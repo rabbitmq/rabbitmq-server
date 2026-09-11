@@ -1277,8 +1277,7 @@ notify_disposition(Pid, DeliveryStateDeliveryTag) ->
     Pid ! {amqp10_disposition, DeliveryStateDeliveryTag},
     ok.
 
-%% Removes every key in the First..Last range from Map, iterating over
-%% whichever of the range and the map is smaller.
+%% Iterates over whichever of the range and the map is smaller.
 remove_range(First, Last, RangeSize, Map) ->
     case map_size(Map) of
         MapSize when RangeSize =< MapSize ->
@@ -1293,8 +1292,7 @@ remove_range(First, Last, RangeSize, Map) ->
               end, Map)
     end.
 
-%% The peer chooses the delivery ID range, so iterate over whichever of the
-%% range and the unsettled map is smaller.
+%% Same as remove_range/4, plus disposition notifications.
 settle_outgoing(First, Last, RangeSize, DeliveryState, Unsettled) ->
     case map_size(Unsettled) of
         0 ->

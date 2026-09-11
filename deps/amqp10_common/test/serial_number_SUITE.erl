@@ -148,12 +148,12 @@ test_range_size(_Config) ->
     ?assertEqual(4, range_size(16#fffffffe, 1)),
     %% Largest accepted range.
     ?assertEqual(16#80000000, range_size(0, 16#7fffffff)),
-    %% The difference RFC 1982 leaves undefined.
+    %% Undefined per RFC 1982.
     ?assertEqual(undefined, range_size(0, 16#80000000)),
     ?assertEqual(undefined, range_size(100, 5)),
     ?assertEqual(undefined, range_size(0, 16#ffffffff)),
 
-    %% Every accepted range must be safe to pass to compare/2.
+    %% Accepted ranges are safe for compare/2.
     lists:foreach(
       fun({First, Last}) ->
               case range_size(First, Last) of
