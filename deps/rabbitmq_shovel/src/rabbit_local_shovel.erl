@@ -15,10 +15,10 @@
 -include_lib("rabbit/include/rabbit_queue_type.hrl").
 -include("rabbit_shovel.hrl").
 
-%% Mirrors rabbit_channel's permission_cache.
+%% Same size as the rabbit_channel permission cache.
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
-%% rabbitmqctl set_permissions/clear_permissions don't notify live
-%% sessions, so expire the cache on a timer instead.
+%% A permission change does not reach a running shovel, so the cache
+%% expires on a timer.
 -define(PERMISSION_CACHE_TTL, 60000).
 
 -rabbit_boot_step({rabbit_global_local_shovel_counters,
@@ -328,8 +328,8 @@ init_source(State = #{source := #{queue_r := QName,
                                                vhost := VHost} = Current} = Src,
                       name := Name,
                       ack_mode := AckMode}) ->
-    %% This worker drives rabbit_queue_type directly, skipping the read
-    %% check a real basic.consume would get from rabbit_channel.
+    %% The consume below bypasses rabbit_channel, so the read check that
+    %% basic.consume performs there has to happen here.
     ok = check_resource_access(User, QName, read),
     Mode = {credited, ?INITIAL_DELIVERY_COUNT},
     MaxLinkCredit = max_link_credit(),
@@ -835,9 +835,9 @@ check_queue(QName, _QArgs, VHost, User) ->
                               passive = true},
     decl_fun([Method], VHost, User).
 
-%% Checks the URI user, not the internal ?SHOVEL_USER identity that
-%% actually performs the consume/deliver. Cached since the destination
-%% check runs on every forwarded message.
+%% Checks the URI user, not the ?SHOVEL_USER identity that performs the
+%% consume and the delivery. The result is cached because the destination
+%% check runs for every forwarded message.
 check_resource_access(User = #user{username = Username}, Resource, Permission) ->
     Cache = case get(local_shovel_permission_cache) of
                 undefined -> [];
@@ -948,10 +948,8 @@ collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
            {AcknowledgedAcc, UAMQTail}
     end.
 
-%% The destination (fixed queue, fixed exchange, or, in pass-through mode,
-%% whatever exchange the source message was published to) is only known
-%% per-message, so the write check has to live here rather than at connect
-%% time.
+%% In pass-through mode the destination exchange is only known per message,
+%% so the write check happens here rather than at connect time.
 route(_Msg, #{queue_r := QueueR,
               queue := Queue,
               current := #{user := User}}) when Queue =/= none ->

@@ -51,9 +51,9 @@ make_uri(Config, Node, VHost) ->
     list_to_binary(lists:flatten(io_lib:format("amqp://~ts:~b/~ts",
                                                [Hostname, Port, VHost]))).
 
-%% No vhost segment: amqp10_client:parse_uri/1 rejects any non-empty path,
-%% so this is the only URI shape that works for the default vhost across
-%% all shovel protocols.
+%% No vhost segment: amqp10_client:parse_uri/1 rejects a non-empty path,
+%% so this is the only URI shape for the default vhost that every shovel
+%% protocol accepts.
 make_uri(Config, Node, User, Password) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_amqp),
