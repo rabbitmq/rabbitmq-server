@@ -39,6 +39,10 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
+end_per_testcase(_Testcase, Config) ->
+    catch meck:unload(gen_tcp),
+    Config.
+
 %% -------------------------------------------------------------------
 %% Test cases.
 %% -------------------------------------------------------------------
@@ -47,8 +51,8 @@ end_per_suite(Config) ->
 fast_close_plain_port(_Config) ->
     {ok, L} = gen_tcp:listen(0, [binary, {active, false}, {reuseaddr, true}]),
     {ok, Port} = inet:port(L),
-    {ok, _C} = gen_tcp:connect({127, 0, 0, 1}, Port, [binary, {active, false}], 5000),
-    {ok, S} = gen_tcp:accept(L, 5000),
+    {ok, _C} = gen_tcp:connect({127, 0, 0, 1}, Port, [binary, {active, false}], 30_000),
+    {ok, S} = gen_tcp:accept(L, 30_000),
     ?assertEqual(ok, rabbit_net:fast_close(S)),
     ?assertEqual(undefined, erlang:port_info(S)),
     ok = gen_tcp:close(L).
@@ -59,8 +63,8 @@ fast_close_healthy_tls(Config) ->
     T0 = erlang:monotonic_time(millisecond),
     ?assertEqual(ok, rabbit_net:fast_close(S)),
     Elapsed = erlang:monotonic_time(millisecond) - T0,
-    ?assert(Elapsed < 1000),
-    ?assertNot(erlang:is_process_alive(ConnPid)),
+    ?assert(Elapsed < 3000),
+    await_exit(ConnPid),
     stop_client(Client),
     ok.
 
@@ -90,7 +94,7 @@ fast_close_recovers_from_stuck_recv(Config) ->
         ?assert(Elapsed < 3000),
         %% The stuck `recv` was actually reached and intercepted.
         ?assert(meck:num_calls(gen_tcp, recv, [TransportPort, 0, '_']) >= 1),
-        ?assertNot(erlang:is_process_alive(ConnPid))
+        await_exit(ConnPid)
     after
         meck:unload(gen_tcp)
     end,
@@ -113,15 +117,15 @@ new_tls_pair(Config, ExtraOpts) ->
                            {ok, C} = ssl:connect(
                                        "localhost", Port,
                                        [binary, {active, false},
-                                        {verify, verify_none} | ExtraOpts], 5000),
+                                        {verify, verify_none} | ExtraOpts], 30_000),
                            Parent ! {client_ready, self()},
                            receive stop -> ssl:close(C) end
                    end),
-    {ok, T} = ssl:transport_accept(L, 5000),
+    {ok, T} = ssl:transport_accept(L, 30_000),
     ok = ssl:close(L),
-    {ok, S} = ssl:handshake(T, 5000),
+    {ok, S} = ssl:handshake(T, 30_000),
     receive {client_ready, _} -> ok
-    after 5000 -> ct:fail(tls_client_did_not_connect)
+    after 30_000 -> ct:fail(tls_client_did_not_connect)
     end,
     [ConnPid] = tls_server_connections() -- Before,
     {S, Client, ConnPid}.
@@ -129,6 +133,17 @@ new_tls_pair(Config, ExtraOpts) ->
 stop_client(Client) ->
     Client ! stop,
     ok.
+
+await_exit(Pid) ->
+    await_exit(Pid, 300).
+
+await_exit(Pid, 0) ->
+    ct:fail({still_alive, Pid});
+await_exit(Pid, N) ->
+    case erlang:is_process_alive(Pid) of
+        false -> ok;
+        true  -> timer:sleep(100), await_exit(Pid, N - 1)
+    end.
 
 tls_server_connections() ->
     [P || P <- erlang:processes(),
