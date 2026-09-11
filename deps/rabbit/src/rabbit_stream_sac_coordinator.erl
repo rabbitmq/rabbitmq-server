@@ -1206,9 +1206,7 @@ state_enter(leader, #?MODULE{groups = Groups,
                     %% 10 seconds is arbitrary, nothing specific about the value
                     10_000;
              T when T > DisTimeout ->
-                 DisTimeout;
-             T ->
-                 T
+                 DisTimeout
          end,
          node_disconnected_timer_effect(P, Time)
      end || P := Ts <- maps:iterator(DisConns, ordered)];
