@@ -1191,15 +1191,15 @@ handle_frame(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                                                consumer_tag = Ctag,
                                                msg_id = MsgId} = Unsettled,
                            {SettledAcc, UnsettledAcc}) ->
-                              case serial_number:in_range(DeliveryId, First, Last) of
-                                  true ->
+                              case range_size(First, DeliveryId) of
+                                  IdRangeSize when IdRangeSize =< DispositionRangeSize ->
                                       SettledAcc1 = maps_update_with(
                                                       {QName, Ctag},
                                                       fun(MsgIds) -> [MsgId | MsgIds] end,
                                                       [MsgId],
                                                       SettledAcc),
                                       {SettledAcc1, UnsettledAcc};
-                                  false ->
+                                  _ ->
                                       {SettledAcc, [{DeliveryId, Unsettled} | UnsettledAcc]}
                               end
                       end,

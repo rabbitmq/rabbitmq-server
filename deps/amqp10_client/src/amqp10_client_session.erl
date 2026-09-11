@@ -364,9 +364,8 @@ mapped(cast,
             Unsettled = case serial_number:range_size(First, Last) of
                             undefined ->
                                 Unsettled0;
-                            _RangeSize ->
-                                serial_number:foldl(fun maps:remove/2,
-                                                    Unsettled0, First, Last)
+                            RangeSize ->
+                                remove_range(First, Last, RangeSize, Unsettled0)
                         end,
             Link = Link0#link{incoming_unsettled = Unsettled},
             State1 = State0#state{links = Links#{OutputHandle := Link}},
@@ -563,7 +562,7 @@ mapped(cast, #'v1_0.disposition'{role = ?AMQP_ROLE_SENDER,
             ?LOG_WARNING("amqp10_session: ignoring disposition with invalid "
                          "delivery ID range (first ~b, last ~b)", [First, Last]),
             keep_state_and_data;
-        _RangeSize ->
+        RangeSize ->
             DS = translate_delivery_state(DeliveryState),
             State = maps:fold(
                       fun(_OutputHandle, #link{role = receiver,
@@ -573,10 +572,10 @@ mapped(cast, #'v1_0.disposition'{role = ?AMQP_ROLE_SENDER,
                               {Ids, Unsettled} =
                               maps:fold(
                                 fun(Id, _, {Ids0, U} = Acc0) ->
-                                        case serial_number:in_range(Id, First, Last) of
-                                            true ->
+                                        case serial_number:range_size(First, Id) of
+                                            IdRangeSize when IdRangeSize =< RangeSize ->
                                                 {[Id | Ids0], maps:remove(Id, U)};
-                                            false ->
+                                            _ ->
                                                 Acc0
                                         end
                                 end, {[], Unsettled0}, Unsettled0),
@@ -1257,6 +1256,22 @@ notify_disposition(Pid, DeliveryStateDeliveryTag) ->
     Pid ! {amqp10_disposition, DeliveryStateDeliveryTag},
     ok.
 
+%% Removes every key in the First..Last range from Map, iterating over
+%% whichever of the range and the map is smaller.
+remove_range(First, Last, RangeSize, Map) ->
+    case map_size(Map) of
+        MapSize when RangeSize =< MapSize ->
+            serial_number:foldl(fun maps:remove/2, Map, First, Last);
+        _ ->
+            maps:filter(
+              fun(Id, _) ->
+                      case serial_number:range_size(First, Id) of
+                          IdRangeSize when IdRangeSize =< RangeSize -> false;
+                          _ -> true
+                      end
+              end, Map)
+    end.
+
 %% The peer chooses the delivery ID range, so iterate over whichever of the
 %% range and the unsettled map is smaller.
 settle_outgoing(First, Last, RangeSize, DeliveryState, Unsettled) ->
@@ -1281,12 +1296,12 @@ settle_outgoing(First, Last, RangeSize, DeliveryState, Unsettled) ->
                      fun(A, B) -> serial_number:compare(A, B) =/= greater end),
             maps:fold(
               fun(Id, {DeliveryTag, Pid}, Acc) ->
-                      case serial_number:in_range(Id, First, Last) of
-                          true ->
+                      case serial_number:range_size(First, Id) of
+                          IdRangeSize when IdRangeSize =< RangeSize ->
                               ok = notify_disposition(
                                      Pid, {DeliveryState, DeliveryTag}),
                               maps:remove(Id, Acc);
-                          false ->
+                          _ ->
                               Acc
                       end
               end, Unsettled, Iter)
