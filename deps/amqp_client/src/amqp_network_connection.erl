@@ -24,6 +24,7 @@
                 name,
                 heartbeat,
                 writer0,
+                main_reader,
                 frame_max,
                 type_sup,
                 closing_reason, %% undefined | Reason
@@ -208,8 +209,8 @@ handshake(AmqpParams, SIF, State0 = #state{sock = Sock}) ->
 
 start_infrastructure(SIF, State = #state{sock = Sock, name = Name}) ->
     case SIF(Sock, Name) of
-      {ok, ChMgr, Writer} ->
-        {ok, ChMgr, State#state{writer0 = Writer}};
+      {ok, ChMgr, Writer, Reader} ->
+        {ok, ChMgr, State#state{writer0 = Writer, main_reader = Reader}};
       {error, Reason} ->
         {error, Reason}
     end.
@@ -226,6 +227,8 @@ network_handshake(AmqpParams = #amqp_params_network{virtual_host = VHost},
             Err;
         Tune ->
             {TuneOk, ChannelMax, State1} = tune(Tune, AmqpParams, State0),
+            amqp_main_reader:set_frame_max(State1#state.main_reader,
+                                           State1#state.frame_max),
             do2(TuneOk, State1),
             do2(#'connection.open'{virtual_host = VHost}, State1),
             Params = {ServerProperties, ChannelMax, ChMgr, State1},

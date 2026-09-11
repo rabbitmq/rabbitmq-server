@@ -11,6 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -include("amqp_client.hrl").
+-include("amqp_client_internal.hrl").
 
 -compile(export_all).
 
@@ -21,7 +22,16 @@ all() ->
       amqp_uri_remove_credentials,
       uri_parser_accepts_string_and_binaries,
       route_destination_parsing,
-      rabbit_channel_build_topic_variable_map
+      rabbit_channel_build_topic_variable_map,
+      main_reader_rejects_oversized_frame,
+      main_reader_rejects_oversized_frame_with_split_header,
+      main_reader_enforces_negotiated_frame_max,
+      main_reader_accepts_frame_at_frame_max,
+      main_reader_rejects_invalid_frame_end_marker,
+      main_reader_rejects_invalid_frame_end_marker_in_one_packet,
+      main_reader_rejects_buffered_frame_above_negotiated_frame_max,
+      main_reader_assembles_frame_split_across_packets,
+      connection_closed_on_frame_above_negotiated_frame_max
     ].
 
 %% -------------------------------------------------------------------
@@ -393,3 +403,206 @@ rabbit_channel_build_topic_variable_map(_Config) ->
         [{amqp_params, AmqpParams3}], <<"default">>, <<"guest">>
     )),
     ok.
+
+%% -------------------------------------------------------------------
+%% amqp_main_reader frame_max enforcement.
+%% -------------------------------------------------------------------
+
+main_reader_rejects_oversized_frame(_Config) ->
+    {Reader, ServerSock} = start_reader(),
+    ok = gen_tcp:send(ServerSock,
+                       <<?FRAME_METHOD:8, 0:16, 16#FFFFFFFF:32>>),
+    ?assertEqual({socket_error, {frame_too_large, 4294967295, ?HANDSHAKE_FRAME_MAX}},
+                 receive_reader_message()),
+    wait_for_death(Reader),
+    ok.
+
+main_reader_rejects_oversized_frame_with_split_header(_Config) ->
+    {Reader, ServerSock} = start_reader(),
+    <<Part1:3/binary, Part2/binary>> = <<?FRAME_METHOD:8, 0:16, 16#FFFFFFFF:32>>,
+    ok = gen_tcp:send(ServerSock, Part1),
+    %% we cannot observe socket state, so yeah, a good ol' `timer:sleep/1` to
+    %% give the original chunk some time to be consumed and processed.
+    timer:sleep(100),
+    ok = gen_tcp:send(ServerSock, Part2),
+    ?assertEqual({socket_error, {frame_too_large, 4294967295, ?HANDSHAKE_FRAME_MAX}},
+                 receive_reader_message()),
+    wait_for_death(Reader),
+    ok.
+
+main_reader_enforces_negotiated_frame_max(_Config) ->
+    {Reader, ServerSock} = start_reader(),
+    ok = amqp_main_reader:set_frame_max(Reader, 4096),
+    ok = gen_tcp:send(ServerSock, <<?FRAME_METHOD:8, 0:16, 8192:32>>),
+    ?assertEqual({socket_error, {frame_too_large, 8192, 4096}},
+                 receive_reader_message()),
+    wait_for_death(Reader),
+    ok.
+
+main_reader_accepts_frame_at_frame_max(_Config) ->
+    {Reader, ServerSock} = start_reader(),
+    FrameMax = 4096,
+    ok = amqp_main_reader:set_frame_max(Reader, FrameMax),
+    Payload = binary:copy(<<0>>, FrameMax),
+    Frame = <<?FRAME_BODY:8, 0:16, FrameMax:32, Payload/binary, ?FRAME_END>>,
+    <<Part1:100/binary, Part2/binary>> = Frame,
+    ok = gen_tcp:send(ServerSock, Part1),
+    timer:sleep(100),
+    ok = gen_tcp:send(ServerSock, Part2),
+    ?assertMatch({channel_exit, 0, _}, receive_reader_message()),
+    ok.
+
+main_reader_rejects_invalid_frame_end_marker(_Config) ->
+    {Reader, ServerSock} = start_reader(),
+    ok = gen_tcp:send(ServerSock, <<?FRAME_BODY:8, 0:16, 4:32>>),
+    timer:sleep(100),
+    ok = gen_tcp:send(ServerSock, <<0:32, 0:8>>),
+    ?assertEqual({socket_error, {invalid_frame_end_marker, 0}},
+                 receive_reader_message()),
+    wait_for_death(Reader),
+    ok.
+
+%% The frame is complete in a single packet, so it never goes through the
+%% partial frame buffer.
+main_reader_rejects_invalid_frame_end_marker_in_one_packet(_Config) ->
+    {Reader, ServerSock} = start_reader(),
+    ok = gen_tcp:send(ServerSock, <<?FRAME_BODY:8, 0:16, 4:32, 0:32, 0:8>>),
+    ?assertEqual({socket_error, {invalid_frame_end_marker, 0}},
+                 receive_reader_message()),
+    wait_for_death(Reader),
+    ok.
+
+%% A header buffered under the handshake ceiling is re-checked when the
+%% negotiated limit is applied.
+main_reader_rejects_buffered_frame_above_negotiated_frame_max(_Config) ->
+    {Reader, ServerSock} = start_reader(),
+    Length = ?HANDSHAKE_FRAME_MAX - 1,
+    ok = gen_tcp:send(ServerSock, <<?FRAME_BODY:8, 0:16, Length:32>>),
+    timer:sleep(100),
+    ok = amqp_main_reader:set_frame_max(Reader, 4096),
+    ?assertEqual({socket_error, {frame_too_large, Length, 4096}},
+                 receive_reader_message()),
+    wait_for_death(Reader),
+    ok.
+
+main_reader_assembles_frame_split_across_packets(_Config) ->
+    {Reader, ServerSock} = start_reader(),
+    Payload = <<"hello">>,
+    Frame = <<?FRAME_BODY:8, 0:16, (byte_size(Payload)):32, Payload/binary,
+              ?FRAME_END>>,
+    [Part1, Part2, Part3] = split_into_3(Frame),
+    ok = gen_tcp:send(ServerSock, Part1),
+    timer:sleep(100),
+    ok = gen_tcp:send(ServerSock, Part2),
+    timer:sleep(100),
+    ok = gen_tcp:send(ServerSock, Part3),
+    ?assertMatch({channel_exit, 0, _}, receive_reader_message()),
+    ok.
+
+%% End-to-end: drives a real amqp_connection against a peer that completes
+%% the handshake and then sends a frame above the negotiated frame_max but
+%% below the handshake ceiling, which only fails if the negotiated value
+%% reached the reader.
+connection_closed_on_frame_above_negotiated_frame_max(_Config) ->
+    FrameMax = 8192,
+    Length = FrameMax + 1,
+    ?assert(Length < ?HANDSHAKE_FRAME_MAX),
+    {ok, _} = application:ensure_all_started(amqp_client),
+    {ok, ListenSock} = gen_tcp:listen(0, [binary, {active, false},
+                                          {packet, raw}, {reuseaddr, true}]),
+    {ok, Port} = inet:port(ListenSock),
+    Server = spawn_link(fun () -> fake_broker(ListenSock, FrameMax) end),
+    {ok, Connection} = amqp_connection:start(
+                         #amqp_params_network{port = Port,
+                                              frame_max = FrameMax,
+                                              heartbeat = 0}),
+    Ref = erlang:monitor(process, Connection),
+    Server ! {send_oversized_frame, Length},
+    receive
+        {'DOWN', Ref, process, Connection, Reason} ->
+            ?assertEqual({shutdown, {socket_error,
+                                     {frame_too_large, Length, FrameMax}}},
+                         Reason)
+    after 5000 ->
+        exit({timeout, waiting_for_connection_to_close})
+    end,
+    unlink(Server),
+    exit(Server, shutdown),
+    gen_tcp:close(ListenSock),
+    ok.
+
+fake_broker(ListenSock, FrameMax) ->
+    {ok, Sock} = gen_tcp:accept(ListenSock, 5000),
+    {ok, <<"AMQP", 0, 0, 9, 1>>} = gen_tcp:recv(Sock, 8, 5000),
+    ok = send_method(Sock, #'connection.start'{
+                              version_major = 0,
+                              version_minor = 9,
+                              server_properties = [],
+                              mechanisms = <<"PLAIN">>,
+                              locales = <<"en_US">>}),
+    {?FRAME_METHOD, 0, _StartOk} = recv_frame(Sock),
+    ok = send_method(Sock, #'connection.tune'{channel_max = 0,
+                                              frame_max = FrameMax,
+                                              heartbeat = 0}),
+    {?FRAME_METHOD, 0, _TuneOk} = recv_frame(Sock),
+    {?FRAME_METHOD, 0, _Open} = recv_frame(Sock),
+    ok = send_method(Sock, #'connection.open_ok'{}),
+    receive
+        {send_oversized_frame, Length} ->
+            Payload = binary:copy(<<0>>, Length),
+            ok = gen_tcp:send(Sock, <<?FRAME_METHOD:8, 0:16, Length:32,
+                                      Payload/binary, ?FRAME_END>>)
+    after 5000 ->
+        exit({timeout, waiting_for_send_instruction})
+    end,
+    %% The socket stays open until the test kills this process, so that the
+    %% connection fails on the oversized frame and not on a closed socket.
+    timer:sleep(30000),
+    gen_tcp:close(Sock).
+
+send_method(Sock, Method) ->
+    gen_tcp:send(Sock, rabbit_binary_generator:build_simple_method_frame(
+                         0, Method)).
+
+recv_frame(Sock) ->
+    {ok, <<Type:8, Channel:16, Length:32>>} = gen_tcp:recv(Sock, 7, 5000),
+    {ok, <<Payload:Length/binary, ?FRAME_END>>} =
+        gen_tcp:recv(Sock, Length + 1, 5000),
+    {Type, Channel, Payload}.
+
+start_reader() ->
+    {ok, ListenSock} = gen_tcp:listen(0, [binary, {active, false}]),
+    {ok, Port} = inet:port(ListenSock),
+    {ok, ClientSock} = gen_tcp:connect("localhost", Port, [binary, {active, false}]),
+    {ok, ServerSock} = gen_tcp:accept(ListenSock),
+    gen_tcp:close(ListenSock),
+    {ok, AState} = rabbit_command_assembler:init(),
+    {ok, Reader} = amqp_main_reader:start_link(
+                     ClientSock, self(), self(), AState, <<"test">>),
+    %% Not interested in the link start_link establishes: the reader is
+    %% expected to stop abnormally in several of these tests.
+    unlink(Reader),
+    ok = rabbit_net:controlling_process(ClientSock, Reader),
+    ok = amqp_main_reader:post_init(Reader),
+    {Reader, ServerSock}.
+
+receive_reader_message() ->
+    receive
+        Msg -> Msg
+    after 5000 ->
+        exit(timeout)
+    end.
+
+wait_for_death(Pid) ->
+    Ref = erlang:monitor(process, Pid),
+    receive
+        {'DOWN', Ref, process, Pid, _Reason} -> ok
+    after 5000 ->
+        exit({timeout, waiting_for_death, Pid})
+    end.
+
+split_into_3(Bin) ->
+    Third = byte_size(Bin) div 3,
+    <<Part1:Third/binary, Rest/binary>> = Bin,
+    <<Part2:Third/binary, Part3/binary>> = Rest,
+    [Part1, Part2, Part3].
