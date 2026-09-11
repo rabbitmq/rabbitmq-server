@@ -53,8 +53,7 @@
         ]).
 
 -import(serial_number,
-        [add/2,
-         diff/2]).
+        [add/2]).
 
 %% By default, we want to keep the server's remote-incoming-window large at all times.
 -define(DEFAULT_MAX_INCOMING_WINDOW, 100_000).
@@ -457,7 +456,18 @@ mapped(cast, #'v1_0.flow'{handle = {uint, InHandle}} = Flow,
     {ok, #link{output_handle = OutHandle} = Link0} =
         find_link_by_input_handle(InHandle, State),
 
-    {ok, Link1} = handle_link_flow(Flow, Link0),
+    Link1 = case handle_link_flow(Flow, Link0) of
+                {ok, L} ->
+                    L;
+                {send_flow, #link{output_handle = H, delivery_count = DC} = L} ->
+                    Reply = #'v1_0.flow'{handle = uint(H),
+                                         delivery_count = uint(DC),
+                                         link_credit = uint(0),
+                                         available = uint(0),
+                                         drain = true},
+                    ok = send(set_flow_session_fields(Reply, State), State),
+                    L
+            end,
     ok = maybe_notify_link_credit(Link0, Link1),
     Link = maybe_notify_link_state_properties(Flow, Link1),
     Links1 = Links#{OutHandle := Link},
@@ -1066,13 +1076,24 @@ handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
               {uint, N} -> N;
               undefined -> ?INITIAL_OUTGOING_TRANSFER_ID
           end,
-    RemoteIncomingWindow = diff(add(NII, InWin), OurNOI), % see: 2.5.6
+    RemoteIncomingWindow =
+        case serial_number:range_size(NII, OurNOI) of
+            undefined ->
+                ?LOG_WARNING("amqp10_session: ignoring FLOW next-incoming-id ~b "
+                             "leading next-outgoing-id ~b", [NII, OurNOI]),
+                State#state.remote_incoming_window;
+            Size ->
+                max(0, InWin - (Size - 1))
+        end,
     State#state{next_incoming_id = NOI,
                 remote_incoming_window = RemoteIncomingWindow,
                 remote_outgoing_window = OutWin}.
 
 
 -spec handle_link_flow(#'v1_0.flow'{}, #link{}) -> {ok | send_flow, #link{}}.
+handle_link_flow(#'v1_0.flow'{link_credit = {uint, Credit}} = Flow, Link)
+  when Credit > 16#7fffffff ->
+    handle_link_flow(Flow#'v1_0.flow'{link_credit = {uint, 16#7fffffff}}, Link);
 handle_link_flow(#'v1_0.flow'{drain = true,
                               link_credit = {uint, TheirCredit}},
                  Link = #link{role = sender,
@@ -1668,6 +1689,17 @@ handle_link_flow_sender_drain_test() ->
     ExpectedDC = SndDeliveryCount + RcvLinkCredit,
     ExpectedDC = Outcome#link.delivery_count.
 
+
+handle_link_flow_sender_drain_max_credit_test() ->
+    Link = #link{role = sender, output_handle = 99,
+                 available = 0, link_credit = 20,
+                 delivery_count = 55},
+    Flow = #'v1_0.flow'{handle = {uint, 45},
+                        link_credit = {uint, 16#ffffffff},
+                        drain = true},
+    {send_flow, Outcome} = handle_link_flow(Flow, Link),
+    0 = Outcome#link.link_credit,
+    ?assertEqual(55 + 16#7fffffff, Outcome#link.delivery_count).
 
 handle_link_flow_receiver_test() ->
     Handle = 45,

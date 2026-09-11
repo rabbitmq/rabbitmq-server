@@ -59,7 +59,9 @@ groups() ->
                  multi_transfer_without_delivery_id,
                  frame_size_too_small_rejected,
                  max_frame_size_exceeded_rejected,
-                 disposition_large_range_settles_outgoing
+                 disposition_large_range_settles_outgoing,
+                 link_credit_max,
+                 drain_with_nothing_available
                 ]}
     ].
 
@@ -970,6 +972,136 @@ disposition_large_range_settles_outgoing(Config) ->
 
     ?assertEqual({accepted, <<"tag-1">>}, await_disposition()),
     ?assertEqual({accepted, <<"tag-2">>}, await_disposition()),
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok.
+
+%% A peer may grant the largest uint as link credit.
+link_credit_max(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{name = Name,
+                                             role = false,
+                                             target = Target}, <<>>}) ->
+                         Attach = #'v1_0.attach'{name = Name,
+                                                 handle = {uint, 99},
+                                                 role = true,
+                                                 target = Target},
+                         Flow = #'v1_0.flow'{handle = {uint, 99},
+                                             next_incoming_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             next_outgoing_id = {uint, 1},
+                                             outgoing_window = {uint, 1000},
+                                             link_credit = {uint, 16#ffffffff}},
+                         {Ch, {multi, [[Attach], [Flow]]}}
+                 end,
+    TransferStep = fun({0 = Ch, #'v1_0.transfer'{handle = {uint, 0}}, _Pay}) ->
+                           Disposition = #'v1_0.disposition'{
+                                            role = ?AMQP_ROLE_RECEIVER,
+                                            settled = true,
+                                            first = {uint, 4294967295},
+                                            state = #'v1_0.accepted'{}},
+                           {Ch, [Disposition]}
+                   end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep),
+             mock_server:amqp_step(TransferStep)
+            ],
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"mock1-sender">>,
+                                                    <<"test">>),
+    await_link(Sender, credited, link_credit_timeout),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag-1">>, <<"one">>, false)),
+    ?assertEqual({accepted, <<"tag-1">>}, await_disposition()),
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok.
+
+%% A DRAIN on a sender link with nothing to send is answered with a FLOW
+%% that consumes the credit.
+drain_with_nothing_available(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    SessionFlow = #'v1_0.flow'{handle = {uint, 99},
+                               next_incoming_id = {uint, 1},
+                               incoming_window = {uint, 1000},
+                               next_outgoing_id = {uint, 1},
+                               outgoing_window = {uint, 1000}},
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{name = Name,
+                                             role = false,
+                                             target = Target}, <<>>}) ->
+                         Attach = #'v1_0.attach'{name = Name,
+                                                 handle = {uint, 99},
+                                                 role = true,
+                                                 target = Target},
+                         Flow = SessionFlow#'v1_0.flow'{link_credit = {uint, 2}},
+                         {Ch, {multi, [[Attach], [Flow]]}}
+                 end,
+    DrainStep = fun({0 = Ch, #'v1_0.transfer'{handle = {uint, 0}}, _Pay}) ->
+                        Flow = SessionFlow#'v1_0.flow'{
+                                 next_incoming_id = {uint, 2},
+                                 delivery_count = {uint, 16#fffffffe},
+                                 link_credit = {uint, 1},
+                                 drain = true},
+                        {Ch, [Flow]}
+                end,
+    DrainedStep = fun({0 = Ch, #'v1_0.flow'{handle = {uint, 0},
+                                            delivery_count = {uint, 16#ffffffff},
+                                            link_credit = {uint, 0},
+                                            drain = true}, <<>>}) ->
+                          Flow = SessionFlow#'v1_0.flow'{
+                                   next_incoming_id = {uint, 2},
+                                   delivery_count = {uint, 16#ffffffff},
+                                   link_credit = {uint, 5}},
+                          {Ch, [Flow]}
+                  end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep),
+             mock_server:amqp_step(DrainStep),
+             mock_server:amqp_step(DrainedStep)
+            ],
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"mock1-sender">>,
+                                                    <<"test">>),
+    await_link(Sender, credited, link_credit_timeout),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag-1">>, <<"one">>, true)),
+    await_link(Sender, credited, link_credit_timeout),
 
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
