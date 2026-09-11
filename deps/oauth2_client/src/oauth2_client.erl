@@ -8,7 +8,9 @@
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
         get_oauth_provider/1, get_oauth_provider/2,
-        get_openid_configuration/2,
+        get_openid_configuration/3,
+        validate_openid_configuration/3,
+        validate_issuer/2,
         build_openid_discovery_endpoint/3,
         merge_openid_configuration/2,
         merge_oauth_provider/2,
@@ -49,8 +51,6 @@ refresh_access_token(OAuthProvider, Request) ->
     Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
     parse_access_token_response(Response).
 
-append_paths(Path1, Path2) ->
-    erlang:iolist_to_binary([Path1, Path2]).
 
 -spec build_openid_discovery_endpoint(Issuer :: uri_string:uri_string(),
     OpenIdConfigurationPath :: uri_string:uri_string() | undefined,
@@ -78,30 +78,28 @@ build_openid_discovery_endpoint(Issuer, OpenIdConfigurationPath, Params) ->
             {_, Q} ->
                 URLMap1#{query => uri_string:compose_query(Q ++ Params)}
         end).
-ensure_leading_path_separator(Path) when is_binary(Path) ->
-    ensure_leading_path_separator(binary:bin_to_list(Path));
-ensure_leading_path_separator(Path) when is_list(Path) ->
-    case string:slice(Path, 0, 1) of
-        "/" -> Path;
-        _ -> "/" ++ Path
-    end.
-drop_trailing_path_separator(Path) when is_binary(Path) ->
-    drop_trailing_path_separator(binary:bin_to_list(Path));
-drop_trailing_path_separator("") -> "";
-drop_trailing_path_separator(Path) when is_list(Path) ->
-    case string:slice(Path, string:len(Path)-1, 1) of
-        "/" -> lists:droplast(Path);
-        _ -> Path
-    end.
+
 
 -spec get_openid_configuration(DiscoveryEndpoint :: uri_string:uri_string(),
-    ssl:tls_option() | []) -> {ok, openid_configuration()} | {error, term()}.
-get_openid_configuration(DiscoverEndpoint, TLSOptions) ->
+    ssl:tls_option() | [], DiscoveryOpts :: proplists:proplist()) ->
+    {ok, openid_configuration()} | {error, term()}.
+get_openid_configuration(DiscoverEndpoint, TLSOptions, DiscoveryOpts) ->
     ?LOG_DEBUG("get_openid_configuration from ~p (~p)", [DiscoverEndpoint,
         format_ssl_options(TLSOptions)]),
     Options = [],
     Response = httpc:request(get, {DiscoverEndpoint, []}, TLSOptions, Options),
-    parse_openid_configuration_response(Response).
+    case parse_openid_configuration_response(Response) of
+        {ok, OpenIdConfig} ->
+            case validate_openid_configuration(OpenIdConfig, DiscoveryOpts, DiscoverEndpoint) of
+                {ok, _} = Ok ->
+                    Ok;
+                {error, Reason} = Error ->
+                    log_openid_configuration_error(Reason),
+                    Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
 
 -spec merge_openid_configuration(openid_configuration(), oauth_provider()) ->
     oauth_provider().
@@ -151,10 +149,31 @@ merge_oauth_provider(OAuthProvider, Proplist) ->
             proplists:delete(jwks_uri, Proplist2)]
     end.
 
+
+append_paths(Path1, Path2) ->
+    erlang:iolist_to_binary([Path1, Path2]).
+
+ensure_leading_path_separator(Path) when is_binary(Path) ->
+    ensure_leading_path_separator(binary:bin_to_list(Path));
+ensure_leading_path_separator(Path) when is_list(Path) ->
+    case string:slice(Path, 0, 1) of
+        "/" -> Path;
+        _ -> "/" ++ Path
+    end.
+drop_trailing_path_separator(Path) when is_binary(Path) ->
+    drop_trailing_path_separator(binary:bin_to_list(Path));
+drop_trailing_path_separator("") -> "";
+drop_trailing_path_separator(Path) when is_list(Path) ->
+    case string:slice(Path, string:len(Path)-1, 1) of
+        "/" -> lists:droplast(Path);
+        _ -> Path
+    end.
+
 parse_openid_configuration_response({error, Reason}) ->
     {error, Reason};
 parse_openid_configuration_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
     map_response_to_openid_configuration(Code, Reason, Headers, Body).
+
 map_response_to_openid_configuration(Code, Reason, Headers, Body) ->
     case decode_body(proplists:get_value("content-type", Headers,
             ?CONTENT_JSON), Body) of
@@ -169,9 +188,10 @@ map_response_to_openid_configuration(Code, Reason, Headers, Body) ->
                 _ ->   {error, Reason}
             end
     end.
+
 map_to_openid_configuration(Map) ->
     #openid_configuration{
-        issuer = maps:get(?RESPONSE_ISSUER, Map),
+        issuer = maps:get(?RESPONSE_ISSUER, Map, undefined),
         token_endpoint = maps:get(?RESPONSE_TOKEN_ENDPOINT, Map, undefined),
         authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT,
             Map, undefined),
@@ -179,6 +199,107 @@ map_to_openid_configuration(Map) ->
             Map, undefined),
         jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
     }.
+
+-spec validate_openid_configuration(OpenIdConfig :: openid_configuration(),
+                                    DiscoveryOpts :: proplists:proplist(),
+                                    UsedDiscoveryURI :: option(uri_string:uri_string())) ->
+    {ok, openid_configuration()} | {error, term()}.
+validate_openid_configuration(#openid_configuration{
+                                issuer = DiscoveredIssuer,
+                                jwks_uri = JwksUri,
+                                token_endpoint = TokenEndpoint,
+                                authorization_endpoint = AuthEndpoint,
+                                end_session_endpoint = EndSessionEndpoint} = OpenIdConfig,
+                              DiscoveryOpts,
+                              UsedDiscoveryURI) ->
+    VerifyIssuer = proplists:get_value(verify_issuer, DiscoveryOpts, true),
+    VerifyHttpsEndpoints = proplists:get_value(verify_https_endpoints, DiscoveryOpts, true),
+    IssuerEndpoints = case VerifyIssuer of
+        true  -> [{invalid_issuer, DiscoveredIssuer, true}];
+        false -> []
+    end,
+    OtherEndpoints = case VerifyHttpsEndpoints of
+        true ->
+            [{invalid_jwks_uri, JwksUri, false},
+             {invalid_token_endpoint, TokenEndpoint, false},
+             {invalid_authorization_endpoint, AuthEndpoint, false},
+             {invalid_end_session_endpoint, EndSessionEndpoint, false}];
+        false -> []
+    end,
+    case check_https_endpoints(IssuerEndpoints ++ OtherEndpoints) of
+        ok ->
+            case VerifyIssuer of
+                false ->
+                    {ok, OpenIdConfig};
+                true ->
+                    case validate_issuer(UsedDiscoveryURI, DiscoveredIssuer) of
+                        ok -> {ok, OpenIdConfig};
+                        {error, _} = Error -> Error
+                    end
+            end;
+        {error, _} = Error -> Error
+    end.
+
+log_openid_configuration_error({Tag, Uri}) when Tag =:= invalid_issuer;
+                                                 Tag =:= invalid_jwks_uri;
+                                                 Tag =:= invalid_token_endpoint;
+                                                 Tag =:= invalid_authorization_endpoint;
+                                                 Tag =:= invalid_end_session_endpoint ->
+    ?LOG_ERROR("Found invalid discovered OpenID URI. "
+        "Reason: ~tp Invalid URI: ~tp. "
+        "This validation can be disabled. See the documentation.", [Tag, Uri]);
+log_openid_configuration_error({issuer_mismatch, UsedDiscoveryURI, DiscoveredIssuer}) ->
+    ?LOG_ERROR("Found invalid discovered OpenID issuer ~tp. "
+        "It must be identical to, or a genuine path prefix of, "
+        "the discovery endpoint ~tp used to retrieve it.",
+        [DiscoveredIssuer, UsedDiscoveryURI]);
+log_openid_configuration_error(_Other) ->
+    ok.
+
+-spec validate_issuer(DiscoveryEndpoint :: option(uri_string:uri_string()),
+                      DiscoveredIssuer :: uri_string:uri_string()) ->
+    ok | {error, {issuer_mismatch, uri_string:uri_string(), uri_string:uri_string()}}.
+validate_issuer(undefined, _DiscoveredIssuer) -> ok;
+validate_issuer(DiscoveryEndpoint, DiscoveredIssuer) ->
+    NormDiscovered = normalize_uri(DiscoveredIssuer),
+    NormEndpoint = normalize_uri(DiscoveryEndpoint),
+    case is_issuer_of_discovery_endpoint(NormDiscovered, NormEndpoint) of
+        true -> ok;
+        false ->
+            {error, {issuer_mismatch, DiscoveryEndpoint, DiscoveredIssuer}}
+    end.
+
+%% The discovery endpoint is always the issuer with a path suffix appended
+%% (the well-known suffix by default, or a customer-configured custom path),
+%% so the discovered issuer must be identical to, or a genuine path prefix
+%% of, the discovery endpoint that was used to retrieve it.
+is_issuer_of_discovery_endpoint(Issuer, Endpoint) when is_list(Issuer), is_list(Endpoint) ->
+    Issuer =:= Endpoint orelse lists:prefix(Issuer ++ "/", Endpoint);
+is_issuer_of_discovery_endpoint(_, _) ->
+    false.
+
+check_https_endpoints([]) ->
+    ok;
+check_https_endpoints([{_Tag, undefined, false} | Rest]) ->
+    check_https_endpoints(Rest);
+check_https_endpoints([{Tag, Uri, _IsRequired} | Rest]) ->
+    case is_https_scheme(Uri) of
+        true  -> check_https_endpoints(Rest);
+        false ->
+            {error, {Tag, Uri}}
+    end.
+
+is_https_scheme(Uri) when is_binary(Uri) ->
+    is_https_scheme(binary_to_list(Uri));
+is_https_scheme(Uri) when is_list(Uri) ->
+    case uri_string:parse(Uri) of
+        #{scheme := Scheme} ->
+            string:lowercase(Scheme) =:= "https";
+        _ ->
+            false
+    end;
+is_https_scheme(_) ->
+    false.
 
 -spec get_expiration_time(successful_access_token_response()) ->
     {ok, [{expires_in, integer() }| {exp, integer() }]} |
@@ -284,13 +405,20 @@ download_oauth_provider(OAuthProvider) ->
         undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
         URL ->
             ?LOG_DEBUG("Downloading oauth_provider using ~p ", [URL]),
-            case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider)) of
+            case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider),
+                    OAuthProvider#oauth_provider.discovery_options) of
                 {ok, OpenIdConfiguration} ->
                     {ok, update_oauth_provider_endpoints_configuration(
                         merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
                 {error, _} = Error2 -> Error2
             end
     end.
+
+normalize_uri(undefined) -> undefined;
+normalize_uri(Uri) when is_binary(Uri) ->
+    normalize_uri(binary_to_list(Uri));
+normalize_uri(Uri) when is_list(Uri) ->
+    string:trim(Uri, trailing, "/").
 
 ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
@@ -396,8 +524,17 @@ lookup_root_oauth_provider() ->
         token_endpoint = get_env(token_endpoint),
         authorization_endpoint = get_env(authorization_endpoint),
         end_session_endpoint = get_env(end_session_endpoint),
-        ssl_options = extract_ssl_options_as_list(Map)
+        ssl_options = extract_ssl_options_as_list(Map),
+        discovery_options = default_discovery_options(get_env(discovery, []))
     }.
+
+%% Both verify_https_endpoints and verify_issuer default to true: discovery
+%% document validation runs unless explicitly disabled.
+default_discovery_options(DiscoveryOpts) ->
+    [{verify_https_endpoints,
+        proplists:get_value(verify_https_endpoints, DiscoveryOpts, true)},
+     {verify_issuer,
+        proplists:get_value(verify_issuer, DiscoveryOpts, true)}].
 
 -spec extract_ssl_options_as_list(#{atom() => any()}) -> proplists:proplist().
 extract_ssl_options_as_list(Map) ->
@@ -599,7 +736,9 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
             proplists:get_value(jwks_uri, PropList, undefined),
         ssl_options =
             extract_ssl_options_as_list(maps:from_list(
-                proplists:get_value(https, PropList, [])))
+                proplists:get_value(https, PropList, []))),
+        discovery_options =
+            default_discovery_options(proplists:get_value(discovery, PropList, []))
     }.
 map_to_access_token_response(Code, Reason, Headers, Body) ->
     case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of

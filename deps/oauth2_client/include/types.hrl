@@ -28,7 +28,8 @@
     authorization_endpoint :: option(uri_string:uri_string()),
     end_session_endpoint :: option(uri_string:uri_string()),
     jwks_uri :: option(uri_string:uri_string()),
-    ssl_options :: option(list())
+    ssl_options :: option(list()),
+    discovery_options = [] :: list()
 }).
 
 -type query_list() :: [{unicode:chardata(), unicode:chardata() | true}].
