@@ -15,7 +15,7 @@
 -include("rabbit_peer_discovery_consul.hrl").
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1]).
+         post_registration/0, lock/1, unlock/1, reports_all_nodes/0]).
 -export([send_health_check_pass/0]).
 -export([session_ttl_update_callback/1]).
 %% for debugging from the REPL
@@ -98,6 +98,11 @@ list_nodes() ->
            end,
     rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, Fun0, Fun1, Fun2).
 
+
+-spec reports_all_nodes() -> boolean().
+
+reports_all_nodes() ->
+    false.
 
 -spec supports_registration() -> boolean().
 
