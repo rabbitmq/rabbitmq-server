@@ -624,7 +624,8 @@ convert_death_entry({map, KvList0}) ->
          {_, {array, utf8, RKeys0}}} ->
             RKeys = [Key || {utf8, Key} <- RKeys0],
             {true, death_table(Queue, Reason, Exchange, RKeys, Count, FirstTime, Ttl)};
-        %% Drop entries that are missing fields.
+        %% Clients can set x-opt-deaths, so a malformed entry must not
+        %% fail the conversion.
         _ ->
             false
     end;
