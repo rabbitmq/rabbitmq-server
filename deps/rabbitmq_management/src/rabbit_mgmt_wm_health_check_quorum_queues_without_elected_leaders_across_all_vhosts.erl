@@ -36,8 +36,14 @@ to_json(ReqData, Context) ->
         [] ->
             rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
         Qs when length(Qs) > 0 ->
-            Msg = <<"Detected quorum queues without an elected leader">>,
-            failure(Msg, Qs, ReqData, Context)
+            FilteredQs = filter_vhost(Qs, ReqData, Context),
+            case FilteredQs of
+                [] ->
+                    rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
+                _ ->
+                    Msg = <<"Detected quorum queues without an elected leader">>,
+                    failure(Msg, FilteredQs, ReqData, Context)
+            end
     end.
 
 failure(Message, Qs, ReqData, Context) ->
@@ -59,3 +65,9 @@ pattern(ReqData) ->
         none  -> ?DEFAULT_PATTERN;
         Other -> Other
     end.
+
+%% Qs are #{binary() => any()} maps keyed by <<"virtual_host">>, not the
+%% atom-keyed proplists filter_vhost/3 expects, so tag and untag around it.
+filter_vhost(Qs, ReqData, Context) ->
+    Tagged = [maps:put(vhost, maps:get(<<"virtual_host">>, Q), Q) || Q <- Qs],
+    [maps:remove(vhost, Q) || Q <- rabbit_mgmt_util:filter_vhost(Tagged, ReqData, Context)].

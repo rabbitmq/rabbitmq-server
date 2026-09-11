@@ -38,8 +38,14 @@ to_json(ReqData, Context) ->
                 [] ->
                     rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
                 Qs when length(Qs) > 0 ->
-                    Msg = <<"There are quorum queues that would lose their quorum if the target node is shut down">>,
-                    failure(Msg, Qs, ReqData, Context)
+                    FilteredQs = filter_vhost(Qs, ReqData, Context),
+                    case FilteredQs of
+                        [] ->
+                            rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
+                        _ ->
+                            Msg = <<"There are quorum queues that would lose their quorum if the target node is shut down">>,
+                            failure(Msg, FilteredQs, ReqData, Context)
+                    end
             end
     end.
 
@@ -52,3 +58,15 @@ failure(Message, Qs, ReqData, Context) ->
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+%% Qs are #{binary() => any()} maps keyed by <<"virtual_host">>, not the
+%% atom-keyed proplists filter_vhost/3 expects, so tag and untag around it.
+%% Critical components (rabbit_stream_coordinator, rabbitmq_metadata) are
+%% cluster-wide, not vhost-scoped: their virtual_host is "(not applicable)"
+%% and they must pass through unfiltered rather than be dropped for everyone.
+filter_vhost(Qs, ReqData, Context) ->
+    {NotVhostScoped, VhostScoped} =
+        lists:partition(fun(Q) -> maps:get(<<"virtual_host">>, Q) =:= <<"(not applicable)">> end, Qs),
+    Tagged = [maps:put(vhost, maps:get(<<"virtual_host">>, Q), Q) || Q <- VhostScoped],
+    Filtered = [maps:remove(vhost, Q) || Q <- rabbit_mgmt_util:filter_vhost(Tagged, ReqData, Context)],
+    NotVhostScoped ++ Filtered.
