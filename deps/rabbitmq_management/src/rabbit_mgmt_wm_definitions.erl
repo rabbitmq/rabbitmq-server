@@ -421,7 +421,8 @@ get_all_parts(Req0, BodySize0, BodySizeLimit, Acc, FileFilename) ->
     end.
 
 is_acceptable_filename(Filename) ->
-    not rabbit_mgmt_features:is_definition_json_extension_required()
+    Settings = rabbit_mgmt_features:get_definitions_settings(),
+    not proplists:get_value(require_definition_json_extension, Settings, false)
         orelse has_json_extension(Filename).
 
 has_json_extension(unknown) ->

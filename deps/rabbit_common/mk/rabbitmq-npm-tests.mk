@@ -1,7 +1,5 @@
-# JavaScript/Node tests: any plugin that ships a package.json at its root
-# opts in automatically, with no changes needed to the plugin's own Makefile.
-# Skipped silently if npm isn't installed, since not every developer works
-# with the JavaScript side.
+# Any plugin with a package.json at its root runs its JavaScript tests as
+# part of `tests`. Skipped if npm is not installed.
 ifneq ($(wildcard $(CURDIR)/package.json),)
 .PHONY: npm-test
 npm-test:

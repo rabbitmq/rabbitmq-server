@@ -135,7 +135,27 @@ function check_login () {
     }
     return false;
   }
-  load_ui(user);
+
+  return load_init_data_and_ui(user);
+}
+
+// Sent with the Authorization header, so it must run after the credentials
+// have been set.
+function load_init_data() {
+  var raw = sync_get('/init');
+  if (!raw) {
+      console.error("Failed to load /api/init");
+      if (oauth.enabled) {
+          renderWarningMessageInLoginStatus(oauth, 'Could not load the management UI');
+      } else {
+          replace_content('login-status', '<p>Could not load the management UI</p>');
+      }
+      return false;
+  }
+  var data = JSON.parse(raw);
+  window.app_settings = data.settings;
+  window.app_vhosts = data.vhosts;
+  window.app_nodes = data.nodes || undefined;
   return true;
 }
 
@@ -168,7 +188,14 @@ function login(username, password) {
   clear_local_pref(SESSION_EXPIRY);
   var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
   set_auth(scheme, result.token.value);
-  
+
+  return load_init_data_and_ui(user);
+}
+
+function load_init_data_and_ui(user) {
+  if (!load_init_data()) {
+    return false;
+  }
   load_ui(user);
   return true;
 }
@@ -177,18 +204,21 @@ function load_ui(user) {
   set_session_expiry_if_required(user.login_session_timeout);
   check_version();
   hide_popup_warn();
+
+  var settings = window.app_settings;
+
   replace_content('outer', format('layout', {}));
 
-  ui_data_model.vhosts = JSON.parse(sync_get('/vhosts'));
+  ui_data_model.vhosts = window.app_vhosts;
   ac.update(user, ui_data_model);
-  if (ac.isMonitoringUser()) {
-    ui_data_model.nodes = JSON.parse(sync_get('/nodes'));
+
+  if (window.app_nodes !== undefined) {
+      ui_data_model.nodes = window.app_nodes;
   }
-  var overview = JSON.parse(sync_get('/overview'));
 
-  display.update(overview, ui_data_model);
+  display.update(settings, ui_data_model);
 
-  setup_global_vars(overview);
+  setup_global_vars(settings);
 
   setup_constant_events();
   update_vhosts();
@@ -1468,6 +1498,7 @@ function format(template, json) {
     try {
         var fn = COMPILED_TEMPLATES[template];
         if (!fn) throw new Error('Template not found: ' + template);
+        json.settings = window.app_settings;
         return fn.call(json, json, json);
     } catch (err) {
         clearInterval(timer);
