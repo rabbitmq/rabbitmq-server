@@ -44,8 +44,7 @@
 -define(DEF_PREFETCH, 1000).
 -define(DEF_MAX_HOPS, 1).
 -define(MIN_MAX_HOPS, 1).
-%% The hop counter is encoded into a `short` field on the wire by exchange
-%% federation, hence the upper bound on `max-hops`.
+%% Exchange federation encodes the hop counter as a `short` table field.
 -define(MAX_MAX_HOPS, 32767).
 
 -define(FEDERATION_GUIDE_URL, <<"https://rabbitmq.com/docs/federation/">>).

@@ -16,7 +16,8 @@
 -behaviour(gen_server2).
 
 -export([go/0, add_binding/3, remove_bindings/3]).
--export([list_routing_keys/1, hops/4]). %% For testing
+%% Exported for tests.
+-export([list_routing_keys/1, hops/4]).
 -export([all_local/0, disconnect_all/0, reconnect_all/0]).
 
 -export([start_link/1]).
@@ -509,8 +510,8 @@ bind_cmd0(unbind, Source, Destination, RoutingKey, Arguments, Nowait) ->
 %% In other words, we count down to 0 from the link with the most
 %% restrictive max_hops we have yet passed through.
 %%
-%% The binding header is client-supplied, since it is an ordinary binding
-%% argument, so it is not trusted: hops/4 clamps it to a non-negative budget.
+%% The binding header is an ordinary binding argument, so clients can set
+%% it to anything. `hops/4` therefore never trusts it.
 
 update_binding(Args, #state{downstream_exchange = X,
                             upstream            = Upstream,
@@ -535,8 +536,8 @@ update_binding(Args, #state{downstream_exchange = X,
             rabbit_basic:prepend_table_header(?BINDING_HEADER, Info, Args)
     end.
 
-%% The binding header is client-supplied: any value that is not a positive
-%% hop count means the binding does not propagate any further.
+%% A header that does not carry a positive hop count stops propagation
+%% instead of being trusted.
 -spec hops(rabbit_framing:amqp_table(), integer(), binary() | unknown, binary()) ->
           non_neg_integer().
 hops(Args, MaxHops, UName, UVhost) ->
