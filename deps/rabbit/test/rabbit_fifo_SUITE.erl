@@ -5117,6 +5117,42 @@ modify_anns_capped_test(Config) ->
     ?assertEqual(<<"updated">>, maps:get(integer_to_binary(1), Anns)),
     ok.
 
+%% When a single `modified' command's annotations have more new keys than
+%% there are cap slots left, which of those keys survive is itself part of
+%% the resulting replicated state, so it must not depend on the unordered
+%% traversal of a plain maps:fold/3 -- that could let replicas diverge on
+%% the very same command. merge_msg_anns/2 must therefore pick
+%% deterministically, in ascending term order of the new keys.
+%% Below the flat/HAMT map size threshold, plain maps:fold/3 already
+%% happens to iterate in ascending term order, so this needs more than
+%% ?MAX_MSG_ANNS_SIZE new keys in the one command to actually exercise a
+%% HAMT map's unordered traversal and tell the two implementations apart.
+modify_anns_capped_deterministic_order_test(Config) ->
+    MaxAnnsSize = 32,
+    NumNewKeys = MaxAnnsSize + 8,
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource =>
+                    rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)}),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {S1, _} = enq(Config, 1, 1, msg1, S0),
+    {S2, #{key := CK1, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, 1, S1),
+    %% Zero-padded so lexicographic (term) order matches numeric order.
+    Key = fun (N) -> iolist_to_binary(io_lib:format("~2..0B", [N])) end,
+    NewAnns = maps:from_list([{Key(N), N} || N <- lists:seq(1, NumNewKeys)]),
+    {SFinal, _, _} =
+        apply(meta(Config, 3),
+              rabbit_fifo:make_modify(CK1, [MsgId], false, false, NewAnns),
+              S2),
+    #consumer{checked_out = Checked} = maps:get(CK1, SFinal#rabbit_fifo.consumers),
+    [?C_MSG(?MSG(_, #{anns := Anns}))] = maps:values(Checked),
+    ?assertEqual(MaxAnnsSize, map_size(Anns)),
+    %% The 32 smallest keys, in term order, are kept.
+    [?assert(maps:is_key(Key(N), Anns)) || N <- lists:seq(1, MaxAnnsSize)],
+    [?assertNot(maps:is_key(Key(N), Anns))
+     || N <- lists:seq(MaxAnnsSize + 1, NumNewKeys)],
+    ok.
+
 %% The deferral token and its accompanying delivery time must survive the
 %% ?MAX_MSG_ANNS_SIZE cap even when `anns' is already full of unrelated
 %% keys. should_delay/5 records the token in #delayed.deferred straight

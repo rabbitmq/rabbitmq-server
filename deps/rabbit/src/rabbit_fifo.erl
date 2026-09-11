@@ -4314,6 +4314,10 @@ incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
 %% the result at ?MAX_MSG_ANNS_SIZE distinct keys. Existing keys can still
 %% be updated once the cap is reached, but new keys beyond the cap are
 %% dropped. ?RESERVED_ANN_KEYS are exempt from the cap: see their comments.
+%% Which of New's keys are kept once the cap is hit is itself part of the
+%% resulting state, so New is traversed in a defined order: unlike plain
+%% maps:fold/3, iteration order is unspecified and can differ between
+%% replicas, which would otherwise let them diverge on the same command.
 merge_msg_anns(Existing, New) ->
     maps:fold(
       fun(Key, Value, Acc) ->
@@ -4325,7 +4329,7 @@ merge_msg_anns(Existing, New) ->
                   false ->
                       Acc
               end
-      end, Existing, New).
+      end, Existing, maps:iterator(New, ordered)).
 
 exec_read(Flru0, ReadPlan, Msgs) ->
     try ra_log_read_plan:execute(ReadPlan, Flru0) of
