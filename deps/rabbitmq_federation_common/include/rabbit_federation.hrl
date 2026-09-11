@@ -42,6 +42,11 @@
 %% Identifies a virtual host, used by exchange federation cycle detection
 -define(DOWNSTREAM_VHOST_ARG, <<"x-downstream-vhost">>).
 -define(DEF_PREFETCH, 1000).
+-define(DEF_MAX_HOPS, 1).
+-define(MIN_MAX_HOPS, 1).
+%% The hop counter is encoded into a `short` field on the wire by exchange
+%% federation, hence the upper bound on `max-hops`.
+-define(MAX_MAX_HOPS, 32767).
 
 -define(FEDERATION_GUIDE_URL, <<"https://rabbitmq.com/docs/federation/">>).
 
