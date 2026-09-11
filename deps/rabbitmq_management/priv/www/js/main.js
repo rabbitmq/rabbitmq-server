@@ -1498,8 +1498,8 @@ function format(template, json) {
     try {
         var fn = COMPILED_TEMPLATES[template];
         if (!fn) throw new Error('Template not found: ' + template);
-        json.settings = window.app_settings;
-        return fn.call(json, json, json);
+        var model = Object.assign({}, json, {settings: window.app_settings});
+        return fn.call(model, model, model);
     } catch (err) {
         clearInterval(timer);
         console.log("Uncaught error: " + err);

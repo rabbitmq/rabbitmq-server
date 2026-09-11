@@ -1191,16 +1191,31 @@ frame_size_too_small_rejected(Config) ->
 
     ok = mock_server:set_steps(?config(mock_server, Config), Steps),
 
+    ok = logger:add_handler(?FUNCTION_NAME, ?MODULE, #{config => self()}),
     Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
     {ok, Connection} = amqp10_client:open_connection(Cfg),
 
-    %% The reader catches the bad offset math, crashes, and causes the connection to tear down
-    receive
-        {amqp10_event, {connection, Connection, {closed, _}}} ->
-            ok
-    after ?TIMEOUT ->
-        exit(frame_size_too_small_assert_failed)
+    try
+        receive
+            {amqp10_event, {connection, Connection, {closed, _}}} ->
+                ok
+        after ?TIMEOUT ->
+            exit(frame_size_too_small_assert_failed)
+        end,
+        receive
+            {log, "AMQP 1.0 framing error: frame length (8) is smaller than header size (12)"} ->
+                ok
+        after ?TIMEOUT ->
+            exit(frame_size_too_small_not_logged)
+        end
+    after
+        ok = logger:remove_handler(?FUNCTION_NAME)
     end.
+
+log(#{msg := {Fmt, Args}}, #{config := Pid}) ->
+    Pid ! {log, lists:flatten(io_lib:format(Fmt, Args))};
+log(_, _) ->
+    ok.
 
 
 max_frame_size_exceeded_rejected(Config) ->

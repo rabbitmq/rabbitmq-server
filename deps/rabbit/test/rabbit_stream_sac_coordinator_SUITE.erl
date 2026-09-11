@@ -2017,14 +2017,23 @@ state_enter_test(_) ->
                                       Id1 => grp([csr(P1), csr(P1), csr(P1)]),
                                       Id2 => grp([csr(P0), csr(P1), csr(P1)])})),
 
-    ?assertEqual(lists:sort(mon_node_eff([N0, N1]) ++ mon_proc_eff([P0, P1]) ++ [timer_eff(P1)]),
-                 state_enter_leader(#{Id0 => grp([csr(P0), csr(P1, {disconnected, waiting})]),
-                                      Id2 => grp([csr(P0)])})),
+    %% The timer duration depends on elapsed time since disconnection, so it
+    %% is checked for presence here rather than for an exact value; the
+    %% duration itself is covered by the state_enter_disconnected_timer_*
+    %% tests below.
+    Effects3 = state_enter_leader(#{Id0 => grp([csr(P0), csr(P1, {disconnected, waiting})]),
+                                    Id2 => grp([csr(P0)])}),
+    assertNodeDisconnectedTimerEffectPresent(P1, Effects3),
+    ?assertEqual(lists:sort(mon_node_eff([N0, N1]) ++ mon_proc_eff([P0, P1])),
+                 lists:sort([E || E <- Effects3, not is_timer_eff(E)])),
 
-    ?assertEqual(lists:sort(mon_node_eff([N0, N1, N2]) ++ mon_proc_eff([P0, P1, P2]) ++ timer_eff([P1, P2])),
-                 state_enter_leader(#{Id0 => grp([csr(P0), csr(P1, {disconnected, waiting})]),
-                                      Id1 => grp([csr(P0), csr(P2, {disconnected, waiting})]),
-                                      Id2 => grp([csr(P0), csr(P1, {disconnected, waiting})])})),
+    Effects4 = state_enter_leader(#{Id0 => grp([csr(P0), csr(P1, {disconnected, waiting})]),
+                                    Id1 => grp([csr(P0), csr(P2, {disconnected, waiting})]),
+                                    Id2 => grp([csr(P0), csr(P1, {disconnected, waiting})])}),
+    assertNodeDisconnectedTimerEffectPresent(P1, Effects4),
+    assertNodeDisconnectedTimerEffectPresent(P2, Effects4),
+    ?assertEqual(lists:sort(mon_node_eff([N0, N1, N2]) ++ mon_proc_eff([P0, P1, P2])),
+                 lists:sort([E || E <- Effects4, not is_timer_eff(E)])),
 
     stop_node(N1Pid),
     stop_node(N2Pid),
@@ -2052,7 +2061,9 @@ state_enter_disconnected_timer_between_bounds_test(_) ->
     ?assert(Time >= 10_000 andalso Time =< 60_000),
     ok.
 
-state_enter_disconnected_timer_over_timeout_test(_) ->
+%% a consumer disconnected for longer than the disconnected timeout gets
+%% the 10s floor, not a full fresh interval
+state_enter_disconnected_timer_past_timeout_test(_) ->
     N0 = node(),
     P0 = new_process(N0),
     P1 = new_process(N0),
@@ -2067,7 +2078,7 @@ state_enter_disconnected_timer_over_timeout_test(_) ->
 
     ?assertEqual(mon_node_eff(N0), MonNode),
     ?assertEqual(mon_proc_eff([P0, P1]), [MonP0, MonP1]),
-    ?assertEqual(60_000, Time),
+    ?assertEqual(10_000, Time),
     ok.
 
 mon_node_eff(Nodes) when is_list(Nodes) ->
@@ -2081,11 +2092,8 @@ mon_proc_eff(Pid) ->
     {monitor, process, Pid}.
 
 
-timer_eff(Pids) when is_list(Pids) ->
-    lists:sort([timer_eff(Pid) || Pid <- Pids]);
-timer_eff(Pid) ->
-    {timer, {sac, node_disconnected,
-             #{connection_pid => Pid}}, 10_000}.
+is_timer_eff({timer, {sac, node_disconnected, _}, _}) -> true;
+is_timer_eff(_) -> false.
 
 state_enter_leader(MapState) ->
     lists:sort(?MOD:state_enter(leader, state(MapState))).
