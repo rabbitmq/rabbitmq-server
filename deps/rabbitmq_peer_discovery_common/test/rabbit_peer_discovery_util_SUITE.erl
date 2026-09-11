@@ -16,6 +16,7 @@ all() ->
      redact_secrets_in_a_map,
      redact_secrets_in_a_proplist,
      redact_secrets_in_nested_cluster_formation_proplist,
+     redact_ssl_options_in_nested_cluster_formation_proplist,
      redact_secrets_leaves_non_secret_values_untouched
     ].
 
@@ -52,6 +53,17 @@ redact_secrets_in_nested_cluster_formation_proplist(_Config) ->
     ?assertEqual("...", proplists:get_value(consul_acl_token, ConsulConfig)),
     ?assertEqual("...", proplists:get_value(aws_access_key, AwsConfig)),
     ?assertEqual("...", proplists:get_value(aws_secret_key, AwsConfig)).
+
+redact_ssl_options_in_nested_cluster_formation_proplist(_Config) ->
+    %% Shape of `application:get_env(rabbit, cluster_formation)`.
+    ClusterFormation = [{peer_discovery_etcd,
+                         [{etcd_host, "localhost"},
+                          {ssl_options, [{key, "private-key"},
+                                         {password, "letmein"}]}]}],
+    [{peer_discovery_etcd, EtcdConfig}] =
+        rabbit_peer_discovery_util:redact_secrets(ClusterFormation),
+    ?assertEqual("localhost", proplists:get_value(etcd_host, EtcdConfig)),
+    ?assertEqual("...", proplists:get_value(ssl_options, EtcdConfig)).
 
 redact_secrets_leaves_non_secret_values_untouched(_Config) ->
     %% List-valued config (e.g. Consul service tags) must not be mistaken
