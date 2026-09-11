@@ -398,6 +398,7 @@ init_dest(#{name := Name,
             dest := #{add_forward_headers := AFH} = Dst} = State) ->
     rabbit_global_counters:publisher_created(?PROTOCOL),
     _TRef = erlang:send_after(1000, self(), send_confirms_and_nacks),
+    %% N.B. the source is checked once, in `init_source/1`.
     _ = erlang:send_after(?PERMISSION_CACHE_TTL, self(), clear_permission_cache),
     Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     Alarms = sets:from_list(Alarms0),
@@ -441,7 +442,7 @@ dest_endpoint(#{dest := #{queue := Queue}}) ->
     [{dest_queue, Queue}];
 dest_endpoint(_Config) ->
     [].
-      
+
 close_dest(_State) ->
     rabbit_global_counters:publisher_deleted(?PROTOCOL),
     ok.
