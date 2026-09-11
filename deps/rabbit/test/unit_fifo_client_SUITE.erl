@@ -74,20 +74,29 @@ order_is_preserved(Fun, MsgIdsFieldPos) ->
     {State1, []} = rabbit_fifo_client:settle(<<"tag">>, [0], State0),
     flush_gen_casts(),
 
+    Other = case Fun of return -> discard; discard -> return end,
     {State2, []} = rabbit_fifo_client:Fun(<<"tag">>, [1, 2], State1),
-    {State3, []} = rabbit_fifo_client:Fun(<<"tag">>, [3, 4], State2),
+    {State3, []} = rabbit_fifo_client:settle(<<"tag">>, [10], State2),
+    {State4, []} = rabbit_fifo_client:Other(<<"tag">>, [11], State3),
+    {State5, []} = rabbit_fifo_client:Fun(<<"tag">>, [3, 4], State4),
     %% modify/6 always flushes pending settles/returns/discards first.
-    {_State4, []} = rabbit_fifo_client:modify(<<"tag">>, [5], false, false,
-                                               #{}, State3),
+    {_State6, []} = rabbit_fifo_client:modify(<<"tag">>, [5], false, false,
+                                               #{}, State5),
 
-    MsgIds = receive
-                 {'$gen_cast', {command, _Priority, {'$usr', Cmd, _Mode}}} ->
-                     element(MsgIdsFieldPos, Cmd)
-             after 1000 ->
-                     exit({command_not_sent, Fun})
-             end,
+    Cmds = [receive_command() || _ <- [settle, return, discard]],
     true = unregister(Name),
-    ?assertEqual([1, 2, 3, 4], MsgIds).
+    ?assertEqual([10], element(MsgIdsFieldPos, lists:keyfind(settle, 1, Cmds))),
+    ?assertEqual([11], element(MsgIdsFieldPos, lists:keyfind(Other, 1, Cmds))),
+    ?assertEqual([1, 2, 3, 4],
+                 element(MsgIdsFieldPos, lists:keyfind(Fun, 1, Cmds))).
+
+receive_command() ->
+    receive
+        {'$gen_cast', {command, _Priority, {'$usr', Cmd, _Mode}}} ->
+            Cmd
+    after 1000 ->
+            exit(command_not_sent)
+    end.
 
 flush_gen_casts() ->
     receive
