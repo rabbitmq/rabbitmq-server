@@ -445,7 +445,9 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entries{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_mem_tables{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_segments{", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_wal_files{", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_wal_files{", [{capture, none}, multiline])),
+    %% Check client library metrics
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connections_by_client_library{product=\"RabbitMQ\",platform=\"Erlang\",protocol=\"amqp091\"}", [{capture, none}, multiline])).
 
 %% Verify that the aggregated endpoint does not emit duplicate TYPE
 %% lines for Raft metrics that belong to different Ra systems.
@@ -515,7 +517,9 @@ per_object_metrics_test(Config, Path) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_commit_latency_seconds{", [{capture, none}, multiline])),
     %% Check the first TOTALS metric value
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_num_segments{", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_num_segments{", [{capture, none}, multiline])),
+    %% Check client library metrics
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connections_by_client_library{product=\"RabbitMQ\",platform=\"Erlang\",protocol=\"amqp091\"}", [{capture, none}, multiline])).
 
 memory_breakdown_metrics_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, "/metrics/memory-breakdown", [], 200),
