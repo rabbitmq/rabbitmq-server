@@ -17,7 +17,8 @@
          disposable_connection_call/3,
          ensure_connection_closed/1, ensure_connection_closed/2,
          ensure_connection_closed_async/1, ensure_connection_closed_async/2,
-         log_terminate/4, unacked_new/0, ack/3, nack/3, forward/9,
+         log_terminate/4, log_buffered_on_terminate/3,
+         unacked_new/0, ack/3, nack/3, forward/9,
          drain_buffer/4,
          handle_downstream_down/3, handle_upstream_down/3,
          get_connection_name/2,
@@ -275,8 +276,15 @@ forward(#upstream{ack_mode      = AckMode,
                      'no-ack' ->
                          Unacked
                  end;
-        false -> amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DT}),
-                 %% Drop it, but acknowledge it!
+        false -> %% Drop it, but acknowledge it, unless the upstream is not
+                 %% tracking the tag: rabbit_channel:collect_acks/3 raises
+                 %% precondition_failed for an unknown tag, which would close
+                 %% the upstream channel and put the link in a restart loop.
+                 case AckMode of
+                     'no-ack' -> ok;
+                     _        -> amqp_channel:cast(
+                                   Ch, #'basic.ack'{delivery_tag = DT})
+                 end,
                  Unacked
     end.
 
@@ -349,6 +357,28 @@ handle_upstream_down(Reason, _Args, State) ->
     {stop, {upstream_channel_down, Reason}, State}.
 
 %%----------------------------------------------------------------------------
+
+%% A link that stops while holding buffered deliveries loses them in `no-ack',
+%% because the upstream discarded them when it delivered them and this process
+%% holds the only copy. In the other ack modes they were never acknowledged
+%% upstream, so they are redelivered.
+-spec log_buffered_on_terminate(queue:queue(), #upstream{},
+                                rabbit_types:r(exchange | queue)) -> ok.
+log_buffered_on_terminate(Buffer, #upstream{ack_mode = AckMode}, XorQName) ->
+    case {queue:len(Buffer), AckMode} of
+        {0, _} ->
+            ok;
+        {N, 'no-ack'} ->
+            ?LOG_WARNING("Federation ~ts is stopping while holding ~b buffered "
+                         "message(s). They are lost: with ack-mode 'no-ack' "
+                         "the upstream did not retain a copy.",
+                         [rabbit_misc:rs(XorQName), N]);
+        {N, _} ->
+            ?LOG_INFO("Federation ~ts is stopping while holding ~b buffered "
+                      "message(s). They were not acknowledged upstream, so "
+                      "they will be redelivered.",
+                      [rabbit_misc:rs(XorQName), N])
+    end.
 
 log_terminate(gone, _Upstream, _UParams, _XorQName) ->
     %% the link cannot start, this has been logged already

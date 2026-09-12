@@ -270,9 +270,12 @@ terminate(Reason, #state{dconn           = DConn,
                          conn            = Conn,
                          upstream        = Upstream,
                          upstream_params = UParams,
+                         blocked_buffer  = Buffer,
                          queue           = Q}) when ?is_amqqueue(Q) ->
     Timeout = connection_close_timeout(),
     QName = amqqueue:get_name(Q),
+    rabbit_federation_link_util:log_buffered_on_terminate(
+      Buffer, Upstream, QName),
     case DConn of
         undefined -> ok;
         _         -> rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout)
@@ -427,13 +430,29 @@ cancel(Ch, Upstream) ->
     amqp_channel:cast(Ch, #'basic.cancel'{nowait       = true,
                                           consumer_tag = ConsumerTag}).
 
-handle_down(DCh, Reason, _Ch, DCh, Args, State) ->
+handle_down(DCh, Reason, _Ch, DCh, Args,
+            State = #state{blocked        = Blocked,
+                           blocked_buffer = QBuffer,
+                           link_state     = LinkState}) ->
     %% The downstream channel is the credit_flow peer for this link. Tell
     %% credit_flow it is gone, otherwise a link that survives a clean DCh
     %% death (Reason =:= normal | shutdown) stays credit_flow:blocked/0
     %% forever and its blocked_buffer never drains.
     credit_flow:peer_down(DCh),
-    rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
+    case LinkState =/= closing andalso
+        (Blocked orelse not queue:is_empty(QBuffer)) of
+        true ->
+            %% Nothing can be forwarded on a dead channel, and surviving would
+            %% strand what is buffered: peer_down/1 has just cleared the
+            %% credit_flow block, so the next delivery would be forwarded
+            %% ahead of everything already buffered, and neither bump_credit
+            %% nor connection.unblocked can arrive to drain it. Restart, so an
+            %% unacked delivery is redelivered.
+            {stop, {shutdown, restart}, State};
+        false ->
+            rabbit_federation_link_util:handle_downstream_down(
+              Reason, Args, State)
+    end;
 handle_down(Ch, Reason, Ch, _DCh, Args, State) ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
 

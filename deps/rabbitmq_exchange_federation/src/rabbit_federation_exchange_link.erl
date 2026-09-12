@@ -275,11 +275,14 @@ terminate(Reason, #state{downstream_connection = DConn,
                          downstream_exchange   = XName,
                          internal_exchange_timer = TRef,
                          internal_exchange     = IntExchange,
+                         blocked_buffer        = Buffer,
                          queue                 = Queue}) when Reason =:= shutdown;
                                                               Reason =:= {shutdown, restart};
                                                               Reason =:= gone ->
     Timeout = connection_close_timeout(),
     _ = timer:cancel(TRef),
+    rabbit_federation_link_util:log_buffered_on_terminate(
+      Buffer, Upstream, XName),
     case DConn of
         undefined -> ok;
         _         -> rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout)
@@ -289,7 +292,7 @@ terminate(Reason, #state{downstream_connection = DConn,
             ok;
         _ ->
             ?LOG_DEBUG("Exchange federation: link is shutting down, resource cleanup mode: ~tp", [Upstream#upstream.resource_cleanup_mode]),
-            case Upstream#upstream.resource_cleanup_mode of
+            case cleanup_mode(Upstream, Buffer) of
                 never -> ok;
                 _     ->
                     ?LOG_DEBUG("Federated exchange '~ts' link will delete its internal queue '~ts'", [Upstream#upstream.exchange_name, Queue]),
@@ -307,9 +310,12 @@ terminate(Reason, #state{downstream_connection = DConn,
                          upstream              = Upstream,
                          upstream_params       = UParams,
                          downstream_exchange   = XName,
+                         blocked_buffer        = Buffer,
                          internal_exchange_timer = TRef}) ->
     Timeout = connection_close_timeout(),
     _ = timer:cancel(TRef),
+    rabbit_federation_link_util:log_buffered_on_terminate(
+      Buffer, Upstream, XName),
     case DConn of
         undefined -> ok;
         _         -> rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout)
@@ -321,6 +327,16 @@ terminate(Reason, #state{downstream_connection = DConn,
     end,
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, XName),
     ok.
+
+%% Deleting the internal upstream queue discards whatever it still holds. When
+%% this link is stopping with deliveries buffered, those are unacked upstream
+%% and are exactly what the restart exists to redeliver, so the queue has to
+%% survive regardless of the configured cleanup mode.
+cleanup_mode(#upstream{resource_cleanup_mode = Mode}, Buffer) ->
+    case queue:is_empty(Buffer) of
+        true  -> Mode;
+        false -> never
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -816,13 +832,29 @@ get_hops(Table) ->
     {_, N} when is_integer(N) andalso N >= 0 -> N
   end.
 
-handle_down(DCh, Reason, _Ch, _CmdCh, DCh, Args, State) ->
+handle_down(DCh, Reason, _Ch, _CmdCh, DCh, Args,
+            State = #state{blocked        = Blocked,
+                           blocked_buffer = Q,
+                           link_state     = LinkState}) ->
     %% The downstream channel is the credit_flow peer for this link. Tell
     %% credit_flow it is gone, otherwise a link that survives a clean DCh
     %% death (Reason =:= normal | shutdown) stays credit_flow:blocked/0
     %% forever and its blocked_buffer never drains.
     credit_flow:peer_down(DCh),
-    rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
+    case LinkState =/= closing andalso
+        (Blocked orelse not queue:is_empty(Q)) of
+        true ->
+            %% Nothing can be forwarded on a dead channel, and surviving would
+            %% strand what is buffered: peer_down/1 has just cleared the
+            %% credit_flow block, so the next delivery would be forwarded
+            %% ahead of everything already buffered, and neither bump_credit
+            %% nor connection.unblocked can arrive to drain it. Restart, so an
+            %% unacked delivery is redelivered.
+            {stop, {shutdown, restart}, State};
+        false ->
+            rabbit_federation_link_util:handle_downstream_down(
+              Reason, Args, State)
+    end;
 handle_down(ChPid, Reason, Ch, CmdCh, _DCh, Args, State)
   when ChPid =:= Ch; ChPid =:= CmdCh ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).

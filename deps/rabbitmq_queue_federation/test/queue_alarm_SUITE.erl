@@ -203,24 +203,34 @@ while_downstream_blocked(Config, Fun) when is_function(Fun, 0) ->
     [] = rabbit_ct_broker_helpers:rpc(
            Config, 0, rabbit_alarm, register,
            [self(), {?MODULE, conserve_resources, []}]),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, 0, vm_memory_monitor,
-           set_vm_memory_high_watermark, [0]),
-    Source = receive
-                 {block, S} -> S
-             after
-                 15_000 -> ct:fail(alarm_set_timeout)
-             end,
+    %% Everything from here on is inside the try, so that an abort while
+    %% waiting for the alarm cannot leave the node pinned at a watermark of 0
+    %% and break the next testcase with {badmatch, [memory]}.
     try
-        Fun()
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, vm_memory_monitor,
+               set_vm_memory_high_watermark, [0]),
+        Source = receive
+                     {block, S} -> S
+                 after
+                     15_000 -> ct:fail(alarm_set_timeout)
+                 end,
+        Fun(),
+        receive
+            {unblock, Source} -> ok
+        after
+            0 -> ok
+        end
     after
         ok = rabbit_ct_broker_helpers:rpc(
                Config, 0, vm_memory_monitor,
                set_vm_memory_high_watermark, [OrigLimit]),
+        %% Waited for here rather than asserted, because raising from an
+        %% `after' block would replace whichever assertion actually failed.
         receive
-            {unblock, Source} -> ok
+            {unblock, _} -> ok
         after
-            15_000 -> ct:fail(alarm_clear_timeout)
+            15_000 -> ct:pal("alarm did not clear within 15s")
         end
     end.
 
