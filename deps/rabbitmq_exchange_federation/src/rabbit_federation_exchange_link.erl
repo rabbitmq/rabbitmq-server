@@ -211,18 +211,40 @@ handle_info(#'connection.unblocked'{}, State = #state{blocked_buffer = Q}) ->
     {Q1, State2} = drain(Q, State1),
     {noreply, State2#state{blocked_buffer = Q1}};
 
+handle_info(continue_drain, State = #state{blocked_buffer = Q}) ->
+    {Q1, State1} = drain(Q, State),
+    {noreply, State1#state{blocked_buffer = Q1}};
+
 handle_info({bump_credit, Msg}, State = #state{blocked_buffer = Q}) ->
     credit_flow:handle_bump_msg(Msg),
     {Q1, State1} = drain(Q, State),
     {noreply, State1#state{blocked_buffer = Q1}};
 
-handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
-            State = #state{blocked = Blocked, blocked_buffer = Q}) ->
-    case Blocked orelse credit_flow:blocked() of
-        true ->
-            {noreply, State#state{blocked_buffer = queue:in({DeliverMethod, Msg}, Q)}};
+handle_info({#'basic.deliver'{delivery_tag = DT} = DeliverMethod, Msg},
+            State = #state{blocked        = Blocked,
+                           blocked_buffer = Q,
+                           upstream       = Upstream,
+                           channel        = Ch}) ->
+    %% Decided before buffering: a message this link will drop must not take up
+    %% buffer space, and leaving it unacknowledged would hold open a slot in the
+    %% upstream's prefetch window for something that is never going to be
+    %% forwarded. It is re-checked in forward/9, which is where a message that
+    %% was buffered is finally dropped or sent.
+    case should_forward(Msg, State) of
         false ->
-            {noreply, do_deliver(DeliverMethod, Msg, State)}
+            rabbit_federation_link_util:ack_dropped(
+              Upstream#upstream.ack_mode, Ch, DT),
+            {noreply, State};
+        true ->
+            case Blocked orelse credit_flow:blocked()
+                orelse not queue:is_empty(Q) of
+                true ->
+                    {noreply, State#state{
+                                blocked_buffer =
+                                    queue:in({DeliverMethod, Msg}, Q)}};
+                false ->
+                    {noreply, do_deliver(DeliverMethod, Msg, State)}
+            end
     end;
 
 handle_info(#'basic.cancel'{}, State = #state{upstream            = Upstream,
@@ -867,10 +889,25 @@ connection_close_timeout() ->
     erlang:min(Configured, Default).
 
 drain(Q, State) ->
-    rabbit_federation_link_util:drain_buffer(
-      Q, State, fun do_deliver/3, fun is_blocked/1).
+    {Q1, State1} = rabbit_federation_link_util:drain_buffer(
+                      Q, State, fun do_deliver/3, fun is_blocked/1),
+    case rabbit_federation_link_util:drain_again(
+           Q1, State1, fun is_blocked/1) of
+        true  -> self() ! continue_drain;
+        false -> ok
+    end,
+    {Q1, State1}.
 
 is_blocked(#state{blocked = B}) -> B.
+
+should_forward(#amqp_msg{props = #'P_basic'{headers = Headers}},
+               #state{upstream            = #upstream{max_hops = MaxH},
+                      downstream_exchange = #resource{virtual_host = DVhost}}) ->
+    should_forward_headers(Headers, MaxH, DVhost).
+
+should_forward_headers(Headers, MaxHops, DVhost) ->
+    rabbit_federation_util:should_forward(
+      Headers, MaxHops, rabbit_nodes:cluster_name(), DVhost).
 
 do_deliver(#'basic.deliver'{routing_key = Key,
                             redelivered = Redelivered} = DeliverMethod, Msg,
@@ -888,10 +925,7 @@ do_deliver(#'basic.deliver'{routing_key = Key,
     HeadersFun = fun (H) -> update_routing_headers(UParams, UName, UVhost, Redelivered, H) end,
     %% We need to check should_forward/2 here in case the upstream
     %% does not have federation and thus is using a fanout exchange.
-    ForwardFun = fun (H) ->
-                         DName = rabbit_nodes:cluster_name(),
-                         rabbit_federation_util:should_forward(H, MaxH, DName, DVhost)
-                 end,
+    ForwardFun = fun (H) -> should_forward_headers(H, MaxH, DVhost) end,
     Unacked1 = rabbit_federation_link_util:forward(
                  Upstream, DeliverMethod, Ch, DCh, PublishMethod,
                  HeadersFun, ForwardFun, Msg, Unacked),

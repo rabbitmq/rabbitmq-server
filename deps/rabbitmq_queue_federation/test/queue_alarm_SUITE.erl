@@ -242,12 +242,15 @@ payload(N) ->
     integer_to_binary(N).
 
 publish_n(Ch, X, Key, N) ->
+    publish_range(Ch, X, Key, 1, N).
+
+publish_range(Ch, X, Key, From, To) ->
     amqp_channel:call(Ch, #'confirm.select'{}),
     [amqp_channel:cast(Ch,
                        #'basic.publish'{exchange = X, routing_key = Key},
                        #amqp_msg{props = #'P_basic'{delivery_mode = 2},
                                  payload = payload(I)})
-     || I <- lists:seq(1, N)],
+     || I <- lists:seq(From, To)],
     true = amqp_channel:wait_for_confirms(Ch, 30),
     ok.
 

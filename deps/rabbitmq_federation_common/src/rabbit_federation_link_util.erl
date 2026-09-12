@@ -17,9 +17,9 @@
          disposable_connection_call/3,
          ensure_connection_closed/1, ensure_connection_closed/2,
          ensure_connection_closed_async/1, ensure_connection_closed_async/2,
-         log_terminate/4, log_buffered_on_terminate/3,
+         log_terminate/4, log_buffered_on_terminate/3, ack_dropped/3,
          unacked_new/0, ack/3, nack/3, forward/9,
-         drain_buffer/4,
+         drain_buffer/4, drain_again/3,
          handle_downstream_down/3, handle_upstream_down/3,
          get_connection_name/2,
          connection_close_timeout/0]).
@@ -276,17 +276,21 @@ forward(#upstream{ack_mode      = AckMode,
                      'no-ack' ->
                          Unacked
                  end;
-        false -> %% Drop it, but acknowledge it, unless the upstream is not
-                 %% tracking the tag: rabbit_channel:collect_acks/3 raises
-                 %% precondition_failed for an unknown tag, which would close
-                 %% the upstream channel and put the link in a restart loop.
-                 case AckMode of
-                     'no-ack' -> ok;
-                     _        -> amqp_channel:cast(
-                                   Ch, #'basic.ack'{delivery_tag = DT})
-                 end,
+        false -> ack_dropped(AckMode, Ch, DT),
                  Unacked
     end.
+
+%% Acknowledge a message that is dropped rather than forwarded, unless the
+%% upstream is not tracking the tag: rabbit_channel:collect_acks/3 raises
+%% precondition_failed for an unknown tag, which would close the upstream
+%% channel and put the link in a restart loop.
+-spec ack_dropped('no-ack' | 'on-publish' | 'on-confirm', pid(),
+                  non_neg_integer()) -> ok.
+ack_dropped('no-ack', _Ch, _DT) ->
+    ok;
+ack_dropped(_AckMode, Ch, DT) ->
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DT}),
+    ok.
 
 maybe_clear_user_id(false, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{user_id = undefined}};
@@ -309,19 +313,28 @@ maybe_clear_user_id(true, Msg) ->
       IsBlockedFun :: fun((State) -> boolean()).
 drain_buffer(Q, State, DeliverFun, IsBlockedFun) ->
     case IsBlockedFun(State) orelse credit_flow:blocked() of
-        true  -> {Q, State};
-        false -> drain_buffer1(queue:out(Q), State, DeliverFun, IsBlockedFun)
+        true ->
+            {Q, State};
+        false ->
+            case queue:out(Q) of
+                {empty, Q1} ->
+                    {Q1, State};
+                {{value, {DeliverMethod, Msg}}, Q1} ->
+                    {Q1, DeliverFun(DeliverMethod, Msg, State)}
+            end
     end.
 
-drain_buffer1({empty, _Q}, State, _DeliverFun, _IsBlockedFun) ->
-    {queue:new(), State};
-drain_buffer1({{value, {DeliverMethod, Msg}}, Q}, State,
-              DeliverFun, IsBlockedFun) ->
-    State1 = DeliverFun(DeliverMethod, Msg, State),
-    case IsBlockedFun(State1) orelse credit_flow:blocked() of
-        true  -> {Q, State1};
-        false -> drain_buffer1(queue:out(Q), State1, DeliverFun, IsBlockedFun)
-    end.
+%% True when the caller should ask itself to drain again. Draining one delivery
+%% per callback keeps the link answering acknowledgements, confirms, channel
+%% deaths and shutdown while a long buffer empties, instead of forwarding up to
+%% prefetch-count messages without returning to its mailbox. Order is preserved
+%% because a delivery arriving mid-drain is buffered behind the rest.
+-spec drain_again(queue:queue(), State, fun((State) -> boolean())) ->
+          boolean() when State :: term().
+drain_again(Q, State, IsBlockedFun) ->
+    not queue:is_empty(Q) andalso
+        not IsBlockedFun(State) andalso
+        not credit_flow:blocked().
 
 extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
     Headers.

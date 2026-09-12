@@ -211,6 +211,10 @@ handle_info(#'connection.unblocked'{},
     {QBuffer1, State2} = drain(QBuffer, State1),
     {noreply, State2#state{blocked_buffer = QBuffer1}};
 
+handle_info(continue_drain, State = #state{blocked_buffer = QBuffer}) ->
+    {QBuffer1, State1} = drain(QBuffer, State),
+    {noreply, State1#state{blocked_buffer = QBuffer1}};
+
 handle_info({bump_credit, Msg},
             State = #state{blocked_buffer = QBuffer,
                            queue = Q}) when ?is_amqqueue(Q) ->
@@ -220,7 +224,8 @@ handle_info({bump_credit, Msg},
 
 handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
             State = #state{blocked = Blocked, blocked_buffer = QBuffer, queue = Q}) when ?is_amqqueue(Q) ->
-    case Blocked orelse credit_flow:blocked() of
+    case Blocked orelse credit_flow:blocked()
+        orelse not queue:is_empty(QBuffer) of
         true ->
             {noreply, State#state{blocked_buffer = queue:in({DeliverMethod, Msg}, QBuffer)}};
         false ->
@@ -464,8 +469,14 @@ connection_close_timeout() ->
     erlang:min(Configured, Default).
 
 drain(QBuffer, State) ->
-    rabbit_federation_link_util:drain_buffer(
-      QBuffer, State, fun do_deliver/3, fun is_blocked/1).
+    {QBuffer1, State1} = rabbit_federation_link_util:drain_buffer(
+                      QBuffer, State, fun do_deliver/3, fun is_blocked/1),
+    case rabbit_federation_link_util:drain_again(
+           QBuffer1, State1, fun is_blocked/1) of
+        true  -> self() ! continue_drain;
+        false -> ok
+    end,
+    {QBuffer1, State1}.
 
 is_blocked(#state{blocked = B}) -> B.
 

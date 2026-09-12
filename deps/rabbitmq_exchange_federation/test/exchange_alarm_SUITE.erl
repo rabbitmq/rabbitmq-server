@@ -39,7 +39,8 @@ groups() ->
      {alarm, [], [
                   alarm_buffers_and_drains_in_order,
                   alarm_buffers_no_ack_and_drains_in_order,
-                  downstream_death_while_buffering_restarts_link
+                  downstream_death_while_buffering_restarts_link,
+                  deliveries_during_a_drain_keep_their_place
                  ]}
     ].
 
@@ -91,6 +92,50 @@ alarm_buffers_and_drains_in_order(Config) ->
 
 alarm_buffers_no_ack_and_drains_in_order(Config) ->
     do_alarm_case(<<"no-ack">>, Config).
+
+%% The buffer is drained one delivery per callback, so the link keeps answering
+%% its mailbox while a long buffer empties. That means a delivery can arrive
+%% mid-drain, and it has to be buffered behind the rest rather than forwarded
+%% straight through, or it would overtake them.
+deliveries_during_a_drain_keep_their_place(Config) ->
+    First = 200,
+    Second = 50,
+    UpstreamUri = rabbit_ct_broker_helpers:node_uri(Config, 1),
+    setup_federation(Config, UpstreamUri, <<"on-confirm">>),
+
+    {UpConn, UpCh} = rabbit_ct_client_helpers:open_connection_and_channel(
+                       Config, 1),
+    {DownConn, DownCh} = rabbit_ct_client_helpers:open_connection_and_channel(
+                           Config, 0),
+
+    declare_exchange(UpCh, ?UPSTREAM_X),
+    declare_exchange(DownCh, ?DOWNSTREAM_X),
+    amqp_channel:call(DownCh, #'queue.declare'{queue = ?DOWNSTREAM_Q,
+                                               durable = true}),
+    amqp_channel:call(DownCh, #'queue.bind'{queue = ?DOWNSTREAM_Q,
+                                            exchange = ?DOWNSTREAM_X,
+                                            routing_key = <<"k">>}),
+
+    await_running_link(Config, ?DOWNSTREAM_X, ?UPSTREAM_X),
+    await_upstream_binding(Config),
+
+    while_downstream_blocked(
+      Config,
+      fun() -> publish_range(UpCh, ?UPSTREAM_X, <<"k">>, 1, First) end),
+
+    %% The alarm has cleared and the link is now draining the first batch one
+    %% delivery at a time. Publish the second batch into that window.
+    publish_range(UpCh, ?UPSTREAM_X, <<"k">>, First + 1, First + Second),
+
+    ?awaitMatch(N when N =:= First + Second,
+                message_count(Config, 0, ?DOWNSTREAM_Q),
+                60_000),
+    Received = drain_queue(DownCh, ?DOWNSTREAM_Q, First + Second),
+    ?assertEqual([payload(N) || N <- lists:seq(1, First + Second)], Received),
+
+    rabbit_ct_client_helpers:close_connection_and_channel(DownConn, DownCh),
+    rabbit_ct_client_helpers:close_connection_and_channel(UpConn, UpCh),
+    ok.
 
 %% A link holding buffered deliveries must not survive the loss of its
 %% downstream channel. credit_flow:peer_down/1 clears the credit_flow block, so
@@ -309,12 +354,15 @@ payload(N) ->
     integer_to_binary(N).
 
 publish_n(Ch, X, Key, N) ->
+    publish_range(Ch, X, Key, 1, N).
+
+publish_range(Ch, X, Key, From, To) ->
     amqp_channel:call(Ch, #'confirm.select'{}),
     [amqp_channel:cast(Ch,
                        #'basic.publish'{exchange = X, routing_key = Key},
                        #amqp_msg{props = #'P_basic'{delivery_mode = 2},
                                  payload = payload(I)})
-     || I <- lists:seq(1, N)],
+     || I <- lists:seq(From, To)],
     true = amqp_channel:wait_for_confirms(Ch, 30),
     ok.
 
