@@ -237,16 +237,19 @@ define ct_master.erl
 	peer:call(Pid2, persistent_term, put, [rabbit_ct_tcp_port_base, 20000]),
 	peer:call(Pid3, persistent_term, put, [rabbit_ct_tcp_port_base, 24000]),
 	peer:call(Pid4, persistent_term, put, [rabbit_ct_tcp_port_base, 28000]),
-	[{[_], {ok, Results}}] = ct_master_fork:run("$1"),
+	[{[_], {ok, Results, EventFailed}}] = ct_master_fork:run("$1"),
 	peer:stop(Pid4),
 	peer:stop(Pid3),
 	peer:stop(Pid2),
 	peer:stop(Pid1),
-	lists:foldl(fun
-		({_, {_, 0, {_, 0}}}, Err) -> Err + 1;
-		(What, Peer) -> halt(Peer)
-	end, 1, Results),
-	halt(0)
+	NodeFailed = lists:any(fun
+		({_, {_, 0, {_, 0}}}) -> false;
+		(_) -> true
+	end, Results),
+	case NodeFailed orelse EventFailed =/= [] of
+		true -> halt(1);
+		false -> halt(0)
+	end
 endef
 
 PARALLEL_CT_SET_1_A = unit_definitions_import_https unit_rabbit_networking unit_rabbit_ssl unit_networking_ssl_options_overrides unit_cluster_formation_locking_mocks unit_cluster_formation_sort_nodes unit_collections unit_config_value_encryption unit_connection_tracking unit_amqp_reader unit_queue_decorator unit_stream_arg_validation unix_domain_socket vhost_tracing vhost_tracing_prop

@@ -93,16 +93,19 @@ define ct_master.erl
 	peer:call(Pid2, persistent_term, put, [rabbit_ct_tcp_port_base, 25000]),
 	peer:call(Pid3, persistent_term, put, [rabbit_ct_tcp_port_base, 27000]),
 	peer:call(Pid4, persistent_term, put, [rabbit_ct_tcp_port_base, 29000]),
-	[{[_], {ok, Results}}] = ct_master_fork:run("$1"),
+	[{[_], {ok, Results, EventFailed}}] = ct_master_fork:run("$1"),
 	peer:stop(Pid4),
 	peer:stop(Pid3),
 	peer:stop(Pid2),
 	peer:stop(Pid1),
-	lists:foldl(fun
-		({_, {_, 0, {_, 0}}}, Err) -> Err + 1;
-		(What, Peer) -> halt(Peer)
-	end, 1, Results),
-	halt(0)
+	NodeFailed = lists:any(fun
+		({_, {_, 0, {_, 0}}}) -> false;
+		(_) -> true
+	end, Results),
+	case NodeFailed orelse EventFailed =/= [] of
+		true -> halt(1);
+		false -> halt(0)
+	end
 endef
 
 PARALLEL_CT_SET_1_A = auth retainer federation disconnect_on_unauthorized

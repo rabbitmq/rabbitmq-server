@@ -44,6 +44,11 @@
 %-doc "Filename of test spec to be executed.".
 -type test_spec() :: file:name_all().
 
+%-doc "Per-node run results, plus the test cases whose `tc_done' event
+%carried `{failed, Reason}'; unlike the per-node results, this covers cases
+%whose body passed but whose `end_per_testcase' failed.".
+-type run_result() :: {'ok', Finished :: [term()], Failed :: [term()]}.
+
 -record(state, {node_ctrl_pids=[],
 		logdirs=[],
 		results=[],
@@ -51,7 +56,7 @@
 		blocked=[]
 		}).
 
--export_type([test_spec/0]).
+-export_type([test_spec/0, run_result/0]).
 
 %-doc """
 %Tests are spawned on `Node` using `ct:run_test/1`
@@ -156,7 +161,7 @@ run_test(NodeOptsList) when is_list(NodeOptsList) ->
 %the nodes in `InclNodes`. Nodes in the `ExclNodes` list are excluded from the
 %test.
 %""".
--spec run(TestSpecs, AllowUserTerms, InclNodes, ExclNodes) -> [{Specs, 'ok'} | {'error', Reason}]
+-spec run(TestSpecs, AllowUserTerms, InclNodes, ExclNodes) -> [{Specs, run_result()} | {'error', Reason}]
               when TestSpecs :: TestSpec | [TestSpec] | [[TestSpec]],
                    TestSpec :: test_spec(),
                    AllowUserTerms :: boolean(),
@@ -201,7 +206,7 @@ run(TS,AllowUserTerms,InclNodes,ExclNodes) when is_list(InclNodes),
     run([TS],AllowUserTerms,InclNodes,ExclNodes).
 
 %-doc(#{equiv => run(TestSpecs, false, InclNodes, ExclNodes)}).
--spec run(TestSpecs, InclNodes, ExclNodes) -> [{Specs, 'ok'} | {'error', Reason}]
+-spec run(TestSpecs, InclNodes, ExclNodes) -> [{Specs, run_result()} | {'error', Reason}]
               when TestSpecs :: TestSpec | [TestSpec] | [[TestSpec]],
                    TestSpec :: test_spec(),
                    InclNodes :: [node()],
@@ -220,7 +225,7 @@ run(TestSpecs,InclNodes,ExclNodes) ->
 %Equivalent to [`run([TS], false, [], [])`](`run/4`) if
 %called with TS being string.
 %""".
--spec run(TestSpecs) -> [{Specs, 'ok'} | {'error', Reason}]
+-spec run(TestSpecs) -> [{Specs, run_result()} | {'error', Reason}]
               when TestSpecs :: TestSpec | [TestSpec] | [[TestSpec]],
                    TestSpec :: test_spec(),
                    Specs :: [file:filename_all()],
@@ -603,11 +608,13 @@ master_loop(#state{node_ctrl_pids=[],
     log(all,"Info","Updating log files",[]),
 
     %% Print the failed and auto skipped tests.
-    master_print_summary(),
+    #{failed := Failed} = master_print_summary(),
 
     ct_master_event_fork:stop(),
     ct_master_logs_fork:stop(),
-    {ok, Finished};
+    %% Teardown failures are not reflected in the per-node counters, so
+    %% callers must also check this list.
+    {ok, Finished, Failed};
 
 master_loop(State=#state{node_ctrl_pids=NodeCtrlPids,
 			 results=Results,
@@ -723,13 +730,13 @@ master_loop(State=#state{node_ctrl_pids=NodeCtrlPids,
     end.
 
 master_print_summary() ->
-    #{
+    Results = #{
         auto_skipped := AutoSkipped,
         failed := Failed
     } = ct_master_event_fork:get_results(),
     master_print_summary_for("Auto skipped test cases", AutoSkipped),
     master_print_summary_for("Failed test cases", Failed),
-    ok.
+    Results.
 
 master_print_summary_for(Title,List) ->
     _ = case List of
