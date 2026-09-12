@@ -190,8 +190,7 @@ connect1(User = #user{username = Username}, VHost, Pid, Infos) ->
                 ok -> ok = pg_local:join(rabbit_direct, Pid),
                       rabbit_core_metrics:connection_created(Pid, Infos),
                       rabbit_event:notify(connection_created, Infos),
-                      _ = rabbit_alarm:register(
-                            Pid, {?MODULE, conserve_resources, []}),
+                      register_for_alarms(Pid),
                       {ok, {User, rabbit_reader:server_properties(rabbit_framing_amqp_0_9_1)}}
             catch
                 exit:#amqp_error{name = Reason = not_allowed} ->
@@ -282,6 +281,18 @@ disconnect(Pid, Infos) ->
     pg_local:leave(rabbit_direct, Pid),
     rabbit_core_metrics:connection_closed(Pid),
     rabbit_event:notify(connection_closed, Infos).
+
+%% rabbit_alarm:internal_register/3 replays only this node's alarms to a new
+%% alertee, so a connection opened while a *different* node is alarmed would
+%% never be told to conserve, even though maybe_alert/5 blocks publishers
+%% cluster-wide. register/2 returns the cluster-wide set of alarmed sources;
+%% replay it, as rabbit_reader does when it seeds its own blocked_by. A source
+%% that internal_register/3 has already replayed is harmless: the connection
+%% keeps them in a set.
+register_for_alarms(Pid) ->
+    Sources = rabbit_alarm:register(Pid, {?MODULE, conserve_resources, []}),
+    [conserve_resources(Pid, Source, {true, true, node()}) || Source <- Sources],
+    ok.
 
 -spec conserve_resources(pid(),
                          rabbit_alarm:resource_alarm_source(),
