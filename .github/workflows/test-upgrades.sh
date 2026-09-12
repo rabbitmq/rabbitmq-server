@@ -67,6 +67,79 @@ case "$scenario" in
 		wait
 		;;
 
+	transient_nonexclusive_queue)
+		# Declare a transient non-exclusive classic queue. The property
+		# combination is denied by default as of 4.3.0, so it is
+		# declared on the old node where it is still permitted.
+		cat > transient-nonexclusive-definitions.json <<-'EOF'
+		{
+		  "queues": [
+		    {
+		      "arguments": {"x-queue-type": "classic"},
+		      "auto_delete": false,
+		      "durable": false,
+		      "name": "transient-nonexclusive",
+		      "vhost": "/"
+		    }
+		  ]
+		}
+		EOF
+
+		if [ "$node_count" -eq 3 ]; then
+			queue_node=rabbit-3
+		else
+			queue_node=rabbit-1
+		fi
+
+		echo "=== Declare a transient non-exclusive classic queue on $queue_node"
+		$old_rabbitmqctl -n "$queue_node" import_definitions \
+			transient-nonexclusive-definitions.json
+		$old_rabbitmqctl -n "$queue_node" list_queues name durable | \
+			grep -qE '^transient-nonexclusive\s+false$'
+
+		if [ "$node_count" -eq 3 ]; then
+			# Upgrade two nodes and leave the queue and its owning node
+			# on the old version. The upgraded nodes must start even
+			# though the queue is still there and in use.
+			echo "=== Upgrade cluster to new RabbitMQ version (2 out of 3 nodes only)"
+			$make -C "$new_dist" restart-cluster NODES=2
+
+			$new_rabbitmqctl -n rabbit-1 list_queues name durable | \
+				grep -qE '^transient-nonexclusive\s+false$'
+
+			# The deprecated feature must be denied on both the
+			# upgraded and the old nodes.
+			$new_rabbitmqctl -n rabbit-1 eval \
+				'rabbit_deprecated_features:is_permitted(transient_nonexcl_queues).' \
+				| tail -n 1 | grep -qx false
+			$old_rabbitmqctl -n rabbit-3 eval \
+				'rabbit_deprecated_features:is_permitted(transient_nonexcl_queues).' \
+				| tail -n 1 | grep -qx false
+		fi
+
+		echo "=== Complete the upgrade"
+		$make -C "$new_dist" restart-cluster
+
+		# The queue is gone: a transient queue is deleted when the node
+		# hosting it restarts.
+		if $new_rabbitmqctl -n rabbit-1 list_queues name | \
+			grep -qE '^transient-nonexclusive$'; then
+			echo "ERROR: transient non-exclusive queue survived its node restart" >&2
+			exit 1
+		fi
+
+		# New declarations are still rejected.
+		echo "=== Ensure a new transient non-exclusive queue is rejected"
+		$new_rabbitmqctl -n rabbit-1 eval \
+			'rabbit_amqqueue:declare(rabbit_misc:r(<<"/">>, queue, <<"transient-nonexclusive-after-upgrade">>), false, false, [], none, <<"upgrade-test">>).' \
+			| grep -q 'transient_nonexcl_queues'
+		if $new_rabbitmqctl -n rabbit-1 list_queues name | \
+			grep -qE '^transient-nonexclusive-after-upgrade$'; then
+			echo "ERROR: rejected transient non-exclusive queue exists" >&2
+			exit 1
+		fi
+		;;
+
 	10k_queues_import)
 		# Import 10k classic queues
 		echo "=== Import 10k classic queues"
