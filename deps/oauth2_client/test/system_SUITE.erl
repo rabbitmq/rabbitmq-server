@@ -48,7 +48,12 @@ groups() ->
         get_openid_configuration_returns_partial_payload,
         get_openid_configuration_using_path,
         get_openid_configuration_using_path_and_custom_endpoint,
-        get_openid_configuration_using_custom_endpoint
+        get_openid_configuration_using_custom_endpoint,
+        get_openid_configuration_non_https_jwks_uri,
+        get_openid_configuration_non_https_token_endpoint,
+        get_openid_configuration_missing_issuer,
+        get_openid_configuration_non_https_issuer,
+        get_openid_configuration_mismatch_issuer
     ]},
     {verify_access_token, [], [
         grants_access_token,
@@ -168,17 +173,47 @@ get_http_oauth_server_expectations(TestCase, Config) ->
     end.
 get_openid_configuration_http_expectation(TestCaseAtom) ->
     TestCase = binary_to_list(atom_to_binary(TestCaseAtom)),
-    Payload = case string:find(TestCase, "returns_partial_payload") of
-        nomatch ->
-            build_http_get_openid_configuration_payload();
-         _ ->
-            List0 = proplists:delete(authorization_endpoint,
-                build_http_get_openid_configuration_payload()),
-            proplists:delete(end_session_endpoint, List0)
-    end,
     Path = case string:find(TestCase, "path") of
         nomatch ->  "";
         _ ->        ?ISSUER_PATH
+    end,
+    Payload0 = case string:find(TestCase, "returns_partial_payload") of
+        nomatch ->
+            build_http_get_openid_configuration_payload(Path);
+         _ ->
+            List0 = proplists:delete(authorization_endpoint,
+                build_http_get_openid_configuration_payload(Path)),
+            proplists:delete(end_session_endpoint, List0)
+    end,
+    Payload1 = case string:find(TestCase, "non_https_jwks_uri") of
+        nomatch ->
+            Payload0;
+        _ ->
+            lists:keyreplace(jwks_uri, 1, Payload0, {jwks_uri, list_to_binary(build_jwks_uri("http"))})
+    end,
+    Payload2 = case string:find(TestCase, "non_https_token_endpoint") of
+        nomatch ->
+            Payload1;
+        _ ->
+            lists:keyreplace(token_endpoint, 1, Payload1, {token_endpoint, list_to_binary(build_token_endpoint_uri("http"))})
+    end,
+    Payload3 = case string:find(TestCase, "missing_issuer") of
+        nomatch ->
+            Payload2;
+        _ ->
+            proplists:delete(issuer, Payload2)
+    end,
+    Payload4 = case string:find(TestCase, "non_https_issuer") of
+        nomatch ->
+            Payload3;
+        _ ->
+            lists:keyreplace(issuer, 1, Payload3, {issuer, list_to_binary(build_issuer("http"))})
+    end,
+    Payload = case string:find(TestCase, "mismatch_issuer") of
+        nomatch ->
+            Payload4;
+        _ ->
+            lists:keyreplace(issuer, 1, Payload4, {issuer, <<"https://mismatch.example.com">>})
     end,
     Endpoint = case string:find(TestCase, "custom_endpoint") of
         nomatch ->  ?DEFAULT_OPENID_CONFIGURATION_PATH;
@@ -325,7 +360,7 @@ get_openid_configuration(Config) ->
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, ActualOpenId} = oauth2_client:get_openid_configuration(
         build_openid_discovery_endpoint(build_issuer("https")),
-        SslOptions),
+        SslOptions, []),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, ActualOpenId).
 
@@ -347,7 +382,7 @@ get_openid_configuration_returns_partial_payload(Config) ->
     SslOptions = [{ssl, ExpectedOAuthProvider0#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
         build_openid_discovery_endpoint(build_issuer("https")),
-        SslOptions),
+        SslOptions, []),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 
@@ -356,26 +391,73 @@ get_openid_configuration_using_path(Config) ->
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
         build_openid_discovery_endpoint(build_issuer("https", ?ISSUER_PATH)),
-        SslOptions),
-    ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
+        SslOptions, []),
+    ExpectedOpenId0 = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
+    ExpectedOpenId = ExpectedOpenId0#openid_configuration{
+        issuer = build_issuer("https", ?ISSUER_PATH)},
     assertOpenIdConfiguration(ExpectedOpenId,Actual).
 get_openid_configuration_using_path_and_custom_endpoint(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
         build_openid_discovery_endpoint(build_issuer("https", ?ISSUER_PATH),
-        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions),
-    ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
+        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions, []),
+    ExpectedOpenId0 = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
+    ExpectedOpenId = ExpectedOpenId0#openid_configuration{
+        issuer = build_issuer("https", ?ISSUER_PATH)},
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 get_openid_configuration_using_custom_endpoint(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
         build_openid_discovery_endpoint(build_issuer("https"),
-        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions),
+        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions, []),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 
+get_openid_configuration_non_https_jwks_uri(Config) ->
+    ExpectedOAuthProvider = ?config(oauth_provider, Config),
+    SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
+    NonHttpsJwksUri = list_to_binary(build_jwks_uri("http")),
+    ?assertEqual({error, {invalid_jwks_uri, NonHttpsJwksUri}},
+        oauth2_client:get_openid_configuration(
+            build_openid_discovery_endpoint(build_issuer("https")),
+            SslOptions, [])).
+
+get_openid_configuration_non_https_token_endpoint(Config) ->
+    ExpectedOAuthProvider = ?config(oauth_provider, Config),
+    SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
+    NonHttpsTokenEndpoint = list_to_binary(build_token_endpoint_uri("http")),
+    ?assertEqual({error, {invalid_token_endpoint, NonHttpsTokenEndpoint}},
+        oauth2_client:get_openid_configuration(
+            build_openid_discovery_endpoint(build_issuer("https")),
+            SslOptions, [])).
+
+get_openid_configuration_missing_issuer(Config) ->
+    ExpectedOAuthProvider = ?config(oauth_provider, Config),
+    SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
+    ?assertEqual({error, {invalid_issuer, undefined}},
+        oauth2_client:get_openid_configuration(
+            build_openid_discovery_endpoint(build_issuer("https")),
+            SslOptions, [])).
+
+get_openid_configuration_non_https_issuer(Config) ->
+    ExpectedOAuthProvider = ?config(oauth_provider, Config),
+    SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
+    NonHttpsIssuer = list_to_binary(build_issuer("http")),
+    ?assertEqual({error, {invalid_issuer, NonHttpsIssuer}},
+        oauth2_client:get_openid_configuration(
+            build_openid_discovery_endpoint(build_issuer("https")),
+            SslOptions, [])).
+
+get_openid_configuration_mismatch_issuer(Config) ->
+    ExpectedOAuthProvider = ?config(oauth_provider, Config),
+    SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
+    DiscoveryEndpoint = build_openid_discovery_endpoint(build_issuer("https")),
+    ?assertEqual({error, {issuer_mismatch, DiscoveryEndpoint, <<"https://mismatch.example.com">>}},
+        oauth2_client:get_openid_configuration(
+            DiscoveryEndpoint,
+            SslOptions, [])).
 
 assertOpenIdConfiguration(ExpectedOpenIdProvider, ActualOpenIdProvider) ->
     ?assertEqual(ExpectedOpenIdProvider#openid_configuration.issuer,
@@ -771,10 +853,10 @@ build_http_response(Code, ContentType, Payload) ->
         {content_type, ContentType},
         {payload, Payload}
   ].
-build_http_get_openid_configuration_payload() ->
+build_http_get_openid_configuration_payload(Path) ->
     Scheme = "https",
     [
-        {issuer, build_issuer(Scheme) },
+        {issuer, build_issuer(Scheme, Path) },
         {authorization_endpoint, Scheme ++ "://localhost:8000/authorize"},
         {token_endpoint, build_token_endpoint_uri(Scheme)},
         {end_session_endpoint, Scheme ++ "://localhost:8000/logout"},

@@ -319,14 +319,50 @@
         ]}
        ], []
   },
-  {additional_scopes_key, 
+  {additional_scopes_key,
       "auth_oauth2.resource_server_id = new_resource_server_id
        auth_oauth2.additional_scopes_key = roles realm.roles",
        [
         {rabbitmq_auth_backend_oauth2, [
             {resource_server_id,<<"new_resource_server_id">>},
-            {extra_scopes_source, <<"roles realm.roles">> }            
+            {extra_scopes_source, <<"roles realm.roles">> }
         ]}
        ], []
+  },
+  {discovery_validation_root_level,
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.discovery.verify_https_endpoints = true
+       auth_oauth2.discovery.verify_issuer = false",
+      [
+       {rabbitmq_auth_backend_oauth2, [
+           {resource_server_id,<<"new_resource_server_id">>},
+           {discovery, [
+               {verify_https_endpoints, true},
+               {verify_issuer, false}
+           ]}
+       ]}
+      ], []
+  },
+  {discovery_validation_oauth_provider,
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.oauth_providers.uaa.issuer = https://uaa
+       auth_oauth2.oauth_providers.uaa.discovery.verify_https_endpoints = false
+       auth_oauth2.oauth_providers.uaa.discovery.verify_issuer = true",
+      [
+       {rabbitmq_auth_backend_oauth2, [
+           {resource_server_id,<<"new_resource_server_id">>},
+           {oauth_providers,
+             #{
+               <<"uaa">> => [
+                   {discovery, [
+                       {verify_issuer, true},
+                       {verify_https_endpoints, false}                       
+                   ]},
+                   {issuer, "https://uaa"}
+               ]
+             }
+           }
+       ]}
+      ], []
   }
 ].

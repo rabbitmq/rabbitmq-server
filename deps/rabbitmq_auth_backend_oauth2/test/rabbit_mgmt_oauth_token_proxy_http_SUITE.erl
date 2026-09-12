@@ -46,16 +46,20 @@ groups() ->
 init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
     inets:start(),
+    {ok, _} = application:ensure_all_started(ssl),
     {ok, _} = application:ensure_all_started(cowboy),
     Config1 = rabbit_ct_helpers:set_config(Config0,
         [{rmq_nodename_suffix, ?MODULE}]),
     Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
         rabbit_ct_broker_helpers:setup_steps() ++
         rabbit_ct_client_helpers:setup_steps()),
-    MockPort = start_mock_provider(),
+    CertsDir = ?config(rmq_certsdir, Config2),
+    CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
+    MockPort = start_mock_provider(CertsDir),
     [ok = rabbit_ct_broker_helpers:enable_plugin(Config2, 0, Plugin)
      || Plugin <- [rabbitmq_management, rabbitmq_auth_backend_oauth2]],
-    rabbit_ct_helpers:set_config(Config2, {mock_port, MockPort}).
+    rabbit_ct_helpers:set_config(Config2,
+        [{mock_port, MockPort}, {mock_ca_cert_file, CaCertFile}]).
 
 end_per_suite(Config) ->
     _ = cowboy:stop_listener(?MOCK_LISTENER),
@@ -74,9 +78,13 @@ end_per_group(_, Config) ->
 init_per_testcase(_, Config) -> Config.
 end_per_testcase(_, Config) -> Config.
 
-%% The mock runs in the CT node; the broker reaches it over localhost.
-start_mock_provider() ->
-    {ok, _} = cowboy:start_clear(?MOCK_LISTENER, [{port, 0}],
+%% The mock runs in the CT node; the broker reaches it over localhost. It uses
+%% TLS because oauth2_client requires every OpenID endpoint to be HTTPS.
+start_mock_provider(CertsDir) ->
+    {ok, _} = cowboy:start_tls(?MOCK_LISTENER,
+        [{port, 0},
+         {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+         {keyfile, filename:join([CertsDir, "server", "key.pem"])}],
         #{env => #{dispatch => cowboy_router:compile([{'_', []}])}}),
     Port = ranch:get_port(?MOCK_LISTENER),
     Issuer = mock_base(Port),
@@ -93,6 +101,8 @@ configure(top_level, Config) ->
     ProviderURL = mock_base(?config(mock_port, Config)),
     set_env(Config, rabbitmq_auth_backend_oauth2, resource_server_id,
         <<"rabbitmq">>),
+    set_env(Config, rabbitmq_auth_backend_oauth2, key_config,
+        ssl_options(?config(mock_ca_cert_file, Config))),
     set_env(Config, rabbitmq_management, oauth_enabled, true),
     set_env(Config, rabbitmq_management, oauth_client_id, <<"rabbitmq_mgt">>),
     set_env(Config, rabbitmq_management, oauth_client_secret, ?SECRET),
@@ -104,6 +114,8 @@ configure(per_resource, Config) ->
     set_env(Config, rabbitmq_auth_backend_oauth2, resource_servers,
         #{<<"rabbit_prod">> => [{id, <<"rabbit_prod">>}],
           <<"rabbit_public">> => [{id, <<"rabbit_public">>}]}),
+    set_env(Config, rabbitmq_auth_backend_oauth2, key_config,
+        ssl_options(?config(mock_ca_cert_file, Config))),
     set_env(Config, rabbitmq_management, oauth_enabled, true),
     set_env(Config, rabbitmq_management, oauth_resource_servers,
         #{<<"rabbit_prod">> =>
@@ -118,12 +130,20 @@ configure(per_resource, Config) ->
                {oauth_provider_url, ProviderURL}]}),
     rabbit_ct_helpers:set_config(Config, {resource, <<"rabbit_prod">>}).
 
+%% Trusts the mock provider's certificate so the proxy's outbound TLS
+%% connection to it succeeds.
+ssl_options(CaCertFile) ->
+    [{verify, verify_peer},
+     {depth, 10},
+     {fail_if_no_peer_cert, false},
+     {cacertfile, CaCertFile}].
+
 reset_oauth(Config) ->
     [unset_env(Config, rabbitmq_management, Key)
      || Key <- [oauth_enabled, oauth_client_id, oauth_client_secret,
                 oauth_provider_url, oauth_scopes, oauth_resource_servers]],
     [unset_env(Config, rabbitmq_auth_backend_oauth2, Key)
-     || Key <- [resource_server_id, resource_servers]],
+     || Key <- [resource_server_id, resource_servers, key_config]],
     ok.
 
 %%
@@ -232,7 +252,7 @@ proxy_token_endpoint(Config, Id) ->
     iolist_to_binary([mgmt_base(Config), token_path(Id)]).
 
 mock_base(Port) ->
-    iolist_to_binary(["http://localhost:", integer_to_list(Port)]).
+    iolist_to_binary(["https://localhost:", integer_to_list(Port)]).
 
 mgmt_base(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt),
