@@ -25,7 +25,8 @@
     translate_resource_servers/1,
     translate_signing_keys/1,
     translate_endpoint_params/2,
-    translate_scope_aliases/1
+    translate_scope_aliases/1,
+    tokenize_additional_scopes_key/1
 ]).
 
 resource_servers_key_synonym(Key) -> maps:get(Key, ?RESOURCE_SERVERS_SYNONYMS, Key).
@@ -266,6 +267,8 @@ resource_server_property_value(Key, V) ->
     case resource_servers_key_synonym(Key) of
         "scope_pattern_syntax" ->
             parse_scope_pattern_syntax_for_schema(V);
+        "extra_scopes_source" ->
+            tokenize_additional_scopes_key(V);
         _ ->
             resource_server_string_property_value(V)
     end.
@@ -274,6 +277,15 @@ resource_server_string_property_value(V) when is_binary(V) ->
     V;
 resource_server_string_property_value(V) when is_list(V) ->
     list_to_binary(V).
+
+tokenize_additional_scopes_key(V) when is_binary(V) ->
+    tokenize_additional_scopes_key(binary_to_list(V));
+tokenize_additional_scopes_key(V) when is_list(V) ->
+    Paths = string:lexemes(V, " "),
+    [[list_to_binary(Segment)
+      || Segment <- cuttlefish_variable:tokenize(Path),
+         Segment =/= ""]
+     || Path <- Paths].
 
 parse_scope_pattern_syntax_for_schema(wildcard) ->
     wildcard;

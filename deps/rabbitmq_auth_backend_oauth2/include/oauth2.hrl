@@ -48,7 +48,7 @@
   verify_aud :: boolean(),
   require_exp :: boolean(),
   scope_prefix :: binary(),
-  additional_scopes_key :: binary() | undefined,
+  additional_scopes_key :: binary() | [[binary()]] | undefined,
   preferred_username_claims :: list(),
   scope_aliases :: map() | undefined,
   oauth_provider_id :: oauth_provider_id(),

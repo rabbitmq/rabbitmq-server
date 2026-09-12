@@ -30,7 +30,7 @@
             {resource_server_id,<<"new_resource_server_id">>},
             {scope_prefix,<<"new_resource_server_id.">>},
             {resource_server_type,<<"new_resource_server_type">>},
-            {extra_scopes_source, <<"my_custom_scope_key">>},
+            {extra_scopes_source, [[<<"my_custom_scope_key">>]]},
             {preferred_username_claims, [<<"user_name">>, <<"username">>, <<"email">>]},
             {verify_aud, true},
             {scope_pattern_syntax, regex},
@@ -86,13 +86,13 @@
         auth_oauth2.resource_servers.1.id = rabbitmq-operations
         auth_oauth2.resource_servers.1.scope_prefix = api://
         auth_oauth2.resource_servers.customers.id = rabbitmq-customers
-        auth_oauth2.resource_servers.customers.additional_scopes_key = roles",
+        auth_oauth2.resource_servers.customers.additional_scopes_key = roles https://example\\.com/claims.roles",
         [
         {rabbitmq_auth_backend_oauth2, [
             {resource_server_id,<<"new_resource_server_id">>},
             {scope_prefix,<<"new_resource_server_id.">>},
             {resource_server_type,<<"new_resource_server_type">>},
-            {extra_scopes_source, <<"my_custom_scope_key">>},
+            {extra_scopes_source, [[<<"my_custom_scope_key">>]]},
             {preferred_username_claims, [<<"user_name">>, <<"username">>, <<"email">>]},
             {verify_aud, true},
             {jwks_uri, "https://my-jwt-issuer/jwks.json"},
@@ -103,7 +103,8 @@
                   {id, <<"rabbitmq-operations">>}
                 ],
                 <<"rabbitmq-customers">> => [
-                  {extra_scopes_source, <<"roles">>},
+                  {extra_scopes_source, [[<<"roles">>],
+                                         [<<"https://example.com/claims">>, <<"roles">>]]},
                   {id, <<"rabbitmq-customers">>}
                 ]
               }
@@ -157,7 +158,7 @@
             {resource_server_id,<<"new_resource_server_id">>},
             {scope_prefix,<<"new_resource_server_id.">>},
             {resource_server_type,<<"new_resource_server_type">>},
-            {extra_scopes_source, <<"my_custom_scope_key">>},
+            {extra_scopes_source, [[<<"my_custom_scope_key">>]]},
             {preferred_username_claims, [<<"user_name">>, <<"username">>, <<"email">>]},
             {verify_aud, true},
             {oauth_providers,
@@ -325,7 +326,17 @@
        [
         {rabbitmq_auth_backend_oauth2, [
             {resource_server_id,<<"new_resource_server_id">>},
-            {extra_scopes_source, <<"roles realm.roles">> }            
+            {extra_scopes_source, [[<<"roles">>], [<<"realm">>, <<"roles">>]] }            
+        ]}
+       ], []
+  },
+  {additional_scopes_key_with_escaped_dots,
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.additional_scopes_key = https://example\\.com/claims.roles",
+       [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id,<<"new_resource_server_id">>},
+            {extra_scopes_source, [[<<"https://example.com/claims">>, <<"roles">>]]}
         ]}
        ], []
   }
