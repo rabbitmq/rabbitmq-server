@@ -17,7 +17,9 @@
          disposable_connection_call/3,
          ensure_connection_closed/1, ensure_connection_closed/2,
          ensure_connection_closed_async/1, ensure_connection_closed_async/2,
-         log_terminate/4, unacked_new/0, ack/3, nack/3, forward/9,
+         log_terminate/4, log_buffered_on_terminate/3, ack_dropped/3,
+         unacked_new/0, ack/3, nack/3, forward/9,
+         drain_buffer/4, drain_again/3,
          handle_downstream_down/3, handle_upstream_down/3,
          get_connection_name/2,
          connection_close_timeout/0]).
@@ -41,6 +43,7 @@ start_conn_ch(Fun, OUpstream, OUParams,
     ConnName = get_connection_name(Upstream, UParams),
     case open_monitor(#amqp_params_direct{virtual_host = DownVHost}, ConnName) of
         {ok, DConn, DCh} ->
+            amqp_connection:register_blocked_handler(DConn, self()),
             case Upstream#upstream.ack_mode of
                 'on-confirm' ->
                     #'confirm.select_ok'{} =
@@ -263,7 +266,7 @@ forward(#upstream{ack_mode      = AckMode,
                            'on-confirm' -> amqp_channel:next_publish_seqno(DCh);
                            _            -> ignore
                        end,
-                 amqp_channel:cast(DCh, PublishMethod, Msg1),
+                 amqp_channel:cast_flow(DCh, PublishMethod, Msg1),
                  case AckMode of
                      'on-confirm' ->
                          gb_trees:insert(Seq, DT, Unacked);
@@ -273,15 +276,65 @@ forward(#upstream{ack_mode      = AckMode,
                      'no-ack' ->
                          Unacked
                  end;
-        false -> amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DT}),
-                 %% Drop it, but acknowledge it!
+        false -> ack_dropped(AckMode, Ch, DT),
                  Unacked
     end.
+
+%% Acknowledge a message that is dropped rather than forwarded, unless the
+%% upstream is not tracking the tag: rabbit_channel:collect_acks/3 raises
+%% precondition_failed for an unknown tag, which would close the upstream
+%% channel and put the link in a restart loop.
+-spec ack_dropped('no-ack' | 'on-publish' | 'on-confirm', pid(),
+                  non_neg_integer()) -> ok.
+ack_dropped('no-ack', _Ch, _DT) ->
+    ok;
+ack_dropped(_AckMode, Ch, DT) ->
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DT}),
+    ok.
 
 maybe_clear_user_id(false, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{user_id = undefined}};
 maybe_clear_user_id(true, Msg) ->
     Msg.
+
+%% Drain a link's blocked_buffer, delivering messages until it is empty
+%% or the link becomes blocked again: either by the downstream connection
+%% raising a resource alarm or by credit_flow entering flow state after a
+%% delivery. Returns the remaining queue and the updated state; the caller
+%% stashes the queue back into its own state record.
+%%
+%% The pre-check ensures that if the alarm is still active or credit_flow
+%% is still blocked when a bump_credit or connection.unblocked event
+%% arrives, no message is forwarded until both conditions clear.
+-spec drain_buffer(queue:queue(), State, DeliverFun, IsBlockedFun) ->
+          {queue:queue(), State} when
+      State :: term(),
+      DeliverFun :: fun((#'basic.deliver'{}, term(), State) -> State),
+      IsBlockedFun :: fun((State) -> boolean()).
+drain_buffer(Q, State, DeliverFun, IsBlockedFun) ->
+    case IsBlockedFun(State) orelse credit_flow:blocked() of
+        true ->
+            {Q, State};
+        false ->
+            case queue:out(Q) of
+                {empty, Q1} ->
+                    {Q1, State};
+                {{value, {DeliverMethod, Msg}}, Q1} ->
+                    {Q1, DeliverFun(DeliverMethod, Msg, State)}
+            end
+    end.
+
+%% True when the caller should ask itself to drain again. Draining one delivery
+%% per callback keeps the link answering acknowledgements, confirms, channel
+%% deaths and shutdown while a long buffer empties, instead of forwarding up to
+%% prefetch-count messages without returning to its mailbox. Order is preserved
+%% because a delivery arriving mid-drain is buffered behind the rest.
+-spec drain_again(queue:queue(), State, fun((State) -> boolean())) ->
+          boolean() when State :: term().
+drain_again(Q, State, IsBlockedFun) ->
+    not queue:is_empty(Q) andalso
+        not IsBlockedFun(State) andalso
+        not credit_flow:blocked().
 
 extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
     Headers.
@@ -317,6 +370,28 @@ handle_upstream_down(Reason, _Args, State) ->
     {stop, {upstream_channel_down, Reason}, State}.
 
 %%----------------------------------------------------------------------------
+
+%% A link that stops while holding buffered deliveries loses them in `no-ack',
+%% because the upstream discarded them when it delivered them and this process
+%% holds the only copy. In the other ack modes they were never acknowledged
+%% upstream, so they are redelivered.
+-spec log_buffered_on_terminate(queue:queue(), #upstream{},
+                                rabbit_types:r(exchange | queue)) -> ok.
+log_buffered_on_terminate(Buffer, #upstream{ack_mode = AckMode}, XorQName) ->
+    case {queue:len(Buffer), AckMode} of
+        {0, _} ->
+            ok;
+        {N, 'no-ack'} ->
+            ?LOG_WARNING("Federation ~ts is stopping while holding ~b buffered "
+                         "message(s). They are lost: with ack-mode 'no-ack' "
+                         "the upstream did not retain a copy.",
+                         [rabbit_misc:rs(XorQName), N]);
+        {N, _} ->
+            ?LOG_INFO("Federation ~ts is stopping while holding ~b buffered "
+                      "message(s). They were not acknowledged upstream, so "
+                      "they will be redelivered.",
+                      [rabbit_misc:rs(XorQName), N])
+    end.
 
 log_terminate(gone, _Upstream, _UParams, _XorQName) ->
     %% the link cannot start, this has been logged already

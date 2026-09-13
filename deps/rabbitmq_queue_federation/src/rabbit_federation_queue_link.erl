@@ -27,7 +27,8 @@
 
 -record(not_started, {queue, run, upstream, upstream_params}).
 -record(state, {queue, run, conn, ch, dconn, dch, upstream, upstream_params,
-                unacked, link_state = starting}).
+                unacked, link_state = starting,
+                blocked = false, blocked_buffer = queue:new()}).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
@@ -199,25 +200,37 @@ handle_info(#'basic.nack'{} = Nack, State = #state{ch      = Ch,
     Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
     {noreply, State#state{unacked = Unacked1}};
 
-handle_info({#'basic.deliver'{redelivered = Redelivered,
-                              exchange    = X,
-                              routing_key = K} = DeliverMethod, Msg},
-            State = #state{queue           = Q,
-                           upstream        = Upstream,
-                           upstream_params = UParams,
-                           ch              = Ch,
-                           dch             = DCh,
-                           unacked         = Unacked}) when ?is_amqqueue(Q) ->
-    QName = amqqueue:get_name(Q),
-    PublishMethod = #'basic.publish'{exchange    = <<"">>,
-                                     routing_key = QName#resource.name},
-    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, X, K, H) end,
-    ForwardFun = fun (_H) -> true end,
-    Unacked1 = rabbit_federation_link_util:forward(
-                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
-                 HeadersFun, ForwardFun, Msg, Unacked),
-    %% TODO actually we could reject when 'stopped'
-    {noreply, State#state{unacked = Unacked1}};
+handle_info(#'connection.blocked'{},
+            State = #state{queue = Q}) when ?is_amqqueue(Q) ->
+    {noreply, State#state{blocked = true}};
+
+handle_info(#'connection.unblocked'{},
+            State = #state{blocked_buffer = QBuffer,
+                           queue = Q}) when ?is_amqqueue(Q) ->
+    State1 = State#state{blocked = false},
+    {QBuffer1, State2} = drain(QBuffer, State1),
+    {noreply, State2#state{blocked_buffer = QBuffer1}};
+
+handle_info(continue_drain, State = #state{blocked_buffer = QBuffer}) ->
+    {QBuffer1, State1} = drain(QBuffer, State),
+    {noreply, State1#state{blocked_buffer = QBuffer1}};
+
+handle_info({bump_credit, Msg},
+            State = #state{blocked_buffer = QBuffer,
+                           queue = Q}) when ?is_amqqueue(Q) ->
+    credit_flow:handle_bump_msg(Msg),
+    {QBuffer1, State1} = drain(QBuffer, State),
+    {noreply, State1#state{blocked_buffer = QBuffer1}};
+
+handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
+            State = #state{blocked = Blocked, blocked_buffer = QBuffer, queue = Q}) when ?is_amqqueue(Q) ->
+    case Blocked orelse credit_flow:blocked()
+        orelse not queue:is_empty(QBuffer) of
+        true ->
+            {noreply, State#state{blocked_buffer = queue:in({DeliverMethod, Msg}, QBuffer)}};
+        false ->
+            {noreply, do_deliver(DeliverMethod, Msg, State)}
+    end;
 
 handle_info(#'basic.cancel'{},
             State = #state{queue           = Q,
@@ -262,9 +275,12 @@ terminate(Reason, #state{dconn           = DConn,
                          conn            = Conn,
                          upstream        = Upstream,
                          upstream_params = UParams,
+                         blocked_buffer  = Buffer,
                          queue           = Q}) when ?is_amqqueue(Q) ->
     Timeout = connection_close_timeout(),
     QName = amqqueue:get_name(Q),
+    rabbit_federation_link_util:log_buffered_on_terminate(
+      Buffer, Upstream, QName),
     case DConn of
         undefined -> ok;
         _         -> rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout)
@@ -305,6 +321,11 @@ go(S0 = #not_started{run             = Run,
                 fun(?NOT_FOUND, _Text) ->
                         amqp_channel:call(Ch, Declare)
                 end),
+              %% Deferring the downstream publish also defers the upstream
+              %% basic.ack, which bounds blocked_buffer by prefetch-count in
+              %% on-confirm and on-publish. In no-ack mode there is no ack to
+              %% withhold and prefetch does not bound the buffer for any
+              %% queue type, so the buffer is unbounded there.
               case Upstream#upstream.ack_mode of
                   'no-ack' -> ok;
                   _        -> amqp_channel:call(
@@ -414,8 +435,29 @@ cancel(Ch, Upstream) ->
     amqp_channel:cast(Ch, #'basic.cancel'{nowait       = true,
                                           consumer_tag = ConsumerTag}).
 
-handle_down(DCh, Reason, _Ch, DCh, Args, State) ->
-    rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
+handle_down(DCh, Reason, _Ch, DCh, Args,
+            State = #state{blocked        = Blocked,
+                           blocked_buffer = QBuffer,
+                           link_state     = LinkState}) ->
+    %% The downstream channel is the credit_flow peer for this link. Tell
+    %% credit_flow it is gone, otherwise a link that survives a clean DCh
+    %% death (Reason =:= normal | shutdown) stays credit_flow:blocked/0
+    %% forever and its blocked_buffer never drains.
+    credit_flow:peer_down(DCh),
+    case LinkState =/= closing andalso
+        (Blocked orelse not queue:is_empty(QBuffer)) of
+        true ->
+            %% Nothing can be forwarded on a dead channel, and surviving would
+            %% strand what is buffered: peer_down/1 has just cleared the
+            %% credit_flow block, so the next delivery would be forwarded
+            %% ahead of everything already buffered, and neither bump_credit
+            %% nor connection.unblocked can arrive to drain it. Restart, so an
+            %% unacked delivery is redelivered.
+            {stop, {shutdown, restart}, State};
+        false ->
+            rabbit_federation_link_util:handle_downstream_down(
+              Reason, Args, State)
+    end;
 handle_down(Ch, Reason, Ch, _DCh, Args, State) ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
 
@@ -425,3 +467,35 @@ connection_close_timeout() ->
                                      connection_close_timeout,
                                      Default),
     erlang:min(Configured, Default).
+
+drain(QBuffer, State) ->
+    {QBuffer1, State1} = rabbit_federation_link_util:drain_buffer(
+                      QBuffer, State, fun do_deliver/3, fun is_blocked/1),
+    case rabbit_federation_link_util:drain_again(
+           QBuffer1, State1, fun is_blocked/1) of
+        true  -> self() ! continue_drain;
+        false -> ok
+    end,
+    {QBuffer1, State1}.
+
+is_blocked(#state{blocked = B}) -> B.
+
+do_deliver(#'basic.deliver'{redelivered = Redelivered,
+                            exchange    = X,
+                            routing_key = K} = DeliverMethod, Msg,
+           State = #state{queue           = Q,
+                          upstream        = Upstream,
+                          upstream_params = UParams,
+                          ch              = Ch,
+                          dch             = DCh,
+                          unacked         = Unacked}) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
+    PublishMethod = #'basic.publish'{exchange    = <<"">>,
+                                     routing_key = QName#resource.name},
+    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, X, K, H) end,
+    ForwardFun = fun (_H) -> true end,
+    Unacked1 = rabbit_federation_link_util:forward(
+                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
+                 HeadersFun, ForwardFun, Msg, Unacked),
+    %% TODO actually we could reject when 'stopped'
+    State#state{unacked = Unacked1}.
