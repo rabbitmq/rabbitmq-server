@@ -38,7 +38,8 @@ groups() ->
     [
      {alarm, [], [
                   alarm_buffers_and_drains_in_order,
-                  alarm_buffers_no_ack_and_drains_in_order
+                  alarm_buffers_no_ack_and_drains_in_order,
+                  downstream_death_while_buffering_restarts_link
                  ]}
     ].
 
@@ -91,6 +92,59 @@ alarm_buffers_and_drains_in_order(Config) ->
 alarm_buffers_no_ack_and_drains_in_order(Config) ->
     do_alarm_case(<<"no-ack">>, Config).
 
+%% A link holding buffered deliveries must not survive the loss of its
+%% downstream channel. credit_flow:peer_down/1 clears the credit_flow block, so
+%% the next delivery would be forwarded ahead of everything already buffered,
+%% and neither bump_credit nor connection.unblocked can arrive on a dead
+%% channel to drain the rest. Restarting redelivers them instead.
+downstream_death_while_buffering_restarts_link(Config) ->
+    UpstreamUri = rabbit_ct_broker_helpers:node_uri(Config, 1),
+    setup_federation(Config, UpstreamUri, <<"on-confirm">>),
+
+    {UpConn, UpCh} = rabbit_ct_client_helpers:open_connection_and_channel(
+                       Config, 1),
+    {DownConn, DownCh} = rabbit_ct_client_helpers:open_connection_and_channel(
+                           Config, 0),
+
+    declare_exchange(UpCh, ?UPSTREAM_X),
+    declare_exchange(DownCh, ?DOWNSTREAM_X),
+    amqp_channel:call(DownCh, #'queue.declare'{queue = ?DOWNSTREAM_Q,
+                                               durable = true}),
+    amqp_channel:call(DownCh, #'queue.bind'{queue = ?DOWNSTREAM_Q,
+                                            exchange = ?DOWNSTREAM_X,
+                                            routing_key = <<"k">>}),
+
+    await_running_link(Config, ?DOWNSTREAM_X, ?UPSTREAM_X),
+    await_upstream_binding(Config),
+
+    while_downstream_blocked(
+      Config,
+      fun() ->
+              publish_n(UpCh, ?UPSTREAM_X, <<"k">>, ?MSG_COUNT),
+              ?assertEqual(0, message_count(Config, 0, ?DOWNSTREAM_Q)),
+              %% Buffered on the link. Take its downstream connection away
+              %% cleanly, which is the case that used to leave it wedged.
+              ok = close_downstream_link_connections(Config)
+      end),
+
+    %% The link restarts, and because on-confirm never acked the buffered
+    %% deliveries the upstream redelivers them, so none are lost.
+    ?awaitMatch(?MSG_COUNT, message_count(Config, 0, ?DOWNSTREAM_Q), 60_000),
+    await_running_link(Config, ?DOWNSTREAM_X, ?UPSTREAM_X),
+
+    rabbit_ct_client_helpers:close_connection_and_channel(DownConn, DownCh),
+    rabbit_ct_client_helpers:close_connection_and_channel(UpConn, UpCh),
+    ok.
+
+%% The only direct connections on the downstream node are federation's.
+close_downstream_link_connections(Config) ->
+    Pids = rabbit_ct_broker_helpers:rpc(
+             Config, 0, rabbit_direct, list_local, []),
+    ?assertNotEqual([], Pids),
+    [rabbit_ct_broker_helpers:rpc(Config, 0, amqp_connection, close, [Pid])
+     || Pid <- Pids],
+    ok.
+
 do_alarm_case(AckMode, Config) ->
     UpstreamUri = rabbit_ct_broker_helpers:node_uri(Config, 1),
     setup_federation(Config, UpstreamUri, AckMode),
@@ -112,6 +166,7 @@ do_alarm_case(AckMode, Config) ->
                                             routing_key = <<"k">>}),
 
     await_running_link(Config, ?DOWNSTREAM_X, ?UPSTREAM_X),
+    await_upstream_binding(Config),
 
     while_downstream_blocked(
       Config,
@@ -162,6 +217,21 @@ setup_federation(Config, UpstreamUri, AckMode) ->
       Config, 0, ?POLICY_NAME, <<"^fed-alarm.downstream$">>, <<"exchanges">>,
       [{<<"federation-upstream-set">>, ?UPSTREAM_SET}]).
 
+%% The link creates the upstream binding asynchronously, after the downstream
+%% bind commits, and reporting `running' does not imply it exists yet: go/1
+%% passes ensure_upstream_bindings/2 whatever rabbit_binding:list_for_source/1
+%% returned for the downstream exchange, which is empty if the link started
+%% first. Until it exists, ?UPSTREAM_X is a `direct' exchange with no matching
+%% binding, so every publish is silently unroutable, confirms still succeed,
+%% and the case fails 30s later looking like a drain bug.
+await_upstream_binding(Config) ->
+    Resource = rabbit_misc:r(<<"/">>, exchange, ?UPSTREAM_X),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              [] =/= rabbit_ct_broker_helpers:rpc(
+                       Config, 1, rabbit_binding, list_for_source, [Resource])
+      end, 30_000).
+
 await_running_link(Config, DownX, UpX) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
@@ -195,24 +265,34 @@ while_downstream_blocked(Config, Fun) when is_function(Fun, 0) ->
     [] = rabbit_ct_broker_helpers:rpc(
            Config, 0, rabbit_alarm, register,
            [self(), {?MODULE, conserve_resources, []}]),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, 0, vm_memory_monitor,
-           set_vm_memory_high_watermark, [0]),
-    Source = receive
-                 {block, S} -> S
-             after
-                 15_000 -> ct:fail(alarm_set_timeout)
-             end,
+    %% Everything from here on is inside the try, so that an abort while
+    %% waiting for the alarm cannot leave the node pinned at a watermark of 0
+    %% and break the next testcase with {badmatch, [memory]}.
     try
-        Fun()
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, vm_memory_monitor,
+               set_vm_memory_high_watermark, [0]),
+        Source = receive
+                     {block, S} -> S
+                 after
+                     15_000 -> ct:fail(alarm_set_timeout)
+                 end,
+        Fun(),
+        receive
+            {unblock, Source} -> ok
+        after
+            0 -> ok
+        end
     after
         ok = rabbit_ct_broker_helpers:rpc(
                Config, 0, vm_memory_monitor,
                set_vm_memory_high_watermark, [OrigLimit]),
+        %% Waited for here rather than asserted, because raising from an
+        %% `after' block would replace whichever assertion actually failed.
         receive
-            {unblock, Source} -> ok
+            {unblock, _} -> ok
         after
-            15_000 -> ct:fail(alarm_clear_timeout)
+            15_000 -> ct:pal("alarm did not clear within 15s")
         end
     end.
 

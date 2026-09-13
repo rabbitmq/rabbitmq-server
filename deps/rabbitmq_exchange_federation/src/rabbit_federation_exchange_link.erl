@@ -150,6 +150,8 @@ handle_cast(disconnect_for_shutdown, State = #state{
         upstream = Upstream,
         internal_exchange = IntExchange,
         internal_exchange_timer = TRef,
+        blocked = Blocked,
+        blocked_buffer = Buffer,
         queue = Queue}) ->
     _ = timer:cancel(TRef),
     Timeout = connection_close_timeout(),
@@ -158,7 +160,10 @@ handle_cast(disconnect_for_shutdown, State = #state{
         undefined ->
             ok;
         _ ->
-            case Upstream#upstream.resource_cleanup_mode of
+            %% A drain or a plugin stop restarts this link rather than
+            %% retiring it, so the buffer has to be treated the same way
+            %% terminate/2 treats a restart.
+            case cleanup_mode({shutdown, restart}, Upstream, Blocked, Buffer) of
                 never ->
                     ok;
                 _ ->
@@ -218,8 +223,8 @@ handle_info({bump_credit, Msg}, State = #state{blocked_buffer = Q}) ->
     {noreply, State1#state{blocked_buffer = Q1}};
 
 handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
-            State = #state{blocked = Blocked, blocked_buffer = Q}) ->
-    case Blocked orelse credit_flow:blocked() of
+            State = #state{blocked_buffer = Q}) ->
+    case is_blocked(State) orelse credit_flow:blocked() of
         true ->
             {noreply, State#state{blocked_buffer = queue:in({DeliverMethod, Msg}, Q)}};
         false ->
@@ -276,11 +281,15 @@ terminate(Reason, #state{downstream_connection = DConn,
                          downstream_exchange   = XName,
                          internal_exchange_timer = TRef,
                          internal_exchange     = IntExchange,
+                         blocked               = Blocked,
+                         blocked_buffer        = Buffer,
                          queue                 = Queue}) when Reason =:= shutdown;
                                                               Reason =:= {shutdown, restart};
                                                               Reason =:= gone ->
     Timeout = connection_close_timeout(),
     _ = timer:cancel(TRef),
+    rabbit_federation_link_util:log_buffered_on_terminate(
+      Buffer, Upstream, XName),
     case DConn of
         undefined -> ok;
         _         -> rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout)
@@ -289,8 +298,9 @@ terminate(Reason, #state{downstream_connection = DConn,
         undefined ->
             ok;
         _ ->
-            ?LOG_DEBUG("Exchange federation: link is shutting down, resource cleanup mode: ~tp", [Upstream#upstream.resource_cleanup_mode]),
-            case Upstream#upstream.resource_cleanup_mode of
+            Mode = cleanup_mode(Reason, Upstream, Blocked, Buffer),
+            ?LOG_DEBUG("Exchange federation: link is shutting down, resource cleanup mode: ~tp", [Mode]),
+            case Mode of
                 never -> ok;
                 _     ->
                     ?LOG_DEBUG("Federated exchange '~ts' link will delete its internal queue '~ts'", [Upstream#upstream.exchange_name, Queue]),
@@ -308,9 +318,12 @@ terminate(Reason, #state{downstream_connection = DConn,
                          upstream              = Upstream,
                          upstream_params       = UParams,
                          downstream_exchange   = XName,
+                         blocked_buffer        = Buffer,
                          internal_exchange_timer = TRef}) ->
     Timeout = connection_close_timeout(),
     _ = timer:cancel(TRef),
+    rabbit_federation_link_util:log_buffered_on_terminate(
+      Buffer, Upstream, XName),
     case DConn of
         undefined -> ok;
         _         -> rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout)
@@ -322,6 +335,26 @@ terminate(Reason, #state{downstream_connection = DConn,
     end,
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, XName),
     ok.
+
+%% Deleting the internal upstream queue discards whatever it still holds, along
+%% with everything the link had checked out unacked. A link that is restarting
+%% to recover from a lost downstream channel is coming back to redeliver
+%% exactly that, so the queue has to survive regardless of the configured
+%% cleanup mode. This has to be the same condition handle_down/7 stops on, or
+%% the two disagree over which restarts are recoverable.
+%%
+%% A link stopping for good is the opposite case: it has to clean up even with
+%% a buffer, because no link is left to do it later and the queue would keep
+%% accumulating messages that nothing consumes.
+cleanup_mode({shutdown, restart}, #upstream{resource_cleanup_mode = Mode},
+             Blocked, Buffer) ->
+    case Blocked orelse not queue:is_empty(Buffer) of
+        true  -> never;
+        false -> Mode
+    end;
+cleanup_mode(_Reason, #upstream{resource_cleanup_mode = Mode}, _Blocked,
+             _Buffer) ->
+    Mode.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -824,13 +857,37 @@ get_hops(Table) ->
         _                                       -> 0
     end.
 
-handle_down(DCh, Reason, _Ch, _CmdCh, DCh, Args, State) ->
+handle_down(DCh, Reason, _Ch, _CmdCh, DCh, Args,
+            State = #state{blocked        = Blocked,
+                           blocked_buffer = Q,
+                           link_state     = LinkState}) ->
     %% The downstream channel is the credit_flow peer for this link. Tell
     %% credit_flow it is gone, otherwise a link that survives a clean DCh
     %% death (Reason =:= normal | shutdown) stays credit_flow:blocked/0
     %% forever and its blocked_buffer never drains.
     credit_flow:peer_down(DCh),
-    rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
+    case LinkState =/= closing andalso
+        (Blocked orelse not queue:is_empty(Q)) of
+        true ->
+            %% Nothing can be forwarded on a dead channel, and surviving would
+            %% strand what is buffered: peer_down/1 has just cleared the
+            %% credit_flow block, so the next delivery would be forwarded
+            %% ahead of everything already buffered, and neither bump_credit
+            %% nor connection.unblocked can arrive to drain it. Restart, so an
+            %% unacked delivery is redelivered.
+            %%
+            %% log_terminate/4 stays quiet for {shutdown, restart} because
+            %% every other site logs before munging the reason, so log here.
+            ?LOG_WARNING("downstream channel for federated exchange '~ts' went "
+                         "away (~tp) while the link held ~b buffered "
+                         "deliveries, restarting it",
+                         [(State#state.downstream_exchange)#resource.name,
+                          Reason, queue:len(Q)]),
+            {stop, {shutdown, restart}, State};
+        false ->
+            rabbit_federation_link_util:handle_downstream_down(
+              Reason, Args, State)
+    end;
 handle_down(ChPid, Reason, Ch, CmdCh, _DCh, Args, State)
   when ChPid =:= Ch; ChPid =:= CmdCh ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
@@ -846,7 +903,11 @@ drain(Q, State) ->
     rabbit_federation_link_util:drain_buffer(
       Q, State, fun do_deliver/3, fun is_blocked/1).
 
-is_blocked(#state{blocked = B}) -> B.
+%% A closing link must not forward. disconnect_for_shutdown leaves both the
+%% buffer and #state.blocked alone, so a delivery arriving afterwards would
+%% otherwise be published onto a closed downstream connection.
+is_blocked(#state{blocked = B, link_state = LinkState}) ->
+    B orelse LinkState =:= closing.
 
 do_deliver(#'basic.deliver'{routing_key = Key,
                             redelivered = Redelivered} = DeliverMethod, Msg,
@@ -862,7 +923,7 @@ do_deliver(#'basic.deliver'{routing_key = Key,
     PublishMethod = #'basic.publish'{exchange    = XNameBin,
                                      routing_key = Key},
     HeadersFun = fun (H) -> update_routing_headers(UParams, UName, UVhost, Redelivered, H) end,
-    %% We need to check should_forward/2 here in case the upstream
+    %% We need to check should_forward/4 here in case the upstream
     %% does not have federation and thus is using a fanout exchange.
     ForwardFun = fun (H) ->
                          DName = rabbit_nodes:cluster_name(),

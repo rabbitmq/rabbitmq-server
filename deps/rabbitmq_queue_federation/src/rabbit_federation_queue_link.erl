@@ -219,8 +219,8 @@ handle_info({bump_credit, Msg},
     {noreply, State1#state{blocked_buffer = QBuffer1}};
 
 handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
-            State = #state{blocked = Blocked, blocked_buffer = QBuffer, queue = Q}) when ?is_amqqueue(Q) ->
-    case Blocked orelse credit_flow:blocked() of
+            State = #state{blocked_buffer = QBuffer, queue = Q}) when ?is_amqqueue(Q) ->
+    case is_blocked(State) orelse credit_flow:blocked() of
         true ->
             {noreply, State#state{blocked_buffer = queue:in({DeliverMethod, Msg}, QBuffer)}};
         false ->
@@ -270,9 +270,12 @@ terminate(Reason, #state{dconn           = DConn,
                          conn            = Conn,
                          upstream        = Upstream,
                          upstream_params = UParams,
+                         blocked_buffer  = Buffer,
                          queue           = Q}) when ?is_amqqueue(Q) ->
     Timeout = connection_close_timeout(),
     QName = amqqueue:get_name(Q),
+    rabbit_federation_link_util:log_buffered_on_terminate(
+      Buffer, Upstream, QName),
     case DConn of
         undefined -> ok;
         _         -> rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout)
@@ -427,13 +430,37 @@ cancel(Ch, Upstream) ->
     amqp_channel:cast(Ch, #'basic.cancel'{nowait       = true,
                                           consumer_tag = ConsumerTag}).
 
-handle_down(DCh, Reason, _Ch, DCh, Args, State) ->
+handle_down(DCh, Reason, _Ch, DCh, Args,
+            State = #state{queue          = Q,
+                           blocked        = Blocked,
+                           blocked_buffer = QBuffer,
+                           link_state     = LinkState}) ->
     %% The downstream channel is the credit_flow peer for this link. Tell
     %% credit_flow it is gone, otherwise a link that survives a clean DCh
     %% death (Reason =:= normal | shutdown) stays credit_flow:blocked/0
     %% forever and its blocked_buffer never drains.
     credit_flow:peer_down(DCh),
-    rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
+    case LinkState =/= closing andalso
+        (Blocked orelse not queue:is_empty(QBuffer)) of
+        true ->
+            %% Nothing can be forwarded on a dead channel, and surviving would
+            %% strand what is buffered: peer_down/1 has just cleared the
+            %% credit_flow block, so the next delivery would be forwarded
+            %% ahead of everything already buffered, and neither bump_credit
+            %% nor connection.unblocked can arrive to drain it. Restart, so an
+            %% unacked delivery is redelivered.
+            %%
+            %% log_terminate/4 stays quiet for {shutdown, restart} because
+            %% every other site logs before munging the reason, so log here.
+            ?LOG_WARNING("downstream channel for federated queue '~ts' went "
+                         "away (~tp) while the link held ~b buffered "
+                         "deliveries, restarting it",
+                         [name(Q), Reason, queue:len(QBuffer)]),
+            {stop, {shutdown, restart}, State};
+        false ->
+            rabbit_federation_link_util:handle_downstream_down(
+              Reason, Args, State)
+    end;
 handle_down(Ch, Reason, Ch, _DCh, Args, State) ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
 
@@ -448,7 +475,11 @@ drain(QBuffer, State) ->
     rabbit_federation_link_util:drain_buffer(
       QBuffer, State, fun do_deliver/3, fun is_blocked/1).
 
-is_blocked(#state{blocked = B}) -> B.
+%% A closing link must not forward. disconnect_for_shutdown leaves both the
+%% buffer and #state.blocked alone, so a delivery arriving afterwards would
+%% otherwise be published onto a closed downstream connection.
+is_blocked(#state{blocked = B, link_state = LinkState}) ->
+    B orelse LinkState =:= closing.
 
 do_deliver(#'basic.deliver'{redelivered = Redelivered,
                             exchange    = X,
