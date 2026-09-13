@@ -17,7 +17,7 @@
 
 -export([go/0, add_binding/3, remove_bindings/3]).
 %% Exported for tests.
--export([list_routing_keys/1, hops/4]).
+-export([list_routing_keys/1, hops/4, cleanup_mode/4]).
 -export([all_local/0, disconnect_all/0, reconnect_all/0]).
 
 -export([start_link/1]).

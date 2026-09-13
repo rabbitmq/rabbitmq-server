@@ -39,7 +39,8 @@ groups() ->
      {alarm, [], [
                   alarm_buffers_and_drains_in_order,
                   alarm_buffers_no_ack_and_drains_in_order,
-                  downstream_death_while_buffering_restarts_link
+                  downstream_death_while_buffering_restarts_link,
+                  retiring_a_buffering_link_deletes_the_upstream_queue
                  ]}
     ].
 
@@ -135,6 +136,65 @@ downstream_death_while_buffering_restarts_link(Config) ->
     rabbit_ct_client_helpers:close_connection_and_channel(DownConn, DownCh),
     rabbit_ct_client_helpers:close_connection_and_channel(UpConn, UpCh),
     ok.
+
+%% A link that is stopping for good has to delete its internal upstream queue
+%% even when it is holding buffered deliveries. Its child spec is removed with
+%% it, so no link is left to clean up later, and the queue stays bound to the
+%% upstream exchange and accumulates messages that nothing consumes.
+retiring_a_buffering_link_deletes_the_upstream_queue(Config) ->
+    UpstreamUri = rabbit_ct_broker_helpers:node_uri(Config, 1),
+    setup_federation(Config, UpstreamUri, <<"on-confirm">>),
+
+    {UpConn, UpCh} = rabbit_ct_client_helpers:open_connection_and_channel(
+                       Config, 1),
+    {DownConn, DownCh} = rabbit_ct_client_helpers:open_connection_and_channel(
+                           Config, 0),
+    declare_exchange(UpCh, ?UPSTREAM_X),
+    declare_exchange(DownCh, ?DOWNSTREAM_X),
+    %% The downstream binding is what the link propagates upstream; without it
+    %% no upstream binding is ever created and every publish is unroutable.
+    amqp_channel:call(DownCh, #'queue.declare'{queue = ?DOWNSTREAM_Q,
+                                               durable = true}),
+    amqp_channel:call(DownCh, #'queue.bind'{queue = ?DOWNSTREAM_Q,
+                                            exchange = ?DOWNSTREAM_X,
+                                            routing_key = <<"k">>}),
+    await_running_link(Config, ?DOWNSTREAM_X, ?UPSTREAM_X),
+    await_upstream_binding(Config),
+    ?assertMatch([_ | _], internal_upstream_queues(Config)),
+
+    while_downstream_blocked(
+      Config,
+      fun() ->
+              publish_n(UpCh, ?UPSTREAM_X, <<"k">>, ?MSG_COUNT),
+              %% Retire the link while it is holding those deliveries.
+              rabbit_ct_broker_helpers:clear_policy(Config, 0, ?POLICY_NAME)
+      end),
+
+    ?awaitMatch([], internal_upstream_queues(Config), 60_000),
+
+    rabbit_ct_client_helpers:close_connection_and_channel(DownConn, DownCh),
+    rabbit_ct_client_helpers:close_connection_and_channel(UpConn, UpCh),
+    ok.
+
+%% Found by prefix rather than by recomputing upstream_queue_name/3, so the
+%% test does not restate the naming scheme it would be checking against. Names
+%% come back already printable, because including rabbit.hrl here to get at
+%% #resource{} collides with amqp_client.hrl over amqp_error.
+internal_upstream_queues(Config) ->
+    [Entry || {N, _} = Entry <- rabbit_ct_broker_helpers:rpc(
+                                  Config, 1, ?MODULE, list_federation_queues,
+                                  [<<"/">>]),
+              string:find(N, "federation: ") =/= nomatch].
+
+%% Message counts come back with the names, because asserting only that a queue
+%% exists cannot tell a surviving queue from one that was deleted and then
+%% recreated empty by the link restarting.
+%%
+%% invoked on a broker node
+list_federation_queues(VHost) ->
+    [{rabbit_misc:rs(amqqueue:get_name(Q)),
+      proplists:get_value(messages, rabbit_amqqueue:info(Q, [messages]), 0)}
+     || Q <- rabbit_amqqueue:list(VHost)].
 
 %% The only direct connections on the downstream node are federation's.
 close_downstream_link_connections(Config) ->

@@ -17,16 +17,18 @@
          init_per_group/2, end_per_group/2,
          init_per_testcase/2, end_per_testcase/2]).
 -export([direct_connection_registered/1,
-         blocked_by_a_remote_node_alarm/1]).
+         blocked_by_a_remote_node_alarm/1,
+         a_remote_alertee_is_not_told_about_a_peer_alarm/1]).
 %% invoked on a broker node
--export([await_connection_blocked/1]).
+-export([await_connection_blocked/1, record_conserve/3]).
 
 all() ->
     [{group, tests}].
 
 groups() ->
     [{tests, [], [direct_connection_registered,
-                  blocked_by_a_remote_node_alarm]}].
+                  blocked_by_a_remote_node_alarm,
+                  a_remote_alertee_is_not_told_about_a_peer_alarm]}].
 
 %% -------------------------------------------------------------------
 
@@ -46,8 +48,9 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     NodesCount = case Testcase of
-                     %% Needs a second node to raise the alarm on.
+                     %% Need a second node to raise the alarm on.
                      blocked_by_a_remote_node_alarm -> 2;
+                     a_remote_alertee_is_not_told_about_a_peer_alarm -> 2;
                      _                              -> 1
                  end,
     Config1 = rabbit_ct_helpers:set_config(
@@ -134,6 +137,49 @@ blocked_by_a_remote_node_alarm(Config) ->
                Config, 1, vm_memory_monitor,
                set_vm_memory_high_watermark, [OrigLimit])
     end.
+
+%% rabbit_alarm replays the cluster-wide alarm set only to an alertee on its own
+%% node. A remote one is reached solely through alert_remote/3, which runs for
+%% this node's own alarms, so replaying a peer node's alarm to it would set a
+%% block that no clear could ever lift. This pins that exclusion: without it the
+%% wedge is silent and permanent.
+a_remote_alertee_is_not_told_about_a_peer_alarm(Config) ->
+    OrigLimit = rabbit_ct_broker_helpers:rpc(
+                  Config, 1, vm_memory_monitor,
+                  get_vm_memory_high_watermark, []),
+    try
+        Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+        ok = rabbit_ct_broker_helpers:add_code_path_to_node(Node0, ?MODULE),
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 1, vm_memory_monitor,
+               set_vm_memory_high_watermark, [0]),
+        ?awaitMatch([_ | _],
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, 0, rabbit_alarm, get_alarms, []),
+                    30_000),
+        %% self() lives on the CT node, so it is remote to node 0. Registering
+        %% returns the cluster-wide set either way; what must not happen is a
+        %% replayed conserve_resources for node 1's alarm.
+        Sources = rabbit_ct_broker_helpers:rpc(
+                    Config, 0, rabbit_alarm, register,
+                    [self(), {?MODULE, record_conserve, [self()]}]),
+        ?assertMatch([_ | _], Sources),
+        receive
+            {conserve, _Source, true} ->
+                ct:fail(remote_alertee_was_told_to_conserve)
+        after 5_000 ->
+                  ok
+        end
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 1, vm_memory_monitor,
+               set_vm_memory_high_watermark, [OrigLimit])
+    end.
+
+%% invoked on a broker node
+record_conserve(Target, Source, {_, Conserve, _}) ->
+    Target ! {conserve, Source, Conserve},
+    ok.
 
 await_connection_blocked(Node) ->
     Params = #amqp_params_direct{node         = Node,

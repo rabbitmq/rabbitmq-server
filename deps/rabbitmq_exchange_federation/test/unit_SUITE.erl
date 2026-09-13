@@ -10,8 +10,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--include("rabbit_exchange_federation.hrl").
 -include_lib("rabbitmq_federation_common/include/rabbit_federation.hrl").
+-include("rabbit_exchange_federation.hrl").
 
 -compile(export_all).
 
@@ -31,7 +31,8 @@ all() -> [
     hops_empty_array_or_non_table_head_returns_zero,
     hops_accepts_long_and_unsignedbyte,
     hops_cycle_detection_returns_zero,
-    hops_with_non_positive_max_hops_returns_zero
+    hops_with_non_positive_max_hops_returns_zero,
+    cleanup_mode_keeps_the_queue_only_for_a_recoverable_restart
 ].
 
 init_per_suite(Config) ->
@@ -91,6 +92,59 @@ adjust_clear_upstream_when_supervisor_not_running(_Config) ->
     %% adjust/1 with clear_upstream should not fail
     ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({clear_upstream, <<"/">>, <<"test">>})),
     ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({clear_upstream_set, <<"test">>})).
+
+%% cleanup_mode/4 decides whether a terminating link deletes the internal
+%% upstream queue. Deleting it when the link is coming back discards the
+%% deliveries the restart exists to redeliver; not deleting it when the link is
+%% gone for good leaves a queue that accumulates messages nothing consumes. The
+%% whole truth table is asserted because both mistakes are silent.
+cleanup_mode_keeps_the_queue_only_for_a_recoverable_restart(_Config) ->
+    Empty = queue:new(),
+    Buffered = queue:in({delivery, msg}, Empty),
+    Restart = {shutdown, restart},
+    %% {Reason, Blocked, Buffer, ConfiguredMode} => Effective mode
+    Expected =
+        [
+         %% A restart with something at stake keeps the queue whatever the
+         %% configured mode says.
+         {{Restart, true,  Buffered, default}, never},
+         {{Restart, true,  Empty,    default}, never},
+         {{Restart, false, Buffered, default}, never},
+         {{Restart, true,  Buffered, never},   never},
+         {{Restart, true,  Empty,    never},   never},
+         {{Restart, false, Buffered, never},   never},
+
+         %% A restart with nothing at stake defers to the configured mode.
+         {{Restart, false, Empty,    default}, default},
+         {{Restart, false, Empty,    never},   never},
+
+         %% A link stopping for good always defers to the configured mode: no
+         %% link is left to clean up afterwards.
+         {{shutdown, true,  Buffered, default}, default},
+         {{shutdown, true,  Empty,    default}, default},
+         {{shutdown, false, Buffered, default}, default},
+         {{shutdown, false, Empty,    default}, default},
+         {{shutdown, true,  Buffered, never},   never},
+         {{shutdown, false, Empty,    never},   never},
+
+         {{gone, true,  Buffered, default}, default},
+         {{gone, true,  Empty,    default}, default},
+         {{gone, false, Buffered, default}, default},
+         {{gone, false, Empty,    default}, default},
+         {{gone, true,  Buffered, never},   never},
+         {{gone, false, Empty,    never},   never}
+        ],
+    [begin
+         Upstream = #upstream{resource_cleanup_mode = Mode},
+         Actual = rabbit_federation_exchange_link:cleanup_mode(
+                    Reason, Upstream, Blocked, Buffer),
+         ?assertEqual(Want, Actual,
+                      lists:flatten(
+                        io_lib:format(
+                          "cleanup_mode(~p, mode=~p, blocked=~p, buffered=~p)",
+                          [Reason, Mode, Blocked, not queue:is_empty(Buffer)])))
+     end || {{Reason, Blocked, Buffer, Mode}, Want} <- Expected],
+    ok.
 
 start_child_handles_already_present(_Config) ->
     XName = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
