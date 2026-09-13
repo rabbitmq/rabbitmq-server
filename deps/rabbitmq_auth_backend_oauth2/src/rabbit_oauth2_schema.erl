@@ -248,9 +248,12 @@ extract_oauth_providers_properties(Settings) ->
     OAuthProviders = [{Name, mapOauthProviderProperty(
         {
             list_to_atom(Key),
-            list_to_binary(V)})
+            oauth_provider_property_value(V)})
         } || {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
+
+oauth_provider_property_value(V) when is_boolean(V) -> V;
+oauth_provider_property_value(V) -> list_to_binary(V).
 
 
 extract_resource_server_properties(Settings) ->

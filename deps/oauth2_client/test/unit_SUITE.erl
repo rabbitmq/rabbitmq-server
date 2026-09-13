@@ -51,6 +51,9 @@ groups() ->
     {merge, [], [
         merge_openid_configuration,
         merge_oauth_provider
+    ]},
+    {issuer, [], [
+        same_issuer
     ]}
 ].
 
@@ -395,3 +398,11 @@ access_token_response_without_expiration_time(_) ->
     },
     ct:log("AccessTokenResponse ~p", [AccessTokenResponse]),
     ?assertEqual({error, missing_exp_field}, oauth2_client:get_expiration_time(AccessTokenResponse)).
+
+same_issuer(_) ->
+    ?assert(oauth2_client:same_issuer("https://issuer", <<"https://issuer">>)),
+    ?assert(oauth2_client:same_issuer(<<"https://issuer">>, <<"https://issuer">>)),
+    ?assert(oauth2_client:same_issuer(undefined, <<"https://issuer">>)),
+    ?assert(oauth2_client:same_issuer("https://issuer", undefined)),
+    ?assertNot(oauth2_client:same_issuer("https://issuer", <<"https://issuer/">>)),
+    ?assertNot(oauth2_client:same_issuer("https://issuer/v2", <<"https://issuer">>)).

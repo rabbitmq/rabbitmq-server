@@ -11,7 +11,10 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--import(uaa_jwt, [parse_jwks_response/2]).
+-import(uaa_jwt, [parse_jwks_response/2, verify_issuer/3]).
+
+-define(ISSUER, <<"https://idp.example.com/realms/one">>).
+-define(OTHER_ISSUER, <<"https://idp.example.com/realms/two">>).
 
 all() ->
     [
@@ -19,7 +22,14 @@ all() ->
         scenario_b,
         scenario_c,
         scenario_d,
-        scenario_e
+        scenario_e,
+        scenario_f,
+        scenario_g,
+        scenario_h,
+        scenario_i,
+        scenario_j,
+        scenario_k,
+        scenario_l
     ].
 
 %% A 200 response with a non-empty key list is accepted.
@@ -66,3 +76,47 @@ scenario_e(_Config) ->
         ?assertEqual({error, invalid_jwks_response},
                      parse_jwks_response({"HTTP/1.1", 200, "OK"}, Body))
         end, Bodies).
+
+scenario_f(_Config) ->
+    Payload = #{<<"iss">> => ?OTHER_ISSUER, <<"sub">> => <<"alice">>},
+    ?assertEqual({true, Payload}, verify_issuer(undefined, false, Payload)),
+    ?assertEqual({true, Payload}, verify_issuer(?ISSUER, false, Payload)).
+
+scenario_g(_Config) ->
+    Payload = #{<<"sub">> => <<"alice">>},
+    ?assertEqual({true, Payload}, verify_issuer(undefined, false, Payload)),
+    ?assertEqual({true, Payload}, verify_issuer(?ISSUER, false, Payload)).
+
+scenario_h(_Config) ->
+    Payload = #{<<"iss">> => ?ISSUER, <<"sub">> => <<"alice">>},
+    ?assertEqual({true, Payload}, verify_issuer(?ISSUER, true, Payload)).
+
+scenario_i(_Config) ->
+    Payload = #{<<"iss">> => ?OTHER_ISSUER, <<"sub">> => <<"alice">>},
+    ?assertEqual({error, {issuer_mismatch, ?OTHER_ISSUER, ?ISSUER}},
+                 verify_issuer(?ISSUER, true, Payload)).
+
+scenario_j(_Config) ->
+    Payload = #{<<"sub">> => <<"alice">>},
+    ?assertEqual({error, {missing_issuer_claim, ?ISSUER}},
+                 verify_issuer(?ISSUER, true, Payload)).
+
+scenario_k(_Config) ->
+    Variants = [
+        <<?ISSUER/binary, "/">>,
+        <<"https://idp.example.com/realms">>,
+        <<"https://idp.example.com">>,
+        <<"http://idp.example.com/realms/one">>,
+        <<"HTTPS://idp.example.com/realms/one">>,
+        <<?ISSUER/binary, "?x=1">>
+    ],
+    lists:foreach(fun(Iss) ->
+        ?assertEqual({error, {issuer_mismatch, Iss, ?ISSUER}},
+                     verify_issuer(?ISSUER, true, #{<<"iss">> => Iss}))
+        end, Variants).
+
+scenario_l(_Config) ->
+    Payload = #{<<"iss">> => ?ISSUER, <<"sub">> => <<"alice">>},
+    ?assertEqual({error, issuer_not_configured},
+                 verify_issuer(undefined, true, Payload)).
+

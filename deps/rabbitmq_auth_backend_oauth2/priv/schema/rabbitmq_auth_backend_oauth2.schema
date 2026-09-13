@@ -116,6 +116,22 @@
  "rabbitmq_auth_backend_oauth2.require_exp",
  [{datatype, boolean}]}.
 
+%% Reject tokens whose `iss` (issuer) claim does not match the configured issuer of the
+%% OAuth 2 provider that signed them.
+%%
+%% Enable this setting for providers that share
+%% signing keys across tenants (this often is the case for SaaS IDPs).
+%%
+%% Note that this key configures the default: the value is also configurable
+%% per Identity Provider using `auth_oauth2.oauth_providers.$name.verify_issuer`.
+%%
+%% {verify_issuer, false},
+
+{mapping,
+ "auth_oauth2.verify_issuer",
+ "rabbitmq_auth_backend_oauth2.verify_issuer",
+ [{datatype, boolean}]}.
+
 %% How scope patterns match vhost names, resource names, and topic routing keys.
 %% wildcard uses RabbitMQ's legacy *-segment wildcard rules; regex treats each pattern
 %% as a Perl-compatible regular expression matched against the entire string.
@@ -311,6 +327,20 @@
   "auth_oauth2.oauth_providers.$name.issuer",
   "rabbitmq_auth_backend_oauth2.oauth_providers",
   [{datatype, string}, {validators, ["uri", "https_uri"]}]
+}.
+
+%% Reject tokens whose `iss` (issuer) claim does not match the configured issuer of the
+%% OAuth 2 provider that signed them.
+%%
+%% This is a per-provider setting in addition to the node-wide default configurable
+%% via `auth_oauth2.verify_issuer`.
+%%
+%% Enable this setting for providers that share
+%% signing keys across tenants (this often is the case for SaaS IDPs).
+{mapping,
+  "auth_oauth2.oauth_providers.$name.verify_issuer",
+  "rabbitmq_auth_backend_oauth2.oauth_providers",
+  [{datatype, boolean}]
 }.
 
 {mapping,

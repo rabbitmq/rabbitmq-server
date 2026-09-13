@@ -71,6 +71,10 @@ groups() ->
                 {with_oauth_provider_A_with_jwks_with_one_signing_key, [], [
                     {with_resource_servers_rabbitmq1_with_oauth_provider_A, [], [
                         test_successful_connection_for_rabbitmq1_audience_signed_by_provider_A,
+                        {with_oauth_provider_A_issuer, [], [
+                            test_successful_connection_for_rabbitmq1_with_matching_iss_signed_by_provider_A,
+                            test_unsuccessful_connection_for_rabbitmq1_with_different_iss_signed_by_provider_A
+                        ]},
                         {without_kid, [], [
                             test_unsuccessful_connection_for_rabbitmq1_signed_by_provider_A,
                             {with_oauth_providers_A_with_default_key, [], [
@@ -112,6 +116,10 @@ groups() ->
                 test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_1,
                 test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_2,
                 test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_jwks_key,
+                {with_root_issuer, [], [
+                    test_successful_connection_for_rabbitmq_with_matching_iss_signed_by_root_oauth_provider_with_jwks_key,
+                    test_unsuccessful_connection_for_rabbitmq_with_different_iss_signed_by_root_oauth_provider_with_jwks_key
+                ]},
                 {without_kid, [], [
                     test_unsuccessful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_1,
                     {with_root_oauth_provider_with_default_key_1, [], [
@@ -155,6 +163,7 @@ groups() ->
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
 -define(RESOURCE_SERVER_TYPE, <<"rabbitmq">>).
 -define(EXTRA_SCOPES_SOURCE, <<"additional_rabbitmq_scopes">>).
+-define(ISSUER, "https://idp.example.com/realms/one").
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -188,6 +197,18 @@ init_per_group(with_resource_servers_rabbitmq1_with_oauth_provider_A, Config) ->
     ResourceServersConfig1 = maps:put(<<"rabbitmq1">>,
         [{oauth_provider_id, <<"A">>} | Resource0], ResourceServersConfig0),
     ok = rpc_set_env(Config, resource_servers, ResourceServersConfig1);
+init_per_group(with_root_issuer, Config) ->
+    ok = rpc_set_env(Config, issuer, ?ISSUER),
+    ok = rpc_set_env(Config, verify_issuer, true),
+    Config;
+init_per_group(with_oauth_provider_A_issuer, Config) ->
+    {ok, OAuthProviders0} = rpc_get_env(Config, oauth_providers),
+    OAuthProvider = maps:get(<<"A">>, OAuthProviders0, []),
+    OAuthProviders1 = maps:put(<<"A">>, [{issuer, ?ISSUER} | OAuthProvider],
+        OAuthProviders0),
+    ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
+    ok = rpc_set_env(Config, verify_issuer, true),
+    Config;
 init_per_group(with_oauth_providers_A_B_and_C, Config) ->
     OAuthProviders = #{
         <<"A">> => [
@@ -324,6 +345,18 @@ end_per_group(no_peer_verification, Config) ->
     ok = rpc_set_env(Config, key_config, KeyConfig),
     set_config(Config, {key_config, KeyConfig});
 
+end_per_group(with_root_issuer, Config) ->
+    ok = rpc_unset_env(Config, issuer),
+    ok = rpc_unset_env(Config, verify_issuer),
+    Config;
+end_per_group(with_oauth_provider_A_issuer, Config) ->
+    {ok, OAuthProviders0} = rpc_get_env(Config, oauth_providers),
+    OAuthProvider = maps:get(<<"A">>, OAuthProviders0, []),
+    OAuthProviders1 = maps:put(<<"A">>, proplists:delete(issuer, OAuthProvider),
+        OAuthProviders0),
+    ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
+    ok = rpc_unset_env(Config, verify_issuer),
+    Config;
 end_per_group(with_default_oauth_provider_B, Config) ->
     ok = rpc_unset_env(Config, default_oauth_provider);
 
@@ -587,6 +620,34 @@ test_unsuccessful_connection_for_rabbitmq1_signed_by_provider_A(Config) ->
     ),
     ?assertMatch({error, {auth_failure, _}},
          open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
+
+test_successful_connection_for_rabbitmq1_with_matching_iss_signed_by_provider_A(Config) ->
+    {_Alg, Token} = generate_token_with_iss(Config, ?config(fixture_jwksA, Config),
+        <<"rabbitmq1">>, list_to_binary(?ISSUER)),
+    verify_queue_declare_with_token(Config, Token).
+test_unsuccessful_connection_for_rabbitmq1_with_different_iss_signed_by_provider_A(Config) ->
+    {_Alg, Token} = generate_token_with_iss(Config, ?config(fixture_jwksA, Config),
+        <<"rabbitmq1">>, <<"https://idp.example.com/realms/two">>),
+    ?assertMatch({error, {auth_failure, _}},
+         open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
+test_successful_connection_for_rabbitmq_with_matching_iss_signed_by_root_oauth_provider_with_jwks_key(Config) ->
+    {_Alg, Token} = generate_token_with_iss(Config, ?config(fixture_jwk, Config),
+        <<"rabbitmq">>, list_to_binary(?ISSUER)),
+    verify_queue_declare_with_token(Config, Token).
+test_unsuccessful_connection_for_rabbitmq_with_different_iss_signed_by_root_oauth_provider_with_jwks_key(Config) ->
+    {_Alg, Token} = generate_token_with_iss(Config, ?config(fixture_jwk, Config),
+        <<"rabbitmq">>, <<"https://idp.example.com/realms/two">>),
+    ?assertMatch({error, {auth_failure, _}},
+         open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
+
+generate_token_with_iss(Config, Jwks, Audience, Iss) ->
+    Scopes = <<Audience/binary, ".configure:*/* ",
+               Audience/binary, ".write:*/* ",
+               Audience/binary, ".read:*/*">>,
+    Token = maps:merge(?UTIL_MOD:fixture_token_with_scopes(Scopes),
+        #{<<"aud">> => [Audience], <<"iss">> => Iss}),
+    ?UTIL_MOD:sign_token_hs(Token, Jwks,
+        rabbit_ct_helpers:get_config(Config, include_kid, true)).
 
 test_successful_connection_for_rabbitmq2_audience_signed_by_provider_B_with_static_key(Config) ->
     Jwks = ?config(fixture_staticB, Config),

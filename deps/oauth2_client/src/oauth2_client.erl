@@ -11,6 +11,7 @@
         get_openid_configuration/2,
         build_openid_discovery_endpoint/3,
         merge_openid_configuration/2,
+        same_issuer/2,
         merge_oauth_provider/2,
         extract_ssl_options_as_list/1,
         format_ssl_options/1, format_oauth_provider/1, format_oauth_provider_id/1
@@ -171,7 +172,7 @@ map_response_to_openid_configuration(Code, Reason, Headers, Body) ->
     end.
 map_to_openid_configuration(Map) ->
     #openid_configuration{
-        issuer = maps:get(?RESPONSE_ISSUER, Map),
+        issuer = maps:get(?RESPONSE_ISSUER, Map, undefined),
         token_endpoint = maps:get(?RESPONSE_TOKEN_ENDPOINT, Map, undefined),
         authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT,
             Map, undefined),
@@ -286,11 +287,33 @@ download_oauth_provider(OAuthProvider) ->
             ?LOG_DEBUG("Downloading oauth_provider using ~p ", [URL]),
             case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider)) of
                 {ok, OpenIdConfiguration} ->
+                    warn_if_discovered_issuer_differs(OAuthProvider, OpenIdConfiguration),
                     {ok, update_oauth_provider_endpoints_configuration(
                         merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
                 {error, _} = Error2 -> Error2
             end
     end.
+
+warn_if_discovered_issuer_differs(OAuthProvider, OpenIdConfiguration) ->
+    Configured = OAuthProvider#oauth_provider.issuer,
+    Discovered = OpenIdConfiguration#openid_configuration.issuer,
+    case same_issuer(Configured, Discovered) of
+        true -> ok;
+        false ->
+            ?LOG_WARNING("OAuth 2 provider ~ts is configured with issuer ~ts but its "
+                         "OpenID discovery metadata reports issuer ~ts: tokens from it "
+                         "can be rejected depending on the OAuth 2 plugin configuration",
+                         [format_oauth_provider_id(OAuthProvider#oauth_provider.id),
+                          Configured, Discovered])
+    end.
+
+-spec same_issuer(string() | binary() | undefined, string() | binary() | undefined) ->
+    boolean().
+same_issuer(undefined, _) -> true;
+same_issuer(_, undefined) -> true;
+same_issuer(Configured, Discovered) ->
+    rabbit_data_coercion:to_binary(Configured) =:=
+        rabbit_data_coercion:to_binary(Discovered).
 
 ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of

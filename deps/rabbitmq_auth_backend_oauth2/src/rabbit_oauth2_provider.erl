@@ -14,7 +14,8 @@
     get_internal_oauth_provider/0, get_internal_oauth_provider/1,
     add_signing_key/2, add_signing_key/3, replace_signing_keys/1,
     replace_signing_keys/2,
-    get_signing_keys/0, get_signing_keys/1, get_signing_key/1, get_signing_key/2
+    get_signing_keys/0, get_signing_keys/1, get_signing_key/1, get_signing_key/2,
+    oauth_provider_ids_with_unverified_issuer/0
 ]).
 
 -spec get_internal_oauth_provider() -> internal_oauth_provider().
@@ -26,7 +27,9 @@ get_internal_oauth_provider(OAuthProviderId) ->
     #internal_oauth_provider{
         id = OAuthProviderId,
         default_key = get_default_key(OAuthProviderId),
-        algorithms = get_algorithms(OAuthProviderId)
+        algorithms = get_algorithms(OAuthProviderId),
+        issuer = get_issuer(OAuthProviderId),
+        verify_issuer = get_verify_issuer(OAuthProviderId)
     }.
 
 
@@ -173,6 +176,32 @@ get_algorithms(OAuthProviderId) ->
         undefined -> undefined;
         V -> proplists:get_value(algorithms, V, undefined)
     end.
+
+-spec oauth_provider_ids_with_unverified_issuer() -> [oauth_provider_id()].
+oauth_provider_ids_with_unverified_issuer() ->
+    Ids = [root | maps:keys(get_env(oauth_providers, #{}))],
+    [Id || Id <- Ids,
+           get_issuer(Id) =/= undefined,
+           not get_verify_issuer(Id)].
+
+-spec get_issuer(oauth_provider_id()) -> binary() | undefined.
+get_issuer(root) ->
+    to_binary_or_undefined(get_env(issuer));
+get_issuer(OAuthProviderId) ->
+    OAuthProviders = get_env(oauth_providers, #{}),
+    OAuthProvider = maps:get(OAuthProviderId, OAuthProviders, []),
+    to_binary_or_undefined(proplists:get_value(issuer, OAuthProvider)).
+
+-spec get_verify_issuer(oauth_provider_id()) -> boolean().
+get_verify_issuer(root) ->
+    get_env(verify_issuer, false);
+get_verify_issuer(OAuthProviderId) ->
+    OAuthProviders = get_env(oauth_providers, #{}),
+    OAuthProvider = maps:get(OAuthProviderId, OAuthProviders, []),
+    proplists:get_value(verify_issuer, OAuthProvider, get_env(verify_issuer, false)).
+
+to_binary_or_undefined(undefined) -> undefined;
+to_binary_or_undefined(Value) -> rabbit_data_coercion:to_binary(Value).
 
 get_env(Par) ->
     application:get_env(rabbitmq_auth_backend_oauth2, Par, undefined).

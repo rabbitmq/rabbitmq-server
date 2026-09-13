@@ -22,7 +22,8 @@
     get_internal_oauth_provider/0,get_internal_oauth_provider/1,
     add_signing_key/2, add_signing_key/3, replace_signing_keys/1,
     replace_signing_keys/2,
-    get_signing_keys/0, get_signing_keys/1, get_signing_key/1, get_signing_key/2
+    get_signing_keys/0, get_signing_keys/1, get_signing_key/1, get_signing_key/2,
+    oauth_provider_ids_with_unverified_issuer/0
 ]).
 -import(oauth2_client, [get_oauth_provider/2]).
 
@@ -53,7 +54,11 @@ groups() -> [
             scenario_d
         ]}
     ]},
-    {verify_oauth_provider_A, [], verify_provider()},
+    {verify_oauth_provider_A, [], verify_provider() ++ [
+        {with_verify_issuer_overridden_for_provider, [], [
+            internal_oauth_provider_does_not_verify_issuer
+        ]}
+    ]},
     {verify_oauth_provider_root, [], verify_provider()}
 ].
 
@@ -66,12 +71,24 @@ verify_provider() -> [
     {oauth_provider_with_algorithms, [], [
         internal_oauth_provider_has_algorithms
     ]},
+    internal_oauth_provider_has_no_issuer,
+    internal_oauth_provider_does_not_verify_issuer,
+    no_oauth_provider_has_unverified_issuer,
+    {with_verify_issuer, [], [
+        internal_oauth_provider_verifies_issuer
+    ]},
     get_oauth_provider_with_jwks_uri_returns_error,
     {oauth_provider_with_jwks_uri, [], [
-        get_oauth_provider_has_jwks_uri
+        get_oauth_provider_has_jwks_uri,
+        internal_oauth_provider_has_no_issuer
     ]},
     {oauth_provider_with_issuer, [], [
-        get_oauth_provider_has_jwks_uri
+        get_oauth_provider_has_jwks_uri,
+        internal_oauth_provider_has_issuer,
+        oauth_provider_has_unverified_issuer,
+        {with_verify_issuer, [], [
+            no_oauth_provider_has_unverified_issuer
+        ]}
     ]}
 ].
 
@@ -211,6 +228,18 @@ init_per_group(with_different_oauth_provider_for_each_resource, Config) ->
     Config;
 
 
+init_per_group(with_verify_issuer, Config) ->
+    case ?config(oauth_provider_id, Config) of
+        root -> set_env(verify_issuer, true);
+        <<"A">> -> set_oauth_provider_properties(<<"A">>, [{verify_issuer, true}])
+    end,
+    Config;
+
+init_per_group(with_verify_issuer_overridden_for_provider, Config) ->
+    set_env(verify_issuer, true),
+    set_oauth_provider_properties(<<"A">>, [{verify_issuer, false}]),
+    Config;
+
 init_per_group(verify_oauth_provider_A, Config) ->
     set_env(oauth_providers,
         #{ <<"A">> => [
@@ -231,6 +260,18 @@ end_per_group(with_rabbitmq_node, Config) ->
 end_per_group(with_root_static_signing_keys, Config) ->
     KeyConfig = call_get_env(Config, key_config, []),
     call_set_env(Config, key_config, KeyConfig),
+    Config;
+
+end_per_group(with_verify_issuer, Config) ->
+    case ?config(oauth_provider_id, Config) of
+        root -> unset_env(verify_issuer);
+        <<"A">> -> unset_oauth_provider_properties(<<"A">>, [verify_issuer])
+    end,
+    Config;
+
+end_per_group(with_verify_issuer_overridden_for_provider, Config) ->
+    unset_env(verify_issuer),
+    unset_oauth_provider_properties(<<"A">>, [verify_issuer]),
     Config;
 
 end_per_group(with_resource_server_id, Config) ->
@@ -516,6 +557,37 @@ internal_oauth_provider_has_algorithms(Config) ->
         ?config(oauth_provider_id, Config)),
     ?assertEqual(?config(algorithms, Config),
         InternalOAuthProvider#internal_oauth_provider.algorithms).
+
+internal_oauth_provider_has_no_issuer(Config) ->
+    InternalOAuthProvider = get_internal_oauth_provider(
+        ?config(oauth_provider_id, Config)),
+    ?assertEqual(undefined,
+        InternalOAuthProvider#internal_oauth_provider.issuer).
+
+internal_oauth_provider_does_not_verify_issuer(Config) ->
+    InternalOAuthProvider = get_internal_oauth_provider(
+        ?config(oauth_provider_id, Config)),
+    ?assertEqual(false,
+        InternalOAuthProvider#internal_oauth_provider.verify_issuer).
+
+internal_oauth_provider_verifies_issuer(Config) ->
+    InternalOAuthProvider = get_internal_oauth_provider(
+        ?config(oauth_provider_id, Config)),
+    ?assertEqual(true,
+        InternalOAuthProvider#internal_oauth_provider.verify_issuer).
+
+no_oauth_provider_has_unverified_issuer(_Config) ->
+    ?assertEqual([], oauth_provider_ids_with_unverified_issuer()).
+
+oauth_provider_has_unverified_issuer(Config) ->
+    ?assertEqual([?config(oauth_provider_id, Config)],
+        oauth_provider_ids_with_unverified_issuer()).
+
+internal_oauth_provider_has_issuer(Config) ->
+    InternalOAuthProvider = get_internal_oauth_provider(
+        ?config(oauth_provider_id, Config)),
+    ?assertEqual(list_to_binary(?config(issuer, Config)),
+        InternalOAuthProvider#internal_oauth_provider.issuer).
 
 get_oauth_provider_with_jwks_uri_returns_error(Config) ->
     {error, _} = get_oauth_provider(

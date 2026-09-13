@@ -8,6 +8,7 @@
 
 -export([add_signing_key/3,
          decode_and_verify/3,
+         verify_issuer/3,
          get_jwk/2,
          verify_signing_key/2,
          resolve_resource_server/1,
@@ -110,11 +111,32 @@ decode_and_verify(Token, ResourceServer, InternalOAuthProvider) ->
                     Algorithms = InternalOAuthProvider#internal_oauth_provider.algorithms,
                     ?LOG_DEBUG("Verifying signature using signing_key_id : '~tp' and algorithms: ~p",
                         [KeyId, Algorithms]),
-                    uaa_jwt_jwt:decode_and_verify(Algorithms, JWK, Token);
+                    case uaa_jwt_jwt:decode_and_verify(Algorithms, JWK, Token) of
+                        {true, Payload} ->
+                            verify_issuer(
+                                InternalOAuthProvider#internal_oauth_provider.issuer,
+                                InternalOAuthProvider#internal_oauth_provider.verify_issuer,
+                                Payload);
+                        Other ->
+                            Other
+                    end;
                 {error, _} = Err3 ->
                     Err3
             end
     end.
+
+-spec verify_issuer(binary() | undefined, boolean(), map()) ->
+    {true, map()} | {error, term()}.
+verify_issuer(_Issuer, false, Payload) ->
+    {true, Payload};
+verify_issuer(undefined, true, _Payload) ->
+    {error, issuer_not_configured};
+verify_issuer(Issuer, true, #{?ISS_JWT_FIELD := Issuer} = Payload) ->
+    {true, Payload};
+verify_issuer(Issuer, true, #{?ISS_JWT_FIELD := Iss}) ->
+    {error, {issuer_mismatch, Iss, Issuer}};
+verify_issuer(Issuer, true, _Payload) ->
+    {error, {missing_issuer_claim, Issuer}}.
 
 -spec resolve_resource_server(binary()|map()) -> {error, term()} |
         {resource_server(), internal_oauth_provider()}.

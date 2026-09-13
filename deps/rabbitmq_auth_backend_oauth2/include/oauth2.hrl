@@ -17,6 +17,7 @@
 %%
 
 -define(AUD_JWT_FIELD, <<"aud">>).
+-define(ISS_JWT_FIELD, <<"iss">>).
 -define(SCOPE_JWT_FIELD, <<"scope">>).
 -define(TAG_SCOPE_PREFIX, <<"tag:">>).
 
@@ -38,7 +39,9 @@
 -record(internal_oauth_provider, {
     id :: oauth_provider_id(),
     default_key :: binary() | undefined,
-    algorithms :: list() | undefined
+    algorithms :: list() | undefined,
+    issuer :: binary() | undefined,
+    verify_issuer = false :: boolean()
 }).
 -type internal_oauth_provider() :: #internal_oauth_provider{}.
 

@@ -25,6 +25,7 @@ all() ->
         test_with_one_oauth_provider,
         test_with_many_oauth_providers,
         test_oauth_providers_attributes,
+        test_oauth_providers_verify_issuer,
         test_oauth_providers_attributes_with_invalid_uri,
         test_oauth_providers_algorithms,
         test_oauth_providers_https,
@@ -153,6 +154,18 @@ test_oauth_providers_attributes(_) ->
     ],
     #{<<"keycloak">> := [{default_key, <<"token-key">>},
                          {issuer, "https://keycloak"}
+                        ]
+    } = sort_settings(translate_oauth_providers(Conf)).
+
+test_oauth_providers_verify_issuer(_) ->
+    Conf = [
+        {["auth_oauth2","oauth_providers","keycloak","issuer"],
+            "https://keycloak"},
+        {["auth_oauth2","oauth_providers","keycloak","verify_issuer"],
+            true}
+    ],
+    #{<<"keycloak">> := [{issuer, "https://keycloak"},
+                         {verify_issuer, true}
                         ]
     } = sort_settings(translate_oauth_providers(Conf)).
 

@@ -80,7 +80,13 @@ groups() ->
           normalize_token_scope_with_additional_scopes_complex_claims,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field_and_custom_scope_prefix,
           test_missing_required_exp_claim_per_resource_server,
-          test_missing_not_required_exp_claim_per_resource_server
+          test_missing_not_required_exp_claim_per_resource_server,
+          test_successful_access_with_a_matching_iss_claim,
+          test_unsuccessful_access_with_a_different_iss_claim,
+          test_unsuccessful_access_without_an_iss_claim,
+          test_unsuccessful_token_refresh_with_a_different_iss_claim,
+          test_unsuccessful_access_with_verify_issuer_and_no_issuer,
+          test_successful_access_with_a_different_iss_claim_without_verify_issuer
       ]}
     ].
 
@@ -119,6 +125,11 @@ end_per_group(_, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id),
   Config.
 
+end_per_testcase(_, Config) ->
+  unset_env(issuer),
+  unset_env(verify_issuer),
+  Config.
+
 
 
 %%
@@ -129,6 +140,8 @@ end_per_group(_, Config) ->
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
 -define(RESOURCE_SERVER_TYPE, <<"rabbitmq-type">>).
 -define(DEFAULT_SCOPE_PREFIX, <<"rabbitmq.">>).
+-define(ISSUER, "https://idp.example.com/realms/one").
+-define(OTHER_ISSUER, <<"https://idp.example.com/realms/two">>).
 
 normalize_token_scope_using_multiple_scopes_key(_) ->
     Pairs = [
@@ -1743,3 +1756,89 @@ assert_topic_access_response(ExpectedResult, AuthUser, VHost, ResourceName,
                                    name = ResourceName},
                          PermissionKind,
                          AuthContext)).
+
+test_successful_access_with_a_matching_iss_claim(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
+    set_env(issuer, ?ISSUER),
+    set_env(verify_issuer, true),
+
+    Token = ?UTIL_MOD:sign_token_hs(
+        ?UTIL_MOD:token_with_claim(
+            ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username),
+            <<"iss">>, list_to_binary(?ISSUER)), Jwk),
+    {ok, #auth_user{username = Username} = User} =
+        user_login_authentication(Username, [{password, Token}]),
+    assert_resource_access_granted(User, <<"vhost">>, <<"foo">>, configure).
+
+test_unsuccessful_access_with_a_different_iss_claim(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
+    set_env(issuer, ?ISSUER),
+    set_env(verify_issuer, true),
+
+    Token = ?UTIL_MOD:sign_token_hs(
+        ?UTIL_MOD:token_with_claim(
+            ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token_with_full_permissions(), Username),
+            <<"iss">>, ?OTHER_ISSUER), Jwk),
+    ?assertMatch({refused, _, [{error, {issuer_mismatch, ?OTHER_ISSUER, _}}]},
+        user_login_authentication(Username, [{password, Token}])).
+
+test_unsuccessful_access_without_an_iss_claim(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
+    set_env(issuer, ?ISSUER),
+    set_env(verify_issuer, true),
+
+    Token = ?UTIL_MOD:sign_token_hs(
+        maps:remove(<<"iss">>,
+            ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username)), Jwk),
+    ?assertMatch({refused, _, [{error, {missing_issuer_claim, _}}]},
+        user_login_authentication(Username, [{password, Token}])).
+
+test_unsuccessful_token_refresh_with_a_different_iss_claim(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
+    set_env(issuer, ?ISSUER),
+    set_env(verify_issuer, true),
+
+    Token = ?UTIL_MOD:sign_token_hs(
+        ?UTIL_MOD:token_with_claim(
+            ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username),
+            <<"iss">>, list_to_binary(?ISSUER)), Jwk),
+    {ok, User} = user_login_authentication(Username, [{password, Token}]),
+
+    NewToken = ?UTIL_MOD:sign_token_hs(
+        ?UTIL_MOD:token_with_claim(
+            ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username),
+            <<"iss">>, ?OTHER_ISSUER), Jwk),
+    ?assertMatch({refused, _, []},
+        rabbit_auth_backend_oauth2:update_state(User, NewToken)).
+
+test_unsuccessful_access_with_verify_issuer_and_no_issuer(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
+    Token = ?UTIL_MOD:sign_token_hs(
+        ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
+    {ok, _} = user_login_authentication(Username, [{password, Token}]),
+
+    set_env(verify_issuer, true),
+    ?assertMatch({refused, _, [{error, issuer_not_configured}]},
+        user_login_authentication(Username, [{password, Token}])).
+
+test_successful_access_with_a_different_iss_claim_without_verify_issuer(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
+    set_env(issuer, ?ISSUER),
+    Token = ?UTIL_MOD:sign_token_hs(
+        ?UTIL_MOD:token_with_claim(
+            ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username),
+            <<"iss">>, ?OTHER_ISSUER), Jwk),
+    {ok, #auth_user{username = Username}} =
+        user_login_authentication(Username, [{password, Token}]).
