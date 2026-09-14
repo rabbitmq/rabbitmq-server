@@ -99,7 +99,7 @@ init([]) ->
                            timer = apply_interval(Interval)},
             WarnMsg = case WarnOnly of
                           true -> "will only log warnings";
-                          false -> "will remove nodes not known to the discovery backend"
+                          false -> "will remove nodes not reported by discovery (for some backends)"
                       end,
             ?LOG_INFO(
                "Peer discovery: enabling node cleanup (~ts). Check interval: ~tp seconds.",
