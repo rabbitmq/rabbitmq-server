@@ -376,7 +376,7 @@ update_visit_count(Table, Been, Headers) ->
             [] -> 0;
             [{table, T} | _] -> case rabbit_misc:table_lookup(
                 T, <<"visit-count">>) of
-                                {_, I} when is_number(I) -> I;
+                                {_, I} when is_integer(I) -> I;
                                 _ -> 0
                             end
         end,
