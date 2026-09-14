@@ -146,9 +146,7 @@ clear_lease_keepalive_test(_Config) ->
         UnrelatedData,
         rabbitmq_peer_discovery_etcd_v3_client:clear_lease_keepalive(3, UnrelatedData)).
 
-%% exercises connected/3 and recover/3 directly: the bug covered here is a
-%% function_clause crash on an unmatched info message, not a defect in
-%% the pure clear_lease_keepalive/2 helper
+%% covers a function_clause crash on an unmatched KeepAliveHalted info message
 keepalive_halted_info_test(_Config) ->
     Data = #statem_data{lock_lease_id = 2, lock_lease_keepalive_pid = self()},
     Event = #{event => 'KeepAliveHalted', lease_id => 2, reason => <<"lease not found">>},
@@ -161,16 +159,14 @@ keepalive_halted_info_test(_Config) ->
         {keep_state, #statem_data{lock_lease_id = undefined, lock_lease_keepalive_pid = undefined}},
         rabbitmq_peer_discovery_etcd_v3_client:recover(info, Event, Data)).
 
-%% eetcd_lease keeps renewing the node-key lease across a reconnect on its
-%% own, so state_enter must leave an already-held lease alone
+%% state_enter must leave an already-held node key lease alone
 connected_enter_keeps_existing_node_lease_test(_Config) ->
     Data = #statem_data{node_key_lease_id = 1, node_lease_keepalive_pid = self()},
     ?assertEqual(
         keep_state_and_data,
         rabbitmq_peer_discovery_etcd_v3_client:connected(enter, recover, Data)).
 
-%% node_key_lease_id alone does not prove the keep-alive is still running,
-%% since it can exit without sending KeepAliveHalted
+%% node_key_lease_id alone does not prove the keep-alive is still running
 node_key_lease_is_healthy_test(_Config) ->
     DeadPid = spawn(fun() -> ok end),
     ct:sleep(10),
@@ -183,9 +179,8 @@ node_key_lease_is_healthy_test(_Config) ->
     ?assert(rabbitmq_peer_discovery_etcd_v3_client:node_key_lease_is_healthy(
         #statem_data{node_key_lease_id = 1, node_lease_keepalive_pid = self()})).
 
-%% counterpart of connected_enter_keeps_existing_node_lease_test/1: a
-%% node_key_lease_id left over from a dead keep-alive must not be treated
-%% as still held, so connected(enter) must attempt, and apply, a fresh grant
+%% a node_key_lease_id left over from a dead keep-alive must not be treated
+%% as still held, so connected(enter) must regrant a fresh lease
 connected_enter_regrants_when_keepalive_dead_test(_Config) ->
     DeadPid = spawn(fun() -> ok end),
     ct:sleep(10),
@@ -207,9 +202,8 @@ connected_enter_regrants_when_keepalive_dead_test(_Config) ->
     ?assertEqual(FreshKeepalivePid, FinalData#statem_data.node_lease_keepalive_pid),
     exit(FreshKeepalivePid, kill).
 
-%% the connection can drop between a successful {lock, Node} and the
-%% matching unlock/2 call; recover/3 must stop the lock lease's
-%% keep-alive so the lease lapses at its TTL instead of renewing forever
+%% if the connection drops between {lock, Node} and the matching unlock/2
+%% call, recover/3 must stop the lock lease's keep-alive so it lapses
 recover_unlock_releases_lock_lease_test(_Config) ->
     Data = #statem_data{lock_lease_id = 2, lock_lease_keepalive_pid = self()},
     Tag = make_ref(),
@@ -227,9 +221,7 @@ recover_unlock_releases_lock_lease_test(_Config) ->
         ?assert(false)
     end.
 
-%% connected(enter) must survive a failed eetcd_lease:grant/2, leave the
-%% lease fields unhealthy, and schedule a retry rather than waiting for
-%% an unrelated reconnect
+%% connected(enter) must survive a failed lease grant and schedule a retry
 connected_enter_survives_lease_grant_failure_test(_Config) ->
     meck:new(eetcd_lease, [passthrough]),
     meck:expect(eetcd_lease, grant, fun(_Name, _TTL) -> {error, mocked_grant_failure} end),
@@ -244,9 +236,8 @@ connected_enter_survives_lease_grant_failure_test(_Config) ->
         {keep_state_and_data, [{state_timeout, _, retry_node_key_lease}]},
         rabbitmq_peer_discovery_etcd_v3_client:connected(enter, recover, Data)).
 
-%% a node key lease freshly granted by connected(enter)'s repair path,
-%% whose PUT then fails, must be discarded rather than kept, or this node
-%% would stay silently missing from etcd-based peer discovery
+%% a fresh lease whose PUT fails must be discarded, or this node stays
+%% silently missing from etcd-based peer discovery
 connected_enter_discards_fresh_lease_on_put_failure_test(_Config) ->
     FreshKeepalivePid = spawn(fun keep_alive_stub/0),
     StaleKeepalivePid = spawn(fun() -> ok end),
@@ -276,10 +267,8 @@ connected_enter_discards_fresh_lease_on_put_failure_test(_Config) ->
     ?assertNot(rabbitmq_peer_discovery_etcd_v3_client:node_key_lease_is_healthy(FinalData)),
     exit(FreshKeepalivePid, kill).
 
-%% when register/1 grants a fresh node key lease and the subsequent PUT
-%% fails, it must reply with the PUT's own error instead of ok, but must
-%% still record that registration was requested and schedule a retry, or
-%% this, the very first registration attempt, is never repaired
+%% when a fresh lease's PUT fails, register/1 must reply with that error
+%% but still record the request and schedule a retry to repair it
 register_replies_with_put_error_on_fresh_lease_test(_Config) ->
     FreshKeepalivePid = spawn(fun keep_alive_stub/0),
 
@@ -312,9 +301,7 @@ register_replies_with_put_error_on_fresh_lease_test(_Config) ->
     ?assertNot(rabbitmq_peer_discovery_etcd_v3_client:node_key_lease_is_healthy(FinalData)),
     exit(FreshKeepalivePid, kill).
 
-%% a KeepAliveHalted for the node key lease while the node is registered
-%% must schedule a retry, or the node stays absent from discovery until
-%% an unrelated reconnect happens to repair it
+%% a KeepAliveHalted for a registered node key must schedule a retry
 keepalive_halted_schedules_retry_for_registered_node_key_test(_Config) ->
     Data = #statem_data{
         node_key_lease_id = 1,
@@ -327,8 +314,7 @@ keepalive_halted_schedules_retry_for_registered_node_key_test(_Config) ->
     ?assertEqual(undefined, FinalData#statem_data.node_key_lease_id),
     ?assertEqual(undefined, FinalData#statem_data.node_lease_keepalive_pid).
 
-%% a halt for a node key lease that was never successfully registered has
-%% nothing to repair, so no retry needs to be scheduled
+%% a halt for a never-registered node key has nothing to repair
 keepalive_halted_skips_retry_for_unregistered_node_key_test(_Config) ->
     Data = #statem_data{
         node_key_lease_id = 1,
@@ -340,16 +326,15 @@ keepalive_halted_skips_retry_for_unregistered_node_key_test(_Config) ->
         {keep_state, Data#statem_data{node_key_lease_id = undefined, node_lease_keepalive_pid = undefined}},
         rabbitmq_peer_discovery_etcd_v3_client:connected(info, Event, Data)).
 
-%% the state_timeout set by the retry actions above must re-run
-%% connected(enter,...) via repeat_state, not merely keep the state
+%% the retry state_timeout must re-run connected(enter, ...) via repeat_state
 retry_node_key_lease_state_timeout_repeats_state_test(_Config) ->
     Data = #statem_data{node_key_lease_id = 1, node_lease_keepalive_pid = self()},
     ?assertEqual(
         {repeat_state, Data},
         rabbitmq_peer_discovery_etcd_v3_client:connected(state_timeout, retry_node_key_lease, Data)).
 
-%% a successfully acquired lock must monitor its caller, so the lock can
-%% be released if that caller dies before calling unlock/1
+%% an acquired lock must monitor its caller, so it can be released if the
+%% caller dies before calling unlock/1
 lock_success_monitors_owner_test(_Config) ->
     %% gen_statem:reply/2 replies to whichever process is in From, so the
     %% owner being monitored must be the calling (this test) process
@@ -373,8 +358,7 @@ lock_success_monitors_owner_test(_Config) ->
     demonitor(FinalData#statem_data.lock_owner_monitor, [flush]).
 
 %% if the lock owner dies without calling unlock/1, the lock and its
-%% lease must be released, or the independently supervised keep-alive
-%% worker renews it, and holds the lock, forever
+%% lease must be released, or the keep-alive worker renews it forever
 lock_owner_down_releases_lock_test(_Config) ->
     meck:new(eetcd_lease, [passthrough]),
     meck:expect(eetcd_lease, revoke, fun(_Ctx, _LeaseID) -> {ok, #{}} end),
@@ -407,9 +391,8 @@ lock_owner_down_releases_lock_test(_Config) ->
         ?assert(false)
     end.
 
-%% losing the lock lease's keep-alive while it is held means mutual
-%% exclusion is gone, so the owner must be aborted rather than left to
-%% continue as if it still held the lock
+%% losing the lock lease's keep-alive means mutual exclusion is gone, so
+%% the owner must be aborted rather than left to continue
 lock_lease_lost_aborts_owner_test(_Config) ->
     process_flag(trap_exit, true),
     Owner = spawn_link(fun keep_alive_stub/0),
@@ -434,10 +417,8 @@ lock_lease_lost_aborts_owner_test(_Config) ->
     end,
     process_flag(trap_exit, false).
 
-%% recover/3 releases the lock lease when the owner dies while disconnected
-%% (see recover_unlock_releases_lock_lease_test above for the unlock/2
-%% counterpart), but must also stop the lock lease's keep-alive, or the
-%% independently supervised eetcd worker keeps renewing a lock nobody owns
+%% recover/3 must also stop the lock lease's keep-alive when the owner
+%% dies while disconnected, or it renews a lock nobody owns
 recover_lock_owner_down_stops_lease_keepalive_test(_Config) ->
     Owner = spawn(fun() -> ok end),
     OwnerMonitor = monitor(process, Owner),
@@ -466,11 +447,8 @@ recover_lock_owner_down_stops_lease_keepalive_test(_Config) ->
         ?assert(false)
     end.
 
-%% recover/3's generic KeepAliveHalted clause must abort the lock owner
-%% when the halted lease is the lock's own, the same as connected/3 does
-%% (see lock_lease_lost_aborts_owner_test above); otherwise a lock owner
-%% that is still running while disconnected proceeds as if it still held
-%% mutual exclusion
+%% recover/3 must also abort the lock owner on a lock lease halt, the
+%% same as connected/3 (see lock_lease_lost_aborts_owner_test above)
 recover_lock_lease_lost_aborts_owner_test(_Config) ->
     process_flag(trap_exit, true),
     Owner = spawn_link(fun keep_alive_stub/0),
@@ -495,10 +473,9 @@ recover_lock_lease_lost_aborts_owner_test(_Config) ->
     end,
     process_flag(trap_exit, false).
 
-%% a lock owner dying concurrently with its lease being lost can already
-%% have a 'DOWN' message queued when connected/3 clears lock_owner_monitor;
-%% maybe_demonitor/1 must flush it, or a real gen_statem later crashes with
-%% function_clause on that now-unmatched, stale 'DOWN'
+%% maybe_demonitor/1 must flush a 'DOWN' already queued when the owner
+%% dies concurrently with its lease being lost, or a stale 'DOWN' later
+%% crashes a real gen_statem with function_clause
 lock_lease_lost_flushes_pending_owner_down_test(_Config) ->
     Owner = spawn(fun() -> ok end),
     OwnerMonitor = monitor(process, Owner),
@@ -519,9 +496,8 @@ lock_lease_lost_flushes_pending_owner_down_test(_Config) ->
         ok
     end.
 
-%% terminate/3 must stop both tracked lease keep-alives, or the
-%% independently supervised eetcd workers survive it and can renew a node
-%% key lease or a lock lease that this client no longer tracks
+%% terminate/3 must stop both tracked lease keep-alives, or they survive
+%% it and keep renewing leases this client no longer tracks
 terminate_stops_lease_keepalives_test(_Config) ->
     Data = #statem_data{
         node_lease_keepalive_pid = self(),
@@ -539,11 +515,9 @@ terminate_stops_lease_keepalives_test(_Config) ->
         ?assert(false)
     end.
 
-%% rabbitmq_peer_discovery_etcd_sup stops and re-attaches this client with
-%% fresh statem_data on every node boot, so a successful register/1 call
-%% must persist that registration was requested outside process state, or
-%% the replacement process (simulated here by init/1) never knows to repair
-%% a registration the old process's terminate/3 is about to let expire
+%% register/1 must persist that registration was requested outside process
+%% state, or a replacement client (simulated by init/1) never knows to
+%% repair it after this client's stop-and-restart on the next boot
 register_persists_intent_across_client_restart_test(_Config) ->
     meck:new(eetcd_lease, [passthrough]),
     meck:expect(eetcd_lease, grant, fun(_Name, _TTL) -> {ok, #{'ID' => 999}} end),
