@@ -21,11 +21,11 @@
     %% which refreshes this node's key lease
     node_lease_keepalive_pid,
     %% true once register/0,1 has been asked to register this node's key,
-    %% whether or not the put has actually succeeded yet; node_key_lease_id
-    %% can't stand in for this, since it is undefined both before
-    %% registration and after a lapsed lease. Seeded from a persistent_term
-    %% (see ?NODE_KEY_REGISTERED_PTERM_KEY) so a freshly started client
-    %% still knows to repair a registration an earlier one had requested.
+    %% whether or not the put has succeeded yet; node_key_lease_id can't
+    %% stand in for this, since it is undefined both before registration
+    %% and after a lapsed lease. Seeded from a persistent_term (see
+    %% ?NODE_KEY_REGISTERED_PTERM_KEY) so a freshly started client still
+    %% knows to repair a registration an earlier one had requested.
     node_key_registered = false,
     lock_ttl_in_seconds,
     lock_lease_id,
