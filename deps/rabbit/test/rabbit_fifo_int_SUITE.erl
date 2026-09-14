@@ -27,6 +27,7 @@ all_tests() ->
      lost_return_is_resent_on_applied_after_leader_change,
      rabbit_fifo_returns_correlation,
      returns,
+     returns_batched_while_slow_are_redelivered_in_order,
      returns_after_down,
      resends_after_lost_applied,
      handles_reject_notification,
@@ -447,6 +448,36 @@ returns(Config) ->
               flush(),
               exit(await_delivery_timeout_3)
     end,
+    rabbit_quorum_queue:stop_server(ServerId),
+    ok.
+
+returns_batched_while_slow_are_redelivered_in_order(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+
+    F0 = rabbit_fifo_client:init([ServerId], 1),
+    {ok, _, F1} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 3},
+                                              #{}, F0),
+    F2 = lists:foldl(fun (Msg, S0) ->
+                             {ok, S, _} = rabbit_fifo_client:enqueue(
+                                            ClusterName, Msg, S0),
+                             S
+                     end, F1, [m1, m2, m3]),
+    {Delivered, F3} = receive_deliveries(ClusterName, 3, F2),
+    ?assertEqual([m1, m2, m3], [Msg || {_, Msg} <- Delivered]),
+
+    F4 = lists:foldl(fun ({MsgId, _}, S0) ->
+                             {S, []} = rabbit_fifo_client:return(<<"tag">>,
+                                                                 [MsgId], S0),
+                             S
+                     end, F3, Delivered),
+    ?assertEqual(3, rabbit_fifo_client:pending_size(F4)),
+
+    {_, _, F5} = process_ra_events(receive_ra_events(3, 0), ClusterName, F4),
+    {Redelivered, _} = receive_deliveries(ClusterName, 3, F5),
+    ?assertEqual([m1, m2, m3], [Msg || {_, Msg} <- Redelivered]),
+
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
@@ -942,6 +973,26 @@ receive_applied_retrying(ClusterName, State, Retries) ->
         exit:{missing_events, _, _, Acc} ->
             {_, _, State1} = process_ra_events(lists:reverse(Acc), ClusterName, State),
             receive_applied_retrying(ClusterName, State1, Retries - 1)
+    end.
+
+receive_deliveries(ClusterName, Num, State) ->
+    receive_deliveries(ClusterName, Num, State, []).
+
+receive_deliveries(_ClusterName, Num, State, Acc) when Num =< 0 ->
+    {Acc, State};
+receive_deliveries(ClusterName, Num, State0, Acc) ->
+    receive
+        {ra_event, From, {machine, Del} = Evt}
+          when element(1, Del) =:= delivery ->
+            {ok, State, Actions} = rabbit_fifo_client:handle_ra_event(
+                                     ClusterName, From, Evt, State0),
+            Msgs = [{MsgId, Msg} || {deliver, _, _, Ms} <- Actions,
+                                    {_, _, MsgId, _, Msg} <- Ms],
+            receive_deliveries(ClusterName, Num - length(Msgs), State,
+                               Acc ++ Msgs)
+    after ?TIMEOUT ->
+              flush(),
+              exit(await_delivery_timeout)
     end.
 
 %% Flusing the mailbox to later check that deliveries hasn't been received
