@@ -155,7 +155,7 @@ parse_source(Def) ->
                   uris => SrcURIs,
                   resource_decl => SrcDeclFun,
                   queue => Queue,
-                  delete_after => opt_b2a(DeleteAfter),
+                  delete_after => rabbit_shovel_util:parse_delete_after(DeleteAfter),
                   delete_after_duration => DeleteAfterDuration,
                   prefetch_count => PrefetchCount,
                   consumer_args => SrcCArgs,
@@ -743,12 +743,12 @@ parse_binary(Binary) when is_binary(Binary) ->
 parse_binary(NotABinary) ->
     fail({require_binary, NotABinary}).
 
+%% `validate_properties/2` and the 'P_basic' field names restrict the
+%% set of possible values, therefore the use of `binary_to_existing_atom/2`
+%% is safe.
 lookup_indices(KVs0, L) ->
     KVs = rabbit_data_coercion:to_proplist(KVs0),
-    [{1 + list_find(list_to_atom(binary_to_list(K)), L), V} || {K, V} <- KVs].
-
-opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
-opt_b2a(N)                   -> N.
+    [{1 + list_find(binary_to_existing_atom(K, utf8), L), V} || {K, V} <- KVs].
 
 list_find(K, L) -> list_find(K, L, 1).
 
