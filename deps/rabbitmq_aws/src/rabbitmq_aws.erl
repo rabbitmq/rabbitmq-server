@@ -296,7 +296,9 @@ endpoint_tld(_Other) ->
 %% structure. The response body will attempt to be decoded by invoking the
 %% maybe_decode_body/2 method.
 %% @end
-format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
+format_response({ok, {{_Version, StatusCode, _Message}, Headers, Body}}) when
+    StatusCode >= 200, StatusCode < 300
+->
     case maybe_decode_body(get_content_type(Headers), Body) of
         {error, Reason} ->
             ?LOG_WARNING("Could not decode AWS response body: ~tp", [Reason]),
@@ -312,6 +314,8 @@ format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when Sta
         Payload ->
             {error, Message, {Headers, Payload}}
     end;
+format_response({ok, {{_Version, _StatusCode, Message}, Headers, Body}}) ->
+    {error, Message, {Headers, Body}};
 format_response({error, Reason}) ->
     {error, Reason, undefined}.
 

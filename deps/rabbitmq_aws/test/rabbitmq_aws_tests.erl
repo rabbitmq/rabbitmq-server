@@ -172,6 +172,17 @@ format_response_test_() ->
         {"no content-type header, empty body", fun() ->
             Response = {ok, {{"HTTP/1.1", 200, "OK"}, [], ""}},
             ?assertMatch({error, "Malformed response body", _}, rabbitmq_aws:format_response(Response))
+        end},
+        {"3xx status code does not crash", fun() ->
+            Response =
+                {ok, {
+                    {"HTTP/1.1", 301, "Moved Permanently"}, [{"content-type", "text/xml"}],
+                    "<test>Value</test>"
+                }},
+            Expectation =
+                {error, "Moved Permanently",
+                    {[{"content-type", "text/xml"}], "<test>Value</test>"}},
+            ?assertEqual(Expectation, rabbitmq_aws:format_response(Response))
         end}
     ].
 
