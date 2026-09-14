@@ -20,6 +20,7 @@
          validate_consumer_args/2,
          validate_delete_after/2,
          validate_delete_after_duration/2,
+         parse_delete_after/1,
          sched_expire_after_duration/2,
          cancel_expire_after_duration/1,
          deobfuscate_value/1,
@@ -269,6 +270,11 @@ validate_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
      "~tp", [Name, Term]}.
+
+
+parse_delete_after(<<"never">>) -> never;
+parse_delete_after(<<"queue-length">>) -> 'queue-length';
+parse_delete_after(N) when is_integer(N) -> N.
 
 validate_delete_after_duration(Name, N) when is_integer(N), N > 0 ->
     %% the configured floor will still be applied if the value is too low

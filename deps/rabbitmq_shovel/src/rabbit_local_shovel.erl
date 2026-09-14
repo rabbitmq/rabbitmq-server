@@ -178,7 +178,7 @@ parse_source(Def) ->
                   uris => SrcURIs,
                   resource_decl => SrcDeclFun,
                   queue => Queue,
-                  delete_after => opt_b2a(DeleteAfter),
+                  delete_after => rabbit_shovel_util:parse_delete_after(DeleteAfter),
                   delete_after_duration => DeleteAfterDuration,
                   consumer_args => SrcCArgs,
                   consumer_name => SrcCTag
@@ -1198,6 +1198,3 @@ forward_pending_delivery(State) ->
                     forward_pending_delivery(S2)
             end
     end.
-
-opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
-opt_b2a(N)                   -> N.
