@@ -55,6 +55,7 @@ all() ->
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field,
         test_username_from,
         test_token_with_too_many_scopes,
+        test_oauth_providers_reported_for_issuer_verification,
         {group, with_rabbitmq_node},
         {group, with_resource_server_id}
       
@@ -86,7 +87,8 @@ groups() ->
           test_unsuccessful_access_without_an_iss_claim,
           test_unsuccessful_token_refresh_with_a_different_iss_claim,
           test_unsuccessful_access_with_verify_issuer_and_no_issuer,
-          test_successful_access_with_a_different_iss_claim_without_verify_issuer
+          test_successful_access_with_a_different_iss_claim_without_verify_issuer,
+          test_per_provider_verify_issuer_overrides_the_node_wide_default
       ]}
     ].
 
@@ -128,6 +130,7 @@ end_per_group(_, Config) ->
 end_per_testcase(_, Config) ->
   unset_env(issuer),
   unset_env(verify_issuer),
+  unset_env(oauth_providers),
   Config.
 
 
@@ -1842,3 +1845,53 @@ test_successful_access_with_a_different_iss_claim_without_verify_issuer(_) ->
             <<"iss">>, ?OTHER_ISSUER), Jwk),
     {ok, #auth_user{username = Username}} =
         user_login_authentication(Username, [{password, Token}]).
+
+test_oauth_providers_reported_for_issuer_verification(_) ->
+    set_env(issuer, ?ISSUER),
+    set_env(oauth_providers, #{
+        <<"A">> => [{id, <<"A">>}, {issuer, ?ISSUER}, {verify_issuer, true}],
+        <<"B">> => [{id, <<"B">>}, {issuer, ?ISSUER}],
+        <<"C">> => [{id, <<"C">>}, {verify_issuer, true}],
+        <<"D">> => [{id, <<"D">>}]
+    }),
+    ?assertEqual([root, <<"B">>],
+        rabbit_oauth2_provider:oauth_provider_ids_with_unverified_issuer()),
+    ?assertEqual([<<"C">>],
+        rabbit_oauth2_provider:oauth_provider_ids_without_issuer_to_verify()),
+
+    set_env(verify_issuer, true),
+    ?assertEqual([],
+        rabbit_oauth2_provider:oauth_provider_ids_with_unverified_issuer()),
+    ?assertEqual([<<"C">>, <<"D">>],
+        rabbit_oauth2_provider:oauth_provider_ids_without_issuer_to_verify()).
+
+test_per_provider_verify_issuer_overrides_the_node_wide_default(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    unset_env(resource_server_id),
+    set_env(resource_servers, #{<<"rabbitmq">> => [
+        {id, <<"rabbitmq">>},
+        {oauth_provider_id, <<"A">>}
+    ]}),
+    ProviderA = [
+        {id, <<"A">>},
+        {issuer, ?ISSUER},
+        {signing_keys, #{<<"token-key">> => {map, Jwk}}}
+    ],
+    Token = ?UTIL_MOD:sign_token_hs(
+        ?UTIL_MOD:token_with_claim(
+            ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username),
+            <<"iss">>, ?OTHER_ISSUER), Jwk),
+
+    set_env(verify_issuer, true),
+    set_env(oauth_providers, #{<<"A">> => [{verify_issuer, false} | ProviderA]}),
+    {ok, #auth_user{username = Username}} =
+        user_login_authentication(Username, [{password, Token}]),
+
+    set_env(verify_issuer, false),
+    set_env(oauth_providers, #{<<"A">> => [{verify_issuer, true} | ProviderA]}),
+    ?assertMatch({refused, _, [{error, {issuer_mismatch, ?OTHER_ISSUER, _}}]},
+        user_login_authentication(Username, [{password, Token}])),
+
+    set_env(resource_server_id, <<"rabbitmq">>),
+    unset_env(resource_servers).

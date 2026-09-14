@@ -15,7 +15,8 @@
     add_signing_key/2, add_signing_key/3, replace_signing_keys/1,
     replace_signing_keys/2,
     get_signing_keys/0, get_signing_keys/1, get_signing_key/1, get_signing_key/2,
-    oauth_provider_ids_with_unverified_issuer/0
+    oauth_provider_ids_with_unverified_issuer/0,
+    oauth_provider_ids_without_issuer_to_verify/0
 ]).
 
 -spec get_internal_oauth_provider() -> internal_oauth_provider().
@@ -179,10 +180,18 @@ get_algorithms(OAuthProviderId) ->
 
 -spec oauth_provider_ids_with_unverified_issuer() -> [oauth_provider_id()].
 oauth_provider_ids_with_unverified_issuer() ->
-    Ids = [root | maps:keys(get_env(oauth_providers, #{}))],
-    [Id || Id <- Ids,
+    [Id || Id <- oauth_provider_ids(),
            get_issuer(Id) =/= undefined,
            not get_verify_issuer(Id)].
+
+-spec oauth_provider_ids_without_issuer_to_verify() -> [oauth_provider_id()].
+oauth_provider_ids_without_issuer_to_verify() ->
+    [Id || Id <- oauth_provider_ids(),
+           get_issuer(Id) =:= undefined,
+           get_verify_issuer(Id)].
+
+oauth_provider_ids() ->
+    [root | maps:keys(get_env(oauth_providers, #{}))].
 
 -spec get_issuer(oauth_provider_id()) -> binary() | undefined.
 get_issuer(root) ->

@@ -21,11 +21,18 @@ start(_Type, _StartArgs) ->
 
 warn_about_unverified_issuers() ->
     lists:foreach(fun(Id) ->
-        ?LOG_WARNING("OAuth 2 provider ~ts has an issuer configured but "
-                     "verify_issuer is not enabled: the iss claim of its tokens "
-                     "will not be verified",
+        ?LOG_WARNING("OAuth 2 provider ~ts has an issuer configured but does not "
+                     "verify the iss claim of its tokens. Set auth_oauth2.verify_issuer "
+                     "or auth_oauth2.oauth_providers.<name>.verify_issuer to true to "
+                     "enable that",
                      [oauth2_client:format_oauth_provider_id(Id)])
-        end, rabbit_oauth2_provider:oauth_provider_ids_with_unverified_issuer()).
+        end, rabbit_oauth2_provider:oauth_provider_ids_with_unverified_issuer()),
+    lists:foreach(fun(Id) ->
+        ?LOG_WARNING("OAuth 2 provider ~ts verifies the iss claim of its tokens but "
+                     "has no issuer configured: every token it signs will be rejected. "
+                     "Configure its issuer or set verify_issuer to false for it",
+                     [oauth2_client:format_oauth_provider_id(Id)])
+        end, rabbit_oauth2_provider:oauth_provider_ids_without_issuer_to_verify()).
 
 stop(_State) ->
     ok.

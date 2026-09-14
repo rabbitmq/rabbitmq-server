@@ -24,7 +24,8 @@ all() ->
     build_openid_discovery_endpoint,
     {group, ssl_options},
     {group, merge},
-    {group, get_expiration_time}
+    {group, get_expiration_time},
+    {group, issuer}
 ].
 
 groups() ->
@@ -402,7 +403,5 @@ access_token_response_without_expiration_time(_) ->
 same_issuer(_) ->
     ?assert(oauth2_client:same_issuer("https://issuer", <<"https://issuer">>)),
     ?assert(oauth2_client:same_issuer(<<"https://issuer">>, <<"https://issuer">>)),
-    ?assert(oauth2_client:same_issuer(undefined, <<"https://issuer">>)),
-    ?assert(oauth2_client:same_issuer("https://issuer", undefined)),
     ?assertNot(oauth2_client:same_issuer("https://issuer", <<"https://issuer/">>)),
     ?assertNot(oauth2_client:same_issuer("https://issuer/v2", <<"https://issuer">>)).

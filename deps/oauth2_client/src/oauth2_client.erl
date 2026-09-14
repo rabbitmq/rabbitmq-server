@@ -295,22 +295,25 @@ download_oauth_provider(OAuthProvider) ->
     end.
 
 warn_if_discovered_issuer_differs(OAuthProvider, OpenIdConfiguration) ->
+    Id = format_oauth_provider_id(OAuthProvider#oauth_provider.id),
     Configured = OAuthProvider#oauth_provider.issuer,
-    Discovered = OpenIdConfiguration#openid_configuration.issuer,
-    case same_issuer(Configured, Discovered) of
-        true -> ok;
-        false ->
-            ?LOG_WARNING("OAuth 2 provider ~ts is configured with issuer ~ts but its "
-                         "OpenID discovery metadata reports issuer ~ts: tokens from it "
-                         "can be rejected depending on the OAuth 2 plugin configuration",
-                         [format_oauth_provider_id(OAuthProvider#oauth_provider.id),
-                          Configured, Discovered])
+    case OpenIdConfiguration#openid_configuration.issuer of
+        undefined ->
+            ?LOG_WARNING("OAuth 2 provider ~ts OpenID discovery metadata does not "
+                         "report an issuer", [Id]);
+        Discovered ->
+            case same_issuer(Configured, Discovered) of
+                true -> ok;
+                false ->
+                    ?LOG_WARNING("OAuth 2 provider ~ts is configured with issuer ~ts "
+                                 "but its OpenID discovery metadata reports issuer ~ts: "
+                                 "tokens from it can be rejected depending on the "
+                                 "OAuth 2 plugin configuration",
+                                 [Id, Configured, Discovered])
+            end
     end.
 
--spec same_issuer(string() | binary() | undefined, string() | binary() | undefined) ->
-    boolean().
-same_issuer(undefined, _) -> true;
-same_issuer(_, undefined) -> true;
+-spec same_issuer(string() | binary(), string() | binary()) -> boolean().
 same_issuer(Configured, Discovered) ->
     rabbit_data_coercion:to_binary(Configured) =:=
         rabbit_data_coercion:to_binary(Discovered).
