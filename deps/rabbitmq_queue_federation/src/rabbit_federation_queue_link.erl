@@ -371,9 +371,11 @@ update_visit_count(Table, Been, Headers) ->
     {Found, Been1} = lists:partition(
         fun(I) -> visit_match(I, Table) end,
         Been),
+    %% don't assume a unique match in x-received-from header,
+    %% more than one entry can match visit_match/2
     C = case Found of
             [] -> 0;
-            [{table, T}] -> case rabbit_misc:table_lookup(
+            [{table, T} | _] -> case rabbit_misc:table_lookup(
                 T, <<"visit-count">>) of
                                 {_, I} when is_number(I) -> I;
                                 _ -> 0
