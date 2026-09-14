@@ -424,7 +424,7 @@ update_auth_attempt(RemoteAddress, Username, Protocol, Incr) ->
         {ok, true} ->
             Addr = case inet:is_ip_address(RemoteAddress) of
                        true ->
-                           list_to_binary(inet:ntoa(RemoteAddress));
+                           list_to_binary(rabbit_misc:ntoa(RemoteAddress));
                        false ->
                            rabbit_data_coercion:to_binary(RemoteAddress)
                    end,
