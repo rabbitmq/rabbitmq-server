@@ -421,7 +421,24 @@ query_node_props(Nodes) when Nodes =/= [] ->
     %% By using a temporary intermediate hidden node, we ask Erlang not to
     %% connect everyone automatically.
     Context = rabbit_prelaunch:get_context(),
-    VMArgs0 = ["+pc","unicode","-hidden"],
+    %% Name and name domain the peer will use once distribution is started
+    %% on it below, computed here since it only depends on this node. This
+    %% mirrors what `peer:start/1' would have derived itself from `name'/
+    %% `host'/`longnames', had we passed them.
+    {NameDomain, DistName} =
+        case Context of
+            #{nodename_type := longnames} ->
+                {longnames, list_to_atom(PeerName ++ "@" ++ Suffix)};
+            _ ->
+                {case net_kernel:longnames() of
+                     true -> longnames;
+                     _ -> shortnames
+                 end,
+                 list_to_atom(PeerName)}
+        end,
+    %% `-nocookie' prevents the peer from reading or creating
+    %% `$HOME/.erlang.cookie' when distribution starts.
+    VMArgs0 = ["+pc","unicode","-nocookie"],
     VMArgs1 = case init:get_argument(boot) of
                   {ok, [[BootFileArg]]} ->
                       ["-boot", BootFileArg | VMArgs0];
@@ -430,42 +447,42 @@ query_node_props(Nodes) when Nodes =/= [] ->
                       %% defined in rabbitmq-defaults / CLEAN_BOOT_FILE
                       ["-boot", "start_clean" | VMArgs0]
               end,
-    VMArgs2 = case Context of
-                  #{erlang_cookie := ErlangCookie,
-                    var_origins := #{erlang_cookie := environment}} ->
-                      ["-setcookie", atom_to_list(ErlangCookie) | VMArgs1];
-                  _ ->
-                      case init:get_argument(setcookie) of
-                          {ok, [[SetCookieArg]]} ->
-                              ["-setcookie", SetCookieArg | VMArgs1];
-                          _ ->
-                              VMArgs1
-                      end
-              end,
-    VMArgs3 = maybe_add_proto_dist_arguments(VMArgs2),
-    VMArgs4 = maybe_add_inetrc_arguments(VMArgs3),
-    VMArgs5 = maybe_add_tls_arguments(VMArgs4),
-    PeerStartArg0 = #{name => PeerName,
-                      args => VMArgs5,
+    VMArgs2 = maybe_add_proto_dist_arguments(VMArgs1),
+    VMArgs3 = maybe_add_inetrc_arguments(VMArgs2),
+    VMArgs4 = maybe_add_tls_arguments(VMArgs3),
+    %% `name' is deliberately left out: distribution is started
+    %% explicitly instead with `dist_listen => false`.
+    PeerStartArg = #{args => VMArgs4,
                       connection => standard_io,
                       wait_boot => infinity},
-    PeerStartArg = case Context of
-                       #{nodename_type := longnames} ->
-                           PeerStartArg0#{host => Suffix,
-                                          longnames => true};
-                       _ ->
-                           PeerStartArg0
-                   end,
     ?LOG_DEBUG("Peer discovery: peer node arguments: ~tp",
                [PeerStartArg]),
     case peer:start(PeerStartArg) of
-        {ok, Pid, Peer} ->
+        {ok, Pid, _Peer} ->
             ?LOG_DEBUG(
                "Peer discovery: using temporary hidden node '~ts' to query "
                "discovered peers properties",
-               [Peer],
+               [DistName],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             try
+                case peer:call(Pid, net_kernel, start,
+                               [DistName, #{name_domain => NameDomain,
+                                            dist_listen => false,
+                                            hidden => true}],
+                               30000) of
+                    {ok, _} ->
+                        ok;
+                    {error, DistError} = DistStartError ->
+                        ?LOG_ERROR(
+                           "Peer discovery: failed to start distribution on "
+                           "the temporary hidden node: ~tp",
+                           [DistError],
+                           #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                        throw(DistStartError)
+                end,
+                %% Set the RabbitMQ node's cookie to be able to connect
+                %% to discovered peers.
+                true = peer:call(Pid, erlang, set_cookie, [erlang:get_cookie()]),
                 NodesAndProps1 = peer:call(
                                   Pid,
                                   ?MODULE, do_query_node_props,
@@ -570,7 +587,7 @@ maybe_add_tls_arguments(VMArgs) ->
     %%     "verify_peer","-pa",
     %%     "/usr/local/lib/erlang/lib/ssl-11.0.3/ebin",
     %%     "-proto_dist","inet_tls","-boot",
-    %%     "no_dot_erlang","-hidden"],
+    %%     "no_dot_erlang"],
     VMArgs1 = case init:get_argument(ssl_dist_opt) of
                   {ok, SslDistOpts0} ->
                       SslDistOpts1 = [["-ssl_dist_opt" |
