@@ -1,4 +1,4 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
+`%% This Source Code Form is subject to the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
@@ -61,7 +61,8 @@ federation_mechanics_tests() ->
                                                        federate_unfederate,
                                                        dynamic_plugin_stop_start,
                                                        supervisor_shutdown_concurrency_safety,
-                                                       clear_upstream_leaves_same_named_exchange_intact
+                                                       clear_upstream_leaves_same_named_exchange_intact,
+                                                       poison_x_received_from_does_not_crash_link
                                                       ]}
                                 ]}
     ].
@@ -435,6 +436,31 @@ clear_upstream_leaves_same_named_exchange_intact(Config) ->
               Payload = <<"after-clear">>,
               publish(Ch, Name, <<>>, Payload),
               expect(Ch, Name, [Payload])
+      end, upstream_downstream(Config)).
+
+%% x-received-from: a publisher on the upstream
+%% queue can send two hop records matching the link's own (uri, queue),
+%% which must not crash update_visit_count/3.
+poison_x_received_from_does_not_crash_link(Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              await_running_federation(Config,
+                [{<<"fed1.downstream">>, <<"upstream">>}],
+                ?EXPECT_FEDERATION_TIMEOUT),
+              Status = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                    rabbit_federation_status, status, []),
+              [Link] = [L || L <- Status,
+                             proplists:get_value(queue, L) =:= <<"fed1.downstream">>],
+              SafeUri = proplists:get_value(uri, Link),
+              Hop = {table, [{<<"uri">>, longstr, SafeUri},
+                             {<<"queue">>, longstr, <<"upstream">>}]},
+              Headers = [{<<"x-received-from">>, array, [Hop, Hop]}],
+              Msg = #amqp_msg{payload = <<"poison">>,
+                              props = #'P_basic'{headers = Headers}},
+              publish(Ch, <<>>, <<"upstream">>, Msg),
+              expect(Ch, <<"fed1.downstream">>, [<<"poison">>]),
+              %% The link must still be alive and forwarding afterwards.
+              expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>, ?EXPECT_FEDERATION_TIMEOUT)
       end, upstream_downstream(Config)).
 
 %% #exchange.decorators
