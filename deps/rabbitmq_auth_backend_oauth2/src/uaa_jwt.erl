@@ -125,18 +125,22 @@ decode_and_verify(Token, ResourceServer, InternalOAuthProvider) ->
             end
     end.
 
--spec verify_issuer(binary() | undefined, boolean(), map()) ->
+-spec verify_issuer(binary() | string() | undefined, boolean(), map()) ->
     {true, map()} | {error, term()}.
 verify_issuer(_Issuer, false, Payload) ->
     {true, Payload};
 verify_issuer(undefined, true, _Payload) ->
     {error, issuer_not_configured};
-verify_issuer(Issuer, true, #{?ISS_JWT_FIELD := Issuer} = Payload) ->
-    {true, Payload};
-verify_issuer(Issuer, true, #{?ISS_JWT_FIELD := Iss}) ->
-    {error, {issuer_mismatch, Iss, Issuer}};
-verify_issuer(Issuer, true, _Payload) ->
-    {error, {missing_issuer_claim, Issuer}}.
+verify_issuer(Issuer0, true, Payload) ->
+    Issuer = rabbit_data_coercion:to_binary(Issuer0),
+    case Payload of
+        #{?ISS_JWT_FIELD := Issuer} ->
+            {true, Payload};
+        #{?ISS_JWT_FIELD := Iss} ->
+            {error, {issuer_mismatch, Iss, Issuer}};
+        _ ->
+            {error, {missing_issuer_claim, Issuer}}
+    end.
 
 -spec resolve_resource_server(binary()|map()) -> {error, term()} |
         {resource_server(), internal_oauth_provider()}.

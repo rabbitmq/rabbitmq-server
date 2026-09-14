@@ -89,7 +89,9 @@ scenario_g(_Config) ->
 
 scenario_h(_Config) ->
     Payload = #{<<"iss">> => ?ISSUER, <<"sub">> => <<"alice">>},
-    ?assertEqual({true, Payload}, verify_issuer(?ISSUER, true, Payload)).
+    ?assertEqual({true, Payload}, verify_issuer(?ISSUER, true, Payload)),
+    ?assertEqual({true, Payload},
+                 verify_issuer(binary_to_list(?ISSUER), true, Payload)).
 
 scenario_i(_Config) ->
     Payload = #{<<"iss">> => ?OTHER_ISSUER, <<"sub">> => <<"alice">>},
