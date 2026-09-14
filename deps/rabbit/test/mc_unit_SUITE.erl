@@ -42,6 +42,7 @@ all_tests() ->
      amqp_amqpl_message_id_large,
      amqp_amqpl_message_id_binary,
      amqp_amqpl_unsupported_values_not_converted,
+     amqp_amqpl_malformed_x_opt_deaths_dropped,
      amqp_to_amqpl_data_body,
      amqp_amqpl_amqp_bodies,
      amqp_x_headers,
@@ -565,6 +566,60 @@ amqp_amqpl_unsupported_values_not_converted(_Config) ->
     ?assertMatch(undefined, header(LongKey, HL)),
     %% RabbitMQ does not validate that keys are ascii as per spec
     %% that's ok after all who really cares?
+    ok.
+
+%% Malformed client-supplied x-opt-deaths entries are dropped on conversion to AMQP 0-9-1.
+amqp_amqpl_malformed_x_opt_deaths_dropped(_Config) ->
+    Malformed = {map, [{{symbol, <<"queue">>}, {utf8, <<"q">>}}]},
+    WellFormedKvs = [
+                     {{symbol, <<"queue">>}, {utf8, <<"q2">>}},
+                     {{symbol, <<"reason">>}, {symbol, <<"rejected">>}},
+                     {{symbol, <<"count">>}, {ulong, 3}},
+                     {{symbol, <<"first-time">>}, {timestamp, 1000}},
+                     {{symbol, <<"last-time">>}, {timestamp, 2000}},
+                     {{symbol, <<"exchange">>}, {utf8, <<"ex">>}},
+                     {{symbol, <<"routing-keys">>},
+                      {array, utf8, [{utf8, <<"rk1">>}]}}
+                    ],
+    WellFormed = {map, WellFormedKvs},
+    WrongType = {map, lists:keyreplace({symbol, <<"count">>}, 1, WellFormedKvs,
+                                       {{symbol, <<"count">>}, {uint, 3}})},
+    MAC = [
+           {{symbol, <<"x-opt-deaths">>},
+            {array, map, [Malformed, WrongType, WellFormed]}},
+           {{symbol, <<"x-other">>}, {utf8, <<"still-here">>}}
+          ],
+    M = #'v1_0.message_annotations'{content = MAC},
+    D = #'v1_0.data'{content = <<"data">>},
+    Payload = serialize_sections([M, D]),
+
+    Msg = mc:init(mc_amqp, Payload, annotations()),
+    MsgL = mc:convert(mc_amqpl, Msg),
+    #content{properties = #'P_basic'{headers = HL}} = mc:protocol_state(MsgL),
+    %% The malformed and wrong-type entries are dropped; the well-formed one
+    %% and the other x- annotations still convert.
+    {_, array, [{table, T}]} = header(<<"x-death">>, HL),
+    ?assertMatch({_, longstr, <<"q2">>}, header(<<"queue">>, T)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"reason">>, T)),
+    ?assertMatch({_, long, 3}, header(<<"count">>, T)),
+    ?assertMatch({_, longstr, <<"still-here">>}, header(<<"x-other">>, HL)),
+
+    %% A message whose only death entry is malformed converts to an empty
+    %% x-death array.
+    MAC1 = [{{symbol, <<"x-opt-deaths">>}, {array, map, [Malformed]}}],
+    Payload1 = serialize_sections([#'v1_0.message_annotations'{content = MAC1}, D]),
+    Msg1 = mc:init(mc_amqp, Payload1, annotations()),
+    MsgL1 = mc:convert(mc_amqpl, Msg1),
+    #content{properties = #'P_basic'{headers = HL1}} = mc:protocol_state(MsgL1),
+    ?assertMatch({_, array, []}, header(<<"x-death">>, HL1)),
+
+    %% An x-opt-deaths value that is not an array of maps is ignored.
+    MAC2 = [{{symbol, <<"x-opt-deaths">>}, {utf8, <<"junk">>}}],
+    Payload2 = serialize_sections([#'v1_0.message_annotations'{content = MAC2}, D]),
+    Msg2 = mc:init(mc_amqp, Payload2, annotations()),
+    MsgL2 = mc:convert(mc_amqpl, Msg2),
+    #content{properties = #'P_basic'{headers = HL2}} = mc:protocol_state(MsgL2),
+    ?assertEqual(undefined, header(<<"x-death">>, HL2)),
     ok.
 
 amqp_amqpl_amqp_uuid_correlation_id(_Config) ->
