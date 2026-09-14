@@ -9,7 +9,7 @@
 
 -export([decode/1]).
 
--spec decode(Value :: string() | binary()) -> list().
+-spec decode(Value :: string() | binary()) -> list() | {error, term()}.
 %% @doc Decode a JSON string returning a proplist
 %% @end
 decode(Value) when is_list(Value) ->
@@ -17,9 +17,14 @@ decode(Value) when is_list(Value) ->
 decode(<<>>) ->
     [];
 decode(Value) when is_binary(Value) ->
-    Decoded0 = rabbit_json:decode(Value),
-    Decoded = maps:to_list(Decoded0),
-    convert_binary_values(Decoded, []).
+    try
+        Decoded0 = rabbit_json:decode(Value),
+        Decoded = maps:to_list(Decoded0),
+        convert_binary_values(Decoded, [])
+    catch
+        error:Reason -> {error, Reason};
+        throw:Reason -> {error, Reason}
+    end.
 
 -spec convert_binary_values(Value :: list(), Accumulator :: list()) -> list().
 %% @doc Convert the binary key/value pairs returned by rabbit_json to strings.

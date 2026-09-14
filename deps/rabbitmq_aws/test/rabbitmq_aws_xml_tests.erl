@@ -46,5 +46,40 @@ parse_test_() ->
             Response = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<test>value</test>",
             Expectation = [{"test", "value"}],
             ?assertEqual(Expectation, rabbitmq_aws_xml:parse(Response))
+        end},
+        {"external DTD reference is not resolved", fun() ->
+            Response =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE test SYSTEM \"file:///etc/passwd\"><test>value</test>",
+            ?assertEqual([{"test", "value"}], rabbitmq_aws_xml:parse(Response))
+        end},
+        {"relative external DTD reference is not resolved", fun() ->
+            Response =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE test SYSTEM \"test.dtd\"><test>value</test>",
+            ?assertEqual([{"test", "value"}], rabbitmq_aws_xml:parse(Response))
+        end},
+        {"entity declarations are rejected", fun() ->
+            Response =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE test [<!ENTITY e \"value\">]><test>&e;</test>",
+            ?assertMatch({error, _}, rabbitmq_aws_xml:parse(Response))
+        end},
+        {"parameter entity declarations are rejected", fun() ->
+            Response =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE test [<!ENTITY % p SYSTEM \"file:///etc/passwd\"> %p;]><test/>",
+            ?assertMatch({error, _}, rabbitmq_aws_xml:parse(Response))
+        end},
+        {"empty body", fun() ->
+            ?assertMatch({error, _}, rabbitmq_aws_xml:parse(""))
+        end},
+        {"truncated body", fun() ->
+            ?assertMatch({error, _}, rabbitmq_aws_xml:parse("<test><example>value</example>"))
+        end},
+        {"body that is not XML", fun() ->
+            ?assertMatch({error, _}, rabbitmq_aws_xml:parse("Internal Server Error"))
+        end},
+        {"binary body", fun() ->
+            ?assertEqual(
+                [{"test", "value"}],
+                rabbitmq_aws_xml:parse(<<"<?xml version=\"1.0\"?><test>value</test>">>)
+            )
         end}
     ].

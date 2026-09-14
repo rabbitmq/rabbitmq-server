@@ -150,6 +150,28 @@ format_response_test_() ->
                 {error, "Internal Server Error",
                     {[{"Content-Type", "text/xml"}], [{"error", "Boom"}]}},
             ?assertEqual(Expectation, rabbitmq_aws:format_response(Response))
+        end},
+        {"ok, undecodable body", fun() ->
+            Response =
+                {ok, {
+                    {"HTTP/1.1", 200, "OK"}, [{"content-type", "text/xml"}], "not xml"
+                }},
+            Expectation =
+                {error, "Malformed response body", {[{"content-type", "text/xml"}], "not xml"}},
+            ?assertEqual(Expectation, rabbitmq_aws:format_response(Response))
+        end},
+        {"error, undecodable body keeps the status message", fun() ->
+            Response =
+                {ok, {
+                    {"HTTP/1.1", 400, "Bad Request"}, [{"content-type", "text/xml"}], "not xml"
+                }},
+            Expectation =
+                {error, "Bad Request", {[{"content-type", "text/xml"}], "not xml"}},
+            ?assertEqual(Expectation, rabbitmq_aws:format_response(Response))
+        end},
+        {"no content-type header, empty body", fun() ->
+            Response = {ok, {{"HTTP/1.1", 200, "OK"}, [], ""}},
+            ?assertMatch({error, "Malformed response body", _}, rabbitmq_aws:format_response(Response))
         end}
     ].
 
@@ -366,6 +388,11 @@ maybe_decode_body_test_() ->
             ContentType = {"text", "html"},
             Body = "<html><head></head><body></body></html>",
             ?assertEqual(Body, rabbitmq_aws:maybe_decode_body(ContentType, Body))
+        end},
+        {"text/xml, not xml", fun() ->
+            ContentType = {"text", "xml"},
+            Body = "not xml",
+            ?assertMatch({error, _}, rabbitmq_aws:maybe_decode_body(ContentType, Body))
         end}
     ].
 
