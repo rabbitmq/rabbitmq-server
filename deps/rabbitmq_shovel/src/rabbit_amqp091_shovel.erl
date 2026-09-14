@@ -743,10 +743,9 @@ parse_binary(Binary) when is_binary(Binary) ->
 parse_binary(NotABinary) ->
     fail({require_binary, NotABinary}).
 
-%% The accepted keys are constrained by validate_properties/2 and all match a
-%% 'P_basic' field name, so binary_to_existing_atom/2 never fails here. It is
-%% used instead of binary_to_atom/2 to make sure no atom is created from a
-%% user-supplied key.
+%% `validate_properties/2` and the 'P_basic' field names restrict the
+%% set of possible values, therefore the use of `binary_to_existing_atom/2`
+%% is safe.
 lookup_indices(KVs0, L) ->
     KVs = rabbit_data_coercion:to_proplist(KVs0),
     [{1 + list_find(binary_to_existing_atom(K, utf8), L), V} || {K, V} <- KVs].

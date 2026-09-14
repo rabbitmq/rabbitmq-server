@@ -271,8 +271,7 @@ validate_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
      "~tp", [Name, Term]}.
 
-%% The accepted values are constrained by validate_delete_after/2, so this
-%% function must never convert an arbitrary binary to an atom.
+
 parse_delete_after(<<"never">>) -> never;
 parse_delete_after(<<"queue-length">>) -> 'queue-length';
 parse_delete_after(N) when is_integer(N) -> N.
