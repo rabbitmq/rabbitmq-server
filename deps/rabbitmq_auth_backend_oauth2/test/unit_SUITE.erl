@@ -1855,7 +1855,7 @@ test_oauth_providers_reported_for_issuer_verification(_) ->
         <<"D">> => [{id, <<"D">>}]
     }),
     ?assertEqual([root, <<"B">>],
-        rabbit_oauth2_provider:oauth_provider_ids_with_unverified_issuer()),
+        lists:sort(rabbit_oauth2_provider:oauth_provider_ids_with_unverified_issuer())),
     ?assertEqual([<<"C">>],
         rabbit_oauth2_provider:oauth_provider_ids_without_issuer_to_verify()),
 
@@ -1863,7 +1863,7 @@ test_oauth_providers_reported_for_issuer_verification(_) ->
     ?assertEqual([],
         rabbit_oauth2_provider:oauth_provider_ids_with_unverified_issuer()),
     ?assertEqual([<<"C">>, <<"D">>],
-        rabbit_oauth2_provider:oauth_provider_ids_without_issuer_to_verify()).
+        lists:sort(rabbit_oauth2_provider:oauth_provider_ids_without_issuer_to_verify())).
 
 test_per_provider_verify_issuer_overrides_the_node_wide_default(_) ->
     Username = <<"username">>,
@@ -1883,15 +1883,17 @@ test_per_provider_verify_issuer_overrides_the_node_wide_default(_) ->
             ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username),
             <<"iss">>, ?OTHER_ISSUER), Jwk),
 
-    set_env(verify_issuer, true),
-    set_env(oauth_providers, #{<<"A">> => [{verify_issuer, false} | ProviderA]}),
-    {ok, #auth_user{username = Username}} =
-        user_login_authentication(Username, [{password, Token}]),
+    try
+        set_env(verify_issuer, true),
+        set_env(oauth_providers, #{<<"A">> => [{verify_issuer, false} | ProviderA]}),
+        {ok, #auth_user{username = Username}} =
+            user_login_authentication(Username, [{password, Token}]),
 
-    set_env(verify_issuer, false),
-    set_env(oauth_providers, #{<<"A">> => [{verify_issuer, true} | ProviderA]}),
-    ?assertMatch({refused, _, [{error, {issuer_mismatch, ?OTHER_ISSUER, _}}]},
-        user_login_authentication(Username, [{password, Token}])),
-
-    set_env(resource_server_id, <<"rabbitmq">>),
-    unset_env(resource_servers).
+        set_env(verify_issuer, false),
+        set_env(oauth_providers, #{<<"A">> => [{verify_issuer, true} | ProviderA]}),
+        ?assertMatch({refused, _, [{error, {issuer_mismatch, ?OTHER_ISSUER, _}}]},
+            user_login_authentication(Username, [{password, Token}]))
+    after
+        set_env(resource_server_id, <<"rabbitmq">>),
+        unset_env(resource_servers)
+    end.

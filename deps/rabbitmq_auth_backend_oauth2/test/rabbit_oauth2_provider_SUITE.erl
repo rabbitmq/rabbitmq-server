@@ -192,11 +192,11 @@ init_per_group(oauth_provider_with_issuer, Config) ->
             Url = build_url_to_oauth_provider(<<"/">>),
             set_env(issuer, Url),
             set_env(key_config, SslOptions),
-            {Url, build_url_to_oauth_provider(<<"/keys">>)};
+            {Url, list_to_binary(build_url_to_oauth_provider(<<"/keys">>))};
         <<"A">> ->
             Url = build_url_to_oauth_provider(<<"/A">>),
             set_oauth_provider_properties(<<"A">>, [{issuer, Url}, {https, SslOptions}]),
-            {Url, build_url_to_oauth_provider(<<"/A/keys">>)}
+            {Url, list_to_binary(build_url_to_oauth_provider(<<"/A/keys">>))}
     end,
     [{issuer, Issuer}, {jwks_uri, JwksUri}] ++ Config;
 

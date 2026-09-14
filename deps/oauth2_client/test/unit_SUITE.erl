@@ -55,7 +55,7 @@ groups() ->
     ]},
     {issuer, [], [
         same_issuer,
-        discovery_document_without_issuer_is_rejected
+        discovery_document_without_a_valid_issuer_yields_no_issuer
     ]}
 ].
 
@@ -407,14 +407,14 @@ same_issuer(_) ->
     ?assertNot(oauth2_client:same_issuer("https://issuer", <<"https://issuer/">>)),
     ?assertNot(oauth2_client:same_issuer("https://issuer/v2", <<"https://issuer">>)).
 
-discovery_document_without_issuer_is_rejected(_) ->
-    ?assertEqual({error, {invalid_openid_configuration, missing_issuer}},
+discovery_document_without_a_valid_issuer_yields_no_issuer(_) ->
+    ?assertMatch(#openid_configuration{issuer = undefined},
         oauth2_client:map_to_openid_configuration(
             #{<<"jwks_uri">> => <<"https://issuer/keys">>})),
     lists:foreach(fun(Issuer) ->
-        ?assertEqual({error, {invalid_openid_configuration, invalid_issuer}},
+        ?assertMatch(#openid_configuration{issuer = undefined},
             oauth2_client:map_to_openid_configuration(#{<<"issuer">> => Issuer}))
         end, [42, 1.5, true, null, [<<"https://issuer">>], #{<<"a">> => <<"b">>}]),
-    ?assertMatch({ok, #openid_configuration{issuer = <<"https://issuer">>}},
+    ?assertMatch(#openid_configuration{issuer = <<"https://issuer">>},
         oauth2_client:map_to_openid_configuration(
             #{<<"issuer">> => <<"https://issuer">>})).

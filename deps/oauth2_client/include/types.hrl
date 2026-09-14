@@ -12,7 +12,7 @@
 -type oauth_provider_id() :: root | binary().
 
 -record(openid_configuration, {
-    issuer :: uri_string:uri_string(),
+    issuer :: option(uri_string:uri_string()),
     token_endpoint :: option(uri_string:uri_string()),
     authorization_endpoint :: option(uri_string:uri_string()),
     end_session_endpoint :: option(uri_string:uri_string()),

@@ -42,7 +42,7 @@ produce_expected_response(ExpectedResponse) ->
         true ->
           { proplists:get_value(code, ExpectedResponse),
             #{<<"content-type">> => proplists:get_value(content_type, ExpectedResponse)},
-            rabbit_json:encode(Payload)
+            rabbit_json:encode(json_payload(Payload))
           };
         _ ->
           { proplists:get_value(code, ExpectedResponse),
@@ -53,6 +53,19 @@ produce_expected_response(ExpectedResponse) ->
     false -> {proplists:get_value(code, ExpectedResponse), undefined, undefined}
   end.
 
+
+json_payload(Payload) ->
+    [{Key, json_value(Value)} || {Key, Value} <- Payload].
+
+json_value([]) ->
+    [];
+json_value(Value) when is_list(Value) ->
+    case io_lib:printable_unicode_list(Value) of
+        true -> unicode:characters_to_binary(Value);
+        false -> Value
+    end;
+json_value(Value) ->
+    Value.
 
 is_proplist([{_Key, _Val}|_] = List) -> lists:all(fun({_K, _V}) -> true; (_) -> false end, List);
 is_proplist(_) -> false.

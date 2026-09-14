@@ -378,16 +378,19 @@ get_openid_configuration_using_custom_endpoint(Config) ->
 
 
 assertOpenIdConfiguration(ExpectedOpenIdProvider, ActualOpenIdProvider) ->
-    ?assertEqual(ExpectedOpenIdProvider#openid_configuration.issuer,
+    ?assertEqual(as_json_string(ExpectedOpenIdProvider#openid_configuration.issuer),
         ActualOpenIdProvider#openid_configuration.issuer),
-    ?assertEqual(ExpectedOpenIdProvider#openid_configuration.jwks_uri,
+    ?assertEqual(as_json_string(ExpectedOpenIdProvider#openid_configuration.jwks_uri),
         ActualOpenIdProvider#openid_configuration.jwks_uri),
-    ?assertEqual(ExpectedOpenIdProvider#openid_configuration.end_session_endpoint,
+    ?assertEqual(as_json_string(ExpectedOpenIdProvider#openid_configuration.end_session_endpoint),
         ActualOpenIdProvider#openid_configuration.end_session_endpoint),
-    ?assertEqual(ExpectedOpenIdProvider#openid_configuration.token_endpoint,
+    ?assertEqual(as_json_string(ExpectedOpenIdProvider#openid_configuration.token_endpoint),
         ActualOpenIdProvider#openid_configuration.token_endpoint),
-    ?assertEqual(ExpectedOpenIdProvider#openid_configuration.authorization_endpoint,
+    ?assertEqual(as_json_string(ExpectedOpenIdProvider#openid_configuration.authorization_endpoint),
         ActualOpenIdProvider#openid_configuration.authorization_endpoint).
+
+as_json_string(undefined) -> undefined;
+as_json_string(Value) -> rabbit_data_coercion:to_binary(Value).
 
 expiration_time_in_response_payload(Config) ->
     #{request := #{parameters := Parameters},
@@ -542,8 +545,8 @@ get_oauth_provider(Config) ->
             } = oauth2_client:get_oauth_provider([issuer, token_endpoint, jwks_uri]),
 
             ?assertEqual(proplists:get_value(issuer, JsonPayload), Issuer),
-            ?assertEqual(proplists:get_value(token_endpoint, JsonPayload), TokenEndPoint),
-            ?assertEqual(proplists:get_value(jwks_uri, JsonPayload), Jwks_uri)
+            ?assertEqual(as_json_string(proplists:get_value(token_endpoint, JsonPayload)), TokenEndPoint),
+            ?assertEqual(as_json_string(proplists:get_value(jwks_uri, JsonPayload)), Jwks_uri)
     end.
 
 get_oauth_provider_given_oauth_provider_id(Config) ->
@@ -588,13 +591,13 @@ get_oauth_provider_given_oauth_provider_id(Config) ->
 
             ?assertEqual(proplists:get_value(issuer, JsonPayload),
                 Issuer),
-            ?assertEqual(proplists:get_value(token_endpoint, JsonPayload),
+            ?assertEqual(as_json_string(proplists:get_value(token_endpoint, JsonPayload)),
                 TokenEndPoint),
-            ?assertEqual(proplists:get_value(authorization_endpoint, JsonPayload),
+            ?assertEqual(as_json_string(proplists:get_value(authorization_endpoint, JsonPayload)),
                 AuthorizationEndpoint),
-            ?assertEqual(proplists:get_value(end_session_endpoint, JsonPayload),
+            ?assertEqual(as_json_string(proplists:get_value(end_session_endpoint, JsonPayload)),
                 EndSessionEndpoint),
-            ?assertEqual(proplists:get_value(jwks_uri, JsonPayload),
+            ?assertEqual(as_json_string(proplists:get_value(jwks_uri, JsonPayload)),
                 Jwks_uri)
     end.
 

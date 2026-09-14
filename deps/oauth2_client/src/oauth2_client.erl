@@ -166,26 +166,24 @@ map_response_to_openid_configuration(Code, Reason, Headers, Body) ->
             Error;
         Value ->
             case Code of
-                200 -> map_to_openid_configuration(Value);
-                201 -> map_to_openid_configuration(Value);
+                200 -> {ok, map_to_openid_configuration(Value)};
+                201 -> {ok, map_to_openid_configuration(Value)};
                 _ ->   {error, Reason}
             end
     end.
-map_to_openid_configuration(#{?RESPONSE_ISSUER := Issuer} = Map)
-        when is_binary(Issuer) ->
-    {ok, #openid_configuration{
-        issuer = Issuer,
+map_to_openid_configuration(Map) ->
+    #openid_configuration{
+        issuer = discovered_issuer(Map),
         token_endpoint = maps:get(?RESPONSE_TOKEN_ENDPOINT, Map, undefined),
         authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT,
             Map, undefined),
         end_session_endpoint = maps:get(?RESPONSE_END_SESSION_ENDPOINT,
             Map, undefined),
         jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
-    }};
-map_to_openid_configuration(#{?RESPONSE_ISSUER := _}) ->
-    {error, {invalid_openid_configuration, invalid_issuer}};
-map_to_openid_configuration(_Map) ->
-    {error, {invalid_openid_configuration, missing_issuer}}.
+    }.
+
+discovered_issuer(#{?RESPONSE_ISSUER := Issuer}) when is_binary(Issuer) -> Issuer;
+discovered_issuer(_Map) -> undefined.
 
 -spec get_expiration_time(successful_access_token_response()) ->
     {ok, [{expires_in, integer() }| {exp, integer() }]} |
@@ -301,16 +299,22 @@ download_oauth_provider(OAuthProvider) ->
     end.
 
 warn_if_discovered_issuer_differs(OAuthProvider, OpenIdConfiguration) ->
+    Id = format_oauth_provider_id(OAuthProvider#oauth_provider.id),
     Configured = OAuthProvider#oauth_provider.issuer,
-    Discovered = OpenIdConfiguration#openid_configuration.issuer,
-    case same_issuer(Configured, Discovered) of
-        true -> ok;
-        false ->
-            ?LOG_WARNING("OAuth 2 provider ~ts is configured with issuer ~ts but its "
-                         "OpenID discovery metadata reports issuer ~ts: tokens from it "
-                         "can be rejected depending on the OAuth 2 plugin configuration",
-                         [format_oauth_provider_id(OAuthProvider#oauth_provider.id),
-                          Configured, Discovered])
+    case OpenIdConfiguration#openid_configuration.issuer of
+        undefined ->
+            ?LOG_WARNING("OAuth 2 provider ~ts OpenID discovery metadata does not "
+                         "report a valid issuer", [Id]);
+        Discovered ->
+            case same_issuer(Configured, Discovered) of
+                true -> ok;
+                false ->
+                    ?LOG_WARNING("OAuth 2 provider ~ts is configured with issuer ~ts "
+                                 "but its OpenID discovery metadata reports issuer ~ts: "
+                                 "tokens from it can be rejected depending on the "
+                                 "OAuth 2 plugin configuration",
+                                 [Id, Configured, Discovered])
+            end
     end.
 
 -spec same_issuer(string() | binary(), string() | binary()) -> boolean().
