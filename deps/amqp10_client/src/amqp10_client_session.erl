@@ -53,8 +53,7 @@
         ]).
 
 -import(serial_number,
-        [add/2,
-         diff/2]).
+        [add/2]).
 
 %% By default, we want to keep the server's remote-incoming-window large at all times.
 -define(DEFAULT_MAX_INCOMING_WINDOW, 100_000).
@@ -361,7 +360,12 @@ mapped(cast,
        #state{links = Links} = State0) ->
     case Links of
         #{OutputHandle := Link0 = #link{incoming_unsettled = Unsettled0}} ->
-            Unsettled = serial_number:foldl(fun maps:remove/2, Unsettled0, First, Last),
+            Unsettled = case serial_number:range_size(First, Last) of
+                            undefined ->
+                                Unsettled0;
+                            RangeSize ->
+                                remove_range(First, Last, RangeSize, Unsettled0)
+                        end,
             Link = Link0#link{incoming_unsettled = Unsettled},
             State1 = State0#state{links = Links#{OutputHandle := Link}},
             State = auto_flow(Link, State1),
@@ -452,7 +456,18 @@ mapped(cast, #'v1_0.flow'{handle = {uint, InHandle}} = Flow,
     {ok, #link{output_handle = OutHandle} = Link0} =
         find_link_by_input_handle(InHandle, State),
 
-    {ok, Link1} = handle_link_flow(Flow, Link0),
+    Link1 = case handle_link_flow(Flow, Link0) of
+                {ok, L} ->
+                    L;
+                {send_flow, #link{output_handle = H, delivery_count = DC} = L} ->
+                    Reply = #'v1_0.flow'{handle = uint(H),
+                                         delivery_count = uint(DC),
+                                         link_credit = uint(0),
+                                         available = uint(0),
+                                         drain = true},
+                    ok = send(set_flow_session_fields(Reply, State), State),
+                    L
+            end,
     ok = maybe_notify_link_credit(Link0, Link1),
     Link = maybe_notify_link_state_properties(Flow, Link1),
     Links1 = Links#{OutHandle := Link},
@@ -532,74 +547,78 @@ mapped(cast, #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                                  first = {uint, First},
                                  state = DeliveryState} = Disp,
        #state{outgoing_unsettled = Unsettled0} = State) ->
-    % TODO: no good if the range becomes very large!! refactor
-    Unsettled = serial_number:foldl(
-                  fun(Id, Acc0) ->
-                          case maps:take(Id, Acc0) of
-                              {{DeliveryTag, Pid}, Acc} ->
-                                  %% TODO: currently all modified delivery states
-                                  %% will be translated to the old, `modified` atom.
-                                  %% At some point we should translate into the
-                                  %% full {modified, bool, bool, map) tuple.
-                                  S = translate_delivery_state(DeliveryState),
-                                  ok = notify_disposition(Pid, {S, DeliveryTag}),
-                                  Acc;
-                              error ->
-                                  Acc0
-                          end
-                  end, Unsettled0, First, get_disposition_last(Disp)),
-    {keep_state, State#state{outgoing_unsettled = Unsettled}};
+    Last = get_disposition_last(Disp),
+    case serial_number:range_size(First, Last) of
+        undefined ->
+            ?LOG_WARNING("amqp10_session: ignoring disposition with invalid "
+                         "delivery ID range (first ~b, last ~b)", [First, Last]),
+            keep_state_and_data;
+        RangeSize ->
+            %% TODO: currently all modified delivery states will be translated
+            %% to the old, `modified` atom. At some point we should translate
+            %% into the full {modified, bool, bool, map} tuple.
+            DS = translate_delivery_state(DeliveryState),
+            Unsettled = settle_outgoing(First, Last, RangeSize, DS, Unsettled0),
+            {keep_state, State#state{outgoing_unsettled = Unsettled}}
+    end;
 mapped(cast, #'v1_0.disposition'{role = ?AMQP_ROLE_SENDER,
                                  settled = Settled,
                                  first = {uint, First},
                                  state = DeliveryState} = Disp,
        #state{links = Links} = State0) ->
     Last = get_disposition_last(Disp),
-    DS = translate_delivery_state(DeliveryState),
-    State = maps:fold(
-              fun(_OutputHandle, #link{role = receiver,
-                                       incoming_unsettled = Unsettled0,
-                                       notify = Pid,
-                                       ref = Ref} = Link0, Acc) ->
-                      {Ids, Unsettled} =
-                      maps:fold(
-                        fun(Id, _, {Ids0, U} = Acc0) ->
-                                case serial_number:in_range(Id, First, Last) of
-                                    true ->
-                                        {[Id | Ids0], maps:remove(Id, U)};
-                                    false ->
-                                        Acc0
-                                end
-                        end, {[], Unsettled0}, Unsettled0),
-                      case Ids of
-                          [] ->
-                              Acc;
-                          _ ->
-                              _ = [Pid ! {amqp10_event, {link, Ref, {disposition, DS, Id}}}
-                                   || Id <- serial_number:usort(Ids)],
-                              Link = Link0#link{incoming_unsettled = Unsettled},
-                              auto_flow(Link, update_link(Link, Acc))
-                      end;
-                 (_OutHandle, _SenderLink, S) ->
-                      S
-              end, State0, Links),
-    case default(Settled, false) of
-        false ->
-            %% "In this case the sender [broker] SHOULD send a disposition to the
-            %% receiver [us], but not settle until the receiver [we] confirms, via a
-            %% disposition in the opposite direction, that it has updated the state
-            %% at its endpoint." [2.6.12]
-            %% Here, we send the disposition in the opposite direction.
-            D = #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
-                                    first = {uint, First},
-                                    last = {uint, Last},
-                                    settled = true,
-                                    state = DeliveryState},
-            ok = send(D, State);
-        true ->
-            ok
-    end,
-    {keep_state, State};
+    case serial_number:range_size(First, Last) of
+        undefined ->
+            ?LOG_WARNING("amqp10_session: ignoring disposition with invalid "
+                         "delivery ID range (first ~b, last ~b)", [First, Last]),
+            keep_state_and_data;
+        RangeSize ->
+            DS = translate_delivery_state(DeliveryState),
+            State = maps:fold(
+                      fun(_OutputHandle, #link{role = receiver,
+                                               incoming_unsettled = Unsettled0,
+                                               notify = Pid,
+                                               ref = Ref} = Link0, Acc) ->
+                              {Ids, Unsettled} =
+                              maps:fold(
+                                fun(Id, _, {Ids0, U} = Acc0) ->
+                                        case serial_number:range_size(First, Id) of
+                                            IdRangeSize when IdRangeSize =< RangeSize ->
+                                                {[Id | Ids0], maps:remove(Id, U)};
+                                            _ ->
+                                                Acc0
+                                        end
+                                end, {[], Unsettled0}, Unsettled0),
+                              case Ids of
+                                  [] ->
+                                      Acc;
+                                  _ ->
+                                      _ = [Pid ! {amqp10_event, {link, Ref, {disposition, DS, Id}}}
+                                           || Id <- serial_number:usort(Ids)],
+                                      Link = Link0#link{incoming_unsettled = Unsettled},
+                                      auto_flow(Link, update_link(Link, Acc))
+                              end;
+                         (_OutHandle, _SenderLink, S) ->
+                              S
+                      end, State0, Links),
+            case default(Settled, false) of
+                false ->
+                    %% "In this case the sender [broker] SHOULD send a disposition to the
+                    %% receiver [us], but not settle until the receiver [we] confirms, via a
+                    %% disposition in the opposite direction, that it has updated the state
+                    %% at its endpoint." [2.6.12]
+                    %% Here, we send the disposition in the opposite direction.
+                    D = #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
+                                            first = {uint, First},
+                                            last = {uint, Last},
+                                            settled = true,
+                                            state = DeliveryState},
+                    ok = send(D, State);
+                true ->
+                    ok
+            end,
+            {keep_state, State}
+    end;
 mapped(cast, Frame, State) ->
     ?LOG_WARNING("Unhandled session frame ~tp in state ~tp",
                  [Frame, State]),
@@ -1057,13 +1076,24 @@ handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
               {uint, N} -> N;
               undefined -> ?INITIAL_OUTGOING_TRANSFER_ID
           end,
-    RemoteIncomingWindow = diff(add(NII, InWin), OurNOI), % see: 2.5.6
+    RemoteIncomingWindow =
+        case serial_number:range_size(NII, OurNOI) of
+            undefined ->
+                ?LOG_WARNING("amqp10_session: ignoring FLOW next-incoming-id ~b "
+                             "leading next-outgoing-id ~b", [NII, OurNOI]),
+                State#state.remote_incoming_window;
+            Size ->
+                max(0, InWin - (Size - 1))
+        end,
     State#state{next_incoming_id = NOI,
                 remote_incoming_window = RemoteIncomingWindow,
                 remote_outgoing_window = OutWin}.
 
 
 -spec handle_link_flow(#'v1_0.flow'{}, #link{}) -> {ok | send_flow, #link{}}.
+handle_link_flow(#'v1_0.flow'{link_credit = {uint, Credit}} = Flow, Link)
+  when Credit > 16#7fffffff ->
+    handle_link_flow(Flow#'v1_0.flow'{link_credit = {uint, 16#7fffffff}}, Link);
 handle_link_flow(#'v1_0.flow'{drain = true,
                               link_credit = {uint, TheirCredit}},
                  Link = #link{role = sender,
@@ -1246,6 +1276,55 @@ notify_session_ended(Perf = #'v1_0.end'{error = Err},
 notify_disposition(Pid, DeliveryStateDeliveryTag) ->
     Pid ! {amqp10_disposition, DeliveryStateDeliveryTag},
     ok.
+
+%% Iterates over whichever of the range and the map is smaller.
+remove_range(First, Last, RangeSize, Map) ->
+    case map_size(Map) of
+        MapSize when RangeSize =< MapSize ->
+            serial_number:foldl(fun maps:remove/2, Map, First, Last);
+        _ ->
+            maps:filter(
+              fun(Id, _) ->
+                      case serial_number:range_size(First, Id) of
+                          IdRangeSize when IdRangeSize =< RangeSize -> false;
+                          _ -> true
+                      end
+              end, Map)
+    end.
+
+%% Same as remove_range/4, plus disposition notifications.
+settle_outgoing(First, Last, RangeSize, DeliveryState, Unsettled) ->
+    case map_size(Unsettled) of
+        0 ->
+            Unsettled;
+        MapSize when RangeSize =< MapSize ->
+            serial_number:foldl(
+              fun(Id, Acc0) ->
+                      case maps:take(Id, Acc0) of
+                          {{DeliveryTag, Pid}, Acc} ->
+                              ok = notify_disposition(
+                                     Pid, {DeliveryState, DeliveryTag}),
+                              Acc;
+                          error ->
+                              Acc0
+                      end
+              end, Unsettled, First, Last);
+        _ ->
+            Iter = maps:iterator(
+                     Unsettled,
+                     fun(A, B) -> serial_number:compare(A, B) =/= greater end),
+            maps:fold(
+              fun(Id, {DeliveryTag, Pid}, Acc) ->
+                      case serial_number:range_size(First, Id) of
+                          IdRangeSize when IdRangeSize =< RangeSize ->
+                              ok = notify_disposition(
+                                     Pid, {DeliveryState, DeliveryTag}),
+                              maps:remove(Id, Acc);
+                          _ ->
+                              Acc
+                      end
+              end, Unsettled, Iter)
+    end.
 
 book_transfer_send(Num, #link{output_handle = Handle} = Link,
                    #state{next_outgoing_id = NextOutgoingId,
@@ -1608,6 +1687,17 @@ handle_link_flow_sender_drain_test() ->
     ExpectedDC = SndDeliveryCount + RcvLinkCredit,
     ExpectedDC = Outcome#link.delivery_count.
 
+
+handle_link_flow_sender_drain_max_credit_test() ->
+    Link = #link{role = sender, output_handle = 99,
+                 available = 0, link_credit = 20,
+                 delivery_count = 55},
+    Flow = #'v1_0.flow'{handle = {uint, 45},
+                        link_credit = {uint, 16#ffffffff},
+                        drain = true},
+    {send_flow, Outcome} = handle_link_flow(Flow, Link),
+    0 = Outcome#link.link_credit,
+    ?assertEqual(55 + 16#7fffffff, Outcome#link.delivery_count).
 
 handle_link_flow_receiver_test() ->
     Handle = 45,
