@@ -690,10 +690,19 @@ parse_credentials_response({error, _}) ->
 parse_credentials_response({ok, {{_, 404, _}, _, _}}) ->
     {error, undefined};
 parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
-    Parsed = rabbitmq_aws_json:decode(Body),
-    {ok, proplists:get_value("AccessKeyId", Parsed), proplists:get_value("SecretAccessKey", Parsed),
-        parse_iso8601_timestamp(proplists:get_value("Expiration", Parsed)),
-        proplists:get_value("Token", Parsed)}.
+    case rabbitmq_aws_json:decode(Body) of
+        {error, Reason} ->
+            ?LOG_ERROR(
+                "Could not decode the EC2 instance metadata credentials response: ~tp",
+                [Reason]
+            ),
+            {error, undefined};
+        Parsed ->
+            {ok, proplists:get_value("AccessKeyId", Parsed),
+                proplists:get_value("SecretAccessKey", Parsed),
+                parse_iso8601_timestamp(proplists:get_value("Expiration", Parsed)),
+                proplists:get_value("Token", Parsed)}
+    end.
 
 -spec perform_http_get_instance_metadata(string()) -> httpc_result().
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests

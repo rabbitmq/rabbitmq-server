@@ -143,7 +143,7 @@
 -type result_ok() :: {ok, {ResponseHeaders :: headers(), Response :: list()}}.
 -type result_error() ::
     {'error', Message :: reason_phrase(),
-        {ResponseHeaders :: headers(), Response :: list()} | undefined}
+        {ResponseHeaders :: headers(), Response :: list() | body()} | undefined}
     | {'error', {credentials, Reason :: string()}}
     | {'error', string()}.
 -type result() :: result_ok() | result_error().
