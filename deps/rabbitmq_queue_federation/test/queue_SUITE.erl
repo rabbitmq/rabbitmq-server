@@ -435,7 +435,11 @@ clear_upstream_leaves_same_named_exchange_intact(Config) ->
               %% than crashing the channel with a decorator function_clause.
               Payload = <<"after-clear">>,
               publish(Ch, Name, <<>>, Payload),
-              expect(Ch, Name, [Payload])
+              expect(Ch, Name, [Payload]),
+
+              %% Restore the upstream: it is shared with other tests.
+              set_upstream(Config, 0, <<"localhost">>,
+                rabbit_ct_broker_helpers:node_uri(Config, 0))
       end, upstream_downstream(Config)).
 
 %% `x-received-from`: a publisher on the upstream
