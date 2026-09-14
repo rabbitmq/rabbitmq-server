@@ -438,9 +438,10 @@ clear_upstream_leaves_same_named_exchange_intact(Config) ->
               expect(Ch, Name, [Payload])
       end, upstream_downstream(Config)).
 
-%% x-received-from: a publisher on the upstream
-%% queue can send two hop records matching the link's own (uri, queue),
-%% which must not crash update_visit_count/3.
+%% `x-received-from`: a publisher on the upstream
+%% queue can send two hop records matching the link's (uri, queue),
+%% and `update_visit_count/3` must tolerate that without failing
+%% with an exception.
 poison_x_received_from_does_not_crash_link(Config) ->
     with_ch(Config,
       fun (Ch) ->
