@@ -171,13 +171,11 @@ backend_errors_do_not_trigger_cleanup(Config) ->
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 backend_not_reporting_all_nodes_does_not_trigger_cleanup(Config) ->
-    %% A backend whose list_nodes/0 doesn't report the cluster's full
-    %% membership (declared via reports_all_nodes/0) can't be trusted to
-    %% say that other nodes are gone; cleanup must not act on it. The
-    %% Kubernetes backend is a real-world example: list_nodes/0 only ever
-    %% returns a single bootstrap seed node. It isn't used directly here
-    %% since it's a separate plugin, not a dependency of this one; DNS is
-    %% mocked to behave the same way instead.
+    %% A backend whose `list_nodes/0` doesn't report the cluster's full
+    %% membership (as reported by `reports_all_nodes/0`) can't be trusted to
+    %% say that other nodes are gone, so the cleanup process should not
+    %% treat such backends as the original one that introduced the cleanup
+    %% (AWS with autoscaling groups).
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
 
