@@ -1,4 +1,4 @@
-`%% This Source Code Form is subject to the terms of the Mozilla Public
+%% This Source Code Form is subject to the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
@@ -453,13 +453,18 @@ poison_x_received_from_does_not_crash_link(Config) ->
               [Link] = [L || L <- Status,
                              proplists:get_value(queue, L) =:= <<"fed1.downstream">>],
               SafeUri = proplists:get_value(uri, Link),
-              Hop = {table, [{<<"uri">>, longstr, SafeUri},
-                             {<<"queue">>, longstr, <<"upstream">>}]},
-              Headers = [{<<"x-received-from">>, array, [Hop, Hop]}],
-              Msg = #amqp_msg{payload = <<"poison">>,
-                              props = #'P_basic'{headers = Headers}},
-              publish(Ch, <<>>, <<"upstream">>, Msg),
-              expect(Ch, <<"fed1.downstream">>, [<<"poison">>]),
+              HopFields = [{<<"uri">>, longstr, SafeUri},
+                           {<<"queue">>, longstr, <<"fed1.downstream">>}],
+              Hop = {table, HopFields},
+              FloatHop = {table, HopFields ++ [{<<"visit-count">>, double, 1.5}]},
+              [begin
+                   Headers = [{<<"x-received-from">>, array, Hops}],
+                   Msg = #amqp_msg{payload = Payload,
+                                   props = #'P_basic'{headers = Headers}},
+                   publish(Ch, <<>>, <<"upstream">>, Msg),
+                   expect(Ch, <<"fed1.downstream">>, [Payload])
+               end || {Payload, Hops} <- [{<<"duplicate-hop">>, [Hop, Hop]},
+                                          {<<"float-visit-count">>, [FloatHop]}]],
               %% The link must still be alive and forwarding afterwards.
               expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>, ?EXPECT_FEDERATION_TIMEOUT)
       end, upstream_downstream(Config)).
