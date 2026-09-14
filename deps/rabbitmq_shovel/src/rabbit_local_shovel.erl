@@ -15,6 +15,12 @@
 -include_lib("rabbit/include/rabbit_queue_type.hrl").
 -include("rabbit_shovel.hrl").
 
+%% Same size as the rabbit_channel permission cache.
+-define(MAX_PERMISSION_CACHE_SIZE, 12).
+%% A permission change does not reach a running shovel, so the cache
+%% expires on a timer.
+-define(PERMISSION_CACHE_TTL, 60000).
+
 -rabbit_boot_step({rabbit_global_local_shovel_counters,
                    [{description, "global local shovel counters"},
                     {mfa,         {?MODULE, boot_step,
@@ -289,6 +295,7 @@ connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
           on_confirm ->
               State#{dest => Dest#{current => #{queue_states => QState,
                                                 delivery_id => 1,
+                                                user => User,
                                                 vhost => VHost},
                                    unconfirmed => rabbit_shovel_confirms:init(),
                                    rejected => [],
@@ -297,6 +304,7 @@ connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
                                    confirmed_count => 0}};
           _ ->
               State#{dest => Dest#{current => #{queue_states => QState,
+                                                user => User,
                                                 vhost => VHost},
                                    unconfirmed => rabbit_shovel_confirms:init(),
                                    confirmed => [],
@@ -316,9 +324,13 @@ init_source(State = #{source := #{queue_r := QName,
                                   consumer_args := Args,
                                   consumer_name := CTag0,
                                   current := #{queue_states := QState0,
+                                               user := User,
                                                vhost := VHost} = Current} = Src,
                       name := Name,
                       ack_mode := AckMode}) ->
+    %% The consume below bypasses rabbit_channel, so the read check that
+    %% basic.consume performs there has to happen here.
+    ok = check_resource_access(User, QName, read),
     Mode = {credited, ?INITIAL_DELIVERY_COUNT},
     MaxLinkCredit = max_link_credit(),
     CTag = case CTag0 of
@@ -386,6 +398,8 @@ init_dest(#{name := Name,
             dest := #{add_forward_headers := AFH} = Dst} = State) ->
     rabbit_global_counters:publisher_created(?PROTOCOL),
     _TRef = erlang:send_after(1000, self(), send_confirms_and_nacks),
+    %% N.B. the source is checked once, in `init_source/1`.
+    _ = erlang:send_after(?PERMISSION_CACHE_TTL, self(), clear_permission_cache),
     Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     Alarms = sets:from_list(Alarms0),
     case AFH of
@@ -428,7 +442,7 @@ dest_endpoint(#{dest := #{queue := Queue}}) ->
     [{dest_queue, Queue}];
 dest_endpoint(_Config) ->
     [].
-      
+
 close_dest(_State) ->
     rabbit_global_counters:publisher_deleted(?PROTOCOL),
     ok.
@@ -517,6 +531,10 @@ handle_dest({{'DOWN', #resource{kind = queue,
         {eol, QState1, _QRef} ->
             State0#{dest => Dest#{current => Current#{queue_states => QState1}}}
     end;
+handle_dest(clear_permission_cache, State) ->
+    _TRef = erlang:send_after(?PERMISSION_CACHE_TTL, self(), clear_permission_cache),
+    erase(local_shovel_permission_cache),
+    State;
 handle_dest({conserve_resources, Alarm, Conserve}, #{dest := #{alarms := Alarms0} = Dest} = State0) ->
     Alarms = case Conserve of
                  true -> sets:add_element(Alarm, Alarms0);
@@ -818,6 +836,33 @@ check_queue(QName, _QArgs, VHost, User) ->
                               passive = true},
     decl_fun([Method], VHost, User).
 
+%% Checks the URI user, not the ?SHOVEL_USER identity that performs the
+%% consume and the delivery. The result is cached because the destination
+%% check runs for every forwarded message.
+check_resource_access(User = #user{username = Username}, Resource, Permission) ->
+    Cache = case get(local_shovel_permission_cache) of
+                undefined -> [];
+                C         -> C
+            end,
+    Key = {Resource, Permission},
+    case lists:member(Key, Cache) of
+        true ->
+            ok;
+        false ->
+            try
+                ok = rabbit_access_control:check_resource_access(
+                       User, Resource, Permission, #{}),
+                CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
+                put(local_shovel_permission_cache, [Key | CacheTail]),
+                ok
+            catch
+                exit:#amqp_error{name = access_refused} ->
+                    ?LOG_ERROR("Local shovel user ~ts was refused ~ts access to ~ts",
+                               [Username, Permission, rabbit_misc:rs(Resource)]),
+                    exit({shutdown, {access_refused, Username}})
+            end
+    end.
+
 get_user_vhost_from_amqp_param(Uri) ->
     {ok, AmqpParam} = amqp_uri:parse(Uri),
     {Username, Password, VHost} =
@@ -904,11 +949,16 @@ collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
            {AcknowledgedAcc, UAMQTail}
     end.
 
+%% In pass-through mode the destination exchange is only known per message,
+%% so the write check happens here rather than at connect time.
 route(_Msg, #{queue_r := QueueR,
-              queue := Queue}) when Queue =/= none ->
+              queue := Queue,
+              current := #{user := User}}) when Queue =/= none ->
+    ok = check_resource_access(User, QueueR, write),
     [QueueR];
-route(Msg, #{current := #{vhost := VHost}}) ->
+route(Msg, #{current := #{vhost := VHost, user := User}}) ->
     ExchangeName = rabbit_misc:r(VHost, exchange, mc:exchange(Msg)),
+    ok = check_resource_access(User, ExchangeName, write),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}).
 
