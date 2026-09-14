@@ -16,6 +16,7 @@
 all() -> [
     longstr_field,
     message_properties,
+    message_properties_strips_reserved_headers,
     message_headers,
     minimal_message_headers_with_no_custom,
     headers_reserved_names_cannot_be_overridden,
@@ -85,6 +86,19 @@ message_properties(_) ->
                 headers          = [{<<"str">>, longstr, <<"foo">>},
                                     {<<"int">>, longstr, <<"123">>}]
               } =
+        rabbit_stomp_util:message_properties(#stomp_frame{headers = Headers}).
+
+message_properties_strips_reserved_headers(_) ->
+    Headers = #{
+                <<"message-id">> => <<"forged-message-id">>,
+                <<"ack">> => <<"forged-ack">>,
+                <<"subscription">> => <<"forged-subscription">>,
+                <<"redelivered">> => <<"forged-redelivered">>,
+                <<"destination">> => <<"forged-destination">>,
+                <<"str">> => <<"foo">>
+              },
+
+    #'P_basic'{headers = [{<<"str">>, longstr, <<"foo">>}]} =
         rabbit_stomp_util:message_properties(#stomp_frame{headers = Headers}).
 
 message_headers(_) ->
