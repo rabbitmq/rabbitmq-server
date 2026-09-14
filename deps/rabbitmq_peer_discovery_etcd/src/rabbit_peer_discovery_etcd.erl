@@ -80,9 +80,13 @@ supports_registration() ->
 -spec register() -> ok | {error, string()}.
 
 register() ->
-    Result = ?ETCD_CLIENT:register(),
-    ?LOG_INFO("Registered node with etcd"),
-    Result.
+    case ?ETCD_CLIENT:register() of
+        ok = Result ->
+            ?LOG_INFO("Registered node with etcd"),
+            Result;
+        {error, _} = Result ->
+            Result
+    end.
 
 
 -spec unregister() -> ok | {error, string()}.
