@@ -183,13 +183,29 @@ export {
 // channels-list.ejs, vhosts.ejs, rate-options.ejs, columns-options.ejs).
 // Since EJS templates render dynamically in browser context and are not ES modules,
 // they resolve helper functions from window.
+//
+// has_auth_resource is also read this way by auth-providers.js, which is
+// deliberately import-free (see its header comment), via a `typeof
+// has_auth_resource === 'function'` guard that fails silently rather than
+// throwing if this is missing - so a gap here picks the wrong auth
+// provider instead of surfacing as a console error.
+//
+// set_token_auth is called the same way from the server-generated
+// js/bootstrap.js (see rabbit_mgmt_wm_bootstrap:set_token_auth/2), which
+// inlines a bare `set_token_auth(...)` call whenever the request carries
+// a bearer token or an oauth2 access-token cookie - a gap here throws
+// before that script reaches initializeAuthProviders(), so oauth2 never
+// gets enabled client-side.
 if (typeof window !== 'undefined') {
     Object.assign(window, {
         store_pref,
         clear_pref,
         get_pref,
         section_pref,
-        show_column
+        show_column,
+        has_auth_resource,
+        set_token_auth,
+        authorization_header
     });
 }
 

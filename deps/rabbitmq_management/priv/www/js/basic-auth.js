@@ -4,17 +4,18 @@
 // side effect of this module being imported - mirrors how
 // oidc-oauth/helper.js holds oauth2's equivalent implementation.
 //
-// finish_check_login, sync_get, show_popup, start_app_login, clear_auth,
-// go_to_home, format_error_response (main.js/global.js) are called as bare
-// globals rather than imported: main.js already imports from
-// auth-providers.js, and this module imports from auth-providers.js too, so
-// an explicit import back to main.js risks a cycle. Each of those modules
-// exposes itself on window for exactly this reason.
+// finish_check_login, sync_get, show_popup, start_app_login, go_to_home
+// (main.js) are called as bare globals rather than imported: main.js
+// already imports from auth-providers.js, and this module imports from
+// auth-providers.js too, so an explicit import back to main.js risks a
+// cycle. main.js exposes them on window for exactly this reason. prefs.js
+// and formatters.js have no imports of their own, so clear_auth and
+// format_error_response are imported directly instead.
 
 import { replace_content, format } from './render.js';
-import { fmt_escape_html } from './formatters.js';
+import { fmt_escape_html, format_error_response } from './formatters.js';
 import { set_current_user } from './global.js';
-import { clear_local_pref, SESSION_EXPIRY, set_auth, clear_auth_resource } from './prefs.js';
+import { clear_local_pref, SESSION_EXPIRY, set_auth, clear_auth, clear_auth_resource } from './prefs.js';
 import { registerAuthProvider, set_active_auth_provider_by_name } from './auth-providers.js';
 import { authOptions } from './auth-options.js';
 

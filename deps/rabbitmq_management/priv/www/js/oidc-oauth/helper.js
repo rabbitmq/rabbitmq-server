@@ -1,11 +1,26 @@
 import {oidc} from './oidc-client-ts.3.0.1.min.js';
 import { replace_content, format, setup_visibility, toggle_visibility } from '../render.js';
+import { fmt_escape_html } from '../formatters.js';
 import {
   authOptions,
   auth_options_for_mechanism,
   auth_section_is_expanded
 } from '../auth-options.js';
-import { registerAuthProvider } from '../auth-providers.js';
+import { registerAuthProvider, set_active_auth_provider_by_name } from '../auth-providers.js';
+import {
+  clear_local_pref,
+  SESSION_EXPIRY,
+  BASIC_AUTH_SCHEME,
+  set_auth_resource,
+  has_auth_resource,
+  get_auth_resource,
+  clear_auth,
+  set_token_auth,
+  has_auth_credentials,
+  store_pref,
+  clear_pref,
+  get_pref
+} from '../prefs.js';
 
 var mgr;
 var _management_logger;

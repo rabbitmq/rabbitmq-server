@@ -18,7 +18,8 @@ import { render_charts } from './charts.js';
 import { clear_local_pref,
     authorization_header,
     has_auth_credentials,
-    clear_auth
+    clear_auth,
+    set_session_expiry_if_required
 } from './prefs.js';
 import { fmt_escape_html } from './formatters.js';
 import { replace_content,
@@ -99,18 +100,28 @@ function start_app_login () {
   // app so its login form/route is reachable.
   if (!has_auth_credentials()) {
     app.run();
-  } else if (shouldRunLoginAppAfterCheck(check_login(), active_auth_provider().needsRouterAfterSessionExpired)) {
-    app.run();
+  } else {
+    // Resolved before check_login(), which clears the marker
+    // active_auth_provider() needs on failure.
+    var provider = active_auth_provider();
+    if (shouldRunLoginAppAfterCheck(check_login(), provider.needsRouterAfterSessionExpired)) {
+      app.run();
+    }
   }
 }
 
 
 function check_login () {
+  // Resolved before clear_auth(), which removes the marker
+  // active_auth_provider() needs to tell an oauth2 session from a basic
+  // one - otherwise a stale oauth2 session would be reported through the
+  // basic provider's generic "Login failed" instead of "Not authorized".
+  var provider = active_auth_provider();
   var u = JSON.parse(sync_get('/whoami'));
   set_current_user(u);
   if (u == false || u.error) {
     clear_auth();
-    active_auth_provider().presentSessionExpired();
+    provider.presentSessionExpired();
     return false;
   }
 
@@ -187,8 +198,12 @@ function finish_check_login() {
   var res = bootstrap({user: get_current_user(), settings: window.app_settings},
                       'Failed to establish session with server');
   if (res.ok === false) {
-    active_auth_provider().signOut();
-    active_auth_provider().presentError(res.error);
+    // Resolved once: signOut() clears the marker active_auth_provider()
+    // needs, so a second call here would misidentify an oauth2 session
+    // as basic.
+    var provider = active_auth_provider();
+    provider.signOut();
+    provider.presentError(res.error);
   }
 }
 
@@ -2050,5 +2065,53 @@ export {
     check_version
 };
 
-// Main application module exports. Functions are imported directly by other
-// ES modules (e.g. dispatcher.js, auth-providers.js, and plugin scripts).
+// Main application module exports, for other ES modules that import
+// main.js directly (e.g. auth-providers.js's registered providers).
+
+// dispatcher.js and the extension plugins' dispatcher scripts (federation.js,
+// shovel.js, stream.js, top.js, tracing.js) are loaded at runtime via
+// setup_extensions() as freestanding <script type="module"> tags, not
+// imported by anything - so, like basic-auth.js and oidc-oauth/helper.js,
+// they call main.js's helpers as bare globals rather than importing them.
+// Mirrors the same window-exposure convention used by prefs.js, global.js
+// and formatters.js for their own EJS-template-facing helpers.
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        on_page_load,
+        dispatcher_add,
+        shouldRunLoginAppAfterCheck,
+        go_to,
+        go_to_home,
+        render,
+        update,
+        partial_update,
+        show_popup,
+        sync_get,
+        sync_put,
+        sync_post,
+        sync_delete,
+        url_pagination_template_context,
+        put_parameter,
+        put_cast_params,
+        keys,
+        is_stream,
+        check_version,
+        start_app_login,
+        finish_check_login,
+        removeDuplicates,
+        get_queue_type,
+        renderQueues,
+        renderUsers,
+        renderExchanges,
+        renderConnections,
+        renderChannels,
+        update_vhosts,
+        update_column_options,
+        pause_auto_refresh,
+        resume_auto_refresh,
+        maybe_format_extra_queue_content,
+        is_internal,
+        is_classic,
+        is_quorum
+    });
+}
