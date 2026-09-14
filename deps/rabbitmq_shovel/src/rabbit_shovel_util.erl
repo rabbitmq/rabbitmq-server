@@ -65,15 +65,10 @@ add_timestamp_header(Props = #'P_basic'{headers = Headers}) ->
     Props#'P_basic'{headers = Headers2}.
 
 delete_shovel(VHost, Name, ActingUser) ->
-    case rabbit_shovel_status:lookup({VHost, Name}) of
+    case rabbit_runtime_parameters:value(VHost, <<"shovel">>, Name) of
         not_found ->
-            %% Follow the user's obvious intent and delete the runtime parameter just in case the Shovel is in
-            %% a starting-failing-restarting loop. MK.
-            ?LOG_INFO("Will delete runtime parameters of shovel '~ts' in virtual host '~ts'", [Name, VHost]),
-            ok = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ActingUser),
             {error, not_found};
-        _Obj ->
-            ShovelParameters = rabbit_runtime_parameters:value(VHost, <<"shovel">>, Name),
+        ShovelParameters ->
             case needs_force_delete(ShovelParameters, ActingUser) of
                 false ->
                     ?LOG_INFO("Will delete runtime parameters of shovel '~ts' in virtual host '~ts'", [Name, VHost]),

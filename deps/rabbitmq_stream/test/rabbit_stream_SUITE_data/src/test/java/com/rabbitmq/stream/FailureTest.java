@@ -359,7 +359,9 @@ public class FailureTest {
       // stop the first node (this is where the stream leader is)
       Host.rabbitmqctl("stop_app");
 
-      assertThat(reconnectionLatch.await(10, TimeUnit.SECONDS)).isTrue();
+      // the coordinator can back off a failed member action by up to ~10 seconds
+      // before electing the new leader, so give the reconnection task headroom
+      assertThat(reconnectionLatch.await(30, TimeUnit.SECONDS)).isTrue();
 
       // let's publish for a bit of time
       Thread.sleep(2000);
