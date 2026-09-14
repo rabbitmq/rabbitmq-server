@@ -37,6 +37,8 @@ all() ->
         successful_access_with_a_parsed_token,
         test_successful_access_with_a_token_that_has_tag_scopes,
         test_unsuccessful_access_with_a_bogus_token,
+        test_unsuccessful_access_with_a_decoded_token_map,
+        test_unsuccessful_token_refresh_with_a_decoded_token_map,
         test_restricted_vhost_access_with_a_valid_token,
         test_insufficient_permissions_in_a_valid_token,
         test_token_expiration,
@@ -1265,44 +1267,53 @@ test_token_expiration(_) ->
 
 test_token_expiry_with_float_exp(_) ->
     Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
     set_env(resource_server_id, <<"rabbitmq">>),
 
     %% A valid, future float exp must be accepted and expiry_timestamp must
     %% return the truncated integer — not the atom 'never'.
     FutureFloatExp = float(os:system_time(seconds) + 600),
-    FutureToken = (?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username))
-                    #{<<"exp">> := FutureFloatExp},
+    FutureToken = ?UTIL_MOD:sign_token_hs(
+        (?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username))
+            #{<<"exp">> := FutureFloatExp}, Jwk),
     {ok, #auth_user{username = Username} = User} =
         user_login_authentication(Username, [{password, FutureToken}]),
     ?assertEqual(trunc(FutureFloatExp), rabbit_auth_backend_oauth2:expiry_timestamp(User)),
 
     %% An already-expired float exp must be refused, not silently accepted.
     PastFloatExp = float(os:system_time(seconds) - 10),
-    ExpiredToken = (?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username))
-                    #{<<"exp">> := PastFloatExp},
+    ExpiredToken = ?UTIL_MOD:sign_token_hs(
+        (?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username))
+            #{<<"exp">> := PastFloatExp}, Jwk),
     ?assertMatch({refused, _, _},
                  user_login_authentication(Username, [{password, ExpiredToken}])).
 
 test_token_expiry_with_non_numeric_exp(_) ->
     Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
     set_env(resource_server_id, <<"rabbitmq">>),
 
     %% A token whose exp claim is not a number (e.g. a string) must be refused,
     %% not silently accepted because the is_number guard falls through to the
     %% no-exp-field catch-all clause.
     lists:foreach(fun(NonNumericExp) ->
-        InvalidToken = (?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username))
-                        #{<<"exp">> := NonNumericExp},
+        InvalidToken = ?UTIL_MOD:sign_token_hs(
+            (?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username))
+                #{<<"exp">> := NonNumericExp}, Jwk),
         ?assertMatch({refused, _, _},
                      user_login_authentication(Username, [{password, InvalidToken}]))
     end, [<<"1700000300">>, true, false, null]).
 
 test_token_expiry_with_missing_exp(_) ->
     Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
     set_env(resource_server_id, <<"rabbitmq">>),
 
-    TokenWithoutExp = maps:remove(<<"exp">>,
-        ?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username)),
+    TokenWithoutExp = ?UTIL_MOD:sign_token_hs(maps:remove(<<"exp">>,
+        ?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username)), Jwk),
 
     %% Default (require_exp = true): a token without exp must be refused.
     set_env(require_exp, true),
@@ -1897,3 +1908,26 @@ test_per_provider_verify_issuer_overrides_the_node_wide_default(_) ->
         set_env(resource_server_id, <<"rabbitmq">>),
         unset_env(resource_servers)
     end.
+
+test_unsuccessful_access_with_a_decoded_token_map(_) ->
+    Username = <<"username">>,
+    set_env(resource_server_id, <<"rabbitmq">>),
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
+    DecodedToken = ?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:fixture_token_with_full_permissions(), Username),
+    ?assertMatch({refused, _, _},
+        user_login_authentication(Username, [{password, DecodedToken}])).
+
+test_unsuccessful_token_refresh_with_a_decoded_token_map(_) ->
+    Username = <<"username">>,
+    set_env(resource_server_id, <<"rabbitmq">>),
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, Jwk}}}]),
+    Token = ?UTIL_MOD:sign_token_hs(
+        ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
+    {ok, User} = user_login_authentication(Username, [{password, Token}]),
+    DecodedToken = ?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:fixture_token_with_full_permissions(), Username),
+    ?assertMatch({refused, _, _},
+        rabbit_auth_backend_oauth2:update_state(User, DecodedToken)).

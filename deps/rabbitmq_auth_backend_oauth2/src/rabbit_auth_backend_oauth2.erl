@@ -129,6 +129,8 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
     {'ok', rabbit_types:auth_user()} |
     {'refused', string(), [any()]} |
     {'error', any()}.
+update_state(_AuthUser, NewToken) when is_map(NewToken) ->
+    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
 update_state(AuthUser, NewToken) ->
     case resolve_resource_server(NewToken) of
         {error, _} = Err0 -> Err0;
@@ -177,7 +179,14 @@ expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
 
 authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
-    Token     = token_from_context(AuthProps),
+    case maps:get(password, AuthProps, undefined) of
+        Password when is_map(Password) ->
+            {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
+        _ ->
+            authenticate_with_token(token_from_context(AuthProps))
+    end.
+
+authenticate_with_token(Token) ->
     case resolve_resource_server(Token) of
         {error, _} = Err0 ->
             {refused, "Authentication using OAuth 2/JWT token failed: ~tp", [Err0]};
