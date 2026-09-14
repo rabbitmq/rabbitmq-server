@@ -119,7 +119,7 @@ parse_source(Def) ->
     {#{module => rabbit_amqp10_shovel,
        uris => Uris,
        source_address => Address,
-       delete_after => opt_b2a(DeleteAfter),
+       delete_after => rabbit_shovel_util:parse_delete_after(DeleteAfter),
        delete_after_duration => DeleteAfterDuration,
        prefetch_count => PrefetchCount,
        predeclared => Predeclared,
@@ -551,9 +551,6 @@ validate_amqp10_map(Name, Terms0) ->
     Str = fun rabbit_parameter_validation:binary/2,
     Validation = [{K, Str, optional} || {K, _} <- Terms],
     rabbit_parameter_validation:proplist(Name, Validation, Terms).
-
-opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
-opt_b2a(N)                   -> N.
 
 decl_queue(_, _, true) ->
     ok;
