@@ -399,14 +399,25 @@ handle_frame(Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 
 ack_action(Command, Frame,
+<<<<<<< HEAD
            State = #proc_state{subscriptions = Subs,
                           channel              = Channel,
                           version              = Version,
                           default_nack_requeue = DefaultNackRequeue}, MethodFun) ->
+=======
+           State = #state{cfg = #cfg{
+                                   version              = Version,
+                                   session_id           = SessionId,
+                                   default_nack_requeue = DefaultNackRequeue}}, Fun) ->
+>>>>>>> fc65b69 (STOMP: server-generated MESSAGE headers must win over publisher headers)
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
     case rabbit_stomp_frame:header(Frame, AckHeader) of
         {ok, AckValue} ->
+            %% SessionId is bound above: this also rejects an ack/message-id
+            %% token that wasn't issued for this connection, e.g. one sent
+            %% by a publisher via a message header.
             case rabbit_stomp_util:parse_message_id(AckValue) of
+<<<<<<< HEAD
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
                     case maps:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
@@ -425,6 +436,17 @@ ack_action(Command, Frame,
                                   "Message with id ~tp has no subscription",
                                   [AckValue],
                                   State)
+=======
+                {ok, {ConsumerTag, SessionId, DeliveryTag}} ->
+                    %% Settle using state's `unacked_message_q` and the `#pending_ack` records.
+                    %% This handles two problematic scenarios: a delivery that outlived its
+                    %% subscription and the original ack mode for the race condition case where
+                    %% a recently cancelled subscription is immediately recreated with the same subscription ID.
+                    Requeue = rabbit_stomp_frame:boolean_header(Frame, <<"requeue">>, DefaultNackRequeue),
+                    case Fun({ConsumerTag, DeliveryTag}, Requeue, State) of
+                        {error, _, _, _} = Err -> Err;
+                        State1 -> ok(State1)
+>>>>>>> fc65b69 (STOMP: server-generated MESSAGE headers must win over publisher headers)
                     end;
                 _ ->
                    error("Invalid header",
