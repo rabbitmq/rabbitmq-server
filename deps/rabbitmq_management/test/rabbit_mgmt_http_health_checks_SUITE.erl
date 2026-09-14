@@ -33,7 +33,8 @@ all() ->
 groups() ->
     [
      {cluster_size_3, [], all_tests()},
-     {cluster_size_5, [], [is_quorum_critical_test]},
+     {cluster_size_5, [], [is_quorum_critical_test,
+                           is_quorum_critical_vhost_named_not_applicable_test]},
      {single_node, [], [
                         alarms_test,
                         local_alarms_test,
@@ -47,7 +48,8 @@ groups() ->
                         is_quorum_critical_single_node_test,
                         quorum_queues_without_elected_leader_single_node_test,
                         quorum_queues_without_elected_leader_across_all_virtual_hosts_single_node_test,
-                        quorum_queues_without_elected_leader_requires_virtual_host_access_single_node_test
+                        quorum_queues_without_elected_leader_requires_virtual_host_access_single_node_test,
+                        quorum_queues_leaderless_all_vhosts_vhost_access_single_node_test
      ]}
     ].
 
@@ -98,7 +100,9 @@ end_per_group(_, Config) ->
     Steps = Teardown0 ++ Teardown1,
     rabbit_ct_helpers:run_teardown_steps(Config, Steps).
 
-init_per_testcase(Testcase, Config) when Testcase == is_quorum_critical_test ->
+init_per_testcase(Testcase, Config)
+  when Testcase == is_quorum_critical_test;
+       Testcase == is_quorum_critical_vhost_named_not_applicable_test ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "not mixed versions compatible"};
@@ -289,6 +293,87 @@ is_quorum_critical_test(Config) ->
             QName =:= maps:get(<<"name">>, Item)
         end, Queues)),
 
+    %% Cluster-wide components such as `rabbitmq_metadata` are not vhost-scoped
+    %% and can still be listed for a user without access to "/"; only the
+    %% queue must be hidden.
+    VHost = <<"is_quorum_critical_test-vh">>,
+    User = <<"is_quorum_critical_test-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+
+    ?assertNot(queue_visible(Config, EndpointPath, User, QName)),
+
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    ?assert(queue_visible(Config, EndpointPath, User, QName)),
+
+    %% Monitoring users are filtered by vhost permissions like
+    %% `GET /api/queues` does.
+    Monitor = <<"is_quorum_critical_test-monitor">>,
+    rabbit_ct_broker_helpers:add_user(Config, Monitor, Monitor),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Monitor, [monitoring]),
+    ?assertNot(queue_visible(Config, EndpointPath, Monitor, QName)),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Monitor, <<"/">>),
+    ?assert(queue_visible(Config, EndpointPath, Monitor, QName)),
+
+    rabbit_ct_broker_helpers:delete_user(Config, Monitor),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server2),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server3),
+
+    passed.
+
+is_quorum_critical_vhost_named_not_applicable_test(Config) ->
+    %% "(not applicable)" is the placeholder vhost name that
+    %% `rabbit_upgrade_preparation:list_with_minimum_quorum_for_cli/0` gives
+    %% cluster-wide components; a real vhost with that name must still be
+    %% filtered.
+    EndpointPath = "/health/checks/node-is-quorum-critical",
+    VHost = <<"(not applicable)">>,
+    User = <<"is_quorum_critical_vhost_named_not_applicable_test-user">>,
+    add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server,
+                                                               VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-quorum-initial-group-size">>, long, 3}],
+    QName = <<"is_quorum_critical_vhost_named_not_applicable_test">>,
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 amqp_channel:call(Ch, #'queue.declare'{queue     = QName,
+                                                        durable   = true,
+                                                        auto_delete = false,
+                                                        arguments = Args})),
+
+    QResource = rabbit_misc:r(VHost, queue, QName),
+    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_queue, get,
+                                             [QResource]),
+    {ok, [_, {_, Server2}, {_, Server3}], _} = ra:members(amqqueue:get_pid(Q1)),
+
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server2),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server3),
+
+    Body = http_get_failed(Config, EndpointPath),
+    Queues = maps:get(<<"queues">>, Body),
+    ?assert(lists:any(
+        fun(Item) -> QName =:= maps:get(<<"name">>, Item) end, Queues)),
+
+    ?assertNot(queue_visible(Config, EndpointPath, User, QName)),
+
+    rabbit_ct_client_helpers:close_connection(Conn),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server2),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server3),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
     passed.
 
 quorum_queues_without_elected_leader_single_node_test(Config) ->
@@ -429,6 +514,77 @@ quorum_queues_without_elected_leader_requires_virtual_host_access_single_node_te
 
     rabbit_ct_broker_helpers:delete_user(Config, User),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
+    passed.
+
+quorum_queues_leaderless_all_vhosts_vhost_access_single_node_test(Config) ->
+    EndpointPath =
+        "/health/checks/quorum-queues-without-elected-leaders/all-vhosts/",
+
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-quorum-initial-group-size">>, long, 3}],
+    QName = <<"quorum_queues_leaderless_all_vhosts_vhost_access">>,
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+        amqp_channel:call(Ch, #'queue.declare'{
+            queue       = QName,
+            durable     = true,
+            auto_delete = false,
+            arguments   = Args
+        })),
+
+    RaSystem = quorum_queues,
+    QResource = rabbit_misc:r(<<"/">>, queue, QName),
+    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_queue, get,
+                                             [QResource]),
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, ra, stop_server,
+                                      [RaSystem, amqqueue:get_pid(Q1)]),
+
+    %% guest is an administrator, so it sees queues in every vhost.
+    AdminBody = http_get_failed(Config, EndpointPath),
+    AdminQueues = maps:get(<<"queues">>, AdminBody),
+    ?assert(lists:any(
+        fun(Item) -> QName =:= maps:get(<<"name">>, Item) end, AdminQueues)),
+
+    VHost = <<"quorum_queues_leaderless_all_vhosts_vhost_access-vh">>,
+    User = <<"quorum_queues_leaderless_all_vhosts_vhost_access-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+
+    RestrictedCheck = http_get(Config, EndpointPath, User, User, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, RestrictedCheck)),
+
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    ?assert(queue_visible(Config, EndpointPath, User, QName)),
+
+    %% Monitoring users are filtered by vhost permissions like
+    %% `GET /api/queues` does.
+    Monitor = <<"quorum_queues_leaderless_all_vhosts_vhost_access-monitor">>,
+    rabbit_ct_broker_helpers:add_user(Config, Monitor, Monitor),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Monitor, [monitoring]),
+    MonitorCheck = http_get(Config, EndpointPath, Monitor, Monitor, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, MonitorCheck)),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Monitor, <<"/">>),
+    ?assert(queue_visible(Config, EndpointPath, Monitor, QName)),
+
+    rabbit_ct_broker_helpers:delete_user(Config, Monitor),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, ra, restart_server,
+                                      [RaSystem, amqqueue:get_pid(Q1)]),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            try
+                Check = http_get(Config, EndpointPath, ?OK),
+                false =:= maps:is_key(reason, Check)
+            catch _:_ ->
+                false
+            end
+        end),
 
     passed.
 
@@ -650,6 +806,17 @@ http_get_failed(Config, Path) ->
     ct:pal("GET ~s: ~w ~w", [Path, Code, ResBody]),
     ?assertEqual(Code, ?HEALTH_CHECK_FAILURE_STATUS),
     rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)).
+
+%% The user's password is its name. The status is not asserted because
+%% cluster-wide components can make `GET /health/checks/node-is-quorum-critical`
+%% fail regardless of vhost access.
+queue_visible(Config, Path, User, QName) ->
+    Auth = auth_header(binary_to_list(User), binary_to_list(User)),
+    {ok, {{_, Code, _}, _, ResBody}} = req(Config, get, Path, [Auth]),
+    ?assert(lists:member(Code, [?OK, ?HEALTH_CHECK_FAILURE_STATUS])),
+    Body = rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)),
+    lists:any(fun(Q) -> QName =:= maps:get(<<"name">>, Q) end,
+              maps:get(<<"queues">>, Body, [])).
 
 delete_queues() ->
     [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
