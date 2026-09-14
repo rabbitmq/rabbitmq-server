@@ -1620,6 +1620,10 @@ consumers(Q) when ?amqqueue_is_stream(Q) ->
     %% TODO how??? they only exist on the channel
     %% we could list the offset listener on the writer but we don't even have a consumer tag,
     %% only a (channel) pid and offset
+    [];
+consumers(Q) when ?amqqueue_is_mqtt_qos0(Q) ->
+    %% MQTT QoS 0 queues deliver directly to the connection process and
+    %% don't track consumers the way other queue types do.
     [].
 
 -spec consumer_info_keys() -> rabbit_types:info_keys().
