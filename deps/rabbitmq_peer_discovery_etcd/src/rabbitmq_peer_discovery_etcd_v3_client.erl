@@ -59,6 +59,14 @@
 %% instead of read back via sys:get_state/2, which can itself time out
 %% when the statem is busy inside a slow {lock, Node}/{unlock, _} handler.
 -define(LOCK_TTL_PTERM_KEY, {?MODULE, lock_ttl_in_seconds}).
+%% this client is stopped and started again with fresh statem_data every
+%% time the plugin supervisor attaches (see rabbitmq_peer_discovery_etcd_sup),
+%% including at every node boot, so whether registration was ever requested
+%% has to survive that to be picked up by connected(enter,...)'s repair path.
+-define(NODE_KEY_REGISTERED_PTERM_KEY, {?MODULE, node_key_registered}).
+%% how long to wait before retrying a failed node key lease grant or put,
+%% e.g. after a reconnect or a lease keep-alive halt, while still connected.
+-define(NODE_KEY_LEASE_RETRY_INTERVAL, 5000).
 
 start(Conf) ->
     gen_statem:start({local, ?MODULE}, ?MODULE, Conf, []).
@@ -94,14 +102,25 @@ init(Args) ->
             maps:get(etcd_node_ttl, Settings, ?DEFAULT_NODE_KEY_LEASE_TTL)
         ),
         cluster_name = maps:get(cluster_name, Settings, <<"default">>),
-        lock_ttl_in_seconds = LockTTL
+        lock_ttl_in_seconds = LockTTL,
+        node_key_registered = persistent_term:get(?NODE_KEY_REGISTERED_PTERM_KEY, false)
     }, Actions}.
 
 callback_mode() -> [state_functions, state_enter].
 
-terminate(Reason, State, Data) ->
+terminate(Reason, State, Data = #statem_data{node_lease_keepalive_pid = NodeKAPid,
+                                              lock_lease_keepalive_pid = LockKAPid}) ->
     ?LOG_DEBUG("etcd v3 API client will terminate in state ~tp, reason: ~tp",
                      [State, Reason]),
+    %% these keep-alives are independently supervised eetcd workers that
+    %% outlive this gen_statem otherwise, and can go on renewing a lease
+    %% (and thus the node key or lock attached to it) that this client no
+    %% longer tracks, e.g. across the stop-and-restart that the plugin
+    %% supervisor performs on every boot. Their leases are left to expire
+    %% at their TTL rather than revoked outright, so a registration this
+    %% process requested stays visible for a replacement process to repair.
+    maybe_stop_lease_keepalive(NodeKAPid),
+    maybe_stop_lease_keepalive(LockKAPid),
     _ = disconnect(?ETCD_CONN_NAME, Data),
     ?LOG_DEBUG("etcd v3 API client has disconnected"),
     ?LOG_DEBUG("etcd v3 API client: total number of connections to etcd is ~tp", [length(eetcd_conn_sup:info())]),
@@ -185,6 +204,26 @@ recover(state_timeout, _PrevState, Data) ->
     ?LOG_DEBUG("etcd peer discovery: connection entered a reconnection delay state"),
     _ = ensure_disconnected(?ETCD_CONN_NAME, Data),
     {next_state, recover, reset_statem_data(Data)};
+%% the connection going down (which lands us here) can race with a lock
+%% lease keep-alive halting; mutual exclusion is gone either way, so the
+%% owner must be aborted here too, the same as the matching clause in
+%% connected/3 does.
+recover(info, #{event := 'KeepAliveHalted', lease_id := LeaseID, reason := Reason},
+        Data = #statem_data{lock_lease_id = LeaseID}) ->
+    log_keepalive_halted(LeaseID, Reason, Data),
+    #statem_data{lock_owner_pid = OwnerPid, lock_owner_monitor = OwnerMonitor} = Data,
+    case OwnerPid of
+        undefined ->
+            ok;
+        _ ->
+            ?LOG_ERROR("etcd peer discovery: lost the registration lock's lease "
+                       "(held by ~tp) while disconnected, aborting the owner "
+                       "since mutual exclusion can no longer be guaranteed", [OwnerPid]),
+            maybe_demonitor(OwnerMonitor),
+            exit(OwnerPid, {etcd_lock_lease_lost, LeaseID})
+    end,
+    NewData = clear_lease_keepalive(LeaseID, Data),
+    {keep_state, NewData#statem_data{lock_owner_pid = undefined, lock_owner_monitor = undefined}};
 %% the connection going down (which lands us here) can race with a
 %% lease keep-alive halting; see the matching clause in connected/3.
 recover(info, #{event := 'KeepAliveHalted', lease_id := LeaseID, reason := Reason}, Data) ->
@@ -194,13 +233,33 @@ recover(info, #{event := 'KeepAliveHalted', lease_id := LeaseID, reason := Reaso
 %% the connection drops between {lock, Node} and unlock/2, the lock
 %% lease's keep-alive (which survives reconnects on its own) must be
 %% stopped here or it renews the lease, and the lock, forever.
-recover({call, From}, {unlock, _GeneratedKey}, Data = #statem_data{lock_lease_keepalive_pid = KAPid}) ->
+recover({call, From}, {unlock, _GeneratedKey}, Data = #statem_data{lock_lease_keepalive_pid = KAPid,
+                                                                    lock_owner_monitor = OwnerMonitor}) ->
     ?LOG_ERROR("etcd v3 API: client received an unlock call while not connected, will stop the lock lease keep-alive so its lease can expire"),
     maybe_stop_lease_keepalive(KAPid),
+    maybe_demonitor(OwnerMonitor),
     gen_statem:reply(From, {error, not_connected}),
     {keep_state, Data#statem_data{
         lock_lease_id = undefined,
-        lock_lease_keepalive_pid = undefined
+        lock_lease_keepalive_pid = undefined,
+        lock_owner_pid = undefined,
+        lock_owner_monitor = undefined
+    }};
+%% the lock owner can die while the connection is down too; the keep-alive
+%% is an independently supervised eetcd worker that survives a disconnect
+%% on its own, so it must be stopped here or it keeps renewing a lock
+%% nobody owns once the connection recovers.
+recover(info, {'DOWN', MonRef, process, _Pid, _Reason}, Data = #statem_data{
+                                                            lock_owner_monitor = MonRef,
+                                                            lock_lease_keepalive_pid = KAPid
+                                                          }) ->
+    ?LOG_WARNING("etcd v3 API: lock owner process died while disconnected, clearing lock ownership state"),
+    maybe_stop_lease_keepalive(KAPid),
+    {keep_state, Data#statem_data{
+        lock_lease_id = undefined,
+        lock_lease_keepalive_pid = undefined,
+        lock_owner_pid = undefined,
+        lock_owner_monitor = undefined
     }};
 recover({call, From}, Req, _Data) ->
     ?LOG_ERROR("etcd v3 API: client received a call ~tp while not connected, will do nothing", [Req]),
@@ -229,24 +288,32 @@ connected(enter, _PrevState, Data) ->
             StaleKeepalivePid = Data#statem_data.node_lease_keepalive_pid,
             case acquire_node_key_lease_grant(Data) of
                 {ok, NewData} ->
-                    FinalData = case Data#statem_data.node_key_registered of
+                    case Data#statem_data.node_key_registered of
                         true ->
                             case put_node_key(NewData) of
                                 ok ->
                                     revoke_stale_node_key_lease(StaleLeaseID, StaleKeepalivePid, NewData),
-                                    NewData;
+                                    {keep_state, NewData};
                                 {error, _} ->
-                                    revoke_fresh_node_key_lease(NewData)
+                                    %% only the freshly granted lease is discarded; schedule a
+                                    %% retry since register/1 will not run again on its own
+                                    %% to repair this while still connected
+                                    FinalData = revoke_fresh_node_key_lease(NewData),
+                                    {keep_state, FinalData, [node_key_lease_retry_action()]}
                             end;
                         false ->
-                            NewData
-                    end,
-                    {keep_state, FinalData};
+                            {keep_state, NewData}
+                    end;
                 {error, _} ->
-                    %% leave the lease fields unhealthy so the next reconnect retries
-                    keep_state_and_data
+                    %% leave the lease fields unhealthy and schedule a retry
+                    %% rather than waiting for an unrelated reconnect
+                    {keep_state_and_data, [node_key_lease_retry_action()]}
             end
     end;
+%% retries the node key lease grant/put repair from connected(enter,...)
+%% above by re-running it, since repeat_state re-executes state entry code.
+connected(state_timeout, retry_node_key_lease, Data) ->
+    {repeat_state, Data};
 connected(info, {'DOWN', ConnRef, process, ConnPid, Reason}, Data = #statem_data{
                                                                connection_pid = ConnPid,
                                                                connection_monitor = ConnRef
@@ -254,9 +321,62 @@ connected(info, {'DOWN', ConnRef, process, ConnPid, Reason}, Data = #statem_data
     ?LOG_DEBUG("etcd peer discovery: connection to etcd ~tp is down: ~tp", [ConnPid, Reason]),
     maybe_demonitor(ConnRef),
     {next_state, recover, reset_statem_data(Data)};
+%% the lock owner did not call unlock/1 before dying, so the lock must be
+%% released here or the independently supervised eetcd_lease keep-alive
+%% worker renews it, and holds the lock, indefinitely.
+connected(info, {'DOWN', MonRef, process, _Pid, _Reason}, Data = #statem_data{
+                                                              lock_owner_monitor = MonRef,
+                                                              connection_name = Conn,
+                                                              lock_lease_id = LockLeaseID,
+                                                              lock_lease_keepalive_pid = KAPid
+                                                            }) ->
+    ?LOG_WARNING("etcd peer discovery: lock owner process died without releasing the lock, will release it now"),
+    maybe_revoke_lease(LockLeaseID, eetcd_kv:new(Conn)),
+    maybe_stop_lease_keepalive(KAPid),
+    {keep_state, Data#statem_data{
+        lock_lease_id = undefined,
+        lock_lease_keepalive_pid = undefined,
+        lock_owner_pid = undefined,
+        lock_owner_monitor = undefined
+    }};
 %% eetcd_lease's keep-alive process sends this info message, unsolicited,
 %% whenever it stops renewing a lease; without this clause it crashes
 %% the gen_statem with a function_clause error.
+%%
+%% A halt for the node key lease while still connected only clears the
+%% cached lease id here; without scheduling a retry, a previously
+%% registered node stays absent from discovery until an unrelated
+%% reconnect happens to repair it via connected(enter,...) above.
+connected(info, #{event := 'KeepAliveHalted', lease_id := LeaseID, reason := Reason},
+          Data = #statem_data{node_key_lease_id = LeaseID}) ->
+    log_keepalive_halted(LeaseID, Reason, Data),
+    NewData = clear_lease_keepalive(LeaseID, Data),
+    case Data#statem_data.node_key_registered of
+        true ->
+            {keep_state, NewData, [node_key_lease_retry_action()]};
+        false ->
+            {keep_state, NewData}
+    end;
+%% A halt for the lock lease means mutual exclusion for whoever is
+%% holding the lock is gone; that owner must not be allowed to proceed
+%% as if it still held the lock, so it is aborted rather than merely
+%% notified of a lease it may never check.
+connected(info, #{event := 'KeepAliveHalted', lease_id := LeaseID, reason := Reason},
+          Data = #statem_data{lock_lease_id = LeaseID}) ->
+    log_keepalive_halted(LeaseID, Reason, Data),
+    #statem_data{lock_owner_pid = OwnerPid, lock_owner_monitor = OwnerMonitor} = Data,
+    case OwnerPid of
+        undefined ->
+            ok;
+        _ ->
+            ?LOG_ERROR("etcd peer discovery: lost the registration lock's lease "
+                       "(held by ~tp) while it was still held, aborting the owner "
+                       "since mutual exclusion can no longer be guaranteed", [OwnerPid]),
+            maybe_demonitor(OwnerMonitor),
+            exit(OwnerPid, {etcd_lock_lease_lost, LeaseID})
+    end,
+    NewData = clear_lease_keepalive(LeaseID, Data),
+    {keep_state, NewData#statem_data{lock_owner_pid = undefined, lock_owner_monitor = undefined}};
 connected(info, #{event := 'KeepAliveHalted', lease_id := LeaseID, reason := Reason}, Data) ->
     log_keepalive_halted(LeaseID, Reason, Data),
     {keep_state, clear_lease_keepalive(LeaseID, Data)};
@@ -273,10 +393,16 @@ connected({call, From}, {lock, _Node}, Data = #statem_data{connection_name = Con
                     case eetcd_lock:lock(lock_context(Conn, Data), Key, LeaseID) of
                         {ok, #{key := GeneratedKey}} ->
                             ?LOG_DEBUG("etcd peer discovery: successfully acquired a lock, lock owner key: ~ts", [GeneratedKey]),
+                            %% monitored so the lock is released if the owner dies
+                            %% before calling unlock/1
+                            {OwnerPid, _Tag} = From,
+                            OwnerMonitor = monitor(process, OwnerPid),
                             gen_statem:reply(From, {ok, GeneratedKey}),
                             {keep_state, Data#statem_data{
                                 lock_lease_id = LeaseID,
-                                lock_lease_keepalive_pid = KeepalivePid
+                                lock_lease_keepalive_pid = KeepalivePid,
+                                lock_owner_pid = OwnerPid,
+                                lock_owner_monitor = OwnerMonitor
                             }};
                         {error, _} = Error ->
                             ?LOG_DEBUG("etcd peer discovery: failed to acquire a lock using key ~ts: ~tp", [Key, Error]),
@@ -293,17 +419,23 @@ connected({call, From}, {lock, _Node}, Data = #statem_data{connection_name = Con
             ?LOG_DEBUG("etcd peer discovery: failed to get a lease for registration lock: ~tp", [Error]),
             reply_and_retain_state(From, Error)
     end;
-connected({call, From}, {unlock, GeneratedKey}, Data = #statem_data{connection_name = Conn, lock_lease_id = LockLeaseID, lock_lease_keepalive_pid = KAPid}) ->
+connected({call, From}, {unlock, GeneratedKey}, Data = #statem_data{connection_name = Conn,
+                                                                     lock_lease_id = LockLeaseID,
+                                                                     lock_lease_keepalive_pid = KAPid,
+                                                                     lock_owner_monitor = OwnerMonitor}) ->
     Ctx = unlock_context(Conn, Data),
     case eetcd_lock:unlock(Ctx, GeneratedKey) of
         {ok, _} ->
             ?LOG_DEBUG("etcd peer discovery: successfully released lock, lock owner key: ~ts", [GeneratedKey]),
             maybe_revoke_lease(LockLeaseID, eetcd_kv:new(Conn)),
             maybe_stop_lease_keepalive(KAPid),
+            maybe_demonitor(OwnerMonitor),
             gen_statem:reply(From, ok),
             {keep_state, Data#statem_data{
                 lock_lease_id = undefined,
-                lock_lease_keepalive_pid = undefined
+                lock_lease_keepalive_pid = undefined,
+                lock_owner_pid = undefined,
+                lock_owner_monitor = undefined
             }};
         {error, _} = Error ->
             ?LOG_DEBUG("etcd peer discovery: failed to release registration lock, lock owner key: ~ts, error ~tp",
@@ -313,31 +445,42 @@ connected({call, From}, {unlock, GeneratedKey}, Data = #statem_data{connection_n
             %% never retries unlock/2, so the keep-alive must also stop here
             maybe_revoke_lease(LockLeaseID, eetcd_kv:new(Conn)),
             maybe_stop_lease_keepalive(KAPid),
+            maybe_demonitor(OwnerMonitor),
             gen_statem:reply(From, Error),
             {keep_state, Data#statem_data{
                 lock_lease_id = undefined,
-                lock_lease_keepalive_pid = undefined
+                lock_lease_keepalive_pid = undefined,
+                lock_owner_pid = undefined,
+                lock_owner_monitor = undefined
             }}
     end;
 connected({call, From}, register, Data0) ->
     %% node_key_lease_id can be undefined here (e.g. a dead keep-alive not yet
     %% regranted), and eetcd_kv:with_lease/2 crashes the gen_statem on an
     %% undefined lease id, so a lease must be obtained before the put.
+    %%
+    %% node_key_registered is set as soon as registration is requested here,
+    %% not only once the put succeeds, and persisted so a transient grant or
+    %% put failure is retried the same way a later keep-alive halt would be,
+    %% and a fresh process (e.g. after this client is stopped and
+    %% re-attached by rabbitmq_peer_discovery_etcd_sup) still knows to
+    %% repair a registration an earlier process had requested.
+    persistent_term:put(?NODE_KEY_REGISTERED_PTERM_KEY, true),
     StaleLeaseID = Data0#statem_data.node_key_lease_id,
     StaleKeepalivePid = Data0#statem_data.node_lease_keepalive_pid,
     {Data1, Regranted} = case node_key_lease_is_healthy(Data0) of
-               true -> {Data0, false};
+               true -> {Data0#statem_data{node_key_registered = true}, false};
                false ->
                    case acquire_node_key_lease_grant(Data0) of
-                       {ok, Data0Regranted} -> {Data0Regranted, true};
-                       {error, _} -> {Data0, true}
+                       {ok, Data0Regranted} -> {Data0Regranted#statem_data{node_key_registered = true}, true};
+                       {error, _} -> {Data0#statem_data{node_key_registered = true}, true}
                    end
            end,
     case node_key_lease_is_healthy(Data1) of
         true ->
             case put_node_key(Data1) of
                 ok ->
-                    Data = Data1#statem_data{node_key_registered = true},
+                    Data = Data1,
                     case Regranted of
                         true ->
                             revoke_stale_node_key_lease(StaleLeaseID, StaleKeepalivePid, Data);
@@ -348,21 +491,23 @@ connected({call, From}, register, Data0) ->
                     {keep_state, Data};
                 {error, _} = Error ->
                     %% only the freshly granted lease is discarded: a still-healthy
-                    %% pre-existing lease (Regranted =:= false) did not cause this failure
+                    %% pre-existing lease (Regranted =:= false) did not cause this failure.
+                    %% node_key_registered stays true so the retry below repairs it.
                     FinalData = case Regranted of
                         true -> revoke_fresh_node_key_lease(Data1);
                         false -> Data1
                     end,
                     gen_statem:reply(From, Error),
-                    {keep_state, FinalData}
+                    {keep_state, FinalData, [node_key_lease_retry_action()]}
             end;
         false ->
             ?LOG_ERROR("etcd peer discovery: could not acquire a lease for node key ~tp, registration skipped", [node_key(Data1)]),
             gen_statem:reply(From, {error, no_node_key_lease}),
-            {keep_state, Data1}
+            {keep_state, Data1, [node_key_lease_retry_action()]}
     end;
 connected({call, From}, unregister, Data = #statem_data{connection_name = Conn}) ->
     unregister(Conn, Data),
+    persistent_term:put(?NODE_KEY_REGISTERED_PTERM_KEY, false),
     gen_statem:reply(From, ok),
     {keep_state, Data#statem_data{
         node_key_lease_id = undefined,
@@ -457,6 +602,12 @@ revoke_fresh_node_key_lease(Data = #statem_data{connection_name = Conn,
         node_key_lease_id = undefined,
         node_lease_keepalive_pid = undefined
     }.
+
+%% used to repair a failed node key lease grant or put without waiting
+%% for an unrelated reconnect; connected(state_timeout, retry_node_key_lease, _)
+%% re-runs connected(enter,...) via repeat_state.
+node_key_lease_retry_action() ->
+    {state_timeout, ?NODE_KEY_LEASE_RETRY_INTERVAL, retry_node_key_lease}.
 
 %% node_key_lease_id alone is not reliable evidence that the lease is
 %% still being renewed: the keep-alive worker can die silently without
@@ -632,7 +783,11 @@ maybe_stop_lease_keepalive(KeepalivePid) ->
 maybe_demonitor(undefined) ->
     true;
 maybe_demonitor(Ref) when is_reference(Ref) ->
-    erlang:demonitor(Ref).
+    %% flush removes a 'DOWN' already queued for Ref, if there is one; without
+    %% it, a monitored process that dies concurrently with this demonitor can
+    %% leave a stale 'DOWN' in the mailbox that no later clause matches once
+    %% the corresponding fields have been cleared, crashing with function_clause
+    erlang:demonitor(Ref, [flush]).
 
 reset_statem_data(Data0 = #statem_data{endpoints = Es, connection_monitor = Ref}) when Es =/= undefined ->
     maybe_demonitor(Ref),
