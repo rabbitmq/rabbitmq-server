@@ -66,6 +66,7 @@ groups() ->
         unsubscribe_nack_discard,
         unsubscribe_ack_stream,
         subscribe_ack,
+        publisher_cannot_forge_ack_headers,
         ack_auto_delivery_errors,
         reused_subscription_id_keeps_ack_mode,
         send,
@@ -1009,6 +1010,60 @@ subscribe_ack(Config) ->
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
 
     rabbit_stomp_client:send(Client, 'ACK', [{AckHeader, AckValue}]),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
+    ok.
+
+%% A publisher (STOMP or, as here, AMQP) must not be able to override the
+%% server-generated message-id/ack/subscription/redelivered headers a
+%% STOMP consumer relies on to ack the right delivery.
+publisher_cannot_forge_ack_headers(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    durable     = true,
+                                                    auto_delete = true}),
+
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION},
+                            {<<"id">>,          <<"forgery-test">>},
+                            {<<"receipt">>,     <<"foo">>},
+                            {<<"ack">>,         <<"client">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+
+    Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
+    ForgedHeaders = [{<<"message-id">>, longstr, <<"forged-message-id">>},
+                     {<<"ack">>, longstr, <<"forged-ack">>},
+                     {<<"subscription">>, longstr, <<"forged-subscription">>},
+                     {<<"redelivered">>, longstr, <<"forged-redelivered">>}],
+    amqp_channel:call(Channel, Method,
+                      #amqp_msg{props = #'P_basic'{headers = ForgedHeaders},
+                                payload = <<"hello">>}),
+
+    {ok, Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
+    MsgHeader = rabbit_stomp_util:msg_header_name(Version),
+    AckHeader = rabbit_stomp_util:ack_header_name(Version),
+    RealAckValue = maps:get(MsgHeader, Headers),
+
+    false = (RealAckValue == <<"forged-message-id">>),
+    false = (RealAckValue == <<"forged-ack">>),
+    <<"forgery-test">> = maps:get(?HEADER_SUBSCRIPTION, Headers),
+    <<"false">> = maps:get(?HEADER_REDELIVERED, Headers),
+
+    %% A syntactically valid ack token for a different session must be
+    %% rejected rather than settling the real delivery.
+    {ok, {ConsumerTag, _RealSessionId, DeliveryTag}} =
+        rabbit_stomp_util:parse_message_id(RealAckValue),
+    ForgedAckValue = iolist_to_binary(
+                       [ConsumerTag, <<"@@wrong-session@@">>,
+                        integer_to_binary(DeliveryTag)]),
+    rabbit_stomp_client:send(Client2, 'ACK', [{AckHeader, ForgedAckValue}]),
+    {ok, Client3, _, _} = stomp_receive(Client2, 'ERROR'),
+
+    %% The real ack still works afterwards.
+    rabbit_stomp_client:send(Client3, 'ACK', [{AckHeader, RealAckValue}]),
     #'basic.get_empty'{} =
         amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
     ok.

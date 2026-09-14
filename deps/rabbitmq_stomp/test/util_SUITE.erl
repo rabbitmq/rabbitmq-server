@@ -18,6 +18,7 @@ all() -> [
     message_properties,
     message_headers,
     minimal_message_headers_with_no_custom,
+    headers_reserved_names_cannot_be_overridden,
     headers_post_process,
     headers_post_process_noop_replyto,
     headers_post_process_noop2,
@@ -134,6 +135,29 @@ minimal_message_headers_with_no_custom(_) ->
                ],
 
     [] = lists:subtract(Headers, Expected).
+
+%% A publisher (STOMP or AMQP) controls #'P_basic'.headers, so it must not
+%% be able to override the server-generated message-id/ack/subscription/
+%% redelivered/destination seen by a STOMP consumer.
+headers_reserved_names_cannot_be_overridden(_) ->
+    Properties = #'P_basic'{
+      headers = [{<<"message-id">>, longstr, <<"forged-message-id">>},
+                 {<<"ack">>, longstr, <<"forged-ack">>},
+                 {<<"subscription">>, longstr, <<"forged-subscription">>},
+                 {<<"redelivered">>, longstr, <<"forged-redelivered">>},
+                 {<<"destination">>, longstr, <<"forged-destination">>}]},
+
+    Headers = rabbit_stomp_util:headers(
+                "session123", <<"T_orders">>, 42,
+                <<>>, <<"routing-key">>, true,
+                Properties, client, "1.2"),
+
+    ExpectedMessageId = <<"T_orders@@session123@@42">>,
+    #{<<"message-id">> := ExpectedMessageId,
+      <<"ack">> := ExpectedMessageId,
+      <<"subscription">> := <<"orders">>,
+      <<"redelivered">> := true,
+      <<"destination">> := <<"/queue/routing-key">>} = Headers.
 
 headers_post_process(_) ->
     Headers  = [{<<"header1">>, <<"1">>},
