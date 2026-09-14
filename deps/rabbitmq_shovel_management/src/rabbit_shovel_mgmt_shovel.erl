@@ -22,15 +22,15 @@
 
 -define(COMPONENT, <<"shovel">>).
 
-dispatcher() -> [{"/shovels/vhost/:vhost/:name", ?MODULE, []},
-                 {"/shovels/vhost/:vhost/:name/restart", ?MODULE, []}].
+dispatcher() -> [{"/shovels/vhost/:vhost/:name", ?MODULE, [shovel]},
+                 {"/shovels/vhost/:vhost/:name/restart", ?MODULE, [restart]}].
 
 web_ui()     -> [{javascript, [<<"shovel_management-ejs.js">>, <<"shovel.js">>]}].
 
 %%--------------------------------------------------------------------
 
-init(Req, _Opts) ->
-    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+init(Req, [Action]) ->
+    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{impl = Action}}.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
@@ -54,7 +54,7 @@ resource_exists(ReqData, Context) ->
                                     case cowboy_req:method(ReqData) of
                                         <<"DELETE">> ->
                                             %% Deleting or restarting a shovel
-                                            case is_restart(ReqData) of
+                                            case is_restart(Context) of
                                                 true -> false;
                                                 %% this is a deletion attempt, it can continue and idempotently try to
                                                 %% delete the shovel
@@ -91,7 +91,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
         Name ->
             case get_shovel_node(VHost, Name, ReqData, Context) of
                 undefined -> ?LOG_ERROR("Could not find shovel data for shovel '~ts' in vhost: '~ts'", [Name, VHost]),
-                             case is_restart(ReqData) of
+                             case is_restart(Context) of
                                  true ->
                                      {false, ReqData, Context};
                                  %% this is a deletion attempt
@@ -110,7 +110,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                              end;
                 Node ->
                     %% We must distinguish between a delete and a restart
-                    case is_restart(ReqData) of
+                    case is_restart(Context) of
                         true ->
                             ?LOG_INFO("Asked to restart shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
                             try erpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
@@ -162,12 +162,8 @@ redact_definition(Param) ->
                  pget(value, Param)),
     rabbit_misc:pset(value, Redacted, Param).
 
-is_restart(ReqData) ->
-    Path = cowboy_req:path(ReqData),
-    case string:find(Path, "/restart", trailing) of
-        nomatch -> false;
-        _ -> true
-    end.
+is_restart(#context{impl = Action}) ->
+    Action =:= restart.
 
 get_shovel_node(VHost, Name, ReqData, Context) ->
     Shovels = rabbit_shovel_mgmt_util:status(ReqData, Context),
