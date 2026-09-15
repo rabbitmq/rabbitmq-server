@@ -122,10 +122,8 @@ put_user_hashing_algorithm1(_Config) ->
     Username = <<"put_user_hashing_algorithm_test_user">>,
     PasswordHash = base64:encode(crypto:strong_rand_bytes(20)),
 
-    %% every algorithm this node ships must be accepted, both when the
-    %% user is created and when it is subsequently updated. dummy_password_hashing
-    %% stands in for a plugin-provided password_hashing_module: it must be
-    %% accepted too, not just the built-in rabbit_password_hashing_* modules.
+    %% Every algorithm this node ships must be accepted, on user creation
+    %% and on update, and so must a plugin-provided module.
     KnownAlgorithms = [rabbit_password_hashing_md5,
                        rabbit_password_hashing_sha256,
                        rabbit_password_hashing_sha512,
@@ -140,9 +138,8 @@ put_user_hashing_algorithm1(_Config) ->
          Alg = rabbit_auth_backend_internal:hashing_module_for_user(StoredUser)
      end || Alg <- KnownAlgorithms],
 
-    %% an unrecognised algorithm must be rejected, not silently turned
-    %% into a brand new atom (unbounded atom creation from network
-    %% input would exhaust the atom table and crash the node)
+    %% An unrecognised algorithm must be rejected, not turned into a new
+    %% atom: atom creation from user input can exhaust the atom table.
     Garbage1 = unique_nonexistent_hashing_module_name(),
     User1 = #{name => Username, password_hash => PasswordHash,
               hashing_algorithm => Garbage1, tags => <<"">>},
@@ -156,15 +153,13 @@ put_user_hashing_algorithm1(_Config) ->
                  rabbit_auth_backend_internal:put_user(User2, ActingUser)),
     ?assertException(error, badarg, binary_to_existing_atom(Garbage2, utf8)),
 
-    %% an existing, loaded module that just isn't a hashing module must
-    %% also be rejected, not accepted just because the atom already exists
+    %% A module that exists but does not export `hash/1` must be rejected, too.
     User3 = User1#{hashing_algorithm => <<"lists">>},
     ?assertThrow({error, {unsupported_hashing_algorithm, lists}},
                  rabbit_auth_backend_internal:put_user(User3, ActingUser)),
 
-    %% a JSON number or object decodes to neither an atom, a binary nor
-    %% a list; it must still be rejected cleanly, not crash with a
-    %% function_clause
+    %% A JSON number or object is neither an atom, a binary nor a list, so
+    %% it must be rejected instead of failing with a `function_clause`.
     User4 = User1#{hashing_algorithm => 42},
     ?assertThrow({error, {unsupported_hashing_algorithm, 42}},
                  rabbit_auth_backend_internal:put_user(User4, ActingUser)),

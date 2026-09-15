@@ -5,9 +5,8 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
-%% Stands in for a plugin-provided password_hashing_module, to verify
-%% that hashing algorithms other than the built-in rabbit_password_hashing_*
-%% ones are still accepted via the HTTP API and definitions import.
+%% Stands in for a plugin-provided `password_hashing_module`: modules other
+%% than the built-in `rabbit_password_hashing_*` ones must be accepted too.
 -module(dummy_password_hashing).
 -behaviour(rabbit_password_hashing).
 
