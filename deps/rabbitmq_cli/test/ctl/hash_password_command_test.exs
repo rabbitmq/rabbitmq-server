@@ -49,6 +49,14 @@ defmodule HashPasswordCommandTest do
     end
   end
 
+  test "banner: does not echo the cleartext password given on the command line", context do
+    refute @command.banner(["a-secret-password"], context[:opts]) =~ "a-secret-password"
+  end
+
+  test "banner: does not require an argument", context do
+    assert is_binary(@command.banner([], context[:opts]))
+  end
+
   @tag user: "someone", password: "hashed_password"
   test "run: successfully create user with a hashed password from cli cmd", context do
     hashed_pwd = @command.run([context[:password]], context[:opts])
