@@ -452,36 +452,10 @@ apply_erlang_term_based_config([]) ->
     ok.
 
 apply_app_env_vars(App, [{Var, Value} | Rest]) ->
-    log_app_env_var(Var, Value),
     ok = application:set_env(App, Var, Value, [{persistent, true}]),
     apply_app_env_vars(App, Rest);
 apply_app_env_vars(_, []) ->
     ok.
-
-log_app_env_var(password = Var, _) ->
-    ?LOG_DEBUG("    - ~ts = ********", [Var],
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
-log_app_env_var(Var, Value) when is_list(Value) ->
-    %% To redact sensitive entries,
-    %% e.g. {password,"********"} for stream replication over TLS
-    Redacted = redact_env_var(Value),
-    ?LOG_DEBUG("    - ~ts = ~tp", [Var, Redacted],
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
-log_app_env_var(Var, Value) ->
-    ?LOG_DEBUG("    - ~ts = ~tp", [Var, Value],
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}).
-
-redact_env_var(Value) when is_list(Value) ->
-    redact_env_var(Value, []);
-redact_env_var(Value) ->
-    Value.
-
-redact_env_var([], Acc) ->
-    lists:reverse(Acc);
-redact_env_var([{password, _Value} | Rest], Acc) ->
-    redact_env_var(Rest, Acc ++ [{password, "********"}]);
-redact_env_var([AppVar | Rest], Acc) ->
-    redact_env_var(Rest, [AppVar | Acc]).
 
 %% -------------------------------------------------------------------
 %% Config decryption.
