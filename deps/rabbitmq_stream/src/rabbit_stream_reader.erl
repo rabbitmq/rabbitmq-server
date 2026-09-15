@@ -115,6 +115,8 @@
 -ifdef(TEST).
 -export([ensure_token_expiry_timer/2,
          evaluate_state_after_secret_update/4,
+         handle_frame_post_auth/4,
+         clean_state_after_super_stream_deletion/5,
          clean_subscriptions/4,
          negotiate_frame_max/2,
          publishing_ids_from_messages/2]).
@@ -2519,6 +2521,16 @@ handle_frame_post_auth(Transport,
                              CorrelationId,
                              ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
                     increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                    {Connection, State};
+                {error, Error} ->
+                    ?LOG_WARNING("Error while trying to delete stream ~tp: ~tp",
+                                 [Stream, Error]),
+                    response(Transport,
+                             Connection,
+                             delete_stream,
+                             CorrelationId,
+                             ?RESPONSE_CODE_INTERNAL_ERROR),
+                    increase_protocol_counter(?INTERNAL_ERROR),
                     {Connection, State}
             end;
         error ->
@@ -3018,19 +3030,40 @@ handle_frame_post_auth(Transport,
                             %% Pass the authorization-checked partition snapshot directly to avoid
                             %% a TOCTOU race where a queue.bind between the authz check and the
                             %% deletion could allow unauthorized streams to be deleted.
-                            rabbit_stream_manager:delete_super_stream(VirtualHost,
-                                                                      SuperStream,
-                                                                      Partitions,
-                                                                      Username),
-                            response_ok(Transport,
-                                        Connection,
-                                        delete_super_stream,
-                                        CorrelationId),
-                            {Connection1, State1} = clean_state_after_super_stream_deletion(Partitions,
-                                                                                            Connection,
-                                                                                            State,
-                                                                                            Transport, S),
-                            {Connection1, State1};
+                            case rabbit_stream_manager:delete_super_stream(VirtualHost,
+                                                                            SuperStream,
+                                                                            Partitions,
+                                                                            Username) of
+                                ok ->
+                                    response_ok(Transport,
+                                                Connection,
+                                                delete_super_stream,
+                                                CorrelationId),
+                                    {Connection1, State1} =
+                                        clean_state_after_super_stream_deletion(Partitions,
+                                                                                  Connection,
+                                                                                  State,
+                                                                                  Transport, S),
+                                    {Connection1, State1};
+                                {error,
+                                 {Result, DeletedPartitions, _} = Error}
+                                  when Result =:= partitions_not_deleted;
+                                       Result =:= exchange_not_deleted ->
+                                    ?LOG_WARNING(
+                                      "Error while trying to delete super stream ~tp: ~tp",
+                                      [SuperStream, Error]),
+                                    response(Transport,
+                                             Connection,
+                                             delete_super_stream,
+                                             CorrelationId,
+                                             ?RESPONSE_CODE_INTERNAL_ERROR),
+                                    increase_protocol_counter(?INTERNAL_ERROR),
+                                    {Connection1, State1} =
+                                        clean_state_after_super_stream_deletion(
+                                          DeletedPartitions, Connection, State,
+                                          Transport, S),
+                                    {Connection1, State1}
+                            end;
                         error ->
                             response(Transport,
                                      Connection,

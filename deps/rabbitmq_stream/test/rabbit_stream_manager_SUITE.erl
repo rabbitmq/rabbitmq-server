@@ -27,6 +27,9 @@ all() ->
 groups() ->
     [{non_parallel_tests, [],
       [manage_super_stream,
+       delete_super_stream_reports_failed_partition,
+       delete_super_stream_reports_failed_exchange,
+       delete_super_stream_deduplicates_partitions,
        manage_super_stream_max_partitions,
        manage_super_stream_max_partitions_infinity,
        lookup_leader,
@@ -176,6 +179,75 @@ manage_super_stream(Config) ->
                                      [<<"invoices-0">>, <<"invoices-1">>],
                                      [<<"0">>])),
 
+    ok.
+
+delete_super_stream_reports_failed_partition(Config) ->
+    SuperStream = <<"super-stream-delete-failure">>,
+    ExistingPartition = <<"super-stream-delete-failure-0">>,
+    MissingPartition = <<"missing-super-stream-partition">>,
+    ?assertEqual(ok,
+                 create_super_stream(Config,
+                                     SuperStream,
+                                     [ExistingPartition],
+                                     [<<"0">>])),
+    ?assertEqual({error,
+                  {partitions_not_deleted,
+                   [ExistingPartition],
+                   [{MissingPartition, reference_not_found}]}},
+                 rpc(Config,
+                     rabbit_stream_manager,
+                     delete_super_stream,
+                     [<<"/">>, SuperStream,
+                      [ExistingPartition, MissingPartition], <<"guest">>])),
+    %% The existing partition was removed, but the exchange is retained so a
+    %% normal deletion retry can complete the Super Stream cleanup.
+    ?assertEqual({ok, []}, partitions(Config, SuperStream)),
+    ?assertEqual(ok, delete_super_stream(Config, SuperStream)),
+        ?assertEqual({error, stream_not_found}, partitions(Config, SuperStream)),
+    ok.
+
+delete_super_stream_reports_failed_exchange(Config) ->
+    SuperStream = <<"super-stream-delete-exchange-failure">>,
+    Partition = <<"super-stream-delete-exchange-failure-0">>,
+    ?assertEqual(ok,
+                 create_super_stream(Config,
+                                     SuperStream,
+                                     [Partition],
+                                     [<<"0">>])),
+    ok = rpc(Config, meck, new, [rabbit_exchange, [no_link, passthrough]]),
+    ok = rpc(Config, meck, expect,
+             [rabbit_exchange, ensure_deleted, 3, {error, timeout}]),
+    try
+        ?assertEqual({error, {exchange_not_deleted, [Partition], timeout}},
+                     rpc(Config,
+                         rabbit_stream_manager,
+                         delete_super_stream,
+                         [<<"/">>, SuperStream, [Partition], <<"guest">>]))
+    after
+        ok = rpc(Config, meck, unload, [rabbit_exchange])
+    end,
+    %% The partition was removed, but the exchange is retained since its
+    %% deletion failed, so a normal deletion retry can complete the cleanup.
+    ?assertEqual({ok, []}, partitions(Config, SuperStream)),
+    ?assertEqual(ok, delete_super_stream(Config, SuperStream)),
+    ?assertEqual({error, stream_not_found}, partitions(Config, SuperStream)),
+    ok.
+
+delete_super_stream_deduplicates_partitions(Config) ->
+    SuperStream = <<"super-stream-delete-duplicate-partition">>,
+    Partition = <<"super-stream-delete-duplicate-partition-0">>,
+    ?assertEqual(ok,
+                 create_super_stream(Config, SuperStream, [Partition], [<<"0">>])),
+    C = start_amqp_connection(Config),
+    {ok, Ch} = amqp_connection:open_channel(C),
+    DuplicateBinding = #'queue.bind'{queue = Partition,
+                                     exchange = SuperStream,
+                                     routing_key = <<"duplicate">>},
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, DuplicateBinding),
+    ?assertEqual({ok, [Partition, Partition]}, partitions(Config, SuperStream)),
+    ?assertEqual(ok, delete_super_stream(Config, SuperStream)),
+    ?assertEqual({error, stream_not_found}, partitions(Config, SuperStream)),
+    amqp_connection:close(C),
     ok.
 
 manage_super_stream_max_partitions(Config) ->
