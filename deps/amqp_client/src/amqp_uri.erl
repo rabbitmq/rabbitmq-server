@@ -187,7 +187,7 @@ build_ssl_broker(ParsedUri, DefaultVHost) ->
                       [{fun find_path_parameter/1, cacertfile},
                        {fun find_path_parameter/1, certfile},
                        {fun find_path_parameter/1, keyfile},
-                       {fun find_atom_parameter/1, verify},
+                       {fun find_verify_parameter/1, verify},
                        {fun find_boolean_parameter/1, fail_if_no_peer_cert},
                        {fun find_identity_parameter/1, password},
                        {fun find_sni_parameter/1, server_name_indication},
@@ -274,10 +274,9 @@ find_boolean_parameter(Value) ->
         _       -> fail({require_boolean, Value})
     end.
 
-find_atom_parameter(Value) ->
-    try return(list_to_existing_atom(Value))
-    catch error:badarg -> fail({invalid_atom_parameter, Value})
-    end.
+find_verify_parameter("verify_peer") -> return(verify_peer);
+find_verify_parameter("verify_none") -> return(verify_none);
+find_verify_parameter(Value)         -> fail({invalid_verify_parameter, Value}).
 
 mechanisms(ParsedUri) ->
     Query = proplists:get_value('query', ParsedUri),

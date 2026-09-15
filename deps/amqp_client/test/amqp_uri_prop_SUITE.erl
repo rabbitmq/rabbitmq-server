@@ -26,19 +26,6 @@ all() ->
     ].
 
 %% -------------------------------------------------------------------
-%% Setup / teardown
-%% -------------------------------------------------------------------
-
-init_per_suite(Config) ->
-    %% Ensure ssl is loaded so that its atoms (SSL option values) exist in
-    %% the atom table, which the verify cases still depend on.
-    {module, _} = code:ensure_loaded(ssl),
-    Config.
-
-end_per_suite(_Config) ->
-    ok.
-
-%% -------------------------------------------------------------------
 %% Generators
 %% -------------------------------------------------------------------
 
@@ -53,7 +40,7 @@ non_boolean_string() ->
     ?LET(N, pos_integer(),
          "not_a_bool_" ++ integer_to_list(N)).
 
-%% Generates a random string unlikely to be an existing atom.
+%% Generates a random string that is not a valid `verify` value.
 unknown_atom_string() ->
     ?LET(N, pos_integer(),
          "zzz_no_such_verify_" ++ integer_to_list(N)).
