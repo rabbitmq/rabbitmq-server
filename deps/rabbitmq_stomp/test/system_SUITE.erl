@@ -33,12 +33,7 @@ groups() ->
         subscribe_with_x_priority,
         unsubscribe_ack,
         subscribe_ack,
-<<<<<<< HEAD
-=======
-        publisher_cannot_forge_ack_headers,
-        ack_auto_delivery_errors,
-        reused_subscription_id_keeps_ack_mode,
->>>>>>> fc65b69 (STOMP: server-generated MESSAGE headers must win over publisher headers)
+        publisher_headers_do_not_override_server_headers,
         send,
         delete_queue_subscribe,
         temp_destination_queue,
@@ -283,12 +278,10 @@ subscribe_ack(Config) ->
         amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
     ok.
 
-<<<<<<< HEAD
-=======
-%% A publisher (STOMP or, as here, AMQP) must not be able to override the
-%% server-generated message-id/ack/subscription/redelivered headers a
-%% STOMP consumer relies on to ack the right delivery.
-publisher_cannot_forge_ack_headers(Config) ->
+%% The server-generated `message-id`, `ack`, `subscription` and
+%% `redelivered` headers of a MESSAGE frame take precedence over the headers a
+%% publisher set.
+publisher_headers_do_not_override_server_headers(Config) ->
     Channel = ?config(amqp_channel, Config),
     Client = ?config(stomp_client, Config),
     Version = ?config(version, Config),
@@ -298,177 +291,63 @@ publisher_cannot_forge_ack_headers(Config) ->
                                                     auto_delete = true}),
 
     rabbit_stomp_client:send(
-      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION},
-                            {<<"id">>,          <<"forgery-test">>},
-                            {<<"receipt">>,     <<"foo">>},
-                            {<<"ack">>,         <<"client">>}]),
-    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+      Client, "SUBSCRIBE", [{"destination", ?DESTINATION},
+                            {"id",          "precedence-test"},
+                            {"receipt",     "foo"},
+                            {"ack",         "client"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
 
     Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
-    ForgedHeaders = [{<<"message-id">>, longstr, <<"forged-message-id">>},
-                     {<<"ack">>, longstr, <<"forged-ack">>},
-                     {<<"subscription">>, longstr, <<"forged-subscription">>},
-                     {<<"redelivered">>, longstr, <<"forged-redelivered">>}],
+    PublisherHeaders =
+        [{<<"message-id">>, longstr, <<"publisher-message-id">>},
+         {<<"ack">>, longstr, <<"publisher-ack">>},
+         {<<"subscription">>, longstr, <<"publisher-subscription">>},
+         {<<"redelivered">>, longstr, <<"publisher-redelivered">>},
+         {<<"destination">>, longstr, <<"publisher-destination">>}],
     amqp_channel:call(Channel, Method,
-                      #amqp_msg{props = #'P_basic'{headers = ForgedHeaders},
+                      #amqp_msg{props = #'P_basic'{headers = PublisherHeaders},
                                 payload = <<"hello">>}),
 
-    {ok, Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
+    {ok, Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
     MsgHeader = rabbit_stomp_util:msg_header_name(Version),
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
-    RealAckValue = maps:get(MsgHeader, Headers),
+    AckValue = proplists:get_value(MsgHeader, Headers),
 
-    false = (RealAckValue == <<"forged-message-id">>),
-    false = (RealAckValue == <<"forged-ack">>),
-    <<"forgery-test">> = maps:get(?HEADER_SUBSCRIPTION, Headers),
-    <<"false">> = maps:get(?HEADER_REDELIVERED, Headers),
+    "precedence-test" = proplists:get_value(?HEADER_SUBSCRIPTION, Headers),
+    "false" = proplists:get_value(?HEADER_REDELIVERED, Headers),
 
-    %% A syntactically valid ack token for a different session must be
-    %% rejected rather than settling the real delivery.
-    {ok, {ConsumerTag, _RealSessionId, DeliveryTag}} =
-        rabbit_stomp_util:parse_message_id(RealAckValue),
-    ForgedAckValue = iolist_to_binary(
-                       [ConsumerTag, <<"@@wrong-session@@">>,
-                        integer_to_binary(DeliveryTag)]),
-    rabbit_stomp_client:send(Client2, 'ACK', [{AckHeader, ForgedAckValue}]),
-    {ok, Client3, _, _} = stomp_receive(Client2, 'ERROR'),
+    %% `ack` is only generated for STOMP 1.2; under the other versions the
+    %% ack token is carried by `message-id` and a publisher's `ack` header
+    %% is an ordinary application header.
+    %%
+    %% N.B. `rabbit_stomp_frame` keeps the first of two headers of the same name.
+    ServerGenerated = [?HEADER_MESSAGE_ID, ?HEADER_SUBSCRIPTION,
+                       ?HEADER_REDELIVERED, ?HEADER_DESTINATION |
+                       case Version of
+                           "1.2" -> [?HEADER_ACK];
+                           _     -> []
+                       end],
+    ?assertEqual([], [Name || {Name, Value} <- Headers,
+                              lists:member(Name, ServerGenerated),
+                              lists:prefix("publisher-", Value)]),
 
-    %% The real ack still works afterwards.
-    rabbit_stomp_client:send(Client3, 'ACK', [{AckHeader, RealAckValue}]),
+    %% An ack token that is syntactically valid but names another session
+    {ok, {ConsumerTag, _SessionId, DeliveryTag}} =
+        rabbit_stomp_util:parse_message_id(AckValue),
+    OtherSessionAckValue =
+        binary_to_list(ConsumerTag) ++ ?MESSAGE_ID_SEPARATOR ++
+        "other-session" ++ ?MESSAGE_ID_SEPARATOR ++
+        integer_to_list(DeliveryTag),
+    rabbit_stomp_client:send(Client2, "ACK",
+                             [{AckHeader, OtherSessionAckValue}]),
+    {ok, Client3, _, _} = stomp_receive(Client2, "ERROR"),
+
+    %% The delivery's own ack token still works afterwards.
+    rabbit_stomp_client:send(Client3, "ACK", [{AckHeader, AckValue}]),
     #'basic.get_empty'{} =
         amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
     ok.
 
-ack_auto_delivery_errors(Config) ->
-    Channel = ?config(amqp_channel, Config),
-    Client = ?config(stomp_client, Config),
-    Version = ?config(version, Config),
-    #'queue.declare_ok'{} =
-        amqp_channel:call(
-          Channel,
-          #'queue.declare'{queue       = ?QUEUE,
-                           durable     = true,
-                           auto_delete = true}),
-    rabbit_stomp_client:send(
-      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION},
-                            {<<"receipt">>, <<"rcpt1">>},
-                            {<<"ack">>, <<"auto">>},
-                            {<<"id">>, <<"auto">>}]),
-    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
-
-    Method = #'basic.publish'{exchange = <<>>, routing_key = ?QUEUE},
-    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
-                                                 payload = <<"hello">>}),
-    {ok, Client2, Headers, [<<"hello">>]} =
-        stomp_receive(Client1, 'MESSAGE'),
-    MessageId = maps:get(?HEADER_MESSAGE_ID, Headers),
-    rabbit_stomp_client:send(
-      Client2, 'ACK',
-      [{rabbit_stomp_util:ack_header_name(Version), MessageId}]),
-    {ok, Client3, ErrorHeaders, _} = stomp_receive(Client2, 'ERROR'),
-    ?assertEqual(<<"Message not found">>,
-                 maps:get(<<"message">>, ErrorHeaders)),
-
-    rabbit_stomp_client:send(
-      Client3, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION},
-                              {<<"receipt">>, <<"rcpt2">>},
-                              {<<"id">>, <<"roundtrip">>}]),
-    {ok, _Client4, _, _} = stomp_receive(Client3, 'RECEIPT'),
-    ok.
-
-reused_subscription_id_keeps_ack_mode(Config) ->
-    Channel = ?config(amqp_channel, Config),
-    Client = ?config(stomp_client, Config),
-    Version = ?config(version, Config),
-    #'queue.declare_ok'{} =
-        amqp_channel:call(
-          Channel, #'queue.declare'{queue   = ?MULTIACK_QUEUE_A,
-                                    durable = true}),
-    #'queue.declare_ok'{} =
-        amqp_channel:call(
-          Channel, #'queue.declare'{queue   = ?MULTIACK_QUEUE_B,
-                                    durable = true}),
-    rabbit_stomp_client:send(
-      Client, 'SUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_B},
-                            {<<"receipt">>, <<"rcpt1">>},
-                            {<<"ack">>, <<"client-individual">>},
-                            {<<"id">>, <<"sub-b">>}]),
-    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
-    rabbit_stomp_client:send(
-      Client1, 'SUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_A},
-                             {<<"receipt">>, <<"rcpt2">>},
-                             {<<"ack">>, <<"client-individual">>},
-                             {<<"id">>, <<"reused">>}]),
-    {ok, Client2, _, _} = stomp_receive(Client1, 'RECEIPT'),
-
-    PublishB = #'basic.publish'{exchange = <<>>,
-                                routing_key = ?MULTIACK_QUEUE_B},
-    amqp_channel:call(Channel, PublishB,
-                      #amqp_msg{props = #'P_basic'{}, payload = <<"one">>}),
-    {ok, Client3, HeadersB, [<<"one">>]} =
-        stomp_receive(Client2, 'MESSAGE'),
-    PublishA = #'basic.publish'{exchange = <<>>,
-                                routing_key = ?MULTIACK_QUEUE_A},
-    amqp_channel:call(Channel, PublishA,
-                      #amqp_msg{props = #'P_basic'{}, payload = <<"two">>}),
-    {ok, Client4, HeadersA, [<<"two">>]} =
-        stomp_receive(Client3, 'MESSAGE'),
-    MessageHeader = rabbit_stomp_util:msg_header_name(Version),
-    AckHeader = rabbit_stomp_util:ack_header_name(Version),
-    AckValueB = maps:get(MessageHeader, HeadersB),
-    AckValueA = maps:get(MessageHeader, HeadersA),
-
-    ForgedAckValue = ack_value_with_consumer(AckValueB, AckValueA),
-    rabbit_stomp_client:send(
-      Client4, 'ACK', [{AckHeader, ForgedAckValue}]),
-    {ok, Client5, ErrorHeaders, _} = stomp_receive(Client4, 'ERROR'),
-    ?assertEqual(<<"Message not found">>,
-                 maps:get(<<"message">>, ErrorHeaders)),
-
-    rabbit_stomp_client:send(
-      Client5, 'UNSUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_A},
-                                {<<"id">>, <<"reused">>},
-                                {<<"receipt">>, <<"rcpt3">>}]),
-    {ok, Client6, _, _} = stomp_receive(Client5, 'RECEIPT'),
-    rabbit_stomp_client:send(
-      Client6, 'SUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_A},
-                              {<<"receipt">>, <<"rcpt4">>},
-                              {<<"ack">>, <<"client">>},
-                              {<<"id">>, <<"reused">>}]),
-    {ok, Client7, _, _} = stomp_receive(Client6, 'RECEIPT'),
-
-    rabbit_stomp_client:send(
-      Client7, 'ACK', [{AckHeader, AckValueA}, {<<"receipt">>, <<"rcpt5">>}]),
-    {ok, Client8, _, _} = stomp_receive(Client7, 'RECEIPT'),
-    ok = await_queue_state(Config, ?MULTIACK_QUEUE_A, 0, 0, 1),
-    ok = await_queue_state(Config, ?MULTIACK_QUEUE_B, 0, 1, 1),
-    rabbit_stomp_client:send(
-      Client8, 'ACK', [{AckHeader, AckValueB}, {<<"receipt">>, <<"rcpt6">>}]),
-    {ok, Client9, _, _} = stomp_receive(Client8, 'RECEIPT'),
-    ok = await_queue_state(Config, ?MULTIACK_QUEUE_B, 0, 0, 1),
-
-    amqp_channel:call(Channel, PublishA,
-                      #amqp_msg{props = #'P_basic'{}, payload = <<"three">>}),
-    {ok, Client10, HeadersA1, [<<"three">>]} =
-        stomp_receive(Client9, 'MESSAGE'),
-    amqp_channel:call(Channel, PublishA,
-                      #amqp_msg{props = #'P_basic'{}, payload = <<"four">>}),
-    {ok, Client11, HeadersA2, [<<"four">>]} =
-        stomp_receive(Client10, 'MESSAGE'),
-    AckValueA1 = maps:get(MessageHeader, HeadersA1),
-    AckValueA2 = maps:get(MessageHeader, HeadersA2),
-    rabbit_stomp_client:send(
-      Client11, 'ACK', [{AckHeader, AckValueA2}, {<<"receipt">>, <<"rcpt7">>}]),
-    {ok, Client12, _, _} = stomp_receive(Client11, 'RECEIPT'),
-    ok = await_queue_state(Config, ?MULTIACK_QUEUE_A, 0, 0, 1),
-    rabbit_stomp_client:send(
-      Client12, 'ACK', [{AckHeader, AckValueA1}]),
-    {ok, _Client13, ErrorHeaders2, _} = stomp_receive(Client12, 'ERROR'),
-    ?assertEqual(<<"Message not found">>,
-                 maps:get(<<"message">>, ErrorHeaders2)),
-    ok.
-
->>>>>>> fc65b69 (STOMP: server-generated MESSAGE headers must win over publisher headers)
 send(Config) ->
     Channel = ?config(amqp_channel, Config),
     Client = ?config(stomp_client, Config),
@@ -713,4 +592,3 @@ stomp_receive(Client, Command) ->
                   body_iolist = Body},   Client1} =
     rabbit_stomp_client:recv(Client),
     {ok, Client1, Hdrs, Body}.
-

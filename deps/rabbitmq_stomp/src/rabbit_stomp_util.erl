@@ -146,25 +146,13 @@ headers_post_process(Headers) ->
              Header
      end || Header <- Headers].
 
-<<<<<<< HEAD
+%% Any header the publisher set under
+%% a name that `headers_extra/4` generates is intentionally dropped.
 headers(SessionId, Delivery, Properties, AckMode, Version) ->
-    headers_extra(SessionId, AckMode, Version, Delivery) ++
-    headers_post_process(message_headers(Properties)).
-=======
-headers(SessionId, ConsumerTag, DeliveryTag,
-        ExchangeBin, RoutingKey, Redelivered,
-        Properties, AckMode, Version) ->
-    %% Message properties/headers are publisher-controlled (STOMP or AMQP),
-    %% so the server-generated values must win on key conflict, not the
-    %% other way round.
-    maps:merge(
-      maps:from_list(
-        headers_post_process(message_headers(Properties))),
-      maps:from_list(
-        headers_extra(SessionId, ConsumerTag, DeliveryTag,
-                      ExchangeBin, RoutingKey, Redelivered,
-                      AckMode, Version))).
->>>>>>> fc65b69 (STOMP: server-generated MESSAGE headers must win over publisher headers)
+    Extra = headers_extra(SessionId, AckMode, Version, Delivery),
+    Extra ++ [Header || Header = {Name, _} <-
+                            headers_post_process(message_headers(Properties)),
+                        not lists:keymember(Name, 1, Extra)].
 
 tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) ->
     {ok, {internal, binary_to_list(Id)}};
