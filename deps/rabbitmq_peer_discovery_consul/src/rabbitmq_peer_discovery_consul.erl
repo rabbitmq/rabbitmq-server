@@ -9,7 +9,7 @@
 -behaviour(rabbit_peer_discovery_backend).
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1]).
+         post_registration/0, lock/1, unlock/1, reports_all_nodes/0]).
 -export([send_health_check_pass/0]).
 -export([session_ttl_update_callback/1]).
 
@@ -57,3 +57,7 @@ send_health_check_pass() ->
 -spec session_ttl_update_callback(string()) -> string().
 session_ttl_update_callback(SessionId) ->
     ?DELEGATE:session_ttl_update_callback(SessionId).
+
+-spec reports_all_nodes() -> boolean().
+reports_all_nodes() ->
+    ?DELEGATE:reports_all_nodes().
