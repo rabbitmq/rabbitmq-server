@@ -25,7 +25,8 @@ all() ->
     {group, ssl_options},
     {group, merge},
     {group, get_expiration_time},
-    {group, validate_openid_configuration}
+    {group, validate_openid_configuration},
+    {group, discovery_options}
 ].
 
 groups() ->
@@ -67,9 +68,22 @@ groups() ->
         verify_https_endpoints_false_skips_other_endpoints_validation,
         issuer_mismatch,
         issuer_match_with_trailing_slash_difference,
-        issuer_match_with_discovery_endpoint
+        issuer_match_with_discovery_endpoint,
+        issuer_match_with_trailing_slash_in_discovered_issuer,
+        issuer_mismatch_with_sibling_realm
+    ]},
+    {discovery_options, [], [
+        discovery_options_of_root_provider_default_to_enabled,
+        discovery_options_of_root_provider_from_config,
+        discovery_options_of_named_provider_default_to_enabled,
+        discovery_options_of_named_provider_from_config
     ]}
 ].
+
+end_per_testcase(_, Config) ->
+    [application:unset_env(rabbitmq_auth_backend_oauth2, Key) ||
+        Key <- [issuer, discovery, oauth_providers]],
+    Config.
 
 build_openid_discovery_endpoint(_) ->
     Issuer = "https://issuer",
@@ -534,3 +548,48 @@ issuer_match_with_discovery_endpoint(_) ->
     Discovered = "https://idp.example.com",
     ?assertEqual(ok,
         oauth2_client:validate_issuer(DiscoveryEndpoint, Discovered)).
+
+issuer_match_with_trailing_slash_in_discovered_issuer(_) ->
+    DiscoveryEndpoint = "https://sts.windows.net/9188040d-6c67-4c5b-b112-36a304b66dad"
+        "/.well-known/openid-configuration",
+    Discovered = "https://sts.windows.net/9188040d-6c67-4c5b-b112-36a304b66dad/",
+    ?assertEqual(ok,
+        oauth2_client:validate_issuer(DiscoveryEndpoint, Discovered)).
+
+issuer_mismatch_with_sibling_realm(_) ->
+    DiscoveryEndpoint = "https://keycloak.example.com/realms/prod-eu"
+        "/.well-known/openid-configuration",
+    Discovered = "https://keycloak.example.com/realms/prod",
+    ?assertEqual({error, {issuer_mismatch, DiscoveryEndpoint, Discovered}},
+        oauth2_client:validate_issuer(DiscoveryEndpoint, Discovered)).
+
+discovery_options_of_root_provider_default_to_enabled(_) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, issuer,
+        "https://keycloak.example.com/realms/prod"),
+    {ok, OAuthProvider} = oauth2_client:get_oauth_provider([]),
+    ?assertEqual([{verify_https_endpoints, true}, {verify_issuer, true}],
+        OAuthProvider#oauth_provider.discovery_options).
+
+discovery_options_of_root_provider_from_config(_) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, issuer,
+        "https://uaa.example.com"),
+    application:set_env(rabbitmq_auth_backend_oauth2, discovery,
+        [{verify_issuer, false}]),
+    {ok, OAuthProvider} = oauth2_client:get_oauth_provider([]),
+    ?assertEqual([{verify_https_endpoints, true}, {verify_issuer, false}],
+        OAuthProvider#oauth_provider.discovery_options).
+
+discovery_options_of_named_provider_default_to_enabled(_) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
+        #{<<"keycloak">> => [{issuer, "https://keycloak.example.com/realms/prod"}]}),
+    {ok, OAuthProvider} = oauth2_client:get_oauth_provider(<<"keycloak">>, []),
+    ?assertEqual([{verify_https_endpoints, true}, {verify_issuer, true}],
+        OAuthProvider#oauth_provider.discovery_options).
+
+discovery_options_of_named_provider_from_config(_) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
+        #{<<"uaa">> => [{issuer, "https://uaa.example.com"},
+                        {discovery, [{verify_issuer, false}]}]}),
+    {ok, OAuthProvider} = oauth2_client:get_oauth_provider(<<"uaa">>, []),
+    ?assertEqual([{verify_https_endpoints, true}, {verify_issuer, false}],
+        OAuthProvider#oauth_provider.discovery_options).

@@ -52,11 +52,11 @@ does_not_override_client_secret_when_present(_Config) ->
                  proplists:get_value(<<"client_secret">>, Result)).
 
 rewrite_replaces_only_token_endpoint(_Config) ->
-    Metadata = rabbit_json:encode(#{
+    Metadata = #{
         <<"issuer">> => <<"https://idp">>,
         <<"authorization_endpoint">> => <<"https://idp/authorize">>,
         <<"token_endpoint">> => <<"https://idp/token">>,
-        <<"jwks_uri">> => <<"https://idp/keys">>}),
+        <<"jwks_uri">> => <<"https://idp/keys">>},
     Proxy = <<"https://rabbit/js/oidc-oauth/token-endpoint/rabbitmq">>,
     Rewritten = rabbit_json:decode(
         rabbit_mgmt_oauth_token_proxy:rewrite_token_endpoint(Metadata, Proxy)),

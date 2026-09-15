@@ -51,9 +51,10 @@ handle_metadata(Req0, State) ->
         {ok, _Secret, MetadataURL, HttpOpts, DiscoveryOpts} ->
             case http_get(MetadataURL, HttpOpts) of
                 {ok, 200, _Headers, Body} ->
-                    case validate_metadata(Body, MetadataURL, DiscoveryOpts) of
+                    Metadata = rabbit_json:decode(Body),
+                    case validate_metadata(Metadata, MetadataURL, DiscoveryOpts) of
                         ok ->
-                            Rewritten = rewrite_token_endpoint(Body,
+                            Rewritten = rewrite_token_endpoint(Metadata,
                                 proxy_token_url(Req0, Id)),
                             {ok, reply_json(200, Rewritten, Req0), State};
                         {error, Reason} ->
@@ -116,21 +117,19 @@ inject_client_secret(Params, Secret) ->
         false -> Params ++ [{<<"client_secret">>, Secret}]
     end.
 
--spec validate_metadata(binary(), binary(), proplists:proplist()) ->
+-spec validate_metadata(#{binary() => any()}, binary(), proplists:proplist()) ->
     ok | {error, term()}.
-validate_metadata(MetadataJson, MetadataURL, DiscoveryOpts) ->
-    OpenIdConfig = oauth2_client:map_to_openid_configuration(
-                     rabbit_json:decode(MetadataJson)),
+validate_metadata(Metadata, MetadataURL, DiscoveryOpts) ->
+    OpenIdConfig = oauth2_client:map_to_openid_configuration(Metadata),
     case oauth2_client:validate_openid_configuration(OpenIdConfig, DiscoveryOpts,
                                                      MetadataURL) of
         {ok, _} -> ok;
         {error, _} = Error -> Error
     end.
 
--spec rewrite_token_endpoint(binary(), binary()) -> binary().
-rewrite_token_endpoint(MetadataJson, ProxyTokenURL) ->
-    Map = rabbit_json:decode(MetadataJson),
-    rabbit_json:encode(maps:put(<<"token_endpoint">>, ProxyTokenURL, Map)).
+-spec rewrite_token_endpoint(#{binary() => any()}, binary()) -> binary().
+rewrite_token_endpoint(Metadata, ProxyTokenURL) ->
+    rabbit_json:encode(maps:put(<<"token_endpoint">>, ProxyTokenURL, Metadata)).
 
 %%--------------------------------------------------------------------
 %% helpers
