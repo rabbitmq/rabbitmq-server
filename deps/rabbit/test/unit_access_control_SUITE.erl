@@ -24,6 +24,7 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           password_hashing,
+          put_user_hashing_algorithm,
           version_negotiation,
           expand_topic_permission_prop,
           is_loopback_prop,
@@ -111,6 +112,73 @@ password_hashing1(_Config) ->
           internal_user:new({hashing_algorithm, rabbit_password_hashing_sha256})),
 
     passed.
+
+put_user_hashing_algorithm(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, put_user_hashing_algorithm1, [Config]).
+
+put_user_hashing_algorithm1(_Config) ->
+    ActingUser = <<"put_user_hashing_algorithm_test">>,
+    Username = <<"put_user_hashing_algorithm_test_user">>,
+    PasswordHash = base64:encode(crypto:strong_rand_bytes(20)),
+
+    %% every algorithm this node ships must be accepted, both when the
+    %% user is created and when it is subsequently updated. dummy_password_hashing
+    %% stands in for a plugin-provided password_hashing_module: it must be
+    %% accepted too, not just the built-in rabbit_password_hashing_* modules.
+    KnownAlgorithms = [rabbit_password_hashing_md5,
+                       rabbit_password_hashing_sha256,
+                       rabbit_password_hashing_sha512,
+                       rabbit_password_hashing_pbkdf2_sha256,
+                       dummy_password_hashing],
+    [begin
+         User = #{name => Username, password_hash => PasswordHash,
+                  hashing_algorithm => atom_to_binary(Alg, utf8),
+                  tags => <<"">>},
+         _ = rabbit_auth_backend_internal:put_user(User, ActingUser),
+         {ok, StoredUser} = rabbit_auth_backend_internal:lookup_user(Username),
+         Alg = rabbit_auth_backend_internal:hashing_module_for_user(StoredUser)
+     end || Alg <- KnownAlgorithms],
+
+    %% an unrecognised algorithm must be rejected, not silently turned
+    %% into a brand new atom (unbounded atom creation from network
+    %% input would exhaust the atom table and crash the node)
+    Garbage1 = unique_nonexistent_hashing_module_name(),
+    User1 = #{name => Username, password_hash => PasswordHash,
+              hashing_algorithm => Garbage1, tags => <<"">>},
+    ?assertThrow({error, {unsupported_hashing_algorithm, Garbage1}},
+                 rabbit_auth_backend_internal:put_user(User1, ActingUser)),
+    ?assertException(error, badarg, binary_to_existing_atom(Garbage1, utf8)),
+
+    Garbage2 = unique_nonexistent_hashing_module_name(),
+    User2 = User1#{hashing_algorithm => Garbage2},
+    ?assertThrow({error, {unsupported_hashing_algorithm, Garbage2}},
+                 rabbit_auth_backend_internal:put_user(User2, ActingUser)),
+    ?assertException(error, badarg, binary_to_existing_atom(Garbage2, utf8)),
+
+    %% an existing, loaded module that just isn't a hashing module must
+    %% also be rejected, not accepted just because the atom already exists
+    User3 = User1#{hashing_algorithm => <<"lists">>},
+    ?assertThrow({error, {unsupported_hashing_algorithm, lists}},
+                 rabbit_auth_backend_internal:put_user(User3, ActingUser)),
+
+    %% a JSON number or object decodes to neither an atom, a binary nor
+    %% a list; it must still be rejected cleanly, not crash with a
+    %% function_clause
+    User4 = User1#{hashing_algorithm => 42},
+    ?assertThrow({error, {unsupported_hashing_algorithm, 42}},
+                 rabbit_auth_backend_internal:put_user(User4, ActingUser)),
+    User5 = User1#{hashing_algorithm => #{}},
+    ?assertThrow({error, {unsupported_hashing_algorithm, #{}}},
+                 rabbit_auth_backend_internal:put_user(User5, ActingUser)),
+
+    ok = rabbit_auth_backend_internal:delete_user(Username, ActingUser),
+    passed.
+
+unique_nonexistent_hashing_module_name() ->
+    iolist_to_binary(
+      io_lib:format("nonexistent_hashing_module_~b",
+                     [erlang:unique_integer([positive])])).
 
 change_password(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
