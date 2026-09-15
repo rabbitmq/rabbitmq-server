@@ -1107,7 +1107,26 @@ hashing_algorithm(User, Version) ->
                 <<"3.0.", _/binary>> -> rabbit_password_hashing_md5;
                 _                    -> rabbit_password:hashing_mod()
             end;
-        Alg       -> rabbit_data_coercion:to_atom(Alg, utf8)
+        Alg       -> known_hashing_algorithm(Alg)
+    end.
+
+known_hashing_algorithm(Alg) when is_atom(Alg) ->
+    validate_hashing_module(Alg);
+known_hashing_algorithm(Alg) when is_binary(Alg); is_list(Alg) ->
+    Mod = try
+              binary_to_existing_atom(iolist_to_binary(Alg), utf8)
+          catch
+              error:badarg -> throw({error, {unsupported_hashing_algorithm, Alg}})
+          end,
+    validate_hashing_module(Mod);
+known_hashing_algorithm(Alg) ->
+    throw({error, {unsupported_hashing_algorithm, Alg}}).
+
+validate_hashing_module(Mod) ->
+    case code:ensure_loaded(Mod) =:= {module, Mod} andalso
+         erlang:function_exported(Mod, hash, 1) of
+        true  -> Mod;
+        false -> throw({error, {unsupported_hashing_algorithm, Mod}})
     end.
 
 is_over_connection_limit(Username) ->
