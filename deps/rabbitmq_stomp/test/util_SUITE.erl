@@ -11,13 +11,16 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
+-include("rabbit_stomp_headers.hrl").
 -compile(export_all).
 
 all() -> [
     longstr_field,
     message_properties,
+    message_properties_strips_reserved_headers,
     message_headers,
     minimal_message_headers_with_no_custom,
+    headers_reserved_names_cannot_be_overridden,
     headers_post_process,
     headers_post_process_noop_replyto,
     headers_post_process_noop2,
@@ -86,6 +89,19 @@ message_properties(_) ->
               } =
         rabbit_stomp_util:message_properties(#stomp_frame{headers = Headers}).
 
+message_properties_strips_reserved_headers(_) ->
+    Headers = [
+               {"message-id", "publisher-message-id"},
+               {"ack", "publisher-ack"},
+               {"subscription", "publisher-subscription"},
+               {"redelivered", "publisher-redelivered"},
+               {"destination", "publisher-destination"},
+               {"str", "foo"}
+              ],
+
+    #'P_basic'{headers = [{<<"str">>, longstr, <<"foo">>}]} =
+        rabbit_stomp_util:message_properties(#stomp_frame{headers = Headers}).
+
 message_headers(_) ->
     Properties = #'P_basic'{
       headers          = [{<<"str">>, longstr, <<"foo">>},
@@ -134,6 +150,41 @@ minimal_message_headers_with_no_custom(_) ->
                ],
 
     [] = lists:subtract(Headers, Expected).
+
+%% A publisher (STOMP or AMQP 0-9-1) controls `#'P_basic'.headers`, so the
+%% server-generated `message-id`, `ack`, `subscription`, `redelivered` and
+%% `destination` headers take precedence over the publisher's values of the
+%% same name.
+headers_reserved_names_cannot_be_overridden(_) ->
+    Properties = #'P_basic'{
+      headers = [{<<"message-id">>, longstr, <<"publisher-message-id">>},
+                 {<<"ack">>, longstr, <<"publisher-ack">>},
+                 {<<"subscription">>, longstr, <<"publisher-subscription">>},
+                 {<<"redelivered">>, longstr, <<"publisher-redelivered">>},
+                 {<<"destination">>, longstr, <<"publisher-destination">>}]},
+    Delivery = #'basic.deliver'{consumer_tag = <<"T_orders">>,
+                                delivery_tag = 42,
+                                exchange     = <<>>,
+                                routing_key  = <<"routing-key">>,
+                                redelivered  = true},
+
+    Headers = rabbit_stomp_util:headers(
+                "session123", Delivery, Properties, client, "1.2"),
+
+    ExpectedMessageId = <<"T_orders@@session123@@42">>,
+    ExpectedMessageId =
+        iolist_to_binary(proplists:get_value(?HEADER_MESSAGE_ID, Headers)),
+    ExpectedMessageId =
+        iolist_to_binary(proplists:get_value(?HEADER_ACK, Headers)),
+    "orders" = proplists:get_value(?HEADER_SUBSCRIPTION, Headers),
+    true = proplists:get_value(?HEADER_REDELIVERED, Headers),
+    "/queue/routing-key" = proplists:get_value(?HEADER_DESTINATION, Headers),
+
+    %% Every header name must be unique.
+    Names = [Name || {Name, _} <- Headers],
+    ?assertEqual(lists:usort(Names), lists:sort(Names)),
+    ?assertEqual([], [V || {_, V} <- Headers, is_list(V),
+                           lists:prefix("publisher-", V)]).
 
 headers_post_process(_) ->
     Headers  = [{"header1", "1"},
@@ -238,4 +289,3 @@ parse_valid_message_id(_) ->
 parse_invalid_message_id(_) ->
     {error, invalid_message_id} =
         rabbit_stomp_util:parse_message_id("blah").
-

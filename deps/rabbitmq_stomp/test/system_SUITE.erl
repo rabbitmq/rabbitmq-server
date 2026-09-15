@@ -33,6 +33,7 @@ groups() ->
         subscribe_with_x_priority,
         unsubscribe_ack,
         subscribe_ack,
+        publisher_headers_do_not_override_server_headers,
         send,
         delete_queue_subscribe,
         temp_destination_queue,
@@ -273,6 +274,76 @@ subscribe_ack(Config) ->
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
 
     rabbit_stomp_client:send(Client, "ACK", [{AckHeader, AckValue}]),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
+    ok.
+
+%% The server-generated `message-id`, `ack`, `subscription` and
+%% `redelivered` headers of a MESSAGE frame take precedence over the headers a
+%% publisher set.
+publisher_headers_do_not_override_server_headers(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    durable     = true,
+                                                    auto_delete = true}),
+
+    rabbit_stomp_client:send(
+      Client, "SUBSCRIBE", [{"destination", ?DESTINATION},
+                            {"id",          "precedence-test"},
+                            {"receipt",     "foo"},
+                            {"ack",         "client"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+
+    Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
+    PublisherHeaders =
+        [{<<"message-id">>, longstr, <<"publisher-message-id">>},
+         {<<"ack">>, longstr, <<"publisher-ack">>},
+         {<<"subscription">>, longstr, <<"publisher-subscription">>},
+         {<<"redelivered">>, longstr, <<"publisher-redelivered">>},
+         {<<"destination">>, longstr, <<"publisher-destination">>}],
+    amqp_channel:call(Channel, Method,
+                      #amqp_msg{props = #'P_basic'{headers = PublisherHeaders},
+                                payload = <<"hello">>}),
+
+    {ok, Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
+    MsgHeader = rabbit_stomp_util:msg_header_name(Version),
+    AckHeader = rabbit_stomp_util:ack_header_name(Version),
+    AckValue = proplists:get_value(MsgHeader, Headers),
+
+    "precedence-test" = proplists:get_value(?HEADER_SUBSCRIPTION, Headers),
+    "false" = proplists:get_value(?HEADER_REDELIVERED, Headers),
+
+    %% `ack` is only generated for STOMP 1.2; under the other versions the
+    %% ack token is carried by `message-id` and a publisher's `ack` header
+    %% is an ordinary application header.
+    %%
+    %% N.B. `rabbit_stomp_frame` keeps the first of two headers of the same name.
+    ServerGenerated = [?HEADER_MESSAGE_ID, ?HEADER_SUBSCRIPTION,
+                       ?HEADER_REDELIVERED, ?HEADER_DESTINATION |
+                       case Version of
+                           "1.2" -> [?HEADER_ACK];
+                           _     -> []
+                       end],
+    ?assertEqual([], [Name || {Name, Value} <- Headers,
+                              lists:member(Name, ServerGenerated),
+                              lists:prefix("publisher-", Value)]),
+
+    %% An ack token that is syntactically valid but names another session
+    {ok, {ConsumerTag, _SessionId, DeliveryTag}} =
+        rabbit_stomp_util:parse_message_id(AckValue),
+    OtherSessionAckValue =
+        binary_to_list(ConsumerTag) ++ ?MESSAGE_ID_SEPARATOR ++
+        "other-session" ++ ?MESSAGE_ID_SEPARATOR ++
+        integer_to_list(DeliveryTag),
+    rabbit_stomp_client:send(Client2, "ACK",
+                             [{AckHeader, OtherSessionAckValue}]),
+    {ok, Client3, _, _} = stomp_receive(Client2, "ERROR"),
+
+    %% The delivery's own ack token still works afterwards.
+    rabbit_stomp_client:send(Client3, "ACK", [{AckHeader, AckValue}]),
     #'basic.get_empty'{} =
         amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
     ok.
@@ -521,4 +592,3 @@ stomp_receive(Client, Command) ->
                   body_iolist = Body},   Client1} =
     rabbit_stomp_client:recv(Client),
     {ok, Client1, Hdrs, Body}.
-

@@ -402,12 +402,16 @@ ack_action(Command, Frame,
            State = #proc_state{subscriptions = Subs,
                           channel              = Channel,
                           version              = Version,
+                          session_id           = SessionId,
                           default_nack_requeue = DefaultNackRequeue}, MethodFun) ->
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
     case rabbit_stomp_frame:header(Frame, AckHeader) of
         {ok, AckValue} ->
             case rabbit_stomp_util:parse_message_id(AckValue) of
-                {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
+                %% `SessionId` comes from `#proc_state`, so a
+                %% token that names another session does not match and is
+                %% reported as an invalid header.
+                {ok, {ConsumerTag, SessionId, DeliveryTag}} ->
                     case maps:find(ConsumerTag, Subs) of
                         {ok, Sub} ->
                             Requeue = rabbit_stomp_frame:boolean_header(Frame, "requeue", DefaultNackRequeue),

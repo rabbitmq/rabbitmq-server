@@ -146,9 +146,13 @@ headers_post_process(Headers) ->
              Header
      end || Header <- Headers].
 
+%% Any header the publisher set under
+%% a name that `headers_extra/4` generates is intentionally dropped.
 headers(SessionId, Delivery, Properties, AckMode, Version) ->
-    headers_extra(SessionId, AckMode, Version, Delivery) ++
-    headers_post_process(message_headers(Properties)).
+    Extra = headers_extra(SessionId, AckMode, Version, Delivery),
+    Extra ++ [Header || Header = {Name, _} <-
+                            headers_post_process(message_headers(Properties)),
+                        not lists:keymember(Name, 1, Extra)].
 
 tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) ->
     {ok, {internal, binary_to_list(Id)}};
@@ -170,7 +174,11 @@ user_header(Hdr)
        Hdr =:= ?HEADER_TYPE orelse
        Hdr =:= ?HEADER_USER_ID orelse
        Hdr =:= ?HEADER_APP_ID orelse
-       Hdr =:= ?HEADER_DESTINATION ->
+       Hdr =:= ?HEADER_DESTINATION orelse
+       Hdr =:= ?HEADER_MESSAGE_ID orelse
+       Hdr =:= ?HEADER_ACK orelse
+       Hdr =:= ?HEADER_SUBSCRIPTION orelse
+       Hdr =:= ?HEADER_REDELIVERED ->
     false;
 user_header(_) ->
     true.
