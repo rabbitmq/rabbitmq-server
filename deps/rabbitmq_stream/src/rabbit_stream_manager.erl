@@ -60,7 +60,7 @@ create(VirtualHost, Reference, Arguments, Username) ->
     end.
 
 -spec delete(binary(), binary(), binary()) ->
-    {ok, deleted} | {error, reference_not_found}.
+    {ok, deleted} | {error, term()}.
 delete(VirtualHost, Reference, Username) ->
     Name =
     #resource{virtual_host = VirtualHost,
@@ -75,10 +75,15 @@ delete(VirtualHost, Reference, Username) ->
                 true ->
                     ?LOG_DEBUG("Queue record ~tp is a stream, trying to delete it",
                                      [Reference]),
-                    {ok, _} =
-                    rabbit_stream_queue:delete(Q, false, false, Username),
-                    ?LOG_DEBUG("Stream ~tp deleted", [Reference]),
-                    {ok, deleted};
+                    case rabbit_stream_queue:delete(Q, false, false, Username) of
+                        {ok, _} ->
+                            ?LOG_DEBUG("Stream ~tp deleted", [Reference]),
+                            {ok, deleted};
+                        {error, Reason} ->
+                            {error, Reason};
+                        {protocol_error, Type, Reason, Args} ->
+                            {error, {protocol_error, Type, Reason, Args}}
+                    end;
                 _ ->
                     ?LOG_DEBUG("Queue record ~tp is NOT a stream, returning error",
                                      [Reference]),
@@ -179,30 +184,57 @@ delete_super_stream(VirtualHost, SuperStream, Username) ->
 %% partition list. Using the caller's snapshot closes the TOCTOU window that
 %% exists when the manager re-reads bindings after the authorization check.
 -spec delete_super_stream(binary(), binary(), [binary()], binary()) ->
-    ok.
+    ok | {error, term()}.
 delete_super_stream(VirtualHost, SuperStream, Partitions, Username) ->
-    case delete_super_stream_exchange(VirtualHost, SuperStream, Username) of
+    UniquePartitions = unique_partitions(Partitions),
+    case delete_super_stream_partitions(VirtualHost, SuperStream, UniquePartitions,
+                                        Username) of
         ok ->
+            case delete_super_stream_exchange(VirtualHost, SuperStream, Username) of
+                ok ->
+                    ok;
+                {error, Error} ->
+                    ?LOG_WARNING("Error while deleting super stream exchange ~tp, "
+                                 "~tp",
+                                 [SuperStream, Error]),
+                    {error, {exchange_not_deleted, UniquePartitions, Error}}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+unique_partitions(Partitions) ->
+    {UniquePartitions, _} =
+        lists:foldl(fun(Partition, {Unique, Seen}) ->
+                            case maps:is_key(Partition, Seen) of
+                                true ->
+                                    {Unique, Seen};
+                                false ->
+                                    {[Partition | Unique], Seen#{Partition => true}}
+                            end
+                    end, {[], #{}}, Partitions),
+    lists:reverse(UniquePartitions).
+
+delete_super_stream_partitions(VirtualHost, SuperStream, Partitions, Username) ->
+    {Deleted, Errors} =
+    lists:foldl(fun(Stream, {DeletedAcc, ErrorsAcc}) ->
+                        case delete(VirtualHost, Stream, Username) of
+                            {ok, deleted} ->
+                                {[Stream | DeletedAcc], ErrorsAcc};
+                            {error, Error} ->
+                                ?LOG_WARNING(
+                                  "Error while deleting partition ~tp of super stream ~tp, ~tp",
+                                  [Stream, SuperStream, Error]),
+                                {DeletedAcc, [{Stream, Error} | ErrorsAcc]}
+                        end
+                end, {[], []}, Partitions),
+    case Errors of
+        [] ->
             ok;
-        {error, Error} ->
-            ?LOG_WARNING("Error while deleting super stream exchange ~tp, "
-                         "~tp",
-                         [SuperStream, Error]),
-            ok
-    end,
-    [begin
-         case delete(VirtualHost, Stream, Username) of
-             {ok, deleted} ->
-                 ok;
-             {error, Err} ->
-                 ?LOG_WARNING("Error while delete partition ~tp of super stream "
-                              "~tp, ~tp",
-                              [Stream, SuperStream, Err]),
-                 ok
-         end
-     end
-     || Stream <- Partitions],
-    ok.
+        _ ->
+            {error, {partitions_not_deleted, lists:reverse(Deleted),
+                    lists:reverse(Errors)}}
+    end.
 
 -spec lookup_leader(binary(), binary()) ->
     {ok, pid()} | {error, not_available} |
