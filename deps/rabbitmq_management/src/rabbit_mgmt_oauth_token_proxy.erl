@@ -48,11 +48,21 @@ init(Req, #{op := token} = State) ->
 handle_metadata(Req0, State) ->
     Id = cowboy_req:binding(id, Req0),
     case resolve(Id) of
-        {ok, _Secret, MetadataURL, HttpOpts} ->
+        {ok, _Secret, MetadataURL, HttpOpts, DiscoveryOpts} ->
             case http_get(MetadataURL, HttpOpts) of
                 {ok, 200, _Headers, Body} ->
-                    Rewritten = rewrite_token_endpoint(Body, proxy_token_url(Req0, Id)),
-                    {ok, reply_json(200, Rewritten, Req0), State};
+                    Metadata = rabbit_json:decode(Body),
+                    case validate_metadata(Metadata, MetadataURL, DiscoveryOpts) of
+                        ok ->
+                            Rewritten = rewrite_token_endpoint(Metadata,
+                                proxy_token_url(Req0, Id)),
+                            {ok, reply_json(200, Rewritten, Req0), State};
+                        {error, Reason} ->
+                            ?LOG_ERROR("OAuth 2 token proxy rejected the "
+                                       "discovery document at ~ts: ~tp",
+                                       [MetadataURL, Reason]),
+                            {ok, cowboy_req:reply(502, Req0), State}
+                    end;
                 Other ->
                     ?LOG_ERROR("OAuth 2 token proxy could not fetch ~ts: ~tp",
                                [MetadataURL, Other]),
@@ -67,9 +77,9 @@ handle_token(Req0, State) ->
         <<"POST">> ->
             Id = cowboy_req:binding(id, Req0),
             case resolve(Id) of
-                {ok, Secret, MetadataURL, HttpOpts} ->
+                {ok, Secret, MetadataURL, HttpOpts, DiscoveryOpts} ->
                     forward_token_request(Req0, State, Secret, MetadataURL,
-                                          HttpOpts);
+                                          HttpOpts, DiscoveryOpts);
                 {error, _} ->
                     {ok, cowboy_req:reply(404, Req0), State}
             end;
@@ -77,8 +87,8 @@ handle_token(Req0, State) ->
             {ok, cowboy_req:reply(405, #{<<"allow">> => <<"POST">>}, Req0), State}
     end.
 
-forward_token_request(Req0, State, Secret, MetadataURL, HttpOpts) ->
-    case token_endpoint(MetadataURL, HttpOpts) of
+forward_token_request(Req0, State, Secret, MetadataURL, HttpOpts, DiscoveryOpts) ->
+    case token_endpoint(MetadataURL, HttpOpts, DiscoveryOpts) of
         {ok, TokenEndpoint} ->
             {ok, Params, Req1} = cowboy_req:read_urlencoded_body(Req0),
             Body = uri_string:compose_query(inject_client_secret(Params, Secret)),
@@ -107,10 +117,19 @@ inject_client_secret(Params, Secret) ->
         false -> Params ++ [{<<"client_secret">>, Secret}]
     end.
 
--spec rewrite_token_endpoint(binary(), binary()) -> binary().
-rewrite_token_endpoint(MetadataJson, ProxyTokenURL) ->
-    Map = rabbit_json:decode(MetadataJson),
-    rabbit_json:encode(maps:put(<<"token_endpoint">>, ProxyTokenURL, Map)).
+-spec validate_metadata(#{binary() => any()}, binary(), proplists:proplist()) ->
+    ok | {error, term()}.
+validate_metadata(Metadata, MetadataURL, DiscoveryOpts) ->
+    OpenIdConfig = oauth2_client:map_to_openid_configuration(Metadata),
+    case oauth2_client:validate_openid_configuration(OpenIdConfig, DiscoveryOpts,
+                                                     MetadataURL) of
+        {ok, _} -> ok;
+        {error, _} = Error -> Error
+    end.
+
+-spec rewrite_token_endpoint(#{binary() => any()}, binary()) -> binary().
+rewrite_token_endpoint(Metadata, ProxyTokenURL) ->
+    rabbit_json:encode(maps:put(<<"token_endpoint">>, ProxyTokenURL, Metadata)).
 
 %%--------------------------------------------------------------------
 %% helpers
@@ -148,9 +167,9 @@ build(Id, Secret, ProviderId) ->
             {error, no_provider_url};
         MetadataURL ->
             case tls_options(ProviderId) of
-                {ok, HttpOpts} ->
+                {ok, HttpOpts, DiscoveryOpts} ->
                     {ok, rabbit_data_coercion:to_binary(Secret), MetadataURL,
-                     HttpOpts};
+                     HttpOpts, DiscoveryOpts};
                 {error, _} = Error ->
                     Error
             end
@@ -186,7 +205,8 @@ well_known_url(ProviderURL) ->
                           trailing, "/"),
     <<Trimmed/binary, "/.well-known/openid-configuration">>.
 
-%% The OAuth 2 backend provider's TLS options, as an `httpc` `{ssl, _}` option.
+%% The OAuth 2 backend provider's TLS options, as an `httpc` `{ssl, _}` option,
+%% and its discovery document validation options.
 %% `get_oauth_provider/2` with no required attributes returns them without
 %% contacting the provider; they default to the system trust store.
 tls_options(ProviderId) ->
@@ -195,13 +215,15 @@ tls_options(ProviderId) ->
                  _ -> oauth2_client:get_oauth_provider(ProviderId, [])
              end,
     case Result of
-        {ok, #oauth_provider{ssl_options = undefined}} -> {ok, []};
-        {ok, #oauth_provider{ssl_options = SslOptions}} -> {ok, [{ssl, SslOptions}]};
+        {ok, #oauth_provider{ssl_options = undefined, discovery_options = DiscoveryOpts}} ->
+            {ok, [], DiscoveryOpts};
+        {ok, #oauth_provider{ssl_options = SslOptions, discovery_options = DiscoveryOpts}} ->
+            {ok, [{ssl, SslOptions}], DiscoveryOpts};
         {error, _} = Error -> Error
     end.
 
-token_endpoint(MetadataURL, HttpOpts) ->
-    case oauth2_client:get_openid_configuration(MetadataURL, HttpOpts) of
+token_endpoint(MetadataURL, HttpOpts, DiscoveryOpts) ->
+    case oauth2_client:get_openid_configuration(MetadataURL, HttpOpts, DiscoveryOpts) of
         {ok, #openid_configuration{token_endpoint = TokenEndpoint}} ->
             {ok, TokenEndpoint};
         {error, _} = Error ->

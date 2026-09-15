@@ -116,6 +116,31 @@
  "rabbitmq_auth_backend_oauth2.require_exp",
  [{datatype, boolean}]}.
 
+%% Require the jwks_uri, token_endpoint, authorization_endpoint and
+%% end_session_endpoint of a discovered OpenID configuration to use the https
+%% scheme. Set to false only when your identity provider's discovery document
+%% uses http, for example in a development or test environment.
+%%
+%% {verify_https_endpoints, true},
+
+{mapping,
+ "auth_oauth2.discovery.verify_https_endpoints",
+ "rabbitmq_auth_backend_oauth2.discovery.verify_https_endpoints",
+ [{datatype, boolean}]}.
+
+%% Verify that the issuer discovered in an OpenID configuration document is
+%% present, uses the https scheme, and matches the discovery endpoint used to
+%% retrieve it, per OpenID Connect Discovery 1.0, Section 4.3. Set to false
+%% only when your identity provider's issuer does not follow this
+%% convention.
+%%
+%% {verify_issuer, true},
+
+{mapping,
+ "auth_oauth2.discovery.verify_issuer",
+ "rabbitmq_auth_backend_oauth2.discovery.verify_issuer",
+ [{datatype, boolean}]}.
+
 %% How scope patterns match vhost names, resource names, and topic routing keys.
 %% wildcard uses RabbitMQ's legacy *-segment wildcard rules; regex treats each pattern
 %% as a Perl-compatible regular expression matched against the entire string.
@@ -379,6 +404,17 @@
  "auth_oauth2.oauth_providers.$name.algorithms.$algorithm",
  "rabbitmq_auth_backend_oauth2.oauth_providers",
  [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.discovery.verify_https_endpoints",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, boolean}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.discovery.verify_issuer",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, boolean}]}.
+
 
 {translation, "rabbitmq_auth_backend_oauth2.oauth_providers",
  fun(Conf) ->

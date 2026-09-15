@@ -24,7 +24,9 @@ all() ->
     build_openid_discovery_endpoint,
     {group, ssl_options},
     {group, merge},
-    {group, get_expiration_time}
+    {group, get_expiration_time},
+    {group, validate_openid_configuration},
+    {group, discovery_options}
 ].
 
 groups() ->
@@ -51,8 +53,37 @@ groups() ->
     {merge, [], [
         merge_openid_configuration,
         merge_oauth_provider
+    ]},
+    {validate_openid_configuration, [], [
+        valid_openid_configuration,
+        invalid_issuer_non_https,
+        invalid_issuer_undefined,
+        invalid_jwks_uri_non_https,
+        invalid_token_endpoint_non_https,
+        invalid_authorization_endpoint_non_https,
+        invalid_end_session_endpoint_non_https,
+        validate_openid_configuration_with_discovery_endpoint,
+        validate_openid_configuration_with_mismatched_discovery_endpoint,
+        verify_issuer_false_skips_issuer_validation,
+        verify_https_endpoints_false_skips_other_endpoints_validation,
+        issuer_mismatch,
+        issuer_match_with_trailing_slash_difference,
+        issuer_match_with_discovery_endpoint,
+        issuer_match_with_trailing_slash_in_discovered_issuer,
+        issuer_mismatch_with_sibling_realm
+    ]},
+    {discovery_options, [], [
+        discovery_options_of_root_provider_default_to_enabled,
+        discovery_options_of_root_provider_from_config,
+        discovery_options_of_named_provider_default_to_enabled,
+        discovery_options_of_named_provider_from_config
     ]}
 ].
+
+end_per_testcase(_, Config) ->
+    [application:unset_env(rabbitmq_auth_backend_oauth2, Key) ||
+        Key <- [issuer, discovery, oauth_providers]],
+    Config.
 
 build_openid_discovery_endpoint(_) ->
     Issuer = "https://issuer",
@@ -395,3 +426,170 @@ access_token_response_without_expiration_time(_) ->
     },
     ct:log("AccessTokenResponse ~p", [AccessTokenResponse]),
     ?assertEqual({error, missing_exp_field}, oauth2_client:get_expiration_time(AccessTokenResponse)).
+
+valid_openid_configuration(_) ->
+    ValidConfig = #openid_configuration{
+        issuer = "https://idp.example.com",
+        jwks_uri = "https://idp.example.com/keys",
+        token_endpoint = "https://idp.example.com/token",
+        authorization_endpoint = "https://idp.example.com/auth",
+        end_session_endpoint = "https://idp.example.com/logout"
+    },
+    ?assertEqual({ok, ValidConfig}, oauth2_client:validate_openid_configuration(ValidConfig, [], undefined)),
+    ?assertEqual(ok, oauth2_client:validate_issuer("https://idp.example.com", ValidConfig#openid_configuration.issuer)).
+
+invalid_issuer_non_https(_) ->
+    Config = #openid_configuration{
+        issuer = "http://idp.example.com",
+        jwks_uri = "https://idp.example.com/keys"
+    },
+    ?assertEqual({error, {invalid_issuer, "http://idp.example.com"}},
+        oauth2_client:validate_openid_configuration(Config, [], undefined)).
+
+invalid_issuer_undefined(_) ->
+    Config = #openid_configuration{
+        issuer = undefined,
+        jwks_uri = "https://idp.example.com/keys"
+    },
+    ?assertEqual({error, {invalid_issuer, undefined}},
+        oauth2_client:validate_openid_configuration(Config, [], undefined)).
+
+invalid_jwks_uri_non_https(_) ->
+    Config = #openid_configuration{
+        issuer = "https://idp.example.com",
+        jwks_uri = "http://idp.example.com/keys"
+    },
+    ?assertEqual({error, {invalid_jwks_uri, "http://idp.example.com/keys"}},
+        oauth2_client:validate_openid_configuration(Config, [], undefined)).
+
+invalid_token_endpoint_non_https(_) ->
+    Config = #openid_configuration{
+        issuer = "https://idp.example.com",
+        jwks_uri = "https://idp.example.com/keys",
+        token_endpoint = "http://idp.example.com/token"
+    },
+    ?assertEqual({error, {invalid_token_endpoint, "http://idp.example.com/token"}},
+        oauth2_client:validate_openid_configuration(Config, [], undefined)).
+
+invalid_authorization_endpoint_non_https(_) ->
+    Config = #openid_configuration{
+        issuer = "https://idp.example.com",
+        jwks_uri = "https://idp.example.com/keys",
+        authorization_endpoint = "http://idp.example.com/auth"
+    },
+    ?assertEqual({error, {invalid_authorization_endpoint, "http://idp.example.com/auth"}},
+        oauth2_client:validate_openid_configuration(Config, [], undefined)).
+
+invalid_end_session_endpoint_non_https(_) ->
+    Config = #openid_configuration{
+        issuer = "https://idp.example.com",
+        jwks_uri = "https://idp.example.com/keys",
+        end_session_endpoint = "http://idp.example.com/logout"
+    },
+    ?assertEqual({error, {invalid_end_session_endpoint, "http://idp.example.com/logout"}},
+        oauth2_client:validate_openid_configuration(Config, [], undefined)).
+
+validate_openid_configuration_with_discovery_endpoint(_) ->
+    Config = #openid_configuration{
+        issuer = "https://idp.example.com",
+        jwks_uri = "https://idp.example.com/keys"
+    },
+    DiscoveryEndpoint = "https://idp.example.com/.well-known/openid-configuration",
+    ?assertEqual({ok, Config},
+        oauth2_client:validate_openid_configuration(Config, [], DiscoveryEndpoint)).
+
+validate_openid_configuration_with_mismatched_discovery_endpoint(_) ->
+    Config = #openid_configuration{
+        issuer = "https://idp.example.com",
+        jwks_uri = "https://idp.example.com/keys"
+    },
+    DiscoveryEndpoint = "https://other.example.com/.well-known/openid-configuration",
+    ?assertEqual({error, {issuer_mismatch, DiscoveryEndpoint, "https://idp.example.com"}},
+        oauth2_client:validate_openid_configuration(Config, [], DiscoveryEndpoint)).
+
+verify_issuer_false_skips_issuer_validation(_) ->
+    %% An undefined issuer would otherwise fail both the presence/https check
+    %% and the discovery endpoint match check.
+    Config = #openid_configuration{
+        issuer = undefined,
+        jwks_uri = "https://idp.example.com/keys"
+    },
+    DiscoveryEndpoint = "https://idp.example.com/.well-known/openid-configuration",
+    ?assertEqual({ok, Config},
+        oauth2_client:validate_openid_configuration(Config,
+            [{verify_issuer, false}], DiscoveryEndpoint)).
+
+verify_https_endpoints_false_skips_other_endpoints_validation(_) ->
+    Config = #openid_configuration{
+        issuer = "https://idp.example.com",
+        jwks_uri = "http://idp.example.com/keys",
+        token_endpoint = "http://idp.example.com/token",
+        authorization_endpoint = "http://idp.example.com/auth",
+        end_session_endpoint = "http://idp.example.com/logout"
+    },
+    ?assertEqual({ok, Config},
+        oauth2_client:validate_openid_configuration(Config,
+            [{verify_https_endpoints, false}], undefined)).
+
+issuer_mismatch(_) ->
+    Discovered = "https://discovered.example.com",
+    Expected = "https://expected.example.com",
+    ?assertEqual({error, {issuer_mismatch, Expected, Discovered}},
+        oauth2_client:validate_issuer(Expected, Discovered)).
+
+issuer_match_with_trailing_slash_difference(_) ->
+    Expected = "https://idp.example.com/",
+    Discovered = "https://idp.example.com",
+    ?assertEqual(ok,
+        oauth2_client:validate_issuer(Expected, Discovered)).
+
+issuer_match_with_discovery_endpoint(_) ->
+    DiscoveryEndpoint = "https://idp.example.com/.well-known/openid-configuration",
+    Discovered = "https://idp.example.com",
+    ?assertEqual(ok,
+        oauth2_client:validate_issuer(DiscoveryEndpoint, Discovered)).
+
+issuer_match_with_trailing_slash_in_discovered_issuer(_) ->
+    DiscoveryEndpoint = "https://sts.windows.net/9188040d-6c67-4c5b-b112-36a304b66dad"
+        "/.well-known/openid-configuration",
+    Discovered = "https://sts.windows.net/9188040d-6c67-4c5b-b112-36a304b66dad/",
+    ?assertEqual(ok,
+        oauth2_client:validate_issuer(DiscoveryEndpoint, Discovered)).
+
+issuer_mismatch_with_sibling_realm(_) ->
+    DiscoveryEndpoint = "https://keycloak.example.com/realms/prod-eu"
+        "/.well-known/openid-configuration",
+    Discovered = "https://keycloak.example.com/realms/prod",
+    ?assertEqual({error, {issuer_mismatch, DiscoveryEndpoint, Discovered}},
+        oauth2_client:validate_issuer(DiscoveryEndpoint, Discovered)).
+
+discovery_options_of_root_provider_default_to_enabled(_) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, issuer,
+        "https://keycloak.example.com/realms/prod"),
+    {ok, OAuthProvider} = oauth2_client:get_oauth_provider([]),
+    ?assertEqual([{verify_https_endpoints, true}, {verify_issuer, true}],
+        OAuthProvider#oauth_provider.discovery_options).
+
+discovery_options_of_root_provider_from_config(_) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, issuer,
+        "https://uaa.example.com"),
+    application:set_env(rabbitmq_auth_backend_oauth2, discovery,
+        [{verify_issuer, false}]),
+    {ok, OAuthProvider} = oauth2_client:get_oauth_provider([]),
+    ?assertEqual([{verify_https_endpoints, true}, {verify_issuer, false}],
+        OAuthProvider#oauth_provider.discovery_options).
+
+discovery_options_of_named_provider_default_to_enabled(_) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
+        #{<<"keycloak">> => [{issuer, "https://keycloak.example.com/realms/prod"}]}),
+    {ok, OAuthProvider} = oauth2_client:get_oauth_provider(<<"keycloak">>, []),
+    ?assertEqual([{verify_https_endpoints, true}, {verify_issuer, true}],
+        OAuthProvider#oauth_provider.discovery_options).
+
+discovery_options_of_named_provider_from_config(_) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
+        #{<<"uaa">> => [{issuer, "https://uaa.example.com"},
+                        {discovery, [{verify_issuer, false}]}]}),
+    {ok, OAuthProvider} = oauth2_client:get_oauth_provider(<<"uaa">>, []),
+    ?assertEqual([{verify_https_endpoints, true}, {verify_issuer, false}],
+        OAuthProvider#oauth_provider.discovery_options).
