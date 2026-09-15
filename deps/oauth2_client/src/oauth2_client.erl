@@ -418,7 +418,28 @@ normalize_uri(undefined) -> undefined;
 normalize_uri(Uri) when is_binary(Uri) ->
     normalize_uri(binary_to_list(Uri));
 normalize_uri(Uri) when is_list(Uri) ->
-    string:trim(Uri, trailing, "/").
+    Trimmed = string:trim(Uri, trailing, "/"),
+    case uri_string:parse(Trimmed) of
+        #{scheme := _} = Map ->
+            case uri_string:recompose(normalize_uri_map(Map)) of
+                Recomposed when is_list(Recomposed) -> Recomposed;
+                _ -> Trimmed
+            end;
+        _ ->
+            Trimmed
+    end.
+
+normalize_uri_map(#{scheme := Scheme} = Map0) ->
+    Map1 = Map0#{scheme := string:lowercase(Scheme)},
+    Map2 = case Map1 of
+        #{host := Host} -> Map1#{host := string:lowercase(Host)};
+        _ -> Map1
+    end,
+    case Map2 of
+        #{scheme := "https", port := 443} -> maps:remove(port, Map2);
+        #{scheme := "http", port := 80} -> maps:remove(port, Map2);
+        _ -> Map2
+    end.
 
 ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
