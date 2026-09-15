@@ -34,11 +34,7 @@ describe('Once an OAuth2 user is logged in', function () {
     // interval.
     await homePage.driver.wait(async () => {
       await homePage.refresh()
-      try {
-        return await homePage.isLoginButtonVisible()
-      } catch (e) {
-        return false
-      }
+      return await homePage.isLoginButtonVisibleNow()
     }, 150000, 'Was not forced to log out after the login_session_timeout expired', 2000)
   })
 

@@ -1,3 +1,7 @@
+import { dispatcher_add, put_parameter, sync_delete, go_to, update, render, show_popup } from './main.js';
+import { NAVIGATION, HELP } from './global.js';
+import { _link_to, esc, fmt_string } from './formatters.js';
+
 dispatcher_add(function(sammy) {
     sammy.get('#/shovels', function() {
             render({'shovels': {path:    '/shovels',
@@ -103,7 +107,7 @@ dispatcher_add(function(sammy) {
             }
         });
     sammy.del("#/shovel-restart-link", function(){
-            if (sync_delete(this, '/shovels/vhost/:vhost/:name/restart')) {
+            if (sync_delete(this, '/shovels/vhost/:vhost/:id/:node/restart')) {
                 update();
             } else {
                 show_popup('warn', 'Shovel could not be restarted');
@@ -112,7 +116,6 @@ dispatcher_add(function(sammy) {
         });
 });
 
-
 NAVIGATION['Admin'][0]['Shovel Status'] = ['#/shovels', "monitoring"];
 NAVIGATION['Admin'][0]['Shovel Management'] = ['#/dynamic-shovels', "policymaker"];
 
@@ -120,7 +123,7 @@ HELP['shovel-uri'] =
     'Both source and destination can be either a local or remote broker. See the "URI examples" pane for examples of how to construct URIs. If connecting to a cluster, you can enter several URIs here separated by spaces.';
 
 HELP['shovel-amqp10-address'] =
-    'The AMQP 1.0 address representing the source or target node.'
+    'The AMQP 1.0 address representing the source or target node.';
 
 HELP['shovel-queue-exchange'] =
     'You can set both source and destination as either a queue or an exchange. If you choose "queue", it will be declared beforehand; if you choose "exchange" it will not, but an appropriate binding and queue will be created when the source is an exchange.';
@@ -200,6 +203,7 @@ function rekey_params(sammy, func) {
         }
     }
 }
+
 function link_shovel(vhost, name) {
     return _link_to(name, '#/dynamic-shovels/' + esc(vhost) + '/' + esc(name));
 }
@@ -247,8 +251,31 @@ function shovel_internal_owner(shovel) {
     return shovel.internal_owner;
 }
 
-
 function fallback_value(shovel, key1, key2) {
     var v = shovel.value[key1];
     return (v !== undefined ? v : shovel.value[key2]);
+}
+
+export {
+    remove_params_with,
+    rekey_params,
+    link_shovel,
+    fmt_shovel_endpoint,
+    is_internal_shovel,
+    shovel_has_internal_owner,
+    shovel_internal_owner,
+    fallback_value
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        remove_params_with,
+        rekey_params,
+        link_shovel,
+        fmt_shovel_endpoint,
+        is_internal_shovel,
+        shovel_has_internal_owner,
+        shovel_internal_owner,
+        fallback_value
+    });
 }

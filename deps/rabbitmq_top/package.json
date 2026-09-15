@@ -1,0 +1,11 @@
+{
+  "name": "rabbitmq_top",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=21"
+  },
+  "scripts": {
+    "test": "node --import ../rabbitmq_management/test/esm-loader.js --test"
+  }
+}

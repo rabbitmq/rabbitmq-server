@@ -1,3 +1,7 @@
+import { active_auth_provider } from './auth-providers.js';
+import { unwind_active_steps } from './bootstrap-steps.js';
+import { update_rate_options } from './charts.js';
+
 dispatcher_add(function(sammy) {
     function path(p, r, t) {
         sammy.get(p, function() {
@@ -132,7 +136,7 @@ dispatcher_add(function(sammy) {
             // we add extra requests that can be added by code plugged on the extension point
             for (var i = 0; i < QUEUE_EXTRA_CONTENT_REQUESTS.length; i++) {
                 var extra = QUEUE_EXTRA_CONTENT_REQUESTS[i](vhost, queue);
-                for (key in extra) {
+                for (var key in extra) {
                     if(extra.hasOwnProperty(key)){
                         requests[key] = extra[key];
                     }
@@ -230,10 +234,10 @@ dispatcher_add(function(sammy) {
            'user','#/users');
       });
       sammy.put('#/users-add', function() {
-            res = sync_put(this, '/users/:username');
+            var res = sync_put(this, '/users/:username');
             if (res) {
                 if (res.http_status === 204) {
-                    username = fmt_escape_html(res.req_params.username);
+                    var username = fmt_escape_html(res.req_params.username);
                     show_popup('warn', "Updated an existing user: '" + username + "'");
                 }
                 update();
@@ -370,14 +374,10 @@ dispatcher_add(function(sammy) {
                                                            options: {sort:true}},
                                    'used_deprecated_features': '/deprecated-features/used'}, 'deprecated-features');
     sammy.put('#/logout', function() {
-        // clear a local storage value used by earlier versions
-        clear_auth()
-        if (oauth.logged_in) {
-            oauth.logged_in = false;
-            oauth_initiateLogout();
-        }else {
-          go_to_home()
-        }
+        // Roll back whatever the login pipeline set up, in reverse order,
+        // then let the active mechanism do its own sign-out.
+        unwind_active_steps({user: user, settings: window.app_settings});
+        active_auth_provider().signOut();
     });
 
     sammy.put('#/rate-options', function() {

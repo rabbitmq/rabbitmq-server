@@ -1,3 +1,7 @@
+import { dispatcher_add, sync_get, go_to, render, sync_put, sync_delete, update, partial_update } from './main.js';
+import { NAVIGATION, HELP } from './global.js';
+import { _link_to, esc } from './formatters.js';
+
 dispatcher_add(function(sammy) {
     sammy.get('#/traces', function() {
             var nodes = JSON.parse(sync_get('/nodes'));
@@ -46,10 +50,12 @@ NAVIGATION['Admin'][0]['Tracing'] = ['#/traces', 'administrator'];
 HELP['tracing-max-payload'] =
     'Maximum size of payload to log, in bytes. Payloads larger than this limit will be truncated. Leave blank to prevent truncation. Set to 0 to prevent logging of payload altogether.';
 
-$(document).on('change', 'select#traces-node', function() {
-    var url='#/traces/' + $(this).val();
-    go_to(url);
-});
+if (typeof $ !== 'undefined') {
+    $(document).on('change', 'select#traces-node', function() {
+        var url='#/traces/' + $(this).val();
+        go_to(url);
+    });
+}
 
 function link_trace(node, name) {
     return _link_to(name, 'api/trace-files/node/' + esc(node) + '/' + esc(name));
@@ -57,4 +63,16 @@ function link_trace(node, name) {
 
 function link_trace_queue(trace) {
     return _link_to('(queue)',  '#/queues/' + esc(trace.vhost) + '/' + esc(trace.queue.name));
+}
+
+export {
+    link_trace,
+    link_trace_queue
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        link_trace,
+        link_trace_queue
+    });
 }

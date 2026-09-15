@@ -12,34 +12,32 @@
     <% } %>
   </div>
 <% if (!notAuthorized) { %>
-    <% if (strict_auth_mechanism != null && strict_auth_mechanism.type === "oauth2") { %>
-        <button id="login" data-oauth-action="login" data-resource-id="<%=fmt_string(strict_auth_mechanism.resource_id)%>">Click here to log in</button>
-    <% } else if ((typeof resource_servers == 'object' && resource_servers.length == 1) && oauth_disable_basic_auth) { %>
-        <button id="login" data-oauth-action="login" data-resource-id="<%=fmt_string(resource_servers[0].id)%>">Click here to log in</button>
-    <% } else if (typeof resource_servers == 'object' && resource_servers.length >= 1 && strict_auth_mechanism == null) { %>
-
+  <% var oauth2Options = auth_options_for_mechanism(auth, 'oauth2'); %>
+  <% var basicOptions = auth_options_for_mechanism(auth, 'basic'); %>
+  <% if (auth.mode == 'none') { %>
+    <p class="warning">There is no authentication mechanism available to log in with.</p>
+  <% } else if (auth.mode == 'single' && oauth2Options.length == 1) { %>
+    <button id="login" data-oauth-action="login" data-resource-id="<%=fmt_string(oauth2Options[0].id)%>">Click here to log in</button>
+  <% } else { %>
+    <% if (auth.mode == 'choice') { %>
     <b>Login with :</b>
     <p/>
-    <% const OAuth2Visible = (strict_auth_mechanism == null || strict_auth_mechanism.type === "oauth2") ||
-      (preferred_auth_mechanism == null || preferred_auth_mechanism === "oauth2"); %>
-    <% const OAuth2Invisible = (preferred_auth_mechanism != null && preferred_auth_mechanism.type !== "oauth2"); %>
-    <% const OAuth2Hidden = (strict_auth_mechanism != null && strict_auth_mechanism.type !== "oauth2"); %>
-    <% const preferredResourceId = preferred_auth_mechanism != null && preferred_auth_mechanism.type === "oauth2" ? preferred_auth_mechanism.resource_id : null; %>
+    <% } %>
     <!-- begin login with oauth2  -->
-    <% if (!OAuth2Hidden) { %>
-    <div class="section disable-pref <%= OAuth2Visible ? 'section-visible' : '' %>  <%= OAuth2Invisible ? 'section-invisible' : '' %> " id="login-with-oauth2">
+    <% if (oauth2Options.length > 0) { %>
+    <div class="section disable-pref <%= auth_section_is_expanded(auth, 'oauth2') ? 'section-visible' : 'section-invisible' %>" id="login-with-oauth2">
       <h2>OAuth 2.0</h2>
       <div class="hider">
         <div class="updatable">
-          <% if (resource_servers.length == 1 && declared_resource_servers_count == 1) { %>
-          <button id="login" data-oauth-action="login" data-resource-id="<%=fmt_string(resource_servers[0].id)%>">Click here to log in</button>
+          <% if (oauth2Options.length == 1) { %>
+          <button id="login" data-oauth-action="login" data-resource-id="<%=fmt_string(oauth2Options[0].id)%>">Click here to log in</button>
           <% } else { %>
           <form id="oauth2-resource-form">
             <label for="oauth2-resource">Resource: </label>
             <select id="oauth2-resource">
-              <% for (var i = 0; i < resource_servers.length; i++) { %>
-               <option value="<%= fmt_string(resource_servers[i].id) %>" <%= (preferredResourceId === resource_servers[i].id) ? 'selected="selected"' : '' %>>
-                 <%= fmt_string(resource_servers[i].label != null ? resource_servers[i].label : resource_servers[i].id) %>
+              <% for (var i = 0; i < oauth2Options.length; i++) { %>
+               <option value="<%= fmt_string(oauth2Options[i].id) %>" <%= (auth.preselected === oauth2Options[i].id) ? 'selected="selected"' : '' %>>
+                 <%= fmt_string(oauth2Options[i].label) %>
                </option>
               <% } %>
             </select>
@@ -50,41 +48,37 @@
         </div>
       </div>
     </div>
-    <% } %>    
+    <% } %>
     <!-- end login with oauth2  -->
-<% } %>
 
-  <!-- begin login with basic auth   -->  
-  <% const basicAuthVisible = (strict_auth_mechanism != null && strict_auth_mechanism.type === "basic") ||
-    (preferred_auth_mechanism != null && preferred_auth_mechanism.type === "basic"); %>
-  <% const basicAuthInvisible = (strict_auth_mechanism == null && preferred_auth_mechanism == null || (preferred_auth_mechanism != null && preferred_auth_mechanism.type !== "basic"));%>
-  <% const basicAuthHidden = (strict_auth_mechanism != null && strict_auth_mechanism.type !== "basic"); %>
-  <% if (!oauth_disable_basic_auth && !basicAuthHidden) { %>
-  <div class="section disable-pref <%= basicAuthInvisible ? 'section-invisible' : ''%>  <%= basicAuthVisible ? 'section-visible' : ''%> " id="login-with-basic-auth">
-    <h2>Basic Authentication</h2>
-    <div class="hider">
-      <div class="updatable">
-        <form action="#/login"  id="basic-auth-form" method="put">
-        <table class="form">
-          <tr>
-            <th><label>Username:</label></th>
-            <td><input type="text" id="username" name="username" autocomplete="username"/><span class="mand">*</span></td>
-          </tr>
-          <tr>
-            <th><label>Password:</label></th>
-            <td><input type="password" id="password" name="password" autocomplete="current-password"/><span class="mand">*</span></td>
-          </tr>
-          <tr>
-            <th>&nbsp;</th>
-            <td><input type="submit" value="Login"/></td>
-          </tr>
-        </table>
-        </form>
+    <!-- begin login with basic auth   -->
+    <% if (basicOptions.length > 0) { %>
+    <div class="section disable-pref <%= auth_section_is_expanded(auth, 'basic') ? 'section-visible' : 'section-invisible' %>" id="login-with-basic-auth">
+      <h2>Basic Authentication</h2>
+      <div class="hider">
+        <div class="updatable">
+          <form action="#/login"  id="basic-auth-form" method="put">
+          <table class="form">
+            <tr>
+              <th><label>Username:</label></th>
+              <td><input type="text" id="username" name="username" autocomplete="username"/><span class="mand">*</span></td>
+            </tr>
+            <tr>
+              <th><label>Password:</label></th>
+              <td><input type="password" id="password" name="password" autocomplete="current-password"/><span class="mand">*</span></td>
+            </tr>
+            <tr>
+              <th>&nbsp;</th>
+              <td><input type="submit" value="Login"/></td>
+            </tr>
+          </table>
+          </form>
+        </div>
       </div>
     </div>
-  </div>
+    <% } %>
+    <!-- end login with basic auth  -->
   <% } %>
-  <!-- end login with basic auth  -->
 <% } %>
 
 </div> <!-- login -->

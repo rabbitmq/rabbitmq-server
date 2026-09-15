@@ -6,6 +6,7 @@ const SELECTED_LIMITS_ON_RHM = By.css('div#rhs ul li a[href="#/limits"]')
 
 const VIRTUAL_HOST_LIMITS_SECTION = By.css('div#main div#virtual-host-limits')
 const USER_LIMITS_SECTION = By.css('div#main div#user-limits')
+const SET_USER_LIMITS_FORM = By.css('div#main div#set-user-limits')
 
 const VIRTUAL_HOST_LIMITS_TABLE_ROWS = By.css('div#main div#virtual-host-limits table.list tbody tr')
 const USER_LIMITS_TABLE_ROWS = By.css('div#main div#user-limits table.list tbody tr')
@@ -28,10 +29,18 @@ module.exports = class LimitsAdminTab extends AdminTab {
     await this.click(USER_LIMITS_SECTION)
     try
     {
-      return this.driver.findElements(VIRTUAL_HOST_LIMITS_TABLE_ROWS)      
+      return this.driver.findElements(USER_LIMITS_TABLE_ROWS)
     } catch (NoSuchElement) {
       return Promise.resolve([])
     }
+  }
+
+  // The "Set / update a user limit" form is administrator-only (see
+  // limits.ejs), so its absence is how a restricted user's lack of
+  // permission actually shows up - the page renders normally rather than
+  // an API call rejecting.
+  async isSetUserLimitsFormNotDisplayed() {
+    return this.isElementNotVisible(SET_USER_LIMITS_FORM)
   }
 
 }
