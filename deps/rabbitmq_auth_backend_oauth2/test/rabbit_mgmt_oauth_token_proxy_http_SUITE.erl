@@ -33,7 +33,9 @@ groups() ->
         token_endpoint_rejects_get,
         unusable_forwarded_values_fall_back_to_the_connection,
         malformed_query_string_does_not_fail_the_request,
-        bootstrap_does_not_disclose_secret
+        bootstrap_does_not_disclose_secret,
+        rejects_metadata_with_a_non_https_endpoint,
+        rejects_metadata_from_a_resource_with_a_foreign_issuer
      ]},
      {per_resource, [], Core ++ [
         resource_without_secret_returns_404
@@ -76,6 +78,13 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(_, Config) -> Config.
+
+end_per_testcase(TestCase, Config) when
+        TestCase =:= rejects_metadata_with_a_non_https_endpoint;
+        TestCase =:= rejects_metadata_from_a_resource_with_a_foreign_issuer ->
+    set_env(Config, rabbitmq_management, oauth_provider_url,
+        mock_base(?config(mock_port, Config))),
+    Config;
 end_per_testcase(_, Config) -> Config.
 
 %% The mock runs in the CT node; the broker reaches it over localhost. It uses
@@ -91,6 +100,15 @@ start_mock_provider(CertsDir) ->
     Dispatch = cowboy_router:compile([{'_', [
         {"/.well-known/openid-configuration", oauth2_mock_http_handler,
             #{kind => discovery, issuer => Issuer,
+              token_endpoint => <<Issuer/binary, "/token">>}},
+        {"/non-https-endpoint/.well-known/openid-configuration",
+            oauth2_mock_http_handler,
+            #{kind => discovery, issuer => <<Issuer/binary, "/non-https-endpoint">>,
+              authorization_endpoint => <<"http://attacker.example/authorize">>,
+              token_endpoint => <<Issuer/binary, "/token">>}},
+        {"/a-resource/.well-known/openid-configuration",
+            oauth2_mock_http_handler,
+            #{kind => discovery, issuer => <<"https://attacker.example">>,
               token_endpoint => <<Issuer/binary, "/token">>}},
         {"/token", oauth2_mock_http_handler, #{kind => token}}
     ]}]),
@@ -235,12 +253,24 @@ bootstrap_does_not_disclose_secret(Config) ->
     ?assertEqual(nomatch, binary:match(Body, ?SECRET)),
     ?assertNotEqual(nomatch, binary:match(Body, <<"use_token_endpoint_proxy">>)).
 
+rejects_metadata_with_a_non_https_endpoint(Config) ->
+    {502, _} = metadata_from_provider_path(Config, "/non-https-endpoint").
+
+rejects_metadata_from_a_resource_with_a_foreign_issuer(Config) ->
+    {502, _} = metadata_from_provider_path(Config, "/a-resource").
+
 resource_without_secret_returns_404(Config) ->
     {404, _} = get_raw(Config, metadata_path(<<"rabbit_public">>)).
 
 %%
 %% Helpers
 %%
+
+metadata_from_provider_path(Config, Path) ->
+    Base = mock_base(?config(mock_port, Config)),
+    set_env(Config, rabbitmq_management, oauth_provider_url,
+        iolist_to_binary([Base, Path])),
+    get_raw(Config, metadata_path(?config(resource, Config))).
 
 token_path(Id) ->
     "/js/oidc-oauth/token-endpoint/" ++ binary_to_list(Id).

@@ -11,6 +11,7 @@
         get_openid_configuration/3,
         validate_openid_configuration/3,
         validate_issuer/2,
+        map_to_openid_configuration/1,
         build_openid_discovery_endpoint/3,
         merge_openid_configuration/2,
         merge_oauth_provider/2,
@@ -189,6 +190,7 @@ map_response_to_openid_configuration(Code, Reason, Headers, Body) ->
             end
     end.
 
+-spec map_to_openid_configuration(#{binary() => any()}) -> openid_configuration().
 map_to_openid_configuration(Map) ->
     #openid_configuration{
         issuer = maps:get(?RESPONSE_ISSUER, Map, undefined),

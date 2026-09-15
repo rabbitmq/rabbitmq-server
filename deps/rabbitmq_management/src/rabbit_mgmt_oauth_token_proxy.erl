@@ -48,11 +48,20 @@ init(Req, #{op := token} = State) ->
 handle_metadata(Req0, State) ->
     Id = cowboy_req:binding(id, Req0),
     case resolve(Id) of
-        {ok, _Secret, MetadataURL, HttpOpts, _DiscoveryOpts} ->
+        {ok, _Secret, MetadataURL, HttpOpts, DiscoveryOpts} ->
             case http_get(MetadataURL, HttpOpts) of
                 {ok, 200, _Headers, Body} ->
-                    Rewritten = rewrite_token_endpoint(Body, proxy_token_url(Req0, Id)),
-                    {ok, reply_json(200, Rewritten, Req0), State};
+                    case validate_metadata(Body, MetadataURL, DiscoveryOpts) of
+                        ok ->
+                            Rewritten = rewrite_token_endpoint(Body,
+                                proxy_token_url(Req0, Id)),
+                            {ok, reply_json(200, Rewritten, Req0), State};
+                        {error, Reason} ->
+                            ?LOG_ERROR("OAuth 2 token proxy rejected the "
+                                       "discovery document at ~ts: ~tp",
+                                       [MetadataURL, Reason]),
+                            {ok, cowboy_req:reply(502, Req0), State}
+                    end;
                 Other ->
                     ?LOG_ERROR("OAuth 2 token proxy could not fetch ~ts: ~tp",
                                [MetadataURL, Other]),
@@ -105,6 +114,17 @@ inject_client_secret(Params, Secret) ->
     case lists:keymember(<<"client_secret">>, 1, Params) of
         true -> Params;
         false -> Params ++ [{<<"client_secret">>, Secret}]
+    end.
+
+-spec validate_metadata(binary(), binary(), proplists:proplist()) ->
+    ok | {error, term()}.
+validate_metadata(MetadataJson, MetadataURL, DiscoveryOpts) ->
+    OpenIdConfig = oauth2_client:map_to_openid_configuration(
+                     rabbit_json:decode(MetadataJson)),
+    case oauth2_client:validate_openid_configuration(OpenIdConfig, DiscoveryOpts,
+                                                     MetadataURL) of
+        {ok, _} -> ok;
+        {error, _} = Error -> Error
     end.
 
 -spec rewrite_token_endpoint(binary(), binary()) -> binary().
