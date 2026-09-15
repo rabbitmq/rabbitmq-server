@@ -302,14 +302,8 @@ accept_multipart(ReqData0, Context) ->
                                                  ExtraFields,
                                                  ReqData, Context);
                 true ->
-                    Redirect = get_part(<<"redirect">>, Parts),
                     Payload = get_part(<<"file">>, Parts),
-                    Resp = {Res, _, _} = accept(Payload, ReqData, Context),
-                    case {Res, Redirect} of
-                        {true, unknown} -> {true, ReqData, Context};
-                        {true, _}       -> {{true, Redirect}, ReqData, Context};
-                        _               -> Resp
-                    end
+                    accept(Payload, ReqData, Context)
             end
     end.
 
