@@ -51,6 +51,23 @@
 -define(DEFAULT_PRIORITY, 4).
 -define(MAX_PRIORITY, 31).
 -define(DEFAULT_CONSUMER_TIMEOUT_MS, 1_800_000).
+%% Maximum number of distinct annotation keys accepted into a message
+%% header's `anns' from client-supplied `modified' disposition annotations.
+%% Anns are merged into the replicated Ra machine state, so an unbounded
+%% number of keys would let a consumer grow that state without limit.
+-define(MAX_MSG_ANNS_SIZE, 32).
+%% The deferral token is exempt from ?MAX_MSG_ANNS_SIZE: should_delay/5
+%% records it in #delayed.deferred from the raw, client-supplied Anns
+%% regardless of the cap, and that entry can only be cleaned up by reading
+%% the same token back from the stored header via get_deferral_token/1. If
+%% the cap dropped the token, the #delayed.deferred entry it created would
+%% never be found and removed, leaking without bound.
+-define(DEFERRAL_TOKEN_ANN_KEY, <<"x-opt-deferral-token">>).
+%% x-opt-delivery-time is the standard AMQP 1.0 annotation used alongside
+%% the deferral token in the `modified' outcome, so it is also exempt from
+%% the cap to keep being echoed back to the consumer on redelivery.
+-define(DELIVERY_TIME_ANN_KEY, <<"x-opt-delivery-time">>).
+-define(RESERVED_ANN_KEYS, [?DEFERRAL_TOKEN_ANN_KEY, ?DELIVERY_TIME_ANN_KEY]).
 
 -export([
          %% ra_machine callbacks
@@ -2570,14 +2587,14 @@ get_delivery_time(Ts, Msg) ->
 
 should_delay(DeliveryFailed, DelayedRetry, Ts, Header, Anns) ->
     case Anns of
-        #{<<"x-opt-delivery-time">> := DeliveryTime}
+        #{?DELIVERY_TIME_ANN_KEY := DeliveryTime}
           when is_integer(DeliveryTime),
                DeliveryTime > Ts ->
             %% Deferral tokens are only honoured when the client explicitly
             %% sets a delivery time; the delayed-retry path never creates a
             %% deferred entry so that tokens remain a purely client-driven
             %% mechanism.
-            DeferralToken = maps:get(<<"x-opt-deferral-token">>, Anns, undefined),
+            DeferralToken = maps:get(?DEFERRAL_TOKEN_ANN_KEY, Anns, undefined),
             {true, DeliveryTime, DeferralToken};
         _ ->
             case should_delay0(DeliveryFailed, DelayedRetry, Ts, Header) of
@@ -2848,7 +2865,7 @@ take_delayed_for_retry(N, Ts, #delayed{tree = Tree0,
 get_deferral_token(Msg) ->
     case get_header(anns, get_msg_header(Msg)) of
         undefined -> undefined;
-        Anns -> maps:get(<<"x-opt-deferral-token">>, Anns, undefined)
+        Anns -> maps:get(?DEFERRAL_TOKEN_ANN_KEY, Anns, undefined)
     end.
 
 %% Drop a single tree key from its token's key list, dropping the token
@@ -4279,10 +4296,10 @@ incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
     Msg1 = update_msg_header(acquired_count, fun incr/1, 1, Msg0),
     Msg2 = case map_size(Anns) > 0 of
                true ->
-                   update_msg_header(anns, fun(A) ->
-                                                   maps:merge(A, Anns)
-                                           end, Anns,
-                                     Msg1);
+                   update_msg_header(anns,
+                                      fun(A) -> merge_msg_anns(A, Anns) end,
+                                      merge_msg_anns(#{}, Anns),
+                                      Msg1);
                false ->
                    Msg1
            end,
@@ -4292,6 +4309,32 @@ incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
         false ->
             Msg2
     end.
+
+%% Merges client-supplied annotations into the existing `anns' map, capping
+%% the result at ?MAX_MSG_ANNS_SIZE distinct keys. Existing keys can still
+%% be updated once the cap is reached, but new keys beyond the cap are
+%% dropped. ?RESERVED_ANN_KEYS are exempt from the cap: see their comments.
+%% Which of New's keys are kept once the cap is hit is itself part of the
+%% resulting state, so New is traversed in a defined order: unlike plain
+%% maps:fold/3, iteration order is unspecified and can differ between
+%% replicas, which would otherwise let them diverge on the same command.
+%% When both maps together can never exceed the cap, no key can possibly
+%% be dropped, so maps:merge/2 is equivalent and avoids the fold.
+merge_msg_anns(Existing, New)
+  when map_size(Existing) + map_size(New) =< ?MAX_MSG_ANNS_SIZE ->
+    maps:merge(Existing, New);
+merge_msg_anns(Existing, New) ->
+    maps:fold(
+      fun(Key, Value, Acc) ->
+              case lists:member(Key, ?RESERVED_ANN_KEYS) orelse
+                   maps:is_key(Key, Acc) orelse
+                   map_size(Acc) < ?MAX_MSG_ANNS_SIZE of
+                  true ->
+                      maps:put(Key, Value, Acc);
+                  false ->
+                      Acc
+              end
+      end, Existing, maps:iterator(New, ordered)).
 
 exec_read(Flru0, ReadPlan, Msgs) ->
     try ra_log_read_plan:execute(ReadPlan, Flru0) of
