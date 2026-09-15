@@ -975,8 +975,10 @@ update_in_khepri_tx(Name, Fun) ->
     case khepri_tx:get(Path) of
         {ok, Q} ->
             Q1 = Fun(Q),
-            ok = khepri_tx:put(Path, Q1),
-            Q1;
+            case khepri_tx:put(Path, Q1) of
+                ok -> Q1;
+                {error, Reason} -> khepri_tx:abort(Reason)
+            end;
         _  ->
             not_found
     end.
