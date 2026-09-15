@@ -10,7 +10,7 @@
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0,
          unregister/0, post_registration/0, lock/1, unlock/1, node/0,
-         retry_strategy/0]).
+         retry_strategy/0, reports_all_nodes/0]).
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
@@ -80,6 +80,9 @@ post_registration() -> ok.
 lock(_) -> not_supported.
 unlock(_) -> ok.
 retry_strategy() -> unlimited.
+
+%% list_nodes/0 always returns the seed node, not the cluster's actual membership.
+reports_all_nodes() -> false.
 
 configuration_options() ->
     [ordinal_start, seed_node].

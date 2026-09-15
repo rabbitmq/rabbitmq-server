@@ -12,13 +12,18 @@
 -behaviour(rabbit_peer_discovery_backend).
 
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1]).
+         post_registration/0, lock/1, unlock/1, reports_all_nodes/0]).
 %% for tests
 -export([discover_nodes/2, discover_hostnames/2]).
 
 %%
 %% API
 %%
+
+-spec reports_all_nodes() -> boolean().
+
+reports_all_nodes() ->
+    true.
 
 -spec list_nodes() ->
     {ok, {Nodes :: [node()], rabbit_types:node_type()}}.

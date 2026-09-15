@@ -15,7 +15,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1]).
+         post_registration/0, lock/1, unlock/1, reports_all_nodes/0]).
 
 -define(ETCD_CLIENT, rabbitmq_peer_discovery_etcd_v3_client).
 
@@ -70,6 +70,11 @@ list_nodes() ->
            end,
     rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, Fun0, Fun1, Fun2).
 
+
+-spec reports_all_nodes() -> boolean().
+
+reports_all_nodes() ->
+    false.
 
 -spec supports_registration() -> boolean().
 
