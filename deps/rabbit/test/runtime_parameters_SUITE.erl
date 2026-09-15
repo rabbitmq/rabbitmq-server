@@ -13,7 +13,8 @@
 
 all() ->
     [
-        test_limits
+        test_limits,
+        boots_with_legacy_atom_keyed_internal_cluster_id
     ].
 
 %% -------------------------------------------------------------------
@@ -59,3 +60,17 @@ test_limits1(_Config) ->
     ok = rabbit_runtime_parameters:set_any(<<"/">>, <<"test">>, <<"good">>, <<"">>, none),
     E  = rabbit_runtime_parameters:set_any(<<"/">>, <<"test">>, <<"good">>, <<"">>, none),
     dummy_runtime_parameters:unregister().
+
+%% The key used to be an atom; make sure we can handle that
+boots_with_legacy_atom_keyed_internal_cluster_id(Config) ->
+    LegacyId = <<"legacy-cluster-id-DMmlVMdAbItqeyl8_8bdMw">>,
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE, seed_legacy_internal_cluster_id, [LegacyId]),
+    ok = rabbit_ct_broker_helpers:restart_broker(Config, 0),
+    LegacyId = rabbit_ct_broker_helpers:rpc(
+                 Config, 0, rabbit_nodes, persistent_cluster_id, []).
+
+seed_legacy_internal_cluster_id(Value) ->
+    ok = rabbit_db_rtparams:delete(<<"internal_cluster_id">>),
+    _ = rabbit_db_rtparams:set(internal_cluster_id, Value),
+    ok.

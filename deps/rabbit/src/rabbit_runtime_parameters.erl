@@ -31,7 +31,8 @@
 %% Parameters are stored in the database and can be global. Their changes
 %% are broadcasted over rabbit_event.
 %%
-%% Global parameters keys are atoms and values are JSON documents.
+%% Global parameters keys are binaries and values are JSON documents.
+%% NOTE: older nodes stored the keys as atoms, so we handle atoms as well.
 %%
 %% See also:
 %%
@@ -63,7 +64,7 @@
 
 -define(TABLE, rabbit_runtime_parameters).
 -define(INTERNAL_RUNTIME_PARAMETER_NAMES, [
-    imported_definition_hash_value
+    <<"imported_definition_hash_value">>
 ]).
 
 %%---------------------------------------------------------------------------
@@ -101,16 +102,26 @@ parse_set_global(Name, String, ActingUser) ->
             {error_string, rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
--spec set_global(atom(), term(), rabbit_types:username()) -> 'ok'.
+-spec set_global(binary(), term(), rabbit_types:username()) -> 'ok'.
 
 set_global(Name, Term, ActingUser)  ->
-    NameAsAtom = rabbit_data_coercion:to_atom(Name),
-    ?LOG_DEBUG("Setting global parameter '~ts' to ~tp", [NameAsAtom, Term]),
-    _ = rabbit_db_rtparams:set(NameAsAtom, Term),
-    event_notify(parameter_set, none, global, [{name,  NameAsAtom},
+    NameAsBinary = rabbit_data_coercion:to_binary(Name),
+    ?LOG_DEBUG("Setting global parameter '~ts' to ~tp", [NameAsBinary, Term]),
+    ok = migrate_legacy_atom_keyed(NameAsBinary),
+    _ = rabbit_db_rtparams:set(NameAsBinary, Term),
+    event_notify(parameter_set, none, global, [{name,  NameAsBinary},
                                                {value, Term},
                                                {user_who_performed_action, ActingUser}]),
     ok.
+
+%% Removes a legacy atom-keyed record left by an old node.
+migrate_legacy_atom_keyed(NameAsBinary) ->
+    case rabbit_db_rtparams:get(NameAsBinary) of
+        #runtime_parameters{key = Key} when is_atom(Key) ->
+            rabbit_db_rtparams:delete(Key);
+        _ ->
+            ok
+    end.
 
 format_error(L) ->
     {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
@@ -197,14 +208,14 @@ clear(VHost, Component, Name, ActingUser) ->
     clear_any(VHost, Component, Name, ActingUser).
 
 clear_global(Key, ActingUser) ->
-    KeyAsAtom = rabbit_data_coercion:to_atom(Key),
-    case value_global(KeyAsAtom) of
-        not_found ->
+    KeyAsBinary = rabbit_data_coercion:to_binary(Key),
+    case rabbit_db_rtparams:get(KeyAsBinary) of
+        undefined ->
             {error_string, "Parameter does not exist"};
-        _         ->
-            ok = rabbit_db_rtparams:delete(KeyAsAtom),
+        #runtime_parameters{key = StoredKey} ->
+            ok = rabbit_db_rtparams:delete(StoredKey),
             event_notify(parameter_cleared, none, global,
-                         [{name,  KeyAsAtom},
+                         [{name,  KeyAsBinary},
                           {user_who_performed_action, ActingUser}])
     end.
 
@@ -287,11 +298,11 @@ list(VHost, Component) ->
              Comp =/= <<"policy">> orelse Component =:= <<"policy">>].
 
 list_global() ->
-    %% list only atom keys
+    %% Global runtime parameters are keyed by name only;
+    %% vhost-scoped ones are always {VHost, Component, Name} tuples.
     All = [p(P) || P <- rabbit_db_rtparams:get_all(),
-                   is_atom(P#runtime_parameters.key)],
-    %% filter out global parameters that are not meant to be exposed
-    %% publicly
+                   not is_tuple(P#runtime_parameters.key)],
+    %% filter out global parameters that are not meant to be exposed publicly
     lists:filter(fun(PL) ->
                     Name = proplists:get_value(name, PL),
                     not lists:member(Name, ?INTERNAL_RUNTIME_PARAMETER_NAMES)
@@ -348,7 +359,7 @@ lookup_global(Name)  ->
 
 value(VHost, Comp, Name) -> value0({VHost, Comp, Name}).
 
--spec value_global(atom()) -> term() | 'not_found'.
+-spec value_global(binary()) -> term() | 'not_found'.
 
 value_global(Key) ->
     value0(Key).
@@ -371,8 +382,10 @@ p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->
      {name,      Name},
      {value,     Value}];
 
-p(#runtime_parameters{key = Key, value = Value}) when is_atom(Key) ->
-    [{name,      Key},
+p(#runtime_parameters{key = Key, value = Value}) when not is_tuple(Key) ->
+    %% `Key' may still be a legacy atom for a global parameter set by an
+    %% old node - normalize it here.
+    [{name,      rabbit_data_coercion:to_binary(Key)},
      {value,     Value}].
 
 -spec info_keys() -> rabbit_types:info_keys().

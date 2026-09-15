@@ -28,9 +28,14 @@ groups() ->
          get_does_not_create_atom,
          delete_nonexistent_returns_not_found,
          delete_does_not_create_atom,
+         put_does_not_create_atom,
          crud_lifecycle,
          plugin_style_name_works,
-         get_does_not_create_atoms_prop
+         get_does_not_create_atoms_prop,
+         put_does_not_create_atoms_prop,
+         legacy_atom_keyed_parameter_is_readable,
+         legacy_atom_keyed_parameter_set_migrates_to_binary_key,
+         legacy_atom_keyed_parameter_delete_removes_the_atom_keyed_record
      ]}
     ].
 
@@ -94,6 +99,16 @@ delete_does_not_create_atom(Config) ->
     http_delete(Config, "/global-parameters/" ++ binary_to_list(Name), ?NOT_FOUND),
     false = atom_exists_on_broker(Config, Name).
 
+put_does_not_create_atom(Config) ->
+    Name = <<"zzz_no_atom_put_test">>,
+    false = atom_exists_on_broker(Config, Name),
+    http_put(Config,
+             "/global-parameters/" ++ binary_to_list(Name),
+             [{value, <<"x">>}],
+             {group, '2xx'}),
+    false = atom_exists_on_broker(Config, Name),
+    http_delete(Config, "/global-parameters/" ++ binary_to_list(Name), {group, '2xx'}).
+
 crud_lifecycle(Config) ->
     http_put(Config,
              "/global-parameters/test_crud_param",
@@ -136,9 +151,90 @@ prop_get_does_not_create_atom(Config) ->
             end
         end).
 
+put_does_not_create_atoms_prop(Config) ->
+    Fun = fun() -> prop_put_does_not_create_atom(Config) end,
+    rabbit_ct_proper_helpers:run_proper(Fun, [], 50).
+
+prop_put_does_not_create_atom(Config) ->
+    ?FORALL(
+        N, pos_integer(),
+        begin
+            Name = iolist_to_binary(["zzz_no_atom_put_prop_", integer_to_list(N)]),
+            case atom_exists_on_broker(Config, Name) of
+                true ->
+                    true;
+                false ->
+                    Path = "/global-parameters/" ++ binary_to_list(Name),
+                    http_put(Config, Path, [{value, <<"x">>}], {group, '2xx'}),
+                    Result = not atom_exists_on_broker(Config, Name),
+                    http_delete(Config, Path, {group, '2xx'}),
+                    Result
+            end
+        end).
+
+%% -------------------------------------------------------------------
+%% Upgrade compatibility: older nodes stored global runtime
+%% parameter names as atoms.
+%% -------------------------------------------------------------------
+
+legacy_atom_keyed_parameter_is_readable(Config) ->
+    Name = <<"zzz_legacy_atom_get_test">>,
+    AtomKey = seed_legacy_atom_keyed_parameter(Config, Name, <<"legacy-value">>),
+    Path = "/global-parameters/" ++ binary_to_list(Name),
+
+    #{name := Name, value := <<"legacy-value">>} = http_get(Config, Path, ?OK),
+
+    %% list_global() must not show the same logical parameter twice
+    %% while only the legacy atom-keyed record exists.
+    1 = count_occurrences(Name, http_get(Config, "/global-parameters", ?OK)),
+
+    http_delete(Config, Path, {group, '2xx'}),
+    undefined = get_on_broker(Config, AtomKey).
+
+legacy_atom_keyed_parameter_set_migrates_to_binary_key(Config) ->
+    Name = <<"zzz_legacy_atom_set_test">>,
+    AtomKey = seed_legacy_atom_keyed_parameter(Config, Name, <<"legacy-value">>),
+    Path = "/global-parameters/" ++ binary_to_list(Name),
+
+    %% Writing a new value must not leave the old atom-keyed record
+    %% behind as a stale duplicate alongside the new binary-keyed one.
+    http_put(Config, Path, [{value, <<"new-value">>}], {group, '2xx'}),
+
+    #{name := Name, value := <<"new-value">>} = http_get(Config, Path, ?OK),
+    1 = count_occurrences(Name, http_get(Config, "/global-parameters", ?OK)),
+    undefined = get_on_broker(Config, AtomKey),
+
+    http_delete(Config, Path, {group, '2xx'}),
+    http_get(Config, Path, ?NOT_FOUND).
+
+legacy_atom_keyed_parameter_delete_removes_the_atom_keyed_record(Config) ->
+    Name = <<"zzz_legacy_atom_delete_test">>,
+    AtomKey = seed_legacy_atom_keyed_parameter(Config, Name, <<"legacy-value">>),
+    Path = "/global-parameters/" ++ binary_to_list(Name),
+
+    %% DELETE looks the record up by binary name but must remove it
+    %% under whatever key it is actually stored under, not silently
+    %% no-op because that key happens to be the legacy atom.
+    http_delete(Config, Path, {group, '2xx'}),
+
+    http_get(Config, Path, ?NOT_FOUND),
+    undefined = get_on_broker(Config, AtomKey).
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
+
+seed_legacy_atom_keyed_parameter(Config, Name, Value) ->
+    AtomKey = binary_to_atom(Name, utf8),
+    new = rabbit_ct_broker_helpers:rpc(
+            Config, 0, rabbit_db_rtparams, set, [AtomKey, Value]),
+    AtomKey.
+
+get_on_broker(Config, Key) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_rtparams, get, [Key]).
+
+count_occurrences(Name, Params) ->
+    length([P || P <- Params, maps:get(name, P) =:= Name]).
 
 %% `binary_to_existing_atom/2` raises badarg when the atom is absent.
 %% rabbit_ct_broker_helpers:rpc/4 is backed by erpc:call/4, which
