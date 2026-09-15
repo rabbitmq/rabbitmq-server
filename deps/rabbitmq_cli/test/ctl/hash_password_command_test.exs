@@ -42,6 +42,24 @@ defmodule HashPasswordCommandTest do
     assert @command.validate(["foo"], opts) == :ok
   end
 
+<<<<<<< HEAD
+=======
+  test "validate: PBKDF2-HMAC-SHA256 is a supported hashing algorithm", context do
+    for alg <- ["pbkdf2_sha256", "pbkdf2-sha256", "PBKDF2_SHA256"] do
+      opts = Map.put(context[:opts], :hashing_algorithm, alg)
+      assert @command.validate(["foo"], opts) == :ok
+    end
+  end
+
+  test "banner: does not echo the cleartext password given on the command line", context do
+    refute @command.banner(["a-secret-password"], context[:opts]) =~ "a-secret-password"
+  end
+
+  test "banner: does not require an argument", context do
+    assert is_binary(@command.banner([], context[:opts]))
+  end
+
+>>>>>>> f7e064d (Do not echo the password in the hash_password banner)
   @tag user: "someone", password: "hashed_password"
   test "run: successfully create user with a hashed password from cli cmd", context do
     hashed_pwd = @command.run([context[:password]], context[:opts])

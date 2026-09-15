@@ -80,11 +80,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
     ]
   end
 
-  def banner([arg], _options),
-    do: "Will hash password #{arg}"
-
-  def banner([], _options),
-    do: "Will hash provided password"
+  def banner(_args, _options),
+    do: "Will hash the provided password ..."
 
   def description(), do: "Hashes a plaintext password"
 
