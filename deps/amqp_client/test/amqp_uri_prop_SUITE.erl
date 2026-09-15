@@ -21,22 +21,9 @@ all() ->
      auth_mechanism_colon_separated_no_new_atoms_prop,
      verify_rejects_unknown_values_prop,
      fail_if_no_peer_cert_rejects_non_boolean_prop,
-     valid_uri_options_still_work
+     valid_uri_options_still_work,
+     auth_mechanism_maps_to_expected_fun
     ].
-
-%% -------------------------------------------------------------------
-%% Setup / teardown
-%% -------------------------------------------------------------------
-
-init_per_suite(Config) ->
-    %% Ensure relevant modules are loaded so that their atoms
-    %% (function names, SSL option values) exist in the atom table.
-    {module, _} = code:ensure_loaded(amqp_auth_mechanisms),
-    {module, _} = code:ensure_loaded(ssl),
-    Config.
-
-end_per_suite(_Config) ->
-    ok.
 
 %% -------------------------------------------------------------------
 %% Generators
@@ -53,7 +40,7 @@ non_boolean_string() ->
     ?LET(N, pos_integer(),
          "not_a_bool_" ++ integer_to_list(N)).
 
-%% Generates a random string unlikely to be an existing atom.
+%% Generates a random string that is not a valid `verify` value.
 unknown_atom_string() ->
     ?LET(N, pos_integer(),
          "zzz_no_such_verify_" ++ integer_to_list(N)).
@@ -161,4 +148,44 @@ valid_uri_options_still_work(_Config) ->
                  amqp_uri:parse("amqp://host/?auth_mechanism=zzz_fake_mod:plain")),
     ?assertMatch({error, _},
                  amqp_uri:parse("amqp://host/?auth_mechanism=amqp_auth_mechanisms:zzz_fake_fn")),
+
+    %% Only `amqp_auth_mechanisms` functions can be named in a URI. Every value
+    %% below resolves to existing atoms.
+    ?assertMatch({error, {{unknown_mechanism, _}, _}},
+                 amqp_uri:parse("amqp://host/?auth_mechanism=erlang:send")),
+    ?assertMatch({error, {{unknown_mechanism, _}, _}},
+                 amqp_uri:parse("amqp://host/?auth_mechanism=application:set_env")),
+    ?assertMatch({error, {{unknown_mechanism, _}, _}},
+                 amqp_uri:parse("amqp://host/?auth_mechanism=amqp_uri:parse")),
+    %% A single token that is an existing atom but not a mechanism must fail at
+    %% parse time, not with `undef` when the connection is established.
+    ?assertMatch({error, {{unknown_mechanism, _}, _}},
+                 amqp_uri:parse("amqp://host/?auth_mechanism=module_info")),
+    %% Malformed separators.
+    ?assertMatch({error, _}, amqp_uri:parse("amqp://host/?auth_mechanism=plain:")),
+    ?assertMatch({error, _}, amqp_uri:parse("amqp://host/?auth_mechanism=:plain")),
+    ?assertMatch({error, _},
+                 amqp_uri:parse("amqp://host/?auth_mechanism=amqp_auth_mechanisms:plain:x")),
+    ok.
+
+%% Confirms the mechanism table maps each name to the expected fun, so a
+%% future edit cannot silently map a name to the wrong mechanism.
+auth_mechanism_maps_to_expected_fun(_Config) ->
+    lists:foreach(
+      fun({Mech, Expected}) ->
+              Uri = "amqp://host/?auth_mechanism=" ++ Mech,
+              {ok, #amqp_params_network{auth_mechanisms = [Fun]}} = amqp_uri:parse(Uri),
+              ?assertEqual(Expected, Fun)
+      end,
+      [{"plain",                         fun amqp_auth_mechanisms:plain/3},
+       {"amqplain",                      fun amqp_auth_mechanisms:amqplain/3},
+       {"external",                      fun amqp_auth_mechanisms:external/3},
+       {"crdemo",                        fun amqp_auth_mechanisms:crdemo/3},
+       {"amqp_auth_mechanisms:external", fun amqp_auth_mechanisms:external/3}]),
+    %% The default when no `auth_mechanism` is given.
+    {ok, #amqp_params_network{auth_mechanisms = DefaultMechs}} =
+        amqp_uri:parse("amqp://host/"),
+    ?assertEqual([fun amqp_auth_mechanisms:plain/3,
+                  fun amqp_auth_mechanisms:amqplain/3],
+                 DefaultMechs),
     ok.
