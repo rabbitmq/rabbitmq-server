@@ -185,7 +185,7 @@ delete_super_stream(VirtualHost, SuperStream, Username) ->
 -spec delete_super_stream(binary(), binary(), [binary()], binary()) ->
     ok | {error, term()}.
 delete_super_stream(VirtualHost, SuperStream, Partitions, Username) ->
-    UniquePartitions = unique_partitions(Partitions),
+    UniquePartitions = lists:uniq(Partitions),
     case delete_super_stream_partitions(VirtualHost, SuperStream, UniquePartitions,
                                         Username) of
         ok ->
@@ -201,18 +201,6 @@ delete_super_stream(VirtualHost, SuperStream, Partitions, Username) ->
         {error, _} = Error ->
             Error
     end.
-
-unique_partitions(Partitions) ->
-    {UniquePartitions, _} =
-        lists:foldl(fun(Partition, {Unique, Seen}) ->
-                            case maps:is_key(Partition, Seen) of
-                                true ->
-                                    {Unique, Seen};
-                                false ->
-                                    {[Partition | Unique], Seen#{Partition => true}}
-                            end
-                    end, {[], #{}}, Partitions),
-    lists:reverse(UniquePartitions).
 
 delete_super_stream_partitions(VirtualHost, SuperStream, Partitions, Username) ->
     {Deleted, Errors} =
@@ -232,7 +220,7 @@ delete_super_stream_partitions(VirtualHost, SuperStream, Partitions, Username) -
             ok;
         _ ->
             {error, {partitions_not_deleted, lists:reverse(Deleted),
-                    lists:reverse(Errors)}}
+                     lists:reverse(Errors)}}
     end.
 
 -spec lookup_leader(binary(), binary()) ->

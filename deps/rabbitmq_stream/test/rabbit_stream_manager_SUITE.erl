@@ -28,6 +28,7 @@ groups() ->
     [{non_parallel_tests, [],
       [manage_super_stream,
        delete_super_stream_reports_failed_partition,
+       delete_super_stream_reports_failed_exchange,
        delete_super_stream_deduplicates_partitions,
        manage_super_stream_max_partitions,
        manage_super_stream_max_partitions_infinity,
@@ -203,6 +204,33 @@ delete_super_stream_reports_failed_partition(Config) ->
     ?assertEqual({ok, []}, partitions(Config, SuperStream)),
     ?assertEqual(ok, delete_super_stream(Config, SuperStream)),
         ?assertEqual({error, stream_not_found}, partitions(Config, SuperStream)),
+    ok.
+
+delete_super_stream_reports_failed_exchange(Config) ->
+    SuperStream = <<"super-stream-delete-exchange-failure">>,
+    Partition = <<"super-stream-delete-exchange-failure-0">>,
+    ?assertEqual(ok,
+                 create_super_stream(Config,
+                                     SuperStream,
+                                     [Partition],
+                                     [<<"0">>])),
+    ok = rpc(Config, meck, new, [rabbit_exchange, [no_link, passthrough]]),
+    ok = rpc(Config, meck, expect,
+             [rabbit_exchange, ensure_deleted, 3, {error, timeout}]),
+    try
+        ?assertEqual({error, {exchange_not_deleted, [Partition], timeout}},
+                     rpc(Config,
+                         rabbit_stream_manager,
+                         delete_super_stream,
+                         [<<"/">>, SuperStream, [Partition], <<"guest">>]))
+    after
+        ok = rpc(Config, meck, unload, [rabbit_exchange])
+    end,
+    %% The partition was removed, but the exchange is retained since its
+    %% deletion failed, so a normal deletion retry can complete the cleanup.
+    ?assertEqual({ok, []}, partitions(Config, SuperStream)),
+    ?assertEqual(ok, delete_super_stream(Config, SuperStream)),
+    ?assertEqual({error, stream_not_found}, partitions(Config, SuperStream)),
     ok.
 
 delete_super_stream_deduplicates_partitions(Config) ->
