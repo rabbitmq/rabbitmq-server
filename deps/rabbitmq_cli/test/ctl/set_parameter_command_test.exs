@@ -138,6 +138,26 @@ defmodule SetParameterCommandTest do
              ~r/Setting runtime parameter \"#{context[:key]}\" for component \"#{context[:component_name]}\" to \"#{context[:value]}\" in vhost \"#{context[:vhost]}\" \.\.\./
   end
 
+  @tag component_name: @component_name,
+       key: @key,
+       value:
+         "{\"src-uri\":\"amqp://alice:s3cr3t@host1\",\"dest-uri\":\"amqp://bob:hunter2@host2\"}",
+       vhost: @vhost
+  test "banner: does not echo credentials embedded in a shovel or federation URI value",
+       context do
+    vhost_opts = Map.merge(context[:opts], %{vhost: context[:vhost]})
+
+    banner =
+      @command.banner([context[:component_name], context[:key], context[:value]], vhost_opts)
+
+    refute banner =~ "s3cr3t"
+    refute banner =~ "hunter2"
+    assert banner =~ context[:key]
+    assert banner =~ context[:component_name]
+    assert banner =~ "host1"
+    assert banner =~ "host2"
+  end
+
   # Checks each element of the first parameter against the expected context values
   defp assert_parameter_fields(context) do
     result_param = context[:vhost] |> list_parameters |> List.first()

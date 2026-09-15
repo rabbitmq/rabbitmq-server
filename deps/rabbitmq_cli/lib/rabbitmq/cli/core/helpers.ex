@@ -147,6 +147,14 @@ defmodule RabbitMQ.CLI.Core.Helpers do
 
   def cli_acting_user, do: "rmq-cli"
 
+  # Strips `user:password@` URI credentials from a string before it is
+  # echoed back to the user, e.g. in a command banner. Parameter values
+  # such as shovel and federation upstream definitions embed AMQP URIs
+  # with credentials as JSON fields.
+  def redact_uri_credentials(value) do
+    Regex.replace(~r{://(?:[^/?#@]*@)+}, value, "://")
+  end
+
   def string_or_inspect(val) do
     case String.Chars.impl_for(val) do
       nil ->
