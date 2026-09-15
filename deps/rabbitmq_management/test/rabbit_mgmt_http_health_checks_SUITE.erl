@@ -697,9 +697,10 @@ certificate_expiration_test(Config) ->
     ?assertEqual(AMQP_TLS, maps:get(<<"port">>, Expired)),
     Node = atom_to_binary(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename), utf8),
     ?assertEqual(Node, maps:get(<<"node">>, Expired)),
-    ?assertEqual(true, maps:is_key(<<"cacertfile">>, Expired)),
-    ?assertEqual(true, maps:is_key(<<"certfile">>, Expired)),
+    ?assertEqual(false, maps:is_key(<<"cacertfile">>, Expired)),
+    ?assertEqual(false, maps:is_key(<<"certfile">>, Expired)),
     ?assertEqual(true, maps:is_key(<<"certfile_expires_on">>, Expired)),
+    ?assertEqual(true, maps:is_key(<<"cacertfile_expires_on">>, Expired)),
     ?assertEqual(true, maps:is_key(<<"interface">>, Expired)),
 
     passed.
