@@ -219,8 +219,10 @@ tmp_hidden_node_does_not_need_a_cookie_file(Config) ->
 
 tmp_hidden_node_is_not_connectable(_Config) ->
     %% Names already registered with epmd before we start anything (e.g. the
-    %% Common Test runner's own node) are not part of what this test cares
-    %% about; only names that show up *because of* the query below are.
+    %% Common Test runner's own node, or nodes started by other suites
+    %% running concurrently on the same host) are not part of what this
+    %% test cares about; only names that show up *because of* the query
+    %% below, and that could plausibly be the temporary hidden node, are.
     {ok, BaselineNames} = net_adm:names(),
     PeerOptions = #{longnames => false},
     Peers = start_test_nodes(?FUNCTION_NAME, 2, PeerOptions),
@@ -229,13 +231,14 @@ tmp_hidden_node_is_not_connectable(_Config) ->
         %% `rabbit_peer_discovery' must never register with epmd or accept
         %% connections, regardless of its cookie, since it only ever needs
         %% to connect out. Watch epmd for the whole duration of the query
-        %% and make sure no node other than the two peers above, and
-        %% whatever was already registered, ever shows up.
-        KnownNames = [Name || {Name, _Port} <- BaselineNames] ++
-                     [hd(string:split(atom_to_list(Node), "@")) ||
-                         Node <- maps:keys(Peers)],
+        %% and make sure no node matching the temporary hidden node's
+        %% naming scheme ever shows up (see `is_temp_hidden_node_name/2').
+        KnownNames = [Name || {Name, _Port} <- BaselineNames],
+        PeerPrefixes = [hd(string:split(atom_to_list(Node), "@")) ||
+                           Node <- maps:keys(Peers)],
         Self = self(),
-        Watcher = spawn_link(fun() -> watch_epmd_names(Self, KnownNames) end),
+        Watcher = spawn_link(
+                    fun() -> watch_epmd_names(Self, KnownNames, PeerPrefixes) end),
         do_test_query_node_props(Peers),
         Watcher ! {stop, Self},
         ExtraNames = receive
@@ -318,7 +321,7 @@ start_test_nodes(Testcase, NodeNumber, NodeCount, PeerOptions, Peers)
                            PeerOptions1
                    end,
     ct:log("Starting peer with options: ~p", [PeerOptions2]),
-    case catch peer:start(PeerOptions2) of
+    try peer:start(PeerOptions2) of
         {ok, PeerPid, PeerName} ->
             ct:log("Configuring peer '~ts'", [PeerName]),
             setup_test_node(PeerPid, PeerOptions2),
@@ -331,6 +334,14 @@ start_test_nodes(Testcase, NodeNumber, NodeCount, PeerOptions, Peers)
                    "Error: ~p", [PeerOptions2, Error]),
             stop_test_nodes(Peers),
             erlang:throw(Error)
+    catch
+        Class:Reason:Stacktrace ->
+            ct:log("Failed to started peer node:~n"
+                   "Options: ~p~n"
+                   "Exception: ~p:~p~n~p",
+                   [PeerOptions2, Class, Reason, Stacktrace]),
+            stop_test_nodes(Peers),
+            erlang:raise(Class, Reason, Stacktrace)
     end;
 start_test_nodes(_Testcase, _NodeNumber, _Count, _PeerOptions, Peers) ->
     ct:log("Peers: ~p", [Peers]),
@@ -365,10 +376,10 @@ ensure_no_connections_between_test_nodes(Peers) ->
               ?assertEqual([], peer:call(PeerPid, erlang, nodes, []))
       end, Peers).
 
-watch_epmd_names(Parent, KnownNames) ->
-    watch_epmd_names(Parent, KnownNames, sets:new([{version, 2}])).
+watch_epmd_names(Parent, KnownNames, PeerPrefixes) ->
+    watch_epmd_names(Parent, KnownNames, PeerPrefixes, sets:new([{version, 2}])).
 
-watch_epmd_names(Parent, KnownNames, Extra) ->
+watch_epmd_names(Parent, KnownNames, PeerPrefixes, Extra) ->
     receive
         {stop, Parent} ->
             Parent ! {names, sets:to_list(Extra)}
@@ -378,12 +389,33 @@ watch_epmd_names(Parent, KnownNames, Extra) ->
                                lists:foldl(
                                  fun({Name, _Port}, Acc) ->
                                          case lists:member(Name, KnownNames) of
-                                             true -> Acc;
-                                             false -> sets:add_element(Name, Acc)
+                                             true ->
+                                                 Acc;
+                                             false ->
+                                                 case is_temp_hidden_node_name(
+                                                        Name, PeerPrefixes) of
+                                                     true ->
+                                                         sets:add_element(Name, Acc);
+                                                     false ->
+                                                         Acc
+                                                 end
                                          end
                                  end, Extra, Names);
                            {error, _} ->
                                Extra
                        end,
-            watch_epmd_names(Parent, KnownNames, NewExtra)
+            watch_epmd_names(Parent, KnownNames, PeerPrefixes, NewExtra)
     end.
+
+%% `rabbit_peer_discovery:query_node_props/1' names the temporary hidden
+%% node with `peer:random_name/1', passing the querying node's own prefix
+%% (the part of its name before `@'). That always produces
+%% `Prefix-Uniq-OsPid'; this is the only shape of name that could possibly
+%% be the temporary hidden node, as opposed to some unrelated node started
+%% by another suite running concurrently on the same host.
+is_temp_hidden_node_name(Name, PeerPrefixes) ->
+    lists:any(
+      fun(Prefix) ->
+              Pattern = "^\\Q" ++ Prefix ++ "\\E-[0-9]+-[0-9]+$",
+              match =:= re:run(Name, Pattern, [{capture, none}])
+      end, PeerPrefixes).
