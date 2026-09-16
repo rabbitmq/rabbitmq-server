@@ -396,7 +396,7 @@ redact_header(Other) ->
 redact_header_value(Name, Value) when is_list(Name); is_binary(Name); is_atom(Name) ->
   case lists:member(string:lowercase(rabbit_data_coercion:to_list(Name)),
                     ?SENSITIVE_HEADERS) of
-    true  -> "...";
+    true  -> "[redacted]";
     false -> Value
   end;
 redact_header_value(_Name, Value) ->

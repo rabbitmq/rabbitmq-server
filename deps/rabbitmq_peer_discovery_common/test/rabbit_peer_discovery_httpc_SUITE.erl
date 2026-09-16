@@ -23,8 +23,8 @@ redact_headers_redacts_sensitive_headers_case_insensitively(_Config) ->
                {"aUtHoRiZaTiOn", "******"},
                {"Content-Type", "application/json"}],
     Redacted = rabbit_peer_discovery_httpc:redact_headers(Headers),
-    ?assertEqual("...", proplists:get_value("X-Consul-Token", Redacted)),
-    ?assertEqual("...", proplists:get_value("aUtHoRiZaTiOn", Redacted)),
+    ?assertEqual("[redacted]", proplists:get_value("X-Consul-Token", Redacted)),
+    ?assertEqual("[redacted]", proplists:get_value("aUtHoRiZaTiOn", Redacted)),
     ?assertEqual("application/json", proplists:get_value("Content-Type", Redacted)).
 
 redact_headers_preserves_non_tuple_entries(_Config) ->
@@ -32,12 +32,12 @@ redact_headers_preserves_non_tuple_entries(_Config) ->
                {"Authorization", "******"}],
     Redacted = rabbit_peer_discovery_httpc:redact_headers(Headers),
     ?assertEqual([nodelay,
-                  {"Authorization", "..."}],
+                  {"Authorization", "[redacted]"}],
                  Redacted).
 
 redact_headers_redacts_binary_and_atom_header_names(_Config) ->
     Headers = [{<<"authorization">>, "******"},
                {'X-Consul-Token', "token-value"}],
-    ?assertEqual([{<<"authorization">>, "..."},
-                  {'X-Consul-Token', "..."}],
+    ?assertEqual([{<<"authorization">>, "[redacted]"},
+                  {'X-Consul-Token', "[redacted]"}],
                  rabbit_peer_discovery_httpc:redact_headers(Headers)).
