@@ -10,6 +10,7 @@
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbit/include/mc.hrl").
 -include("../include/rabbit_shovel.hrl").
 
@@ -34,7 +35,8 @@ groups() ->
          local_pending_count_empty_queue,
          local_pending_count_after_settle,
          behaviour_metrics_includes_pending,
-         behaviour_pending_count_delegation
+         behaviour_pending_count_delegation,
+         amqp091_confirm_unknown_delivery_tag
         ]}
     ].
 
@@ -142,3 +144,16 @@ behaviour_pending_count_delegation(_Config) ->
 
     ?assertEqual(3, maps:get(pending, Metrics)),
     ?assert(meck:validate(rabbit_amqp10_shovel)).
+
+%% The shovel must not crash when the destination broker confirms
+%% a delivery tag it has no record of.
+amqp091_confirm_unknown_delivery_tag(_Config) ->
+    State = #{name => <<"test-shovel">>,
+              ack_mode => on_confirm,
+              dest => #{unacked => #{}}},
+    ?assertEqual(State,
+                 rabbit_amqp091_shovel:handle_dest(
+                   #'basic.ack'{delivery_tag = 123, multiple = false}, State)),
+    ?assertEqual(State,
+                 rabbit_amqp091_shovel:handle_dest(
+                   #'basic.nack'{delivery_tag = 123, multiple = false, requeue = true}, State)).
