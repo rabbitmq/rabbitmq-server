@@ -285,8 +285,8 @@ log_context(Context) ->
       end,
       lists:sort(maps:keys(Context))).
 
-%% Known secrets in used variables. Cookie is hashed consistent
-%% with the rest of the code, other values are masked.
+%% The cookie is hashed, consistent with the rest of the code;
+%% other secrets are masked.
 -define(REDACTED_VARS,
         #{default_pass              => mask,
           "RABBITMQ_DEFAULT_PASS"   => mask,
@@ -1795,10 +1795,9 @@ post_port_cmd_output(#{os_type := {OSType, _}}, UnicodeOutput, ExitStatus) ->
     %% The real parser needs the unredacted lines.
     Lines.
 
-%% Raw shell output, not a parsed value: only bare `VAR=value`
-%% assignments are masked. The variable name is always the last
-%% whitespace-separated token before `=`. Multi-line values are
-%% not supported but secrets are single line anyway.
+%% This masks raw shell output, not a parsed value, so the variable
+%% name is taken as the last whitespace-separated token before `=`,
+%% which also matches `sh -x` traces like `++ export VAR=value`.
 redact_sh_assignment(Line) ->
     case string:split(Line, "=") of
         [VarPart, _Value] ->
@@ -1815,9 +1814,8 @@ redact_sh_assignment(Line) ->
             Line
     end.
 
-%% Exact list of masked environment variables. We may include both
-%% variables used by RabbitMQ and other known secret variables here
-%% as any inherited environment variables may end up in debug logs.
+%% The shell child inherits the whole process environment, not just
+%% RabbitMQ's own variables, so this also covers bare secret names.
 -define(SH_MASKED_VARS,
         ["RABBITMQ_DEFAULT_PASS", "DEFAULT_PASS",
          "RABBITMQ_ERLANG_COOKIE", "ERLANG_COOKIE"]).
