@@ -7,7 +7,7 @@
 
 -module(unit_inbroker_SUITE).
 
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -include("rabbit_federation.hrl").
@@ -28,6 +28,7 @@ groups() ->
           scratch_space,
           remove_credentials,
           get_connection_name,
+          ack_nack_unknown_delivery_tag,
           upstream_validation,
           upstream_set_validation
         ]}
@@ -148,6 +149,22 @@ get_connection_name(Config) ->
         whatever
     ),
     ok.
+
+%% A federation link must not crash when the destination broker
+%% confirms (acks or nacks) a delivery tag it has no record of.
+ack_nack_unknown_delivery_tag(_Config) ->
+    Unacked = rabbit_federation_link_util:unacked_new(),
+    Unacked = rabbit_federation_link_util:ack(
+                #'basic.ack'{delivery_tag = 123, multiple = false},
+                self(), Unacked),
+    Unacked = rabbit_federation_link_util:nack(
+                #'basic.nack'{delivery_tag = 123, multiple = false, requeue = true},
+                self(), Unacked),
+    receive
+        _ -> exit(unexpected_cast_for_unknown_delivery_tag)
+    after 0 ->
+        ok
+    end.
 
 upstream_set_validation(_Config) ->
     ?assertEqual(rabbit_federation_parameters:validate(<<"/">>, <<"federation-upstream-set">>,
