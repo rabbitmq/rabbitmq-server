@@ -226,5 +226,6 @@ dispatcher() ->
      {"/login",                                                rabbit_mgmt_wm_login, []},
      {"/config/effective",                                     rabbit_mgmt_wm_environment, []},
      {"/auth/hash_password/:password",                         rabbit_mgmt_wm_hash_password, []},
+     {"/auth/hash_password",                                   rabbit_mgmt_wm_hash_password, []},
      {"/version",                                              rabbit_mgmt_wm_version, []}
     ].

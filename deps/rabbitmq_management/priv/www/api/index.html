@@ -1377,13 +1377,14 @@ or:
         </td>
       </tr>
       <tr>
+        <td></td>
+        <td></td>
+        <td></td>
         <td>X</td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td class="path">/api/auth/hash_password/<i>plaintext-password</i></td>
+        <td class="path">/api/auth/hash_password</td>
         <td>
-          Hashes <code>plaintext-password</code> according to the currently configured password hashing algorithm.
+          Hashes the password passed in the request body (<code>{"password": "plaintext-password"}</code>)
+          according to the currently configured password hashing algorithm.
         </td>
       </tr>
       <tr>
