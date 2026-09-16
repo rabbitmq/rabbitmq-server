@@ -141,7 +141,7 @@ defmodule SetParameterCommandTest do
   @tag component_name: @component_name,
        key: @key,
        value:
-         "{\"src-uri\":\"amqp://alice:s3cr3t@host1\",\"dest-uri\":\"amqp://bob:hunter2@host2\"}",
+         "{\"src-uri\":\"amqps://alice:s3cr3t@host1?password=passphr4se\",\"dest-uri\":\"amqp://bob:hunter2@host2\"}",
        vhost: @vhost
   test "banner: does not echo credentials embedded in a shovel or federation URI value",
        context do
@@ -152,6 +152,7 @@ defmodule SetParameterCommandTest do
 
     refute banner =~ "s3cr3t"
     refute banner =~ "hunter2"
+    refute banner =~ "passphr4se"
     assert banner =~ context[:key]
     assert banner =~ context[:component_name]
     assert banner =~ "host1"

@@ -77,11 +77,12 @@ defmodule SetGlobalParameterCommandTest do
              ~r/Setting global runtime parameter \"#{context[:key]}\" to \"#{context[:value]}\" \.\.\./
   end
 
-  @tag key: @key, value: "{\"uri\":\"amqp://alice:s3cr3t@host1\"}"
+  @tag key: @key, value: "{\"uri\":\"amqps://alice:s3cr3t@host1?password=passphr4se\"}"
   test "banner: does not echo credentials embedded in a URI value", context do
     banner = @command.banner([context[:key], context[:value]], context[:opts])
 
     refute banner =~ "s3cr3t"
+    refute banner =~ "passphr4se"
     assert banner =~ to_string(context[:key])
     assert banner =~ "host1"
   end
