@@ -153,6 +153,8 @@ all_tests() -> [
     adding_a_user_with_password_test,
     adding_a_user_with_password_hash_test,
     adding_a_user_with_generated_password_hash_test,
+    hash_password_get_is_deprecated_test,
+    hash_password_rejects_non_string_password_test,
     adding_a_user_with_permissions_in_single_operation_test,
     adding_a_user_without_tags_fails_test,
     adding_a_user_with_too_many_tags_fails_test,
@@ -836,7 +838,9 @@ adding_a_user_with_password_hash_test(Config) ->
     http_delete(Config, "/users/user11", ?NO_CONTENT).
 
 adding_a_user_with_generated_password_hash_test(Config) ->
-    #{ok := HashedPassword} = http_get(Config, "/auth/hash_password/some_password"),
+    #{ok := HashedPassword} = http_post(Config, "/auth/hash_password",
+                                         [{password, <<"some_password">>}],
+                                         ?OK),
 
     http_put(Config, "/users/user12", [{tags, <<"administrator">>},
                                        {password_hash, HashedPassword}],
@@ -845,6 +849,12 @@ adding_a_user_with_generated_password_hash_test(Config) ->
     User = http_get(Config, "/users/user12", "user12", "some_password", ?OK),
     ?assert(maps:get(has_password, User)),
     http_delete(Config, "/users/user12", ?NO_CONTENT).
+
+hash_password_get_is_deprecated_test(Config) ->
+    http_get(Config, "/auth/hash_password/some_password", ?NOT_FOUND).
+
+hash_password_rejects_non_string_password_test(Config) ->
+    http_post(Config, "/auth/hash_password", [{password, 12345}], ?BAD_REQUEST).
 
 adding_a_user_with_permissions_in_single_operation_test(Config) ->
     QArgs = #{durable => true},
