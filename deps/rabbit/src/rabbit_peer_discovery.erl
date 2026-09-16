@@ -541,7 +541,7 @@ maybe_add_tls_arguments(VMArgs) ->
     %% In the next case, RabbitMQ has been configured with additional Erlang VM
     %% arguments such as this:
     %%
-    %% SERVER_ADDITIONAL_ERL_ARGS="-pa $ERL_SSL_PATH -proto_dist inet_tls
+    %% RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-pa $ERL_SSL_PATH -proto_dist inet_tls
     %%     -ssl_dist_opt server_cacertfile /etc/rabbitmq/ca_certificate.pem
     %%     -ssl_dist_opt server_certfile /etc/rabbitmq/server_certificate.pem
     %%     -ssl_dist_opt server_keyfile /etc/rabbitmq/server_key.pem
@@ -601,7 +601,7 @@ maybe_add_tls_arguments(VMArgs) ->
     %% In the next case, RabbitMQ has been configured with additional Erlang VM
     %% arguments such as this:
     %%
-    %% SERVER_ADDITIONAL_ERL_ARGS="-pa $ERL_SSL_PATH -proto_dist inet_tls
+    %% RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-pa $ERL_SSL_PATH -proto_dist inet_tls
     %%     -ssl_dist_optfile /etc/rabbitmq/inter_node_tls.config"
     %%
     %% This code adds the `ssl_dist_optfile' argument to the peer node's

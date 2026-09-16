@@ -15,11 +15,19 @@ setup() {
 }
 
 @test "can configure Erlang scheduler bind type via conf file" {
-    echo 'SCHEDULER_BIND_TYPE=u' > "$RABBITMQ_CONF_ENV_FILE"
+    echo 'RABBITMQ_SCHEDULER_BIND_TYPE=u' > "$RABBITMQ_CONF_ENV_FILE"
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +stbt u ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +stbt u "* ]]
+}
+
+@test "bare (non-RABBITMQ_-prefixed) scheduler bind type in conf file is ignored" {
+    echo 'SCHEDULER_BIND_TYPE=u' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain the default ' +stbt db ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +stbt db "* ]]
 }
 
 @test "can configure Erlang scheduler bind type via env" {
@@ -45,11 +53,19 @@ setup() {
 }
 
 @test "can configure Erlang distribution buffer size via conf file" {
-    echo 'DISTRIBUTION_BUFFER_SIZE=123123' > "$RABBITMQ_CONF_ENV_FILE"
+    echo 'RABBITMQ_DISTRIBUTION_BUFFER_SIZE=123123' > "$RABBITMQ_CONF_ENV_FILE"
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +zdbbl 123123 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +zdbbl 123123 "* ]]
+}
+
+@test "bare (non-RABBITMQ_-prefixed) distribution buffer size in conf file is ignored" {
+    echo 'DISTRIBUTION_BUFFER_SIZE=123123' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain the default ' +zdbbl 128000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +zdbbl 128000 "* ]]
 }
 
 @test "can configure Erlang distribution buffer size via env" {
@@ -75,11 +91,19 @@ setup() {
 }
 
 @test "can configure Erlang maximum number of processes via conf file" {
-    echo 'MAX_NUMBER_OF_PROCESSES=2000000' > "$RABBITMQ_CONF_ENV_FILE"
+    echo 'RABBITMQ_MAX_NUMBER_OF_PROCESSES=2000000' > "$RABBITMQ_CONF_ENV_FILE"
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +P 2000000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +P 2000000 "* ]]
+}
+
+@test "bare (non-RABBITMQ_-prefixed) maximum number of processes in conf file is ignored" {
+    echo 'MAX_NUMBER_OF_PROCESSES=2000000' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain the default ' +P 1048576 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +P 1048576 "* ]]
 }
 
 @test "can configure Erlang maximum number of processes via env" {
@@ -105,11 +129,19 @@ setup() {
 }
 
 @test "can configure Erlang maximum number of atoms via conf file" {
-    echo 'MAX_NUMBER_OF_ATOMS=1000000' > "$RABBITMQ_CONF_ENV_FILE"
+    echo 'RABBITMQ_MAX_NUMBER_OF_ATOMS=1000000' > "$RABBITMQ_CONF_ENV_FILE"
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +t 1000000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +t 1000000 "* ]]
+}
+
+@test "bare (non-RABBITMQ_-prefixed) maximum number of atoms in conf file is ignored" {
+    echo 'MAX_NUMBER_OF_ATOMS=1000000' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain the default ' +t 5000000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +t 5000000 "* ]]
 }
 
 @test "can configure Erlang maximum number of atoms via env" {
@@ -136,11 +168,19 @@ setup() {
 }
 
 @test "can configure Erlang scheduler busy wait threshold via conf file" {
-    echo 'SCHEDULER_BUSY_WAIT_THRESHOLD=medium' > "$RABBITMQ_CONF_ENV_FILE"
+    echo 'RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD=medium' > "$RABBITMQ_CONF_ENV_FILE"
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +sbwt medium ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +sbwt medium "* ]]
+}
+
+@test "bare (non-RABBITMQ_-prefixed) scheduler busy wait threshold in conf file is ignored" {
+    echo 'SCHEDULER_BUSY_WAIT_THRESHOLD=medium' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain the default ' +sbwt none ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +sbwt none "* ]]
 }
 
 @test "can configure Erlang scheduler busy wait threshold via env" {
@@ -156,4 +196,35 @@ setup() {
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +sbwt short ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +sbwt short "* ]]
+}
+
+@test "default Erlang boot module" {
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_BOOT_MODULE to be 'rabbit', but got: $RABBITMQ_BOOT_MODULE"
+    [ "$RABBITMQ_BOOT_MODULE" = "rabbit" ]
+}
+
+@test "can configure Erlang boot module via conf file" {
+    echo 'RABBITMQ_BOOT_MODULE=my_boot_module' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_BOOT_MODULE to be 'my_boot_module', but got: $RABBITMQ_BOOT_MODULE"
+    [ "$RABBITMQ_BOOT_MODULE" = "my_boot_module" ]
+}
+
+@test "bare (non-RABBITMQ_-prefixed) boot module in conf file is ignored" {
+    echo 'BOOT_MODULE=my_boot_module' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_BOOT_MODULE to default to 'rabbit', but got: $RABBITMQ_BOOT_MODULE"
+    [ "$RABBITMQ_BOOT_MODULE" = "rabbit" ]
+}
+
+@test "can configure Erlang boot module via env" {
+    export RABBITMQ_BOOT_MODULE=my_boot_module
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_BOOT_MODULE to be 'my_boot_module', but got: $RABBITMQ_BOOT_MODULE"
+    [ "$RABBITMQ_BOOT_MODULE" = "my_boot_module" ]
 }
