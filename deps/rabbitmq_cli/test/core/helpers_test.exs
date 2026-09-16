@@ -141,9 +141,26 @@ defmodule HelpersTest do
              "{\"uri\":\"amqp://127.0.0.1:5672\"}"
   end
 
+  test "redact_uri_credentials: strips the query string, which can carry a private key passphrase" do
+    assert Helpers.redact_uri_credentials(
+             "{\"src-uri\":\"amqps://host1?keyfile=%2Fpath%2Fkey.pem&password=s3cr3t\"}"
+           ) == "{\"src-uri\":\"amqps://host1\"}"
+  end
+
+  test "redact_uri_credentials: strips both the userinfo and the query string of the same URI" do
+    assert Helpers.redact_uri_credentials(
+             "{\"src-uri\":\"amqps://alice:s3cr3t@host1?password=hunter2\",\"src-queue\":\"q\"}"
+           ) == "{\"src-uri\":\"amqps://host1\",\"src-queue\":\"q\"}"
+  end
+
   test "redact_uri_credentials: does not mistake a literal @ in the query string for userinfo" do
     assert Helpers.redact_uri_credentials("amqp://myhost?ssl_options.password=p@ssw0rd") ==
-             "amqp://myhost?ssl_options.password=p@ssw0rd"
+             "amqp://myhost"
+  end
+
+  test "redact_uri_credentials: leaves a question mark outside a URI alone" do
+    assert Helpers.redact_uri_credentials("{\"note\":\"why? because\",\"max-hops\":1}") ==
+             "{\"note\":\"why? because\",\"max-hops\":1}"
   end
 
   test "redact_uri_credentials: strips the whole userinfo when it contains a literal @, e.g. an email-style username" do
