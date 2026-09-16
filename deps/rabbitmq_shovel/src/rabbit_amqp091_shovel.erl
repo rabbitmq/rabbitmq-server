@@ -495,12 +495,19 @@ close_dest(_) ->
     ok.
 
 confirm_to_inbound(ConfirmFun, Seq, Multiple,
-                   State0 = #{dest := #{unacked := Unacked} = Dst}) ->
-    #{Seq := InTag} = Unacked,
-    {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
-    State = ConfirmFun(InTag, Multiple, State0#{dest =>
-                                                    Dst#{unacked => Unacked1}}),
-    rabbit_shovel_behaviour:decr_remaining(Removed, State).
+                   State0 = #{name := Name,
+                              dest := #{unacked := Unacked} = Dst}) ->
+    case Unacked of
+        #{Seq := InTag} ->
+            {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
+            State = ConfirmFun(InTag, Multiple, State0#{dest =>
+                                                            Dst#{unacked => Unacked1}}),
+            rabbit_shovel_behaviour:decr_remaining(Removed, State);
+        _ ->
+            ?LOG_WARNING("Shovel ~ts amqp0-9-1 destination confirm for an unknown "
+                         "delivery tag: ~tp", [Name, Seq]),
+            State0
+    end.
 
 publish(_Tag, _Method, _Msg, State = #{source := #{remaining_unacked := 0}}) ->
     %% We are in on-confirm mode, and are autodelete. We have

@@ -224,9 +224,16 @@ unacked_new() -> gb_trees:empty().
 
 ack(#'basic.ack'{delivery_tag = Seq,
                  multiple     = Multiple}, Ch, Unack) ->
-    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = gb_trees:get(Seq, Unack),
-                                       multiple     = Multiple}),
-    remove_delivery_tags(Seq, Multiple, Unack).
+    case gb_trees:lookup(Seq, Unack) of
+        {value, Tag} ->
+            amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = Tag,
+                                               multiple     = Multiple}),
+            remove_delivery_tags(Seq, Multiple, Unack);
+        none ->
+            ?LOG_WARNING("Federation link received a confirm ack for an "
+                         "unknown delivery tag: ~tp", [Seq]),
+            Unack
+    end.
 
 
 %% Note: at time of writing the broker will never send requeue=false. And it's
@@ -234,10 +241,17 @@ ack(#'basic.ack'{delivery_tag = Seq,
 nack(#'basic.nack'{delivery_tag = Seq,
                    multiple     = Multiple,
                    requeue      = Requeue}, Ch, Unack) ->
-    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = gb_trees:get(Seq, Unack),
-                                        multiple     = Multiple,
-                                        requeue      = Requeue}),
-    remove_delivery_tags(Seq, Multiple, Unack).
+    case gb_trees:lookup(Seq, Unack) of
+        {value, Tag} ->
+            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = Tag,
+                                                multiple     = Multiple,
+                                                requeue      = Requeue}),
+            remove_delivery_tags(Seq, Multiple, Unack);
+        none ->
+            ?LOG_WARNING("Federation link received a confirm nack for an "
+                         "unknown delivery tag: ~tp", [Seq]),
+            Unack
+    end.
 
 remove_delivery_tags(Seq, false, Unacked) ->
     gb_trees:delete(Seq, Unacked);
