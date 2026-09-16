@@ -26,6 +26,7 @@
 
          expiry_timestamp/1,
          update_state_rebuilds_tags/1,
+         check_user_id0_tag_representation/1,
          with_enabled_plugin/1,
          with_enabled_plugin_plus_internal/1,
          with_missing_plugin/1,
@@ -45,7 +46,8 @@ all() ->
 
 groups() ->
     [{unit_tests, [], [expiry_timestamp,
-                       update_state_rebuilds_tags]},
+                       update_state_rebuilds_tags,
+                       check_user_id0_tag_representation]},
      {integration_tests, [], [with_enabled_plugin,
                               with_enabled_plugin_plus_internal,
                               with_missing_plugin,
@@ -218,6 +220,21 @@ update_state_rebuilds_tags(_) ->
                    authz_backends = [{rabbit_static_backend, unused}]},
     {ok, U4} = rabbit_access_control:update_state(Static, ignored),
     ?assertEqual([administrator], U4#user.tags),
+    ok.
+
+%% `impersonator` may reach `#user.tags` as an atom (LDAP, HTTP, OAuth2
+%% backends) or a binary (the internal backend, which avoids interning
+%% admin-supplied tag strings); both must be honoured.
+check_user_id0_tag_representation(_) ->
+    Actual = #user{username = <<"actual">>, tags = [<<"impersonator">>]},
+    ?assertEqual(ok, rabbit_access_control:check_user_id0(<<"claimed">>, Actual)),
+
+    ActualAtomTag = #user{username = <<"actual">>, tags = [impersonator]},
+    ?assertEqual(ok, rabbit_access_control:check_user_id0(<<"claimed">>, ActualAtomTag)),
+
+    NonImpersonator = #user{username = <<"actual">>, tags = [<<"management">>]},
+    ?assertMatch({refused, _, _},
+                 rabbit_access_control:check_user_id0(<<"claimed">>, NonImpersonator)),
     ok.
 
 with_enabled_plugin(Config) ->

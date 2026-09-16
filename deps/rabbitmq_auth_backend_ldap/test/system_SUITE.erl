@@ -827,8 +827,18 @@ tag_check(Config, Username, Password, VHost, Outcome, Tags)
     tag_check_outcome(Outcome, Tags, User);
 tag_check(_, _, _, _, _, _) -> fun() -> [] end.
 
-tag_check_outcome(good, Tags, User) -> ?assertEqual(Tags, User#user.tags);
-tag_check_outcome(bad, Tags, User)  -> ?assertNotEqual(Tags, User#user.tags).
+tag_check_outcome(good, Tags, User) ->
+    ?assertEqual(tags_as_binaries(Tags), tags_as_binaries(User#user.tags));
+tag_check_outcome(bad, Tags, User) ->
+    ?assertNotEqual(tags_as_binaries(Tags), tags_as_binaries(User#user.tags)).
+
+%% `User#user.tags` may mix atoms (from LDAP's tag_queries) and
+%% binaries (from the internal backend, which avoids interning
+%% admin-supplied tag strings, when it also contributes tags via
+%% `{rabbit_auth_backend_ldap, rabbit_auth_backend_internal}`).
+%% Compare both sides as binaries so either representation matches.
+tags_as_binaries(Tags) ->
+    [rabbit_data_coercion:to_binary(T) || T <- Tags].
 
 test_tag_check(Config, Env, TagCheckFun) ->
     try

@@ -80,7 +80,7 @@ set_tags_within_limit_succeeds1() ->
     Tags = generate_tag_atoms(8),
     ok = rabbit_auth_backend_internal:set_tags(Username, Tags, <<"acting-user">>),
     {ok, User} = rabbit_auth_backend_internal:lookup_user(Username),
-    ?assertEqual(Tags, internal_user:get_tags(User)),
+    ?assertEqual(tags_as_binaries(Tags), internal_user:get_tags(User)),
     ok = rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>),
     passed.
 
@@ -126,7 +126,7 @@ add_user_within_limit_succeeds1() ->
     ok = rabbit_auth_backend_internal:add_user(
            Username, Password, <<"acting-user">>, undefined, Tags),
     {ok, User} = rabbit_auth_backend_internal:lookup_user(Username),
-    ?assertEqual(Tags, internal_user:get_tags(User)),
+    ?assertEqual(tags_as_binaries(Tags), internal_user:get_tags(User)),
     ok = rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>),
     passed.
 
@@ -271,12 +271,17 @@ delete_if_exists(Username) ->
             ok
     end.
 
-%% Use stable, deterministic atom names. They are never converted via
-%% `binary_to_atom/2` by the system under test (the suite calls APIs that
-%% forward atoms straight through), so reusing them across cases is safe.
+%% Use stable, deterministic atom names. The system under test never
+%% mints a *new* atom from them (it either passes an existing atom
+%% through unchanged or converts it to a binary), so reusing them
+%% across cases is safe.
 generate_tag_atoms(N) ->
     [list_to_atom("user_tags_count_limit_tag_" ++ integer_to_list(I))
      || I <- lists:seq(1, N)].
+
+%% `internal_user:get_tags/1` always normalizes to binaries on read.
+tags_as_binaries(Tags) ->
+    [atom_to_binary(T, utf8) || T <- Tags].
 
 csv_tag_string(N) ->
     Names = ["user_tags_count_limit_tag_" ++ integer_to_list(I)

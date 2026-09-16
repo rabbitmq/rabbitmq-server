@@ -281,7 +281,7 @@ add_user_sans_validation(Username, Password, ActingUser, Limits, Tags) ->
     HashingMod = rabbit_password:hashing_mod(),
     PasswordHash = hash_password(HashingMod, Password),
     User0 = internal_user:create_user(Username, PasswordHash, HashingMod),
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+    ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
     User1 = internal_user:set_tags(User0, ConvertedTags),
     User = case Limits of
                undefined -> User1;
@@ -291,7 +291,7 @@ add_user_sans_validation(Username, Password, ActingUser, Limits, Tags) ->
 
 add_user_sans_validation(Username, PasswordHash, HashingMod, Tags, Limits, ActingUser) ->
     ?LOG_DEBUG("Asked to create a new user '~ts' with password hash", [Username]),
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+    ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
     User0 = internal_user:create_user(Username, PasswordHash, HashingMod),
     User1 = internal_user:set_tags(
               internal_user:set_password_hash(User0, PasswordHash, HashingMod),
@@ -410,7 +410,7 @@ update_user_sans_validation(Tags, Limits) ->
 
                 ?LOG_DEBUG("Asked to set user tags for user '~ts' to ~tp", [Username, Tags]),
 
-                ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+                ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
                 R = update_user_with_hash(Username,
                                           hash_password(rabbit_password:hashing_mod(),
                                                         Password),
@@ -475,10 +475,10 @@ update_user_with_hash(Username, PasswordHash, HashingAlgorithm, ConvertedTags, L
                                   internal_user:set_tags(User2, ConvertedTags)
                           end).
 
--spec set_tags(rabbit_types:username(), [atom()], rabbit_types:username()) -> 'ok'.
+-spec set_tags(rabbit_types:username(), [atom() | binary()], rabbit_types:username()) -> 'ok'.
 
 set_tags(Username, Tags, ActingUser) ->
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+    ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
     ?LOG_DEBUG("Asked to set user tags for user '~ts' to ~tp", [Username, ConvertedTags]),
     try
         R = rabbit_db_user:update(Username, fun(User) ->
@@ -745,7 +745,7 @@ put_user(User, Version, ActingUser) ->
                               throw({error, tags_not_present});
                           {undefined, AdminS} ->
                               case rabbit_misc:parse_bool(AdminS) of
-                                  true  -> [administrator];
+                                  true  -> [coerce_tag(administrator)];
                                   false -> []
                               end;
                           {TagsVal, _} ->
@@ -816,7 +816,7 @@ update_user_password_hash(Username, PasswordHash, Tags, Limits, User, Version) -
     HashingAlgorithm = hashing_algorithm(User, Version),
 
     Hash = rabbit_misc:b64decode_or_throw(PasswordHash),
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+    ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
     update_user_with_hash(
       Username, Hash, HashingAlgorithm, ConvertedTags, Limits).
 
@@ -900,15 +900,21 @@ clear_user_limits(Username, LimitType, ActingUser) ->
     notify_limit_clear(Username, ActingUser).
 
 tag_list_from(Tags) when is_list(Tags) ->
-    [to_atom(string:trim(to_list(T))) || T <- validate_tag_count(Tags)];
+    [coerce_tag(string:trim(to_list(T))) || T <- validate_tag_count(Tags)];
 tag_list_from(Tags) when is_binary(Tags) ->
-    [to_atom(string:trim(T)) ||
+    [coerce_tag(string:trim(T)) ||
         T <- validate_tag_count(string:lexemes(to_list(Tags), ","))].
 
 validate_tag_count(Tags) when is_list(Tags), length(Tags) =< ?MAX_USER_TAGS ->
     Tags;
 validate_tag_count(_) ->
     throw({error, {too_many_tags, ?MAX_USER_TAGS}}).
+
+coerce_tag(Tag) ->
+    case rabbit_feature_flags:is_enabled('rabbitmq_4.4.0') of
+        true  -> to_binary(Tag);
+        false -> to_atom(Tag)
+    end.
 
 -spec max_user_tags() -> non_neg_integer().
 max_user_tags() ->

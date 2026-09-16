@@ -28,7 +28,8 @@ validate(_, <<"test">>, <<"good">>,  _Term, _User)      -> ok;
 validate(_, <<"test">>, <<"maybe">>, <<"good">>, _User) -> ok;
 validate(_, <<"test">>, <<"admin">>, _Term, none)       -> ok;
 validate(_, <<"test">>, <<"admin">>, _Term, User) ->
-    case lists:member(administrator, User#user.tags) of
+    Tags = [rabbit_data_coercion:to_binary(T) || T <- User#user.tags],
+    case lists:member(<<"administrator">>, Tags) of
         true  -> ok;
         false -> {error, "meh", []}
     end;

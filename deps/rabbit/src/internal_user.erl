@@ -39,7 +39,7 @@
 -record(internal_user, {
     username :: username() | '_',
     password_hash :: password_hash() | '_',
-    tags :: [atom()] | '_',
+    tags :: [atom() | binary()] | '_',
     %% password hashing implementation module,
     %% typically rabbit_password_hashing_* but can
     %% come from a plugin
@@ -49,7 +49,7 @@
 -type(internal_user_v2() ::
         #internal_user{username          :: username() | '_',
                        password_hash     :: password_hash() | '_',
-                       tags              :: [atom()] | '_',
+                       tags              :: [atom() | binary()] | '_',
                        hashing_algorithm :: atom() | '_',
                        limits            :: map()}).
 
@@ -125,8 +125,10 @@ get_username(#internal_user{username = Value}) -> Value.
 -spec get_password_hash(internal_user()) -> password_hash().
 get_password_hash(#internal_user{password_hash = Value}) -> Value.
 
--spec get_tags(internal_user()) -> [atom()].
-get_tags(#internal_user{tags = Value}) -> Value.
+-spec get_tags(internal_user()) -> [binary()].
+%% Tags may be atom or binary. Normalize to binary on read.
+get_tags(#internal_user{tags = Value}) ->
+    [rabbit_data_coercion:to_binary(T) || T <- Value].
 
 -spec get_hashing_algorithm(internal_user()) -> atom().
 get_hashing_algorithm(#internal_user{hashing_algorithm = Value}) -> Value.
@@ -148,7 +150,7 @@ set_password_hash(#internal_user{} = User, PasswordHash, HashingAlgorithm) ->
     User#internal_user{password_hash = PasswordHash,
                        hashing_algorithm = HashingAlgorithm}.
 
--spec set_tags(internal_user(), [atom()]) -> internal_user().
+-spec set_tags(internal_user(), [atom() | binary()]) -> internal_user().
 set_tags(#internal_user{} = User, Tags) ->
     User#internal_user{tags = Tags}.
 
