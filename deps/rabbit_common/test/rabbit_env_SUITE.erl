@@ -10,6 +10,11 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+%% Independently hashed, so a broken `hash_secret/1` can't pass by
+%% accident.
+-define(FIXED_COOKIE_SECRET, "known-fixed-cookie-value").
+-define(FIXED_COOKIE_HASH, "4zUzJ7bNnKtIoHjCjz6xww==").
+
 -export([all/0,
          suite/0,
          groups/0,
@@ -56,10 +61,33 @@
          check_RABBITMQ_USE_LOGNAME/1,
          check_value_is_yes/1,
          check_log_process_env/1,
+         check_log_process_env_shows_unlisted_rabbitmq_vars/1,
+         check_log_process_env_shows_erl_crash_dump_and_inetrc/1,
+         check_log_process_env_shows_erl_script_vars/1,
          check_log_context/1,
+         check_log_context_with_default_values/1,
          check_get_used_env_vars/1,
+         check_get_used_env_vars_redacts_secrets/1,
+         check_redact_only_known_secrets/1,
+         check_redact_does_not_catch_unlisted_rabbitmq_secrets/1,
+         check_redact_cookie_non_latin1/1,
          check_parse_conf_env_file_output/1,
-         check_parse_conf_env_file_output_win32/1
+         check_post_port_cmd_output_redacts_secrets/1,
+         check_post_port_cmd_output_redacts_traced_assignment/1,
+         check_post_port_cmd_output_redacts_bare_secrets/1,
+         check_post_port_cmd_output_does_not_mask_unlisted_vars/1,
+         check_used_env_vars_have_no_unredacted_secrets/1,
+         check_get_used_env_vars_recognizes_bare_entries/1,
+         check_parse_conf_env_file_output1_reexports_bare_entries/1,
+         check_parse_conf_env_file_output1_reexports_unlisted_rabbitmq_vars/1,
+         check_parse_conf_env_file_output1_reexports_erl_crash_dump_and_inetrc/1,
+         check_parse_conf_env_file_output1_reexports_erl_script_vars/1,
+         check_context_keys_have_no_unredacted_secrets/1,
+         check_parse_conf_env_file_output_unparseable_line_is_not_logged/1,
+         check_parse_conf_env_file_output_win32_unparseable_line_is_not_logged/1,
+         check_unicode_characters_to_list_error_is_not_logged/1,
+         check_parse_conf_env_file_output_win32/1,
+         log/2
         ]).
 
 all() ->
@@ -100,9 +128,31 @@ all() ->
      check_RABBITMQ_USE_LOGNAME,
      check_value_is_yes,
      check_log_process_env,
+     check_log_process_env_shows_unlisted_rabbitmq_vars,
+     check_log_process_env_shows_erl_crash_dump_and_inetrc,
+     check_log_process_env_shows_erl_script_vars,
      check_log_context,
+     check_log_context_with_default_values,
      check_get_used_env_vars,
+     check_get_used_env_vars_redacts_secrets,
+     check_redact_only_known_secrets,
+     check_redact_does_not_catch_unlisted_rabbitmq_secrets,
+     check_redact_cookie_non_latin1,
      check_parse_conf_env_file_output,
+     check_post_port_cmd_output_redacts_secrets,
+     check_post_port_cmd_output_redacts_traced_assignment,
+     check_post_port_cmd_output_redacts_bare_secrets,
+     check_post_port_cmd_output_does_not_mask_unlisted_vars,
+     check_used_env_vars_have_no_unredacted_secrets,
+     check_get_used_env_vars_recognizes_bare_entries,
+     check_parse_conf_env_file_output1_reexports_bare_entries,
+     check_parse_conf_env_file_output1_reexports_unlisted_rabbitmq_vars,
+     check_parse_conf_env_file_output1_reexports_erl_crash_dump_and_inetrc,
+     check_parse_conf_env_file_output1_reexports_erl_script_vars,
+     check_context_keys_have_no_unredacted_secrets,
+     check_parse_conf_env_file_output_unparseable_line_is_not_logged,
+     check_parse_conf_env_file_output_win32_unparseable_line_is_not_logged,
+     check_unicode_characters_to_list_error_is_not_logged,
      check_parse_conf_env_file_output_win32
     ].
 
@@ -1048,11 +1098,180 @@ check_value_is_yes(_) ->
     ?assertNot(rabbit_env:value_is_yes(random_string() ++ ".")).
 
 check_log_process_env(_) ->
-    ok = rabbit_env:log_process_env().
+    PassSecret = "pass-secret-" ++ random_string(),
+    PlainValue = "plain-value-" ++ random_string(),
+    UnusedValue = "unused-value-" ++ random_string(),
+    UnusedVar = "RABBIT_ENV_SUITE_TEST_UNUSED",
+    Lines = with_env_vars(
+              [{"RABBITMQ_ERLANG_COOKIE", ?FIXED_COOKIE_SECRET},
+               {"RABBITMQ_DEFAULT_PASS", PassSecret},
+               {"RABBITMQ_LOGS", PlainValue},
+               {UnusedVar, UnusedValue}],
+              fun() -> capture_debug_log(fun rabbit_env:log_process_env/0) end),
+    ?assertNot(log_contains(Lines, ?FIXED_COOKIE_SECRET)),
+    ?assertNot(log_contains(Lines, PassSecret)),
+    ?assert(log_contains(Lines, "******")),
+    ?assert(log_contains(Lines, ?FIXED_COOKIE_HASH)),
+    %% A used, non-sensitive var logs its real value.
+    ?assert(log_contains(Lines, PlainValue)),
+    %% An unused var's name is logged, never its value.
+    ?assertNot(log_contains(Lines, UnusedValue)),
+    ?assert(log_contains(Lines, UnusedVar ++ " (unused)")).
+
+%% Any `RABBITMQ_*` variable is controlled by RabbitMQ itself, even
+%% one only consumed by the launch scripts and not read by
+%% `rabbit_env` directly; showing its real value is safe.
+check_log_process_env_shows_unlisted_rabbitmq_vars(_) ->
+    Value = "boot-module-" ++ random_string(),
+    Lines = with_env_vars(
+              [{"RABBITMQ_BOOT_MODULE", Value}],
+              fun() -> capture_debug_log(fun rabbit_env:log_process_env/0) end),
+    ?assert(log_contains(Lines, Value)),
+    ?assertNot(
+       log_contains(Lines, "RABBITMQ_BOOT_MODULE (unused)")).
+
+%% Not `RABBITMQ_`-prefixed, but genuinely read by rabbit's own
+%% runtime code (rabbit_prelaunch_logging/rabbit_peer_discovery).
+check_log_process_env_shows_erl_crash_dump_and_inetrc(_) ->
+    CrashDumpValue = "crash-dump-" ++ random_string(),
+    InetrcValue = "inetrc-" ++ random_string(),
+    Lines = with_env_vars(
+              [{"ERL_CRASH_DUMP", CrashDumpValue},
+               {"ERL_INETRC", InetrcValue}],
+              fun() -> capture_debug_log(fun rabbit_env:log_process_env/0) end),
+    ?assert(log_contains(Lines, CrashDumpValue)),
+    ?assert(log_contains(Lines, InetrcValue)),
+    ?assertNot(log_contains(Lines, "ERL_CRASH_DUMP (unused)")),
+    ?assertNot(log_contains(Lines, "ERL_INETRC (unused)")).
+
+%% Not `RABBITMQ_`-prefixed, but genuinely read/exported by
+%% `scripts/rabbitmq-env`; "(unused)" would be a false claim for
+%% these, since they're used, just not by rabbit_env directly.
+check_log_process_env_shows_erl_script_vars(_) ->
+    LibsValue = "libs-" ++ random_string(),
+    PortValue = "epmd-port-" ++ random_string(),
+    AddressValue = "epmd-address-" ++ random_string(),
+    EtsTablesValue = "ets-tables-" ++ random_string(),
+    PortsValue = "ports-" ++ random_string(),
+    Lines = with_env_vars(
+              [{"ERL_LIBS", LibsValue},
+               {"ERL_EPMD_PORT", PortValue},
+               {"ERL_EPMD_ADDRESS", AddressValue},
+               {"ERL_MAX_ETS_TABLES", EtsTablesValue},
+               {"ERL_MAX_PORTS", PortsValue}],
+              fun() -> capture_debug_log(fun rabbit_env:log_process_env/0) end),
+    ?assert(log_contains(Lines, LibsValue)),
+    ?assert(log_contains(Lines, PortValue)),
+    ?assert(log_contains(Lines, AddressValue)),
+    ?assert(log_contains(Lines, EtsTablesValue)),
+    ?assert(log_contains(Lines, PortsValue)),
+    ?assertNot(log_contains(Lines, "ERL_LIBS (unused)")),
+    ?assertNot(log_contains(Lines, "ERL_EPMD_PORT (unused)")),
+    ?assertNot(log_contains(Lines, "ERL_EPMD_ADDRESS (unused)")),
+    ?assertNot(log_contains(Lines, "ERL_MAX_ETS_TABLES (unused)")),
+    ?assertNot(log_contains(Lines, "ERL_MAX_PORTS (unused)")).
+
+%% Sets each `{Var, Value}`, runs `Fun`, then restores each `Var` to
+%% whatever it was before (unset if it wasn't set), even if `Fun`
+%% throws.
+with_env_vars(VarValues, Fun) ->
+    Saved = [{Var, os:getenv(Var)} || {Var, _} <- VarValues],
+    lists:foreach(fun({Var, Value}) -> os:putenv(Var, Value) end, VarValues),
+    try
+        Fun()
+    after
+        lists:foreach(
+          fun({Var, false}) -> os:unsetenv(Var);
+             ({Var, Value}) -> os:putenv(Var, Value)
+          end, Saved)
+    end.
 
 check_log_context(_) ->
-    Context = rabbit_env:get_context(),
-    ok = rabbit_env:log_context(Context).
+    CookieSecret = list_to_atom(?FIXED_COOKIE_SECRET),
+    PassSecret = list_to_binary("pass-secret-" ++ random_string()),
+    PlainValue = list_to_binary("plain-value-" ++ random_string()),
+    Context = maps:merge(
+                rabbit_env:get_context(),
+                #{erlang_cookie => CookieSecret,
+                  default_pass => PassSecret,
+                  default_vhost => PlainValue}),
+    Lines = capture_debug_log(fun() -> rabbit_env:log_context(Context) end),
+    ?assertNot(log_contains(Lines, ?FIXED_COOKIE_SECRET)),
+    ?assertNot(log_contains(Lines, binary_to_list(PassSecret))),
+    ?assert(log_contains(Lines, "******")),
+    ?assert(log_contains(Lines, ?FIXED_COOKIE_HASH)),
+    ?assert(log_contains(Lines, binary_to_list(PlainValue))).
+
+%% Must not crash when unset.
+check_log_context_with_default_values(_) ->
+    %% `get_prefixed_env_var/1` falls back to the unprefixed name.
+    Lines = without_env_vars(
+              ["RABBITMQ_ERLANG_COOKIE", "ERLANG_COOKIE",
+               "RABBITMQ_DEFAULT_PASS", "DEFAULT_PASS"],
+              fun() ->
+                      Context = rabbit_env:get_context(),
+                      ?assertMatch(
+                         #{erlang_cookie := undefined,
+                           default_pass := undefined},
+                         Context),
+                      capture_debug_log(
+                        fun() -> rabbit_env:log_context(Context) end)
+              end),
+    ?assert(log_contains(Lines, "erlang_cookie: undefined")),
+    ?assert(log_contains(Lines, "default_pass: undefined")).
+
+%% Like `with_env_vars/2`, but forces each `Var` unset for the
+%% duration of `Fun` instead of setting it.
+without_env_vars(Vars, Fun) ->
+    Saved = [{Var, os:getenv(Var)} || Var <- Vars],
+    lists:foreach(fun os:unsetenv/1, Vars),
+    try
+        Fun()
+    after
+        lists:foreach(
+          fun({_Var, false}) -> ok;
+             ({Var, Value}) -> os:putenv(Var, Value)
+          end, Saved)
+    end.
+
+%% Captures `?LOG_DEBUG` output via a temporary logger handler.
+capture_debug_log(Fun) ->
+    Ref = make_ref(),
+    HandlerId = list_to_atom(
+                  "rabbit_env_SUITE_log_capture_" ++
+                  integer_to_list(erlang:unique_integer([positive]))),
+    #{level := PrevLevel} = logger:get_primary_config(),
+    ok = logger:set_primary_config(level, debug),
+    ok = logger:add_handler(
+           HandlerId, ?MODULE,
+           #{config => #{pid => self(), ref => Ref}, level => debug}),
+    try
+        Fun()
+    after
+        _ = logger:remove_handler(HandlerId),
+        ok = logger:set_primary_config(level, PrevLevel)
+    end,
+    [format_event(Event) || Event <- drain_log_events(Ref, [])].
+
+drain_log_events(Ref, Acc) ->
+    receive
+        {Ref, Event} -> drain_log_events(Ref, [Event | Acc])
+    after 500 ->
+        lists:reverse(Acc)
+    end.
+
+format_event(#{msg := {Fmt, Args}}) when is_list(Fmt) ->
+    lists:flatten(io_lib:format(Fmt, Args));
+format_event(_) ->
+    "".
+
+log_contains(Lines, Needle) ->
+    lists:any(fun(Line) -> string:find(Line, Needle) =/= nomatch end, Lines).
+
+%% Used by `capture_debug_log/1`.
+log(LogEvent, #{config := #{pid := Pid, ref := Ref}}) ->
+    Pid ! {Ref, LogEvent},
+    ok.
 
 check_get_used_env_vars(_) ->
     os:putenv("RABBITMQ_LOGS", "-"),
@@ -1064,6 +1283,129 @@ check_get_used_env_vars(_) ->
     ?assertNot(lists:keymember("PATH", 1, Vars)),
     os:unsetenv("RABBITMQ_LOGS"),
     os:unsetenv("CONFIG_FILE").
+
+%% `SYS_PREFIX` is listed bare (no `RABBITMQ_` prefix) in
+%% `?USED_ENV_VARS`; it must still be recognized as used.
+check_get_used_env_vars_recognizes_bare_entries(_) ->
+    Value = "prefix-" ++ random_string(),
+    Vars = with_env_vars(
+             [{"SYS_PREFIX", Value}],
+             fun() -> rabbit_env:get_used_env_vars() end),
+    ?assertEqual(Value, proplists:get_value("SYS_PREFIX", Vars)).
+
+%% `SYS_PREFIX` set via `$RABBITMQ_CONF_ENV_FILE` and not already in
+%% the OS environment must be re-exported, so `sys_prefix/1`'s later
+%% `os:getenv/1` picks it up.
+check_parse_conf_env_file_output1_reexports_bare_entries(_) ->
+    without_env_vars(
+      ["SYS_PREFIX"],
+      fun() ->
+              Value = "prefix-" ++ random_string(),
+              Context = #{os_type => os:type()},
+              rabbit_env:parse_conf_env_file_output1(
+                Context, ["SYS_PREFIX=" ++ Value]),
+              ?assertEqual(Value, os:getenv("SYS_PREFIX"))
+      end).
+
+%% Any `RABBITMQ_*` variable set via `$RABBITMQ_CONF_ENV_FILE`, not
+%% just the ones `rabbit_env` reads directly, must be re-exported.
+check_parse_conf_env_file_output1_reexports_unlisted_rabbitmq_vars(_) ->
+    without_env_vars(
+      ["RABBITMQ_BOOT_MODULE"],
+      fun() ->
+              Value = "boot-module-" ++ random_string(),
+              Context = #{os_type => os:type()},
+              rabbit_env:parse_conf_env_file_output1(
+                Context, ["RABBITMQ_BOOT_MODULE=" ++ Value]),
+              ?assertEqual(Value, os:getenv("RABBITMQ_BOOT_MODULE"))
+      end).
+
+%% Same, for two of the other non-prefixed `?USED_ENV_VARS` entries.
+check_parse_conf_env_file_output1_reexports_erl_crash_dump_and_inetrc(_) ->
+    without_env_vars(
+      ["ERL_CRASH_DUMP", "ERL_INETRC"],
+      fun() ->
+              CrashDumpValue = "crash-dump-" ++ random_string(),
+              InetrcValue = "inetrc-" ++ random_string(),
+              Context = #{os_type => os:type()},
+              rabbit_env:parse_conf_env_file_output1(
+                Context,
+                ["ERL_CRASH_DUMP=" ++ CrashDumpValue,
+                 "ERL_INETRC=" ++ InetrcValue]),
+              ?assertEqual(CrashDumpValue, os:getenv("ERL_CRASH_DUMP")),
+              ?assertEqual(InetrcValue, os:getenv("ERL_INETRC"))
+      end).
+
+%% Same, for the vars scripts/rabbitmq-env reads or exports.
+check_parse_conf_env_file_output1_reexports_erl_script_vars(_) ->
+    Vars = ["ERL_LIBS", "ERL_EPMD_PORT", "ERL_EPMD_ADDRESS",
+            "ERL_MAX_ETS_TABLES", "ERL_MAX_PORTS"],
+    without_env_vars(
+      Vars,
+      fun() ->
+              Values = [{Var, Var ++ "-" ++ random_string()} || Var <- Vars],
+              Context = #{os_type => os:type()},
+              rabbit_env:parse_conf_env_file_output1(
+                Context,
+                [Var ++ "=" ++ Value || {Var, Value} <- Values]),
+              lists:foreach(
+                fun({Var, Value}) ->
+                        ?assertEqual(Value, os:getenv(Var))
+                end, Values)
+      end).
+
+%% Only the known secrets are redacted, by exact name (prefixed or
+%% not), never by a name that merely looks sensitive.
+check_redact_only_known_secrets(_) ->
+    ?assertEqual("******",
+                 rabbit_env:redact("RABBITMQ_DEFAULT_PASS", "any-value")),
+    ?assertEqual("******", rabbit_env:redact("DEFAULT_PASS", "any-value")),
+    ?assertEqual("******", rabbit_env:redact(default_pass, <<"any-value">>)),
+    ?assertEqual(?FIXED_COOKIE_HASH,
+                 rabbit_env:redact("RABBITMQ_ERLANG_COOKIE",
+                                   ?FIXED_COOKIE_SECRET)),
+    ?assertEqual(?FIXED_COOKIE_HASH,
+                 rabbit_env:redact("ERLANG_COOKIE", ?FIXED_COOKIE_SECRET)),
+    ?assertEqual(?FIXED_COOKIE_HASH,
+                 rabbit_env:redact(erlang_cookie,
+                                   list_to_atom(?FIXED_COOKIE_SECRET))),
+    ?assertEqual("any-value", rabbit_env:redact("SECRET_COOKIE", "any-value")),
+    ?assertEqual("any-value", rabbit_env:redact("HTTP_COOKIE", "any-value")).
+
+%% An accepted trade-off: `redact/2` only masks the exact names in
+%% `?REDACTED_VARS`, so a var that merely looks like a secret is
+%% shown as-is.
+check_redact_does_not_catch_unlisted_rabbitmq_secrets(_) ->
+    Value = "any-value-" ++ random_string(),
+    Vars = with_env_vars(
+             [{"RABBITMQ_SOME_PASSWORD", Value}],
+             fun() -> rabbit_env:get_used_env_vars() end),
+    %% If it weren't used, it wouldn't appear at all; if it were
+    %% redacted, its value wouldn't come back unchanged.
+    ?assertEqual(Value, proplists:get_value("RABBITMQ_SOME_PASSWORD", Vars)).
+
+%% Must not crash on a non-Latin-1 cookie.
+check_redact_cookie_non_latin1(_) ->
+    NonLatin1 = [26085, 26412],
+    ?assertEqual(
+       base64:encode_to_string(erlang:md5(unicode:characters_to_binary(NonLatin1))),
+       rabbit_env:redact("RABBITMQ_ERLANG_COOKIE", NonLatin1)).
+
+%% `os_env` is reachable without debug logging enabled.
+check_get_used_env_vars_redacts_secrets(_) ->
+    PassSecret = "pass-secret-" ++ random_string(),
+    os:putenv("RABBITMQ_ERLANG_COOKIE", ?FIXED_COOKIE_SECRET),
+    os:putenv("RABBITMQ_DEFAULT_PASS", PassSecret),
+    try
+        Vars = rabbit_env:get_used_env_vars(),
+        ?assertEqual("******",
+                     proplists:get_value("RABBITMQ_DEFAULT_PASS", Vars)),
+        ?assertEqual(?FIXED_COOKIE_HASH,
+                     proplists:get_value("RABBITMQ_ERLANG_COOKIE", Vars))
+    after
+        os:unsetenv("RABBITMQ_ERLANG_COOKIE"),
+        os:unsetenv("RABBITMQ_DEFAULT_PASS")
+    end.
 
 check_variable(Variable, Key, ValueToSet, Comparison) ->
     os:putenv(Variable, ValueToSet),
@@ -1194,3 +1536,151 @@ check_parse_conf_env_file_output(_) ->
           "'"],
          #{}
         )).
+
+%% Only the log line is redacted; the parser still gets the real
+%% values.
+check_post_port_cmd_output_redacts_secrets(_) ->
+    CookieSecret = "cookie-secret-" ++ random_string(),
+    PassSecret = "pass-secret-" ++ random_string(),
+    Output = string:join(
+               ["RABBITMQ_ERLANG_COOKIE=" ++ CookieSecret,
+                "RABBITMQ_DEFAULT_PASS=" ++ PassSecret,
+                "RABBITMQ_DEFAULT_USER=guest"],
+               "\n"),
+    Context = #{os_type => os:type()},
+    {Lines, LogLines} =
+    capture_and_return(
+      fun() -> rabbit_env:post_port_cmd_output(Context, Output, 0) end),
+    ?assert(lists:member("RABBITMQ_ERLANG_COOKIE=" ++ CookieSecret, Lines)),
+    ?assert(lists:member("RABBITMQ_DEFAULT_PASS=" ++ PassSecret, Lines)),
+    ?assertNot(log_contains(LogLines, CookieSecret)),
+    ?assertNot(log_contains(LogLines, PassSecret)),
+    ?assert(log_contains(LogLines, "******")),
+    ?assert(log_contains(LogLines, "RABBITMQ_DEFAULT_USER=guest")).
+
+%% `sh -x` (see `do_load_conf_env_file/3`) traces `export VAR=value`
+%% as `++ export VAR=value` and `++ VAR=value` before the real `set`
+%% dump line; all three must be redacted, not just the last one.
+check_post_port_cmd_output_redacts_traced_assignment(_) ->
+    PassSecret = "pass-secret-" ++ random_string(),
+    Output = string:join(
+               ["++ export RABBITMQ_DEFAULT_PASS=" ++ PassSecret,
+                "++ RABBITMQ_DEFAULT_PASS=" ++ PassSecret,
+                "RABBITMQ_DEFAULT_PASS=" ++ PassSecret],
+               "\n"),
+    Context = #{os_type => os:type()},
+    {_Lines, LogLines} =
+    capture_and_return(
+      fun() -> rabbit_env:post_port_cmd_output(Context, Output, 0) end),
+    ?assertNot(log_contains(LogLines, PassSecret)).
+
+%% Same trade-off as `redact/2`: only the exact names in
+%% `?SH_MASKED_VARS` are masked, even though the `set` dump also
+%% carries the shell child's inherited, non-RabbitMQ variables.
+check_post_port_cmd_output_does_not_mask_unlisted_vars(_) ->
+    Secret = "AKIA-secret-" ++ random_string(),
+    Output = "AWS_SECRET_ACCESS_KEY=" ++ Secret,
+    Context = #{os_type => os:type()},
+    {_Lines, LogLines} =
+    capture_and_return(
+      fun() -> rabbit_env:post_port_cmd_output(Context, Output, 0) end),
+    ?assert(log_contains(LogLines, Secret)).
+
+%% Bare (non-`RABBITMQ_`-prefixed) forms are exact-listed too.
+check_post_port_cmd_output_redacts_bare_secrets(_) ->
+    PassSecret = "pass-secret-" ++ random_string(),
+    CookieSecret = "cookie-secret-" ++ random_string(),
+    Output = string:join(
+               ["DEFAULT_PASS=" ++ PassSecret,
+                "ERLANG_COOKIE=" ++ CookieSecret],
+               "\n"),
+    Context = #{os_type => os:type()},
+    {_Lines, LogLines} =
+    capture_and_return(
+      fun() -> rabbit_env:post_port_cmd_output(Context, Output, 0) end),
+    ?assertNot(log_contains(LogLines, PassSecret)),
+    ?assertNot(log_contains(LogLines, CookieSecret)).
+
+%% Every sensitive-looking `?USED_ENV_VARS` entry must be in
+%% `?REDACTED_VARS`, so adding a future secret-bearing var without
+%% also redacting it doesn't go unnoticed.
+check_used_env_vars_have_no_unredacted_secrets(_) ->
+    LooksSensitive =
+    fun(Var) ->
+            Lower = string:lowercase(Var),
+            lists:any(fun(Part) -> string:find(Lower, Part) =/= nomatch end,
+                      ["pass", "secret", "token", "cookie"])
+    end,
+    IsRedacted =
+    fun(Var) ->
+            BareForm = case Var of
+                           "RABBITMQ_" ++ Rest -> Rest;
+                           _ -> Var
+                       end,
+            %% Both forms are reachable via `var_is_used/1`'s
+            %% bare-form fallback, so both must be redacted.
+            rabbit_env:redact(Var, "x") =/= "x" andalso
+            rabbit_env:redact(BareForm, "x") =/= "x"
+    end,
+    Unredacted = [Var || Var <- rabbit_env:used_env_vars(),
+                          LooksSensitive(Var),
+                          not IsRedacted(Var)],
+    ?assertEqual([], Unredacted).
+
+%% Same invariant as `check_used_env_vars_have_no_unredacted_secrets`,
+%% but for `Context` map keys.
+check_context_keys_have_no_unredacted_secrets(_) ->
+    LooksSensitive =
+    fun(Key) ->
+            Lower = string:lowercase(atom_to_list(Key)),
+            lists:any(fun(Part) -> string:find(Lower, Part) =/= nomatch end,
+                      ["pass", "secret", "token", "cookie"])
+    end,
+    Context = rabbit_env:get_context(),
+    Unredacted = [Key || Key <- maps:keys(Context),
+                          LooksSensitive(Key),
+                          rabbit_env:redact(Key, "x") =:= "x"],
+    ?assertEqual([], Unredacted).
+
+%% Can't redact by name; must not log content.
+check_parse_conf_env_file_output_unparseable_line_is_not_logged(_) ->
+    SecretFragment = "pass-secret-" ++ random_string(),
+    LogLines = capture_debug_log(
+                 fun() ->
+                         rabbit_env:parse_conf_env_file_output2(
+                           [SecretFragment], #{})
+                 end),
+    ?assertNot(log_contains(LogLines, SecretFragment)),
+    %% Not vacuous: the warning was actually logged, just without
+    %% the line's content.
+    ?assert(log_contains(LogLines, "Failed to parse")).
+
+check_parse_conf_env_file_output_win32_unparseable_line_is_not_logged(_) ->
+    SecretFragment = "pass-secret-" ++ random_string(),
+    LogLines = capture_debug_log(
+                 fun() ->
+                         rabbit_env:parse_conf_env_file_output_win32(
+                           [SecretFragment], #{})
+                 end),
+    ?assertNot(log_contains(LogLines, SecretFragment)),
+    ?assert(log_contains(LogLines, "Failed to parse")).
+
+%% Decoding errors on secret-bearing input must not log content.
+check_unicode_characters_to_list_error_is_not_logged(_) ->
+    SecretFragment = "pass-secret-" ++ random_string(),
+    Input = <<(list_to_binary("RABBITMQ_DEFAULT_PASS=" ++ SecretFragment))/binary,
+              255>>,
+    LogLines = capture_debug_log(
+                 fun() -> rabbit_env:unicode_characters_to_list(Input) end),
+    ?assertNot(log_contains(LogLines, SecretFragment)),
+    ?assert(log_contains(LogLines, "error converting")).
+
+%% Like `capture_debug_log/1`, but also returns `Fun`'s return value.
+capture_and_return(Fun) ->
+    RetRef = make_ref(),
+    Lines = capture_debug_log(fun() -> self() ! {RetRef, Fun()} end),
+    receive
+        {RetRef, Ret} -> {Ret, Lines}
+    after 0 ->
+        error(no_return_value)
+    end.
