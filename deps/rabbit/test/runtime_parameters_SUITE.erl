@@ -14,7 +14,8 @@
 all() ->
     [
         test_limits,
-        boots_with_legacy_atom_keyed_internal_cluster_id
+        boots_with_legacy_atom_keyed_internal_cluster_id,
+        set_global_writes_atom_key_until_feature_flag_is_enabled
     ].
 
 %% -------------------------------------------------------------------
@@ -73,4 +74,38 @@ boots_with_legacy_atom_keyed_internal_cluster_id(Config) ->
 seed_legacy_internal_cluster_id(Value) ->
     ok = rabbit_db_rtparams:delete(<<"internal_cluster_id">>),
     _ = rabbit_db_rtparams:set(internal_cluster_id, Value),
+    ok.
+
+set_global_writes_atom_key_until_feature_flag_is_enabled(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE,
+           set_global_writes_atom_key_until_feature_flag_is_enabled1, []).
+
+set_global_writes_atom_key_until_feature_flag_is_enabled1() ->
+    Name = <<"zzz_ff_gate_test">>,
+    AtomKey = binary_to_atom(Name, utf8),
+    AtomPath = rabbit_db_rtparams:khepri_global_rp_path(AtomKey),
+    BinaryPath = rabbit_db_rtparams:khepri_global_rp_path(Name),
+
+    ok = meck:new(rabbit_feature_flags, [passthrough, no_link]),
+    try
+        ok = meck:expect(rabbit_feature_flags, is_enabled,
+                         fun('rabbitmq_4.4.0') -> false;
+                            (Other) -> meck:passthrough([Other])
+                         end),
+        ok = rabbit_runtime_parameters:set_global(Name, <<"v1">>, <<"acting-user">>),
+        {ok, _} = rabbit_khepri:get(AtomPath),
+        {error, {khepri, node_not_found, _}} = rabbit_khepri:get(BinaryPath),
+
+        ok = meck:expect(rabbit_feature_flags, is_enabled,
+                         fun('rabbitmq_4.4.0') -> true;
+                            (Other) -> meck:passthrough([Other])
+                         end),
+        ok = rabbit_runtime_parameters:set_global(Name, <<"v2">>, <<"acting-user">>),
+        {ok, _} = rabbit_khepri:get(BinaryPath),
+        {error, {khepri, node_not_found, _}} = rabbit_khepri:get(AtomPath)
+    after
+        meck:unload(rabbit_feature_flags),
+        rabbit_runtime_parameters:clear_global(Name, <<"acting-user">>)
+    end,
     ok.

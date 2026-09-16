@@ -32,7 +32,7 @@
 %% are broadcasted over rabbit_event.
 %%
 %% Global parameters keys are binaries and values are JSON documents.
-%% NOTE: older nodes stored the keys as atoms, so we handle atoms as well.
+%% NOTE: before RabbitMQ 4.4, the keys were atoms.
 %%
 %% See also:
 %%
@@ -107,14 +107,19 @@ parse_set_global(Name, String, ActingUser) ->
 set_global(Name, Term, ActingUser)  ->
     NameAsBinary = rabbit_data_coercion:to_binary(Name),
     ?LOG_DEBUG("Setting global parameter '~ts' to ~tp", [NameAsBinary, Term]),
-    ok = migrate_legacy_atom_keyed(NameAsBinary),
-    _ = rabbit_db_rtparams:set(NameAsBinary, Term),
+    StorageKey = case rabbit_feature_flags:is_enabled('rabbitmq_4.4.0') of
+                      true ->
+                          ok = migrate_legacy_atom_keyed(NameAsBinary),
+                          NameAsBinary;
+                      false ->
+                          rabbit_data_coercion:to_atom(Name)
+                  end,
+    _ = rabbit_db_rtparams:set(StorageKey, Term),
     event_notify(parameter_set, none, global, [{name,  NameAsBinary},
                                                {value, Term},
                                                {user_who_performed_action, ActingUser}]),
     ok.
 
-%% Removes a legacy atom-keyed record left by an old node.
 migrate_legacy_atom_keyed(NameAsBinary) ->
     case rabbit_db_rtparams:get(NameAsBinary) of
         #runtime_parameters{key = Key} when is_atom(Key) ->
