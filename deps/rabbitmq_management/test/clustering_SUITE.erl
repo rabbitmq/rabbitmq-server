@@ -75,6 +75,8 @@ merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management_agent, [
                                      {rates_mode, detailed},
+                                     %% keep it frequent so tests don't have to wait
+                                     {metrics_gc_interval, 500},
                                      {sample_retention_policies,
                                           %% List of {MaxAgeInSeconds, SampleEveryNSeconds}
                                           [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},
