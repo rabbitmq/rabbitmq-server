@@ -10,7 +10,7 @@ defmodule SetGlobalParameterCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand
 
-  @key :mqtt_default_vhosts
+  @key "mqtt_default_vhosts"
   @value "{\"O=client,CN=dummy\":\"somevhost\"}"
 
   setup_all do

@@ -34,7 +34,7 @@
 %% -------------------------------------------------------------------
 
 -spec set(Key, Term) -> Ret when
-      Key :: atom(),
+      Key :: atom() | binary(),
       Term :: any(),
       Ret :: new | {old, Term}.
 %% @doc Sets the new value of the global runtime parameter named `Key'.
@@ -44,7 +44,7 @@
 %%
 %% @private
 
-set(Key, Term) when is_atom(Key) ->
+set(Key, Term) when is_atom(Key) orelse is_binary(Key) ->
     Path = khepri_rp_path(Key),
     Record = #runtime_parameters{key   = Key,
                                  value = Term},
@@ -102,7 +102,7 @@ set_in_khepri_tx(Key, Term) ->
 %% -------------------------------------------------------------------
 
 -spec get(Key) -> Ret when
-      Key :: atom() | {vhost:name(), binary(), binary()},
+      Key :: atom() | binary() | {vhost:name(), binary(), binary()},
       Ret :: #runtime_parameters{} | undefined.
 %% @doc Returns a runtime parameter.
 %%
@@ -116,10 +116,24 @@ get({VHostName, Comp, Name} = Key)
        is_binary(Comp) andalso
        (is_binary(Name) orelse is_atom(Name)) ->
     do_get(Key);
+get(Key) when is_binary(Key) ->
+    case do_get(Key) of
+        undefined -> get_legacy_atom_keyed(Key);
+        Record    -> Record
+    end;
 get(Key) when is_atom(Key) ->
     do_get(Key).
 
-do_get(Key) when is_atom(Key) ->
+%% Older nodes stored global runtime parameter names as atoms. Fall
+%% back to that representation for values set by such a node.
+get_legacy_atom_keyed(Key) ->
+    try binary_to_existing_atom(Key, utf8) of
+        AtomKey -> do_get(AtomKey)
+    catch
+        error:badarg -> undefined
+    end.
+
+do_get(Key) when is_atom(Key) orelse is_binary(Key) ->
     try ets:lookup(?KHEPRI_GLOBAL_PROJECTION, Key) of
         []       -> undefined;
         [Record] -> Record
@@ -189,12 +203,12 @@ get_all(VHostName, Comp)
 %% -------------------------------------------------------------------
 
 -spec delete(Key) -> ok when
-      Key :: atom().
+      Key :: atom() | binary().
 %% @doc Deletes the global runtime parameter named `Key'.
 %%
 %% @private
 
-delete(Key) when is_atom(Key) ->
+delete(Key) when is_atom(Key) orelse is_binary(Key) ->
     do_delete(Key).
 
 -spec delete(VHostName, Comp, Name) -> ok when

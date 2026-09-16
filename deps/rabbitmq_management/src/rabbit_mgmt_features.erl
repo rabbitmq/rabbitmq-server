@@ -136,7 +136,7 @@ transform_retention_intervals([{MaxAgeInSeconds, _}|Rest], Acc) ->
     transform_retention_intervals(Rest, [AccVal|Acc]).
 
 cluster_tags() ->
-    Val = case rabbit_runtime_parameters:value_global(cluster_tags) of
+    Val = case rabbit_runtime_parameters:value_global(<<"cluster_tags">>) of
         not_found ->
             [];
         Tags -> Tags

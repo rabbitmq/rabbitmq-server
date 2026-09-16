@@ -10,7 +10,7 @@ defmodule ListGlobalParametersCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.ListGlobalParametersCommand
 
-  @key :mqtt_default_vhosts
+  @key "mqtt_default_vhosts"
   @value "{\"O=client,CN=dummy\":\"somevhost\"}"
 
   setup_all do
@@ -55,8 +55,8 @@ defmodule ListGlobalParametersCommandTest do
     initial = for param <- @command.run([], context[:opts]), do: Map.new(param)
 
     parameters = [
-      %{name: :global_param_1, value: "{\"key1\":\"value1\"}"},
-      %{name: :global_param_2, value: "{\"key2\":\"value2\"}"}
+      %{name: "global_param_1", value: "{\"key1\":\"value1\"}"},
+      %{name: "global_param_2", value: "{\"key2\":\"value2\"}"}
     ]
 
     Enum.each(parameters, fn %{name: name, value: value} ->

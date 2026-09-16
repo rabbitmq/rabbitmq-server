@@ -89,7 +89,7 @@ get_vhost(_Config) ->
 
     %% certificate user, cert/vhost mapping with global runtime parameter
     %% should use mapping
-    set_global_parameter(mqtt_default_vhosts, [
+    set_global_parameter(<<"mqtt_default_vhosts">>, [
         {<<"O=client,CN=dummy">>,     <<"somevhost">>},
         {<<"O=client,CN=otheruser">>, <<"othervhost">>}
     ]),
@@ -98,13 +98,13 @@ get_vhost(_Config) ->
 
     %% certificate user, cert/vhost mapping with global runtime parameter, but no key for the user
     %% should use default vhost
-    set_global_parameter(mqtt_default_vhosts, [{<<"O=client,CN=otheruser">>, <<"somevhost">>}]),
+    set_global_parameter(<<"mqtt_default_vhosts">>, [{<<"O=client,CN=otheruser">>, <<"somevhost">>}]),
     {_, {<<"/">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, <<"O=client,CN=dummy">>, 1883),
     clear_vhost_global_parameters(),
 
     %% not a certificate user, port/vhost mapping
     %% should use mapping
-    set_global_parameter(mqtt_port_to_vhost_mapping, [
+    set_global_parameter(<<"mqtt_port_to_vhost_mapping">>, [
         {<<"1883">>, <<"somevhost">>},
         {<<"1884">>, <<"othervhost">>}
     ]),
@@ -113,7 +113,7 @@ get_vhost(_Config) ->
 
     %% not a certificate user, port/vhost mapping, but vhost in username
     %% vhost in username should take precedence
-    set_global_parameter(mqtt_port_to_vhost_mapping, [
+    set_global_parameter(<<"mqtt_port_to_vhost_mapping">>, [
         {<<"1883">>, <<"somevhost">>},
         {<<"1884">>, <<"othervhost">>}
     ]),
@@ -122,7 +122,7 @@ get_vhost(_Config) ->
 
     %% not a certificate user, port/vhost mapping, but no mapping for this port
     %% should use default vhost
-    set_global_parameter(mqtt_port_to_vhost_mapping, [
+    set_global_parameter(<<"mqtt_port_to_vhost_mapping">>, [
         {<<"1884">>, <<"othervhost">>}
     ]),
     {_, {<<"/">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, none, 1883),
@@ -130,7 +130,7 @@ get_vhost(_Config) ->
 
     %% certificate user, port/vhost parameter, mapping, no cert/vhost mapping
     %% should use port/vhost mapping
-    set_global_parameter(mqtt_port_to_vhost_mapping, [
+    set_global_parameter(<<"mqtt_port_to_vhost_mapping">>, [
         {<<"1883">>, <<"somevhost">>},
         {<<"1884">>, <<"othervhost">>}
     ]),
@@ -140,12 +140,12 @@ get_vhost(_Config) ->
     %% certificate user, port/vhost parameter but no mapping, cert/vhost mapping
     %% should use cert/vhost mapping
     set_global_parameters(
-      [{mqtt_default_vhosts,
+      [{<<"mqtt_default_vhosts">>,
         [
          {<<"O=client,CN=dummy">>,     <<"somevhost">>},
          {<<"O=client,CN=otheruser">>, <<"othervhost">>}
         ]},
-       {mqtt_port_to_vhost_mapping,
+       {<<"mqtt_port_to_vhost_mapping">>,
         [
          {<<"1884">>, <<"othervhost">>}
         ]}]),
@@ -155,12 +155,12 @@ get_vhost(_Config) ->
     %% certificate user, port/vhost parameter, cert/vhost parameter
     %% cert/vhost parameter takes precedence
     set_global_parameters(
-      [{mqtt_default_vhosts,
+      [{<<"mqtt_default_vhosts">>,
         [
          {<<"O=client,CN=dummy">>,     <<"cert-somevhost">>},
          {<<"O=client,CN=otheruser">>, <<"othervhost">>}
         ]},
-       {mqtt_port_to_vhost_mapping,
+       {<<"mqtt_port_to_vhost_mapping">>,
         [
          {<<"1883">>, <<"port-vhost">>},
          {<<"1884">>, <<"othervhost">>}
@@ -175,12 +175,12 @@ get_vhost(_Config) ->
     %% not a certificate user, port/vhost parameter, cert/vhost parameter
     %% port/vhost mapping is used, as cert/vhost should not be used
     set_global_parameters(
-      [{mqtt_default_vhosts,
+      [{<<"mqtt_default_vhosts">>,
         [
          {<<"O=cert">>,                <<"cert-somevhost">>},
          {<<"O=client,CN=otheruser">>, <<"othervhost">>}
         ]},
-       {mqtt_port_to_vhost_mapping,
+       {<<"mqtt_port_to_vhost_mapping">>,
         [
          {<<"1883">>, <<"port-vhost">>},
          {<<"1884">>, <<"othervhost">>}

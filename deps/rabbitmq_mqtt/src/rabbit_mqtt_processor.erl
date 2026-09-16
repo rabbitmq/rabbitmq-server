@@ -1254,7 +1254,7 @@ get_vhost_username(UserBin) ->
 
 get_vhost_from_user_mapping(User) ->
     UserVirtualHostMapping = rabbit_runtime_parameters:value_global(
-                               mqtt_default_vhosts
+                               <<"mqtt_default_vhosts">>
                               ),
     get_vhost_from_user_mapping(User, UserVirtualHostMapping).
 
@@ -1271,7 +1271,7 @@ get_vhost_from_user_mapping(User, Mapping) ->
 
 get_vhost_from_port_mapping(Port) ->
     PortVirtualHostMapping = rabbit_runtime_parameters:value_global(
-                               mqtt_port_to_vhost_mapping
+                               <<"mqtt_port_to_vhost_mapping">>
                               ),
     get_vhost_from_port_mapping(Port, PortVirtualHostMapping).
 

@@ -35,7 +35,7 @@ handle_event(#event{type  = parameter_set,
                     props = Props0}, State) ->
     Props = rabbit_data_coercion:to_list(Props0),
     case {pget(component, Props), pget(name, Props)} of
-        {global, cluster_name} ->
+        {global, <<"cluster_name">>} ->
             rabbit_federation_parameters:adjust(everything);
         _ ->
             ok
