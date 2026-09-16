@@ -151,9 +151,10 @@ ensure_ssl() ->
 %% and do so without this core module depending on the plugin.
 fix_ssl_options(Config) ->
     Overrides = application:get_env(rabbit, ssl_options_overrides, []),
-    rabbit_ssl_options:fix(
-      lists:foldl(fun({Key, Value}, Acc) -> rabbit_misc:pset(Key, Value, Acc) end,
-                  Config, Overrides)).
+    rabbit_ssl_options:wrap_password_opt(
+      rabbit_ssl_options:fix(
+        lists:foldl(fun({Key, Value}, Acc) -> rabbit_misc:pset(Key, Value, Acc) end,
+                    Config, Overrides))).
 
 -spec tcp_listener_addresses(listener_config()) -> [address()].
 
