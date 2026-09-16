@@ -27,7 +27,7 @@ content_types_provided(ReqData, Context) ->
     {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-    {[{'*', accept_content}], ReqData, Context}.
+    {[{{<<"application">>, <<"json">>, '*'}, accept_content}], ReqData, Context}.
 
 %% Passing the password as a URL path segment risked leaking it via
 %% access logs, proxies, and browser or shell history. GET now only
