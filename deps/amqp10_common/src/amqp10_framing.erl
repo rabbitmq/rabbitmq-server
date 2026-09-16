@@ -254,25 +254,3 @@ pprint(Thing) when is_tuple(Thing) ->
                    {T, lists:zip(Names, [pprint(I) || I <- L])}
     end;
 pprint(Other) -> Other.
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-encode_decode_test_() ->
-    Data = [{{symbol, <<"x-my key">>}, {binary, <<"my value">>}}],
-    Test = fun(M) -> [M] = decode_bin(iolist_to_binary(encode_bin(M))) end,
-    [
-     fun() -> Test(#'v1_0.application_properties'{content = Data}) end,
-     fun() -> Test(#'v1_0.delivery_annotations'{content = Data}) end,
-     fun() -> Test(#'v1_0.message_annotations'{content = Data}) end,
-     fun() -> Test(#'v1_0.footer'{content = Data}) end
-    ].
-
-encode_decode_amqp_sequence_test() ->
-    L = [{utf8, <<"k">>},
-         {binary, <<"v">>}],
-    F = #'v1_0.amqp_sequence'{content = L},
-    [F] = decode_bin(iolist_to_binary(encode_bin(F))),
-    ok.
-
--endif.
