@@ -1372,11 +1372,9 @@ check_redact_only_known_secrets(_) ->
     ?assertEqual("any-value", rabbit_env:redact("SECRET_COOKIE", "any-value")),
     ?assertEqual("any-value", rabbit_env:redact("HTTP_COOKIE", "any-value")).
 
-%% Deliberate, accepted trade-off: any `RABBITMQ_*` name is used
-%% (shown), but only the two known secrets above are redacted. A
-%% name that merely looks like a secret is not caught by
-%% `redact/2`'s exact-name check -- there is no runtime fallback for
-%% names we don't already know about; see `?REDACTED_VARS`.
+%% An accepted trade-off: `redact/2` only masks the exact names in
+%% `?REDACTED_VARS`, so a var that merely looks like a secret is
+%% shown as-is.
 check_redact_does_not_catch_unlisted_rabbitmq_secrets(_) ->
     Value = "any-value-" ++ random_string(),
     Vars = with_env_vars(
@@ -1576,11 +1574,9 @@ check_post_port_cmd_output_redacts_traced_assignment(_) ->
       fun() -> rabbit_env:post_port_cmd_output(Context, Output, 0) end),
     ?assertNot(log_contains(LogLines, PassSecret)).
 
-%% Deliberate, accepted trade-off, same as `redact/2`: the `set` dump
-%% isn't limited to RabbitMQ's own variables (the shell child
-%% inherits the whole process environment), but only the exact names
-%% in `?SH_MASKED_VARS` are masked -- an unrelated var that merely
-%% looks like a secret is shown as-is.
+%% Same trade-off as `redact/2`: only the exact names in
+%% `?SH_MASKED_VARS` are masked, even though the `set` dump also
+%% carries the shell child's inherited, non-RabbitMQ variables.
 check_post_port_cmd_output_does_not_mask_unlisted_vars(_) ->
     Secret = "AKIA-secret-" ++ random_string(),
     Output = "AWS_SECRET_ACCESS_KEY=" ++ Secret,
