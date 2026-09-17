@@ -35,6 +35,7 @@ groups() ->
           login_of_passwordless_user,
           login_of_nonexistent_user,
           set_tags_for_passwordless_user,
+          set_tags_atom_creation_gated_by_feature_flag,
           change_password,
           login_with_pbkdf2_sha256_hashed_password,
           login_with_legacy_4_byte_salt_hashed_password,
@@ -351,13 +352,13 @@ set_tags_for_passwordless_user1(_Config) ->
                                                <<"acting-user">>),
 
     {ok, User1} = rabbit_auth_backend_internal:lookup_user(Username),
-    ?assertEqual([management], internal_user:get_tags(User1)),
+    ?assertEqual([<<"management">>], internal_user:get_tags(User1)),
 
     ok = rabbit_auth_backend_internal:set_tags(Username, [management, policymaker],
                                                <<"acting-user">>),
 
     {ok, User2} = rabbit_auth_backend_internal:lookup_user(Username),
-    ?assertEqual([management, policymaker], internal_user:get_tags(User2)),
+    ?assertEqual([<<"management">>, <<"policymaker">>], internal_user:get_tags(User2)),
 
     ok = rabbit_auth_backend_internal:set_tags(Username, [],
                                                <<"acting-user">>),
@@ -370,6 +371,55 @@ set_tags_for_passwordless_user1(_Config) ->
 
     passed.
 
+set_tags_atom_creation_gated_by_feature_flag(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, set_tags_atom_creation_gated_by_feature_flag1, []).
+
+set_tags_atom_creation_gated_by_feature_flag1() ->
+    Username = <<"set_tags_atom_creation_gated_by_feature_flag">>,
+    ok = rabbit_auth_backend_internal:add_user(Username, <<"hunter2-1234567890">>,
+                                               <<"acting-user">>),
+    ok = meck:new(rabbit_feature_flags, [passthrough, no_link]),
+    try
+        ok = meck:expect(rabbit_feature_flags, is_enabled,
+                         fun('rabbitmq_4.4.0') -> false;
+                            (Other) -> meck:passthrough([Other])
+                         end),
+        LegacyTag = unique_tag(),
+        ok = rabbit_auth_backend_internal:set_tags(Username, [LegacyTag],
+                                                   <<"acting-user">>),
+        %% While the flag is disabled, tags are still atomized for
+        %% compatibility with nodes that predate the binary switch.
+        ?assert(is_atom(binary_to_existing_atom(LegacyTag, utf8))),
+
+        %% `internal_user:get_tags/1` still normalizes that legacy atom
+        %% to a binary on read.
+        {ok, LegacyUser} = rabbit_auth_backend_internal:lookup_user(Username),
+        ?assertEqual([LegacyTag], internal_user:get_tags(LegacyUser)),
+
+        ok = meck:expect(rabbit_feature_flags, is_enabled,
+                         fun('rabbitmq_4.4.0') -> true;
+                            (Other) -> meck:passthrough([Other])
+                         end),
+        NewTag = unique_tag(),
+        ok = rabbit_auth_backend_internal:set_tags(Username, [NewTag],
+                                                   <<"acting-user">>),
+        %% Once the flag is enabled, a never-before-seen tag must not
+        %% become an atom, regardless of how many distinct tags an
+        %% administrator sets.
+        ?assertException(error, badarg, binary_to_existing_atom(NewTag, utf8)),
+
+        {ok, User} = rabbit_auth_backend_internal:lookup_user(Username),
+        ?assertEqual([NewTag], internal_user:get_tags(User))
+    after
+        meck:unload(rabbit_feature_flags),
+        rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>)
+    end,
+    passed.
+
+unique_tag() ->
+    list_to_binary("unit_access_control_tag_" ++
+                    integer_to_list(erlang:unique_integer([positive]))).
 
 auth_backend_internal_expand_topic_permission(_Config) ->
     ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},

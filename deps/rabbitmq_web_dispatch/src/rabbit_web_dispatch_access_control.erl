@@ -269,17 +269,16 @@ vhost(ReqData) ->
         end
     end.
 
-is_admin(T)       -> intersects(T, [administrator]).
-is_policymaker(T) -> intersects(T, [administrator, policymaker]).
-is_monitor(T)     -> intersects(T, [administrator, monitoring]).
-is_mgmt_user(T)   -> intersects(T, [administrator, monitoring, policymaker,
-                                    management]).
-is_protected_user(T) -> intersects(T, [protected]).
+is_admin(T)       -> intersects(T, [<<"administrator">>]).
+is_policymaker(T) -> intersects(T, [<<"administrator">>, <<"policymaker">>]).
+is_monitor(T)     -> intersects(T, [<<"administrator">>, <<"monitoring">>]).
+is_mgmt_user(T)   -> intersects(T, [<<"administrator">>, <<"monitoring">>,
+                                    <<"policymaker">>, <<"management">>]).
+is_protected_user(T) -> intersects(T, [<<"protected">>]).
 
-intersects(A, [B]) ->
-    lists:member(B, A);
 intersects(A, B) ->
-    lists:any(fun(I) -> lists:member(I, B) end, A).
+    ABin = [rabbit_data_coercion:to_binary(I) || I <- A],
+    lists:any(fun(I) -> lists:member(I, B) end, ABin).
 
 user_matches_vhost(ReqData, User) ->
     case vhost(ReqData) of
