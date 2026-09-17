@@ -26,15 +26,8 @@ assert_cluster_status({All, Running}, Nodes, VerifyFun) ->
 assert_cluster_status({All, Disc, Running}, Nodes, VerifyFun) ->
     assert_cluster_status({All, Running, All, Disc, Running}, Nodes, VerifyFun);
 assert_cluster_status(Status0, Nodes, VerifyFun) ->
-    Status = sort_cluster_status(Status0),
-    AllNodes = case Status of
-                   {undef, undef, All, _, _} ->
-                       %% Support mixed-version clusters
-                       All;
-                   {All, _, _, _, _} ->
-                       All
-               end,
-    wait_for_cluster_status(Status, AllNodes, Nodes, VerifyFun).
+    Status = {All, _, _, _, _} = sort_cluster_status(Status0),
+    wait_for_cluster_status(Status, All, Nodes, VerifyFun).
 
 wait_for_cluster_status(Status, AllNodes, Nodes, VerifyFun) ->
     Max = 10000 / ?LOOP_RECURSION_DELAY,
@@ -64,28 +57,12 @@ verify_cluster_status_equal(Node, Status, AllNodes) ->
     IsClustered = rpc:call(Node, rabbit_db_cluster, is_clustered, []),
     ((AllNodes =/= [Node]) =:= IsClustered andalso equal(Status, NodeStatus)).
 
-equal({_, _, A, B, C}, {undef, undef, A, B, C}) ->
-    true;
-equal({_, _, _, _, _}, {undef, undef, _, _, _}) ->
-    false;
 equal(Status0, Status1) ->
     Status0 == Status1.
 
 cluster_status(Node) ->
-    %% To be compatible with mixed version clusters in 3.11.x we use here
-    %% rabbit_nodes:all/0 instead of rabbit_nodes:list_members/0 and
-    %% rabbit_nodes:all_running/0 instead of rabbit_nodes:list_running/0
-    %% which are part of the new API.
-    AllMembers0 = rpc:call(Node, rabbit_nodes, list_members, []),
-    AllMembers = case maybe_undef(AllMembers0) of
-                     undef -> rpc:call(Node, rabbit_nodes, all, []);
-                     _     -> AllMembers0
-                 end,
-    RunningMembers0 = rpc:call(Node, rabbit_nodes, list_running, []),
-    RunningMembers = case maybe_undef(RunningMembers0) of
-                         undef -> rpc:call(Node, rabbit_nodes, all_running, []);
-                         _     -> RunningMembers0
-                     end,
+    AllMembers = rpc:call(Node, rabbit_nodes, list_members, []),
+    RunningMembers = rpc:call(Node, rabbit_nodes, list_running, []),
 
     AllDbNodes = rpc:call(Node, rabbit_db_cluster, members, []),
     {DiscDbNodes, RunningDbNodes} =
@@ -106,19 +83,12 @@ cluster_status(Node) ->
 sort_cluster_status({All, Running, AllM, DiscM, RunningM}) ->
     {maybe_sort(All), maybe_sort(Running), maybe_sort(AllM), maybe_sort(DiscM), maybe_sort(RunningM)}.
 
-maybe_sort({badrpc, {'EXIT', {undef, _}}}) ->
-    undef;
 maybe_sort({badrpc, nodedown}) ->
     nodedown;
 maybe_sort({badrpc, Reason}) ->
     Reason;
 maybe_sort(List) ->
     lists:sort(List).
-
-maybe_undef({badrpc, {'EXIT', {undef, _}}}) ->
-    undef;
-maybe_undef(Any) ->
-    Any.
 
 assert_clustered(Nodes) ->
     assert_cluster_status({Nodes, Nodes, Nodes, Nodes, Nodes}, Nodes).
