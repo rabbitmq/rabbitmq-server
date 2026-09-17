@@ -829,27 +829,16 @@ query_node(Config, NodeConfig) ->
     {ok, EnabledPluginsFile} = rpc(Config, Nodename, application, get_env,
       [rabbit, enabled_plugins_file]),
     LogLocations = rpc(Config, Nodename, rabbit, log_locations, []),
-    Vars0 = [{pid_file, PidFile},
-             {data_dir, DataDir},
-             {plugins_dir, PluginsDir},
-             {enabled_plugins_file, EnabledPluginsFile},
-             {log_locations, LogLocations}],
-    Vars = try
-               EnabledFeatureFlagsFile = rpc(Config, Nodename,
-                                             rabbit_feature_flags,
-                                             enabled_feature_flags_list_file,
-                                             []),
-               [{enabled_feature_flags_list_file, EnabledFeatureFlagsFile}
-                | Vars0]
-           catch
-               exit:{undef, [{rabbit_feature_flags, _, _, _} | _]} ->
-                   %% This happens if the queried node is a RabbitMQ
-                   %% 3.7.x node. If this is the case, we can ignore
-                   %% this and leave the `enabled_plugins_file` config
-                   %% variable unset.
-                   ct:log("NO RABBITMQ_FEATURE_FLAGS_FILE"),
-                   Vars0
-           end,
+    EnabledFeatureFlagsFile = rpc(Config, Nodename,
+                                  rabbit_feature_flags,
+                                  enabled_feature_flags_list_file,
+                                  []),
+    Vars = [{pid_file, PidFile},
+            {data_dir, DataDir},
+            {plugins_dir, PluginsDir},
+            {enabled_plugins_file, EnabledPluginsFile},
+            {log_locations, LogLocations},
+            {enabled_feature_flags_list_file, EnabledFeatureFlagsFile}],
     cover_add_node(Nodename),
     rabbit_ct_helpers:set_config(NodeConfig, Vars).
 
@@ -1318,7 +1307,7 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
 
     NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
-    Env0 = [
+    Env = [
       {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqctl)},
       {"RABBITMQ_NODENAME", atom_to_list(Nodename)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
@@ -1326,17 +1315,10 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
         ?config(enabled_plugins_file, NodeConfig)},
-      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
+      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"},
+      {"RABBITMQ_FEATURE_FLAGS_FILE",
+        ?config(enabled_feature_flags_list_file, NodeConfig)}
     ],
-    Ret = rabbit_ct_helpers:get_config(
-            NodeConfig, enabled_feature_flags_list_file),
-    Env = case Ret of
-              undefined ->
-                  Env0;
-              EnabledFeatureFlagsFile ->
-                  Env0 ++
-                  [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
-          end,
     Cmd = [Rabbitmqctl, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}, {timeout, Timeout}]).
 
@@ -1351,24 +1333,17 @@ rabbitmq_queues(Config, Node, Args) ->
     RabbitmqQueues = ?config(rabbitmq_queues_cmd, Config),
     NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
-    Env0 = [
+    Env = [
       {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqQueues)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
       {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
         ?config(enabled_plugins_file, NodeConfig)},
-      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
+      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"},
+      {"RABBITMQ_FEATURE_FLAGS_FILE",
+        ?config(enabled_feature_flags_list_file, NodeConfig)}
     ],
-    Ret = rabbit_ct_helpers:get_config(
-            NodeConfig, enabled_feature_flags_list_file),
-    Env = case Ret of
-              undefined ->
-                  Env0;
-              EnabledFeatureFlagsFile ->
-                  Env0 ++
-                  [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
-          end,
     Cmd = [RabbitmqQueues, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
 
@@ -1376,24 +1351,17 @@ rabbitmq_streams(Config, Node, Args) ->
     RabbitmqStreams = ?config(rabbitmq_streams_cmd, Config),
     NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
-    Env0 = [
+    Env = [
       {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqStreams)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
       {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
         ?config(enabled_plugins_file, NodeConfig)},
-      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
+      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"},
+      {"RABBITMQ_FEATURE_FLAGS_FILE",
+        ?config(enabled_feature_flags_list_file, NodeConfig)}
     ],
-    Ret = rabbit_ct_helpers:get_config(
-            NodeConfig, enabled_feature_flags_list_file),
-    Env = case Ret of
-              undefined ->
-                  Env0;
-              EnabledFeatureFlagsFile ->
-                  Env0 ++
-                  [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
-          end,
     Cmd = [RabbitmqStreams, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
 
