@@ -18,7 +18,10 @@ all() ->
      single_target_no_correlation,
      forged_suffixes_one_pid_cast_once_correlation,
      forged_suffixes_one_pid_cast_once_no_correlation,
-     distinct_pids_not_deduplicated
+     distinct_pids_not_deduplicated,
+     new_name_matches_prefix,
+     new_name_is_unpredictable,
+     new_name_uses_gen_secure
     ].
 
 init_per_suite(Config) ->
@@ -86,6 +89,44 @@ distinct_pids_not_deduplicated(Config) ->
     ?assertEqual(N, length(Actions)),
     [exit(Pid, kill) || Pid <- Pids],
     ok.
+
+%% rabbit_guid:gen_secure/0 relies on a gen_server that isn't started in
+%% this suite, so stub it with a real random source instead of exercising
+%% the on-disk serial number machinery.
+with_stubbed_gen_secure(Fun) ->
+    ok = meck:new(rabbit_guid, [passthrough]),
+    meck:expect(rabbit_guid, gen_secure, fun() -> crypto:strong_rand_bytes(16) end),
+    try
+        Fun()
+    after
+        meck:unload(rabbit_guid)
+    end.
+
+new_name_matches_prefix(_Config) ->
+    with_stubbed_gen_secure(
+      fun() ->
+              Name = rabbit_volatile_queue:new_name(),
+              ?assertMatch(<<"amq.rabbitmq.reply-to.", _/binary>>, Name)
+      end).
+
+new_name_is_unpredictable(_Config) ->
+    with_stubbed_gen_secure(
+      fun() ->
+              N = 1000,
+              Names = [rabbit_volatile_queue:new_name() || _ <- lists:seq(1, N)],
+              ?assertEqual(N, length(lists:usort(Names)))
+      end).
+
+%% The suffix of the name is a capability: knowing it is sufficient to
+%% consume from the pseudo-queue. It must be generated with gen_secure/0,
+%% not the predictable gen/0.
+new_name_uses_gen_secure(_Config) ->
+    with_stubbed_gen_secure(
+      fun() ->
+              _ = rabbit_volatile_queue:new_name(),
+              ?assert(meck:called(rabbit_guid, gen_secure, [])),
+              ?assertNot(meck:called(rabbit_guid, gen, []))
+      end).
 
 targets(Pid, N) ->
     [target(Pid, I) || I <- lists:seq(1, N)].
