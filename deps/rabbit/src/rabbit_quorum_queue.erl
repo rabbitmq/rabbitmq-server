@@ -1919,10 +1919,9 @@ maybe_grow(Q, Node, Membership, Size) ->
 
 maybe_grow(Q, Node, Membership, Size, QNodes) ->
     QName = amqqueue:get_name(Q),
-    case amqqueue:get_pid(Q) of
-        {RaName, _} ->
-            case rabbit_queue_type_ra:all_members_stable(RaName, QNodes) of
-                true ->
+    {RaName, _} = amqqueue:get_pid(Q),
+    case rabbit_queue_type_ra:all_members_stable(RaName, QNodes) of
+        true ->
             ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
                             [rabbit_misc:rs(QName), Node]),
             case add_member(Q, Node, Membership) of
@@ -1940,10 +1939,7 @@ maybe_grow(Q, Node, Membership, Size, QNodes) ->
                     "~ts: failed to add member (replica) on node ~w, error: ~w",
                     [rabbit_misc:rs(QName), Node, Err]),
             {QName, {error, Size, Err}}
-    end;
-_ ->
-    {QName, {error, Size, {error, not_running}}}
-end.
+    end.
 
 -spec transfer_leadership(amqqueue:amqqueue(), node()) ->
     {ok, node()} | {error, term()}.

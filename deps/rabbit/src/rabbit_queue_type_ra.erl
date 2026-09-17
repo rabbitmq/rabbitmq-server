@@ -164,15 +164,11 @@ modify_members_matching(VHostSpec, QueueSpec, Node, Strategy, FilterFun, Operati
                  QName = amqqueue:get_name(Q),
                  QNodes = get_nodes(Q),
                  Size = length(QNodes),
-                 Res = case amqqueue:get_pid(Q) of
-                           {RaName, _} ->
-                               case all_members_stable(RaName, QNodes) of
-                                   true ->
-                                       OperationFun(Mod, Q, Size);
-                                   false ->
-                                       {error, Size, {error, non_stable_members}}
-                               end;
-                           _ ->
+                 {RaName, _} = amqqueue:get_pid(Q),
+                 Res = case all_members_stable(RaName, QNodes) of
+                           true ->
+                               OperationFun(Mod, Q, Size);
+                           false ->
                                {error, Size, {error, non_stable_members}}
                        end,
                  {QName, Res}
