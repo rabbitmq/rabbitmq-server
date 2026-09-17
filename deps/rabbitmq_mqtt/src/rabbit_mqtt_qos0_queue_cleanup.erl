@@ -17,7 +17,7 @@
          terminate/2, code_change/3]).
 
 -record(state, {pending = [] :: [{key(), {amqqueue:amqqueue(), rabbit_types:username()}}],
-                fence = undefined :: undefined | {pid(), reference()}}).
+                fence = undefined :: undefined | pid()}).
 
 -type key() :: {rabbit_amqqueue:name(), pid() | none}.
 
@@ -30,6 +30,7 @@ retry_delete(Q, Username) ->
     gen_server:cast(?MODULE, {retry_delete, Q, Username}).
 
 init([]) ->
+    process_flag(trap_exit, true),
     {ok, #state{}}.
 
 handle_call(Request, From, State) ->
@@ -57,19 +58,18 @@ handle_info(retry_delete, State0 = #state{pending = Pending0}) ->
                     {noreply, State0#state{pending = Rest}}
             end
     end;
-handle_info({khepri_available, Pid},
-            State0 = #state{fence = {Pid, _Ref}}) ->
-    self() ! retry_delete,
-    {noreply, State0#state{fence = undefined}};
-handle_info({'DOWN', Ref, process, Pid, _Reason},
-            State0 = #state{fence = {Pid, Ref}}) ->
-    {noreply, maybe_wait_for_khepri(State0#state{fence = undefined})};
+handle_info({'EXIT', Pid, Reason}, State0 = #state{fence = Pid}) ->
+    State1 = State0#state{fence = undefined},
+    case Reason of
+        normal ->
+            self() ! retry_delete,
+            {noreply, State1};
+        _ ->
+            {noreply, maybe_wait_for_khepri(State1)}
+    end;
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, #state{fence = {Pid, _Ref}}) ->
-    exit(Pid, shutdown),
-    ok;
 terminate(_Reason, _State) ->
     ok.
 
@@ -77,20 +77,19 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 maybe_wait_for_khepri(State = #state{pending = [_ | _], fence = undefined}) ->
-    Parent = self(),
-    {Pid, Ref} = spawn_monitor(fun() -> wait_for_khepri(Parent) end),
-    State#state{fence = {Pid, Ref}};
+    Pid = spawn_link(fun wait_for_khepri/0),
+    State#state{fence = Pid};
 maybe_wait_for_khepri(State) ->
     State.
 
 %% rabbit_khepri:fence/1 can return immediately with an error (e.g. `noproc`)
 %% instead of blocking when the local Khepri store isn't up yet, so retry
 %% with a fixed delay instead of busy-looping.
-wait_for_khepri(Parent) ->
+wait_for_khepri() ->
     case rabbit_khepri:fence(infinity) of
         ok ->
-            Parent ! {khepri_available, self()};
+            ok;
         {error, _} ->
             timer:sleep(1000),
-            wait_for_khepri(Parent)
+            wait_for_khepri()
     end.
