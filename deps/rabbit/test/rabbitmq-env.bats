@@ -268,3 +268,60 @@ setup() {
     echo "expected no warning, but got: $output"
     [[ $output != *"was already set in the environment"* ]]
 }
+
+@test "an embedded newline in one variable's value does not corrupt another" {
+    export RABBITMQ_SOME_VAR="$(printf 'line one\nRABBITMQ_NODENAME=forged')"
+    export RABBITMQ_NODENAME=real
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_NODENAME to remain 'real', but got: $RABBITMQ_NODENAME"
+    [ "$RABBITMQ_NODENAME" = "real" ]
+}
+
+@test "a precedence conflict on a secret redacts the value in the warning" {
+    echo 'RABBITMQ_DEFAULT_PASS=from-conf-file' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_DEFAULT_PASS=super-secret-value
+    run source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    # A single compound assertion: bats 0.4 only checks the exit status
+    # of a test's last statement, so two separate `[[ ]]` lines here
+    # would let a passing second one mask a failing first one.
+    echo "expected the warning to mention the variable but not the secret value, but got: $output"
+    [[ $output == *"RABBITMQ_DEFAULT_PASS was already set in the environment"* && $output != *"super-secret-value"* ]]
+}
+
+@test "set -a auto-exporting RABBITMQ_HOME does not block a conf file override" {
+    echo 'RABBITMQ_HOME=/custom/home' > "$RABBITMQ_CONF_ENV_FILE"
+    set -a
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    set +a
+
+    echo "expected RABBITMQ_HOME to be '/custom/home', but got: $RABBITMQ_HOME"
+    [ "$RABBITMQ_HOME" = "/custom/home" ]
+}
+
+@test "a pre-set RABBITMQ_HOME does not block its own recomputation" {
+    export RABBITMQ_HOME=/should/be/ignored
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_HOME to have been recomputed, but got: $RABBITMQ_HOME"
+    [ "$RABBITMQ_HOME" != "/should/be/ignored" ]
+}
+
+@test "RABBITMQ_SCRIPTS_DIR env takes precedence over conf file" {
+    local expected="$RABBITMQ_SCRIPTS_DIR"
+    echo 'RABBITMQ_SCRIPTS_DIR=/from/conf/file' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_SCRIPTS_DIR to remain '$expected', but got: $RABBITMQ_SCRIPTS_DIR"
+    [ "$RABBITMQ_SCRIPTS_DIR" = "$expected" ]
+}
+
+@test "a precedence conflict on the erlang cookie redacts the value in the warning" {
+    echo 'RABBITMQ_ERLANG_COOKIE=from-conf-file' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_ERLANG_COOKIE=super-secret-cookie
+    run source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected the warning to mention the variable but not the secret value, but got: $output"
+    [[ $output == *"RABBITMQ_ERLANG_COOKIE was already set in the environment"* && $output != *"super-secret-cookie"* ]]
+}

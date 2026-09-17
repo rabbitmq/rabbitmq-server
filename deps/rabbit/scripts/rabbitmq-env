@@ -10,6 +10,60 @@ if [ "$RABBITMQ_ENV_LOADED" = 1 ]; then
     return 0;
 fi
 
+# $RABBITMQ_CONF_ENV_FILE is sourced into this same shell further
+# below, so a plain assignment in it would otherwise silently
+# overwrite any RABBITMQ_* variable already set in the environment,
+# reversing the documented precedence (environment, then
+# rabbitmq-env.conf, then built-in defaults). Save every RABBITMQ_*
+# variable already set so it can be restored afterwards if the conf
+# file tries to change it.
+#
+# This must run before this script computes and exports anything
+# itself (RABBITMQ_SCRIPTS_DIR, RABBITMQ_HOME, RABBITMQ_CONF_ENV_FILE
+# via rabbitmq-defaults, ...), so that only a genuine operator
+# override is ever recorded here -- callers that source this script
+# with `set -a` (e.g. rabbitmqctl) would otherwise auto-export those
+# internal values and make this mistake them for one. This only sees
+# variables already exported to this process; a variable set by an
+# init script without exporting it is out of scope here, which is why
+# $RABBITMQ_PID_FILE below still has its own, separate save.
+_rmq_env_preserved_vars=""
+for _rmq_env_candidate_var in $(env | sed -n 's/^\(RABBITMQ_[A-Za-z0-9_]*\)=.*/\1/p'); do
+    case " $_rmq_env_preserved_vars " in
+        *" $_rmq_env_candidate_var "*)
+            # Already recorded. `env`'s output is parsed one line per
+            # variable, so a variable whose value contains an
+            # embedded newline can make a later line look like a
+            # second "RABBITMQ_X=" assignment for a var already seen;
+            # recording it twice would make the restore loop below
+            # find its own backup already consumed and unset on the
+            # second pass, and wipe the real value.
+            continue
+            ;;
+    esac
+    case "$_rmq_env_candidate_var" in
+        RABBITMQ_HOME)
+            # Unconditionally recomputed a few lines below regardless
+            # of any prior value (unlike RABBITMQ_SCRIPTS_DIR, which
+            # is only computed if unset and so is already safe to
+            # preserve here). If a genuinely pre-exported value were
+            # recorded, the recomputed value would look like a conf
+            # file conflict and get reverted to the stale value, even
+            # with no conf file involved at all.
+            continue
+            ;;
+    esac
+    eval "_rmq_env_candidate_value=\$$_rmq_env_candidate_var"
+    # An exported-but-empty variable is treated as unset everywhere
+    # else (see get_env_var/2 in rabbit_env.erl), so it must not beat
+    # a real value set in the conf file either.
+    if [ -n "$_rmq_env_candidate_value" ]; then
+        eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
+        _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
+    fi
+done
+unset _rmq_env_candidate_var _rmq_env_candidate_value
+
 if [ -z "$RABBITMQ_SCRIPTS_DIR" ]; then
     # We set +e here since since our test for "readlink -f" below needs to
     # be able to fail.
@@ -94,46 +148,34 @@ ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
 
 ## Get configuration variables from the configure environment file
-
-# $RABBITMQ_CONF_ENV_FILE is sourced into this same shell, so a plain
-# assignment in it would otherwise silently overwrite any RABBITMQ_*
-# variable already set in the environment, reversing the documented
-# precedence (environment, then rabbitmq-env.conf, then built-in
-# defaults). Save every RABBITMQ_* variable already set so it can be
-# restored afterwards if the conf file tries to change it. This only
-# sees variables already exported to this process; a variable set by
-# an init script without exporting it is out of scope here, which is
-# why $RABBITMQ_PID_FILE above still has its own, separate save.
-_rmq_env_preserved_vars=""
-for _rmq_env_candidate_var in $(env | sed -n 's/^\(RABBITMQ_[A-Za-z0-9_]*\)=.*/\1/p'); do
-    eval "_rmq_env_candidate_value=\$$_rmq_env_candidate_var"
-    # An exported-but-empty variable is treated as unset everywhere
-    # else (see get_env_var/2 in rabbit_env.erl), so it must not beat
-    # a real value set in the conf file either.
-    if [ -n "$_rmq_env_candidate_value" ]; then
-        eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
-        _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
-    fi
-done
-
 if [ -f "$RABBITMQ_CONF_ENV_FILE" ]; then
     CONF_ENV_FILE_PHASE=rabbitmq-env
     . "$RABBITMQ_CONF_ENV_FILE" || true
 fi
 
+# Restore whatever was preserved at the top of this script, warning
+# for any RABBITMQ_* variable the conf file just tried to change.
 for _rmq_env_preserved_var in $_rmq_env_preserved_vars; do
     eval "_rmq_env_new_value=\$$_rmq_env_preserved_var"
     eval "_rmq_env_old_value=\$_rmq_env_saved_$_rmq_env_preserved_var"
     if [ "$_rmq_env_new_value" != "$_rmq_env_old_value" ]; then
+        case "$_rmq_env_preserved_var" in
+            RABBITMQ_DEFAULT_PASS|RABBITMQ_ERLANG_COOKIE)
+                _rmq_env_display_value='******'
+                ;;
+            *)
+                _rmq_env_display_value="$_rmq_env_old_value"
+                ;;
+        esac
         _rmq_env_pwarn "\$$_rmq_env_preserved_var was already set in the environment to:" \
-            "$_rmq_env_old_value" \
+            "$_rmq_env_display_value" \
             'The value set in rabbitmq-env.conf is ignored.'
         eval "$_rmq_env_preserved_var=\$_rmq_env_old_value"
     fi
     unset "_rmq_env_saved_$_rmq_env_preserved_var"
 done
 unset _rmq_env_preserved_vars _rmq_env_preserved_var _rmq_env_new_value _rmq_env_old_value \
-    _rmq_env_candidate_var _rmq_env_candidate_value
+    _rmq_env_display_value
 
 # Bump ETS table limit to 50000
 if [ -z "$ERL_MAX_ETS_TABLES" ]; then
