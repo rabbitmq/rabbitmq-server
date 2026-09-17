@@ -70,7 +70,13 @@ handle_info({'EXIT', Pid, Reason}, State0 = #state{fence = Pid}) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+%% Best-effort: our in-memory `pending` state is lost once we terminate,
+%% so give every pending delete one last try before that happens.
+terminate(_Reason, #state{pending = Pending}) ->
+    lists:foreach(
+      fun({_Key, {Q, Username}}) ->
+              _ = rabbit_queue_type:delete(Q, false, false, Username)
+      end, Pending),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
