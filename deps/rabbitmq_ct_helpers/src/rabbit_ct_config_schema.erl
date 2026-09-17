@@ -55,14 +55,9 @@ snippet_id(L) when is_list(L) ->
 
 test_snippet(Config, Schema, Snippet = {SnipID, _, _}, Expected, _Plugins, Sort) ->
     {ConfFile, AdvancedFile} = write_snippet(Config, Snippet),
-    %% We ignore the rabbit -> log portion of the config on v3.9+, where the lager
-    %% dependency has been dropped
-    Generated = case code:which(lager) of
-                    non_existing ->
-                        without_rabbit_log(generate_config(Schema, ConfFile, AdvancedFile));
-                    _ ->
-                        generate_config(Schema, ConfFile, AdvancedFile)
-                end,
+    %% We ignore the rabbit -> log portion of the config: it is generated
+    %% from the logger schema translation, not from the snippet itself.
+    Generated = without_rabbit_log(generate_config(Schema, ConfFile, AdvancedFile)),
     {Exp, Gen} = case Sort of
                      true ->
                          {deepsort(Expected), deepsort(Generated)};
