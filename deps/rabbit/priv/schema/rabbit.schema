@@ -1080,7 +1080,7 @@ end}.
 %%
 %% {vm_memory_high_watermark, {absolute, 1073741824}},
 %%
-%% Or you can set absolute value using memory unit symbols (with RabbitMQ 3.6.0+).
+%% Or you can set absolute value using memory unit symbols.
 %%
 %% {vm_memory_high_watermark, {absolute, "1024M"}},
 %%
@@ -1255,7 +1255,6 @@ end}.
 
 %% Mirror sync batch size, in messages. Increasing this will speed
 %% up syncing but total batch size in bytes must not exceed 2 GiB.
-%% Available in RabbitMQ 3.6.0 or later.
 %%
 %% {mirroring_sync_batch_size, 4096},
 
