@@ -164,11 +164,15 @@ modify_members_matching(VHostSpec, QueueSpec, Node, Strategy, FilterFun, Operati
                  QName = amqqueue:get_name(Q),
                  QNodes = get_nodes(Q),
                  Size = length(QNodes),
-                 {ok, RaName} = rabbit_queue_type_util:qname_to_internal_name(QName),
-                 Res = case all_members_stable(RaName, QNodes) of
-                           true ->
-                               OperationFun(Mod, Q, Size);
-                           false ->
+                 Res = case amqqueue:get_pid(Q) of
+                           {RaName, _} ->
+                               case all_members_stable(RaName, QNodes) of
+                                   true ->
+                                       OperationFun(Mod, Q, Size);
+                                   false ->
+                                       {error, Size, {error, non_stable_members}}
+                               end;
+                           _ ->
                                {error, Size, {error, non_stable_members}}
                        end,
                  {QName, Res}
