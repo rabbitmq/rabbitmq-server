@@ -94,10 +94,46 @@ ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
 
 ## Get configuration variables from the configure environment file
+
+# $RABBITMQ_CONF_ENV_FILE is sourced into this same shell, so a plain
+# assignment in it would otherwise silently overwrite any RABBITMQ_*
+# variable already set in the environment, reversing the documented
+# precedence (environment, then rabbitmq-env.conf, then built-in
+# defaults). Save every RABBITMQ_* variable already set so it can be
+# restored afterwards if the conf file tries to change it. This only
+# sees variables already exported to this process; a variable set by
+# an init script without exporting it is out of scope here, which is
+# why $RABBITMQ_PID_FILE above still has its own, separate save.
+_rmq_env_preserved_vars=""
+for _rmq_env_candidate_var in $(env | sed -n 's/^\(RABBITMQ_[A-Za-z0-9_]*\)=.*/\1/p'); do
+    eval "_rmq_env_candidate_value=\$$_rmq_env_candidate_var"
+    # An exported-but-empty variable is treated as unset everywhere
+    # else (see get_env_var/2 in rabbit_env.erl), so it must not beat
+    # a real value set in the conf file either.
+    if [ -n "$_rmq_env_candidate_value" ]; then
+        eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
+        _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
+    fi
+done
+
 if [ -f "$RABBITMQ_CONF_ENV_FILE" ]; then
     CONF_ENV_FILE_PHASE=rabbitmq-env
     . "$RABBITMQ_CONF_ENV_FILE" || true
 fi
+
+for _rmq_env_preserved_var in $_rmq_env_preserved_vars; do
+    eval "_rmq_env_new_value=\$$_rmq_env_preserved_var"
+    eval "_rmq_env_old_value=\$_rmq_env_saved_$_rmq_env_preserved_var"
+    if [ "$_rmq_env_new_value" != "$_rmq_env_old_value" ]; then
+        _rmq_env_pwarn "\$$_rmq_env_preserved_var was already set in the environment to:" \
+            "$_rmq_env_old_value" \
+            'The value set in rabbitmq-env.conf is ignored.'
+        eval "$_rmq_env_preserved_var=\$_rmq_env_old_value"
+    fi
+    unset "_rmq_env_saved_$_rmq_env_preserved_var"
+done
+unset _rmq_env_preserved_vars _rmq_env_preserved_var _rmq_env_new_value _rmq_env_old_value \
+    _rmq_env_candidate_var _rmq_env_candidate_value
 
 # Bump ETS table limit to 50000
 if [ -z "$ERL_MAX_ETS_TABLES" ]; then

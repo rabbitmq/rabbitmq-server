@@ -38,8 +38,9 @@ setup() {
 }
 
 @test "Erlang scheduler bind type env takes precedence over conf file" {
-    echo 'SCHEDULER_BIND_TYPE=s' > "$RABBITMQ_CONF_ENV_FILE"
-    RABBITMQ_SCHEDULER_BIND_TYPE=nnps source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    echo 'RABBITMQ_SCHEDULER_BIND_TYPE=s' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_SCHEDULER_BIND_TYPE=nnps
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +stbt nnps ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +stbt nnps "* ]]
@@ -76,8 +77,9 @@ setup() {
 }
 
 @test "Erlang distribution buffer size env takes precedence over conf file" {
-    echo 'DISTRIBUTION_BUFFER_SIZE=3000000' > "$RABBITMQ_CONF_ENV_FILE"
-    RABBITMQ_DISTRIBUTION_BUFFER_SIZE=4000000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    echo 'RABBITMQ_DISTRIBUTION_BUFFER_SIZE=3000000' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_DISTRIBUTION_BUFFER_SIZE=4000000
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +zdbbl 4000000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +zdbbl 4000000 "* ]]
@@ -114,8 +116,9 @@ setup() {
 }
 
 @test "Erlang maximum number of processes env takes precedence over conf file" {
-    echo 'MAX_NUMBER_OF_PROCESSES=4000000' > "$RABBITMQ_CONF_ENV_FILE"
-    RABBITMQ_MAX_NUMBER_OF_PROCESSES=5000000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    echo 'RABBITMQ_MAX_NUMBER_OF_PROCESSES=4000000' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_MAX_NUMBER_OF_PROCESSES=5000000
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +P 5000000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +P 5000000 "* ]]
@@ -152,8 +155,9 @@ setup() {
 }
 
 @test "Erlang maximum number of atoms env takes precedence over conf file" {
-    echo 'MAX_NUMBER_OF_ATOMS=3000000' > "$RABBITMQ_CONF_ENV_FILE"
-    RABBITMQ_MAX_NUMBER_OF_ATOMS=4000000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    echo 'RABBITMQ_MAX_NUMBER_OF_ATOMS=3000000' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_MAX_NUMBER_OF_ATOMS=4000000
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +t 4000000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +t 4000000 "* ]]
@@ -191,8 +195,9 @@ setup() {
 }
 
 @test "Erlang scheduler busy wait threshold env takes precedence over conf file" {
-    echo 'SCHEDULER_BIND_TYPE=s' > "$RABBITMQ_CONF_ENV_FILE"
-    RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD=short source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    echo 'RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD=medium' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD=short
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +sbwt short ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +sbwt short "* ]]
@@ -227,4 +232,39 @@ setup() {
 
     echo "expected RABBITMQ_BOOT_MODULE to be 'my_boot_module', but got: $RABBITMQ_BOOT_MODULE"
     [ "$RABBITMQ_BOOT_MODULE" = "my_boot_module" ]
+}
+
+@test "Erlang boot module env takes precedence over conf file" {
+    echo 'RABBITMQ_BOOT_MODULE=from_conf_file' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_BOOT_MODULE=from_env
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_BOOT_MODULE to be 'from_env', but got: $RABBITMQ_BOOT_MODULE"
+    [ "$RABBITMQ_BOOT_MODULE" = "from_env" ]
+}
+
+@test "an exported but empty env var does not take precedence over conf file" {
+    echo 'RABBITMQ_BOOT_MODULE=from_conf_file' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_BOOT_MODULE=""
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_BOOT_MODULE to be 'from_conf_file', but got: $RABBITMQ_BOOT_MODULE"
+    [ "$RABBITMQ_BOOT_MODULE" = "from_conf_file" ]
+}
+
+@test "a precedence conflict prints a warning" {
+    echo 'RABBITMQ_BOOT_MODULE=from_conf_file' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_BOOT_MODULE=from_env
+    run source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected output to mention RABBITMQ_BOOT_MODULE was already set, but got: $output"
+    [[ $output == *"RABBITMQ_BOOT_MODULE was already set in the environment"* ]]
+}
+
+@test "no precedence conflict means no warning" {
+    echo 'RABBITMQ_BOOT_MODULE=from_conf_file' > "$RABBITMQ_CONF_ENV_FILE"
+    run source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected no warning, but got: $output"
+    [[ $output != *"was already set in the environment"* ]]
 }
