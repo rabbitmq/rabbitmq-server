@@ -138,7 +138,7 @@ sheet_body(PrevState) ->
                                         empty_row(Name);
                                     _ ->
                                         QQCounters = maps:get({QName, node()}, ra_counters:overview()),
-                                        {ok, InternalName} = rabbit_queue_type_util:qname_to_internal_name(#resource{virtual_host = Vhost, name= Name}),
+                                        InternalName = QName,
                                         #{snapshot_index := SnapIdx,
                                             last_written_index := LW,
                                             term := CT,
