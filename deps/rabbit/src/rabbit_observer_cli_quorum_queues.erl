@@ -123,7 +123,7 @@ sheet_header() ->
 sheet_body(PrevState) ->
     {_, RaStates} = rabbit_quorum_queue:all_replica_states(),
     Body = [begin
-                #resource{name = Name, virtual_host = Vhost} = amqqueue:get_name(Q),
+                #resource{name = Name, virtual_host = _} = amqqueue:get_name(Q),
                 case rabbit_amqqueue:pid_of(Q) of
                     none ->
                         empty_row(Name);
