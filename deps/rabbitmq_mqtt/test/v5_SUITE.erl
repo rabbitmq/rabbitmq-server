@@ -98,6 +98,7 @@ cluster_size_1_tests() ->
      compatibility_v3_v5,
      session_upgrade_v3_v5_unsubscribe,
      session_upgrade_v4_v5_no_queue_bind_permission,
+     stale_qos0_queue_delete_does_not_delete_reconnected_client_queue,
      amqp091_cc_header,
      publish_property_content_type,
      publish_property_payload_format_indicator,
@@ -201,7 +202,8 @@ init_per_testcase(T, Config)
     init_per_testcase0(T, Config1);
 
 init_per_testcase(T, Config)
-    when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue ->
+    when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue;
+         T =:= stale_qos0_queue_delete_does_not_delete_reconnected_client_queue ->
   rpc(Config, rabbit_registry, register, [queue, <<"qos0">>, rabbit_mqtt_qos0_queue]),
   init_per_testcase0(T, Config);
 
@@ -220,9 +222,10 @@ end_per_testcase(T, Config)
     ok = rpc(Config, application, set_env, [?APP, Par, Default]),
     end_per_testcase0(T, Config);
 end_per_testcase(T, Config)
-    when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue ->
+    when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue;
+         T =:= stale_qos0_queue_delete_does_not_delete_reconnected_client_queue ->
   ok = rpc(Config, rabbit_registry, unregister, [queue, <<"qos0">>]),
-  init_per_testcase0(T, Config);
+  end_per_testcase0(T, Config);
 
 end_per_testcase(T, Config) ->
     end_per_testcase0(T, Config).
@@ -432,6 +435,32 @@ zero_session_expiry_disconnect_autodeletes_qos0_queue(Config) ->
     rabbit_ct_helpers:eventually(
         {?LINE, fun() -> ?assertEqual(0, length(rpc(Config, rabbit_amqqueue, list, []))) end},
         100, 50).
+
+stale_qos0_queue_delete_does_not_delete_reconnected_client_queue(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C1 = connect(ClientId, Config),
+    {ok, _, _} = emqtt:subscribe(C1, <<"topic0">>, qos0),
+    [OldQ] = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    ok = emqtt:disconnect(C1),
+    C2 = connect(ClientId, Config),
+    {ok, _, _} = emqtt:subscribe(C2, <<"topic0">>, qos0),
+    [NewQ] = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    ?assertNotEqual(amqqueue:get_pid(OldQ), amqqueue:get_pid(NewQ)),
+
+    %% A retry carries the old exclusive owner and must not match the new queue.
+    ok = rpc(Config, rabbit_mqtt_qos0_queue_cleanup, retry_delete,
+             [OldQ, <<"test">>]),
+    rabbit_ct_helpers:eventually(
+      {?LINE,
+       fun() ->
+               {state, Pending, _} = rpc(Config, sys, get_state,
+                                         [rabbit_mqtt_qos0_queue_cleanup]),
+               ?assertEqual(0, map_size(Pending))
+       end},
+      100, 50),
+    ?assertEqual([NewQ],
+                 rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue])),
+    ok = emqtt:disconnect(C2).
 
 session_expiry_disconnect_decrease(QueueType, Config) ->
     ClientId = ?FUNCTION_NAME,

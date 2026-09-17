@@ -1932,7 +1932,12 @@ maybe_delete_mqtt_qos0_queue(
             case {amqqueue:get_type(Q), amqqueue:get_pid(Q)} of
                 {?QUEUE_TYPE_QOS_0, Pid}
                   when Pid =:= self() ->
-                    rabbit_queue_type:delete(Q, false, false, Username);
+                    case rabbit_queue_type:delete(Q, false, false, Username) of
+                        {error, timeout} ->
+                            rabbit_mqtt_qos0_queue_cleanup:retry_delete(Q, Username);
+                        _ ->
+                            ok
+                    end;
                 _ ->
                     ok
             end;
