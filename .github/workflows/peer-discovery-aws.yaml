@@ -56,8 +56,10 @@ jobs:
       if: steps.authorized.outputs.authorized == 'true'
       env:
         ECS_CLI_VERSION: 1.21.0
+        ECS_CLI_SHA256: b041f0862ad4d84630b4145e82222f378cabed52ad9b2edeeb1c798193a4b98d
       run: |
         curl -Lo /usr/local/bin/ecs-cli https://amazon-ecs-cli.s3.amazonaws.com/ecs-cli-linux-amd64-v${ECS_CLI_VERSION} && \
+        echo "${ECS_CLI_SHA256}  /usr/local/bin/ecs-cli" | sha256sum -c - && \
         chmod +x /usr/local/bin/ecs-cli && \
         ecs-cli --version
     - name: RUN INTEGRATION TESTS
