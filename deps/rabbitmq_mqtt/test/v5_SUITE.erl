@@ -449,7 +449,7 @@ stale_qos0_queue_delete_does_not_delete_reconnected_client_queue(Config) ->
 
     %% A retry carries the old exclusive owner and must not match the new queue.
     ok = rpc(Config, rabbit_mqtt_qos0_queue_cleanup, retry_delete,
-             [OldQ, <<"test">>]),
+             [OldQ]),
     rabbit_ct_helpers:eventually(
       {?LINE,
        fun() ->

@@ -1934,7 +1934,7 @@ maybe_delete_mqtt_qos0_queue(
                   when Pid =:= self() ->
                     case rabbit_queue_type:delete(Q, false, false, Username) of
                         {error, timeout} ->
-                            rabbit_mqtt_qos0_queue_cleanup:retry_delete(Q, Username);
+                            rabbit_mqtt_qos0_queue_cleanup:retry_delete(Q);
                         _ ->
                             ok
                     end;
