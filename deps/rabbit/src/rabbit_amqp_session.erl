@@ -3398,13 +3398,27 @@ handle_outgoing_link_flow_control(
                               #credit_req{tokens = T} ->
                                   T
                           end,
+            %% parse_deferred_tokens/1 only caps each individual FLOW
+            %% frame's own batch; since FLOW frames aren't subject to
+            %% session incoming-window flow control, a client can
+            %% pipeline many of them while a credit request is in
+            %% flight and grow the stash unboundedly if the combined
+            %% length isn't capped here too.
+            Tokens = PrevTokens ++ parse_deferred_tokens(FlowProps),
+            NumTokens = length(Tokens),
+            NumTokens =< ?MAX_DEFERRAL_TOKENS orelse
+                protocol_error(
+                  ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                  "rabbitmq:deferral-tokens must contain at most ~b tokens "
+                  "across stashed FLOW frames, got: ~b",
+                  [?MAX_DEFERRAL_TOKENS, NumTokens]),
             Link = Link0#outgoing_link{
                      stashed_credit_req = #credit_req{
                                              delivery_count = DeliveryCountRcv,
                                              credit = LinkCreditRcv,
                                              drain = Drain,
                                              echo = Echo,
-                                             tokens = PrevTokens ++ parse_deferred_tokens(FlowProps)}},
+                                             tokens = Tokens}},
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
 

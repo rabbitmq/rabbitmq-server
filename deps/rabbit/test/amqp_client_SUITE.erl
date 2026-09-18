@@ -153,6 +153,7 @@ groups() ->
        session_flow_max_incoming_window,
        modified_quorum_queue_deferral_token_precedes_backlog,
        modified_quorum_queue_deferral_token_survives_in_flight_credit_req,
+       modified_quorum_queue_deferral_token_too_many_across_stashed_flows,
        modified_quorum_queue_deferral_token_invalid_annotation_type,
        modified_quorum_queue_deferral_token_invalid_flow_property_type,
        modified_quorum_queue_deferral_token_too_many,
@@ -1201,6 +1202,55 @@ modified_quorum_queue_deferral_token_survives_in_flight_credit_req(Config) ->
     ?assertEqual([<<"m1">>], amqp10_msg:body(M1b)),
     ok = amqp10_client:settle_msg(Receiver, M1b, accepted),
     ok = close(Init).
+
+%% Test that the deferral-tokens cap applies to the combined length of
+%% tokens accumulated across multiple stashed FLOW frames, not just to
+%% each individual FLOW frame's own batch: FLOW frames aren't subject to
+%% session incoming-window flow control, so a client could otherwise
+%% pipeline many of them while a credit request is in flight and grow
+%% the stash past the per-frame limit.
+modified_quorum_queue_deferral_token_too_many_across_stashed_flows(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    Tokens1 = [{utf8, integer_to_binary(N)} || N <- lists:seq(1, 200)],
+    Tokens2 = [{utf8, integer_to_binary(N)} || N <- lists:seq(201, 300)],
+    %% Fire three FLOW frames back-to-back with no wait in between, so
+    %% the 2nd and 3rd (carrying 200 and 100 tokens respectively, 300
+    %% combined) are very likely to both land in the stashed_credit_req
+    %% path while the 1st FLOW's credit request is still in flight.
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{link_credit = {uint, 1}},
+           never),
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 1},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, Tokens1}}]}},
+           never),
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 1},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, Tokens2}}]}},
+           never),
+    receive
+        {amqp10_event,
+         {session, Session,
+          {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
+    after 30000 -> flush(missing_ended),
+                   ct:fail("did not receive expected error")
+    end,
+    ok = close_connection_sync(Connection).
 
 %% Test that a x-opt-deferral-token of any AMQP type other than utf8 is
 %% rejected instead of silently accepted.
