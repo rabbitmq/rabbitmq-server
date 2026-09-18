@@ -14,7 +14,8 @@
 
 -define(PROFILE, ?MODULE).
 
--export([list_certs/1, list_certs/2, load_cert/3, prepare_ssl_opts/1]).
+-export([list_certs/1, list_certs/2, load_cert/3, prepare_ssl_opts/1,
+         init_state/1]).
 
 -record(http_state,{
     url :: string(),
@@ -77,16 +78,35 @@ init_state(Config) ->
     Url = proplists:get_value(url, Config),
     Headers = proplists:get_value(http_headers, Config, []),
     Timeout = https_request_timeout(),
-    HttpOptions0 = [{timeout, Timeout}, {connect_timeout, Timeout}],
-    HttpOptions = case proplists:get_value(ssl_options, Config) of
-        undefined -> HttpOptions0;
-        SslOpts   -> [{ssl, prepare_ssl_opts(SslOpts)} | HttpOptions0]
+    SslOpts = case proplists:get_value(ssl_options, Config) of
+        undefined -> [];
+        Opts      -> Opts
     end,
+    %% Always wire up TLS options, even when `ssl_options` is entirely
+    %% unset: `prepare_ssl_opts/1` is what makes `verify_peer` the default,
+    %% and the `ssl` option is harmlessly ignored by httpc for plain `http`
+    %% URLs. `autoredirect` is disabled since none of these endpoints are
+    %% expected to redirect, and a redirect could otherwise downgrade an
+    %% already-verified https:// request to plain http://.
+    HttpOptions = [{timeout, Timeout},
+                   {connect_timeout, Timeout},
+                   {autoredirect, false},
+                   {ssl, prepare_ssl_opts(SslOpts)}],
     #http_state{url = Url, http_options = HttpOptions, headers = [{"connection", "close"} | Headers]}.
 
 -spec prepare_ssl_opts(proplists:proplist()) -> proplists:proplist().
 prepare_ssl_opts(SslOpts) ->
-    rabbit_ssl_options:fix_client(SslOpts).
+    fix_verify(rabbit_ssl_options:fix_client(SslOpts)).
+
+%% rabbit_ssl_options:fix_client/1 does not set a default `verify`; without
+%% one, `ssl` defaults to `verify_none`, which would let an on-path attacker
+%% serve an arbitrary certificate list to poison the trust anchors this
+%% feature is meant to establish.
+fix_verify(Opts) ->
+    case proplists:is_defined(verify, Opts) of
+        true -> Opts;
+        false -> [{verify, verify_peer} | Opts]
+    end.
 
 https_request_timeout() ->
     application:get_env(rabbitmq_trust_store, https_request_timeout, 20000).

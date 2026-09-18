@@ -13,6 +13,10 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+%% mirrors the private record in rabbit_trust_store_http_provider; there is
+%% no shared .hrl, but the field order only needs to match at the tuple level
+-record(http_state, {url, http_options, headers}).
+
 all() ->
     [{group, unit},
      {group, prop}].
@@ -25,11 +29,16 @@ groups() ->
        hibernate_after_preserved_when_set,
        cacertfile_prevents_cacerts_injection,
        cacerts_preserved_when_set,
-       user_options_preserved]},
+       verify_peer_added_when_absent,
+       verify_preserved_when_set,
+       user_options_preserved,
+       https_url_without_ssl_options_still_verified,
+       autoredirect_disabled_by_default]},
      {prop, [parallel],
       [prop_sslv3_never_present,
        prop_hibernate_after_always_set,
        prop_cacertfile_prevents_cacerts_injection,
+       prop_verify_always_set,
        prop_user_options_preserved]}].
 
 suite() ->
@@ -86,6 +95,29 @@ cacerts_preserved_when_set(_Config) ->
     Opts = prepare([{cacerts, MyCaCerts}]),
     MyCaCerts = opt(cacerts, Opts).
 
+verify_peer_added_when_absent(_Config) ->
+    Opts = prepare([]),
+    verify_peer = opt(verify, Opts).
+
+verify_preserved_when_set(_Config) ->
+    Opts = prepare([{verify, verify_none}]),
+    verify_none = opt(verify, Opts).
+
+https_url_without_ssl_options_still_verified(_Config) ->
+    %% no `ssl_options` key at all -- the common minimal configuration
+    %% this finding is about
+    State = rabbit_trust_store_http_provider:init_state(
+              [{url, "https://example.invalid"}]),
+    #http_state{http_options = HttpOptions} = State,
+    {ssl, SslOpts} = lists:keyfind(ssl, 1, HttpOptions),
+    verify_peer = proplists:get_value(verify, SslOpts).
+
+autoredirect_disabled_by_default(_Config) ->
+    State = rabbit_trust_store_http_provider:init_state(
+              [{url, "https://example.invalid"}]),
+    #http_state{http_options = HttpOptions} = State,
+    false = proplists:get_value(autoredirect, HttpOptions).
+
 user_options_preserved(_Config) ->
     Input = [{certfile, "/path/to/cert.pem"},
              {keyfile, "/path/to/key.pem"},
@@ -121,6 +153,20 @@ prop_cacertfile_prevents_cacerts_injection(_Config) ->
               ?FORALL(
                  BaseOpts, ssl_options_without_ca(),
                  undefined =:= opt(cacerts, prepare([{cacertfile, "/path/to/ca.pem"} | BaseOpts])))
+      end).
+
+prop_verify_always_set(_Config) ->
+    run_proper(
+      fun() ->
+              ?FORALL(
+                 UserOpts, ssl_options(),
+                 begin
+                     Result = prepare(UserOpts),
+                     case proplists:get_value(verify, UserOpts) of
+                         undefined -> opt(verify, Result) =:= verify_peer;
+                         V -> opt(verify, Result) =:= V
+                     end
+                 end)
       end).
 
 prop_user_options_preserved(_Config) ->
@@ -162,7 +208,8 @@ ssl_option() ->
         {keyfile, binary()},
         {cacerts, list(binary())},
         {cacertfile, binary()},
-        {ciphers, list(binary())}
+        {ciphers, list(binary())},
+        {verify, oneof([verify_peer, verify_none])}
     ]).
 
 unique_keys(Opts) ->
