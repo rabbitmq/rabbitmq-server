@@ -339,6 +339,19 @@ connect_reason_code_to_return_code(_) ->
 
 process_connect(State0) ->
     maybe
+        %% A session's queue is looked up by Client ID alone, with no binding
+        %% to the authenticated username: a session resumed by a different
+        %% (or since-restricted) user than whoever created its subscriptions
+        %% must not silently inherit them, nor start consuming messages
+        %% already sitting in the queue from before the reconnect. This must
+        %% run before handle_clean_start_qos1/2 below, which is what attaches
+        %% the resuming connection as a consumer of the QoS 1 queue. Rather
+        %% than unbinding individual unauthorized subscriptions (which would
+        %% let any user resuming with someone else's Client ID permanently
+        %% destroy that other session's subscriptions merely by lacking
+        %% topic-read access to them), the whole CONNECT is rejected: the
+        %% client can reconnect with clean_start=true for a fresh session.
+        ok ?= check_existing_subscriptions_topic_access(State0),
         {ok, QoS0SessPresent, State1} ?= handle_clean_start_qos0(State0),
         {ok, SessPresent, State2} ?= handle_clean_start_qos1(QoS0SessPresent, State1),
         {ok, State} ?= init_subscriptions(SessPresent, State2),
@@ -348,6 +361,29 @@ process_connect(State0) ->
     else
         {error, _} = Error ->
             Error
+    end.
+
+-spec check_existing_subscriptions_topic_access(state()) ->
+    ok | {error, reason_code()}.
+check_existing_subscriptions_topic_access(#state{cfg = #cfg{clean_start = true}}) ->
+    %% A clean start deletes any pre-existing queue outright (see
+    %% handle_clean_start/3): there is no session to resume, so nothing to
+    %% recheck.
+    ok;
+check_existing_subscriptions_topic_access(#state{cfg = #cfg{exchange = Exchange}} = State) ->
+    QNames = existing_queue_names(State),
+    TopicFilters =
+    [amqp_to_mqtt(Key)
+     || QName <- QNames,
+        #binding{key = Key} <- rabbit_binding:list_for_source_and_destination(
+                                  Exchange, QName, _Reverse = true)],
+    case lists:all(fun(TopicFilter) ->
+                           check_topic_access(TopicFilter, read, State) =:= ok
+                   end, TopicFilters) of
+        true ->
+            ok;
+        false ->
+            {error, ?RC_NOT_AUTHORIZED}
     end.
 
 -spec process_packet(mqtt_packet(), state()) ->
@@ -888,14 +924,14 @@ init_subscriptions(_SessionPresent = _SubscriptionsPresent = true,
 init_subscriptions(_, State) ->
     {ok, State}.
 
-%% We suppress a warning because rabbit_misc:table_lookup/2 declares the correct spec and
-%% we must handle binding args v1 where binding arguments are not a valid AMQP 0.9.1 table.
--dialyzer({no_match, init_subscriptions0/2}).
-
 -spec init_subscriptions0(qos(), state()) ->
     {ok, subscriptions()} | {error, reason_code()}.
 init_subscriptions0(QoS, State = #state{cfg = #cfg{proto_ver = ProtoVer,
                                                    exchange = Exchange }}) ->
+    %% By the time this runs, check_existing_subscriptions_topic_access/1
+    %% has already verified that the resuming user has topic-read access to
+    %% every existing binding for this session, so no further permission
+    %% check is needed here.
     Bindings =
     rabbit_binding:list_for_source_and_destination(
       Exchange,
@@ -908,46 +944,10 @@ init_subscriptions0(QoS, State = #state{cfg = #cfg{proto_ver = ProtoVer,
       _Reverse = true),
     try
         Subs = lists:map(
-                 fun(#binding{key = Key,
-                              args = Args = []}) ->
-                         Opts = #mqtt_subscription_opts{qos = QoS},
+                 fun(#binding{key = Key, args = Args}) ->
                          TopicFilter = amqp_to_mqtt(Key),
-                         case ProtoVer of
-                             ?MQTT_PROTO_V5 ->
-                                 %% session upgrade
-                                 NewBindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts),
-                                 ok = recreate_subscription(TopicFilter, Args, NewBindingArgs, QoS, State);
-                             _ ->
-                                 ok
-                         end,
-                         {TopicFilter, Opts};
-                    (#binding{key = Key,
-                              args = Args}) ->
-                         TopicFilter = amqp_to_mqtt(Key),
-                         Opts = case ProtoVer of
-                                    ?MQTT_PROTO_V5 ->
-                                        case rabbit_misc:table_lookup(Args, <<"x-mqtt-subscription-opts">>) of
-                                            {table, Table} ->
-                                                %% binding args v2
-                                                subscription_opts_from_table(Table);
-                                            undefined ->
-                                                %% binding args v1
-                                                Opts0 = #mqtt_subscription_opts{} = lists:keyfind(
-                                                                                      mqtt_subscription_opts, 1, Args),
-                                                %% Migrate v1 to v2.
-                                                %% Note that this migration must be in place even for some versions
-                                                %% (jump upgrade) after feature flag 'rabbitmq_4.1.0' has become
-                                                %% required since enabling the feature flag doesn't migrate binding
-                                                %% args for existing connections.
-                                                NewArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts0),
-                                                ok = recreate_subscription(TopicFilter, Args, NewArgs, QoS, State),
-                                                Opts0
-                                        end;
-                                    _ ->
-                                        %% session downgrade
-                                        ok = recreate_subscription(TopicFilter, Args, [], QoS, State),
-                                        #mqtt_subscription_opts{qos = QoS}
-                                end,
+                         Opts = subscription_opts_for_existing_binding(
+                                  ProtoVer, TopicFilter, Args, QoS, State),
                          {TopicFilter, Opts}
                  end, Bindings),
         {ok, maps:from_list(Subs)}
@@ -957,6 +957,47 @@ init_subscriptions0(QoS, State = #state{cfg = #cfg{proto_ver = ProtoVer,
                        _Other -> ?RC_IMPLEMENTATION_SPECIFIC_ERROR
                    end,
               {error, Rc}
+    end.
+
+%% We suppress a warning because rabbit_misc:table_lookup/2 declares the correct spec and
+%% we must handle binding args v1 where binding arguments are not a valid AMQP 0.9.1 table.
+-dialyzer({no_match, subscription_opts_for_existing_binding/5}).
+
+subscription_opts_for_existing_binding(ProtoVer, TopicFilter, Args = [], QoS, State) ->
+    Opts = #mqtt_subscription_opts{qos = QoS},
+    case ProtoVer of
+        ?MQTT_PROTO_V5 ->
+            %% session upgrade
+            NewBindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts),
+            ok = recreate_subscription(TopicFilter, Args, NewBindingArgs, QoS, State);
+        _ ->
+            ok
+    end,
+    Opts;
+subscription_opts_for_existing_binding(ProtoVer, TopicFilter, Args, QoS, State) ->
+    case ProtoVer of
+        ?MQTT_PROTO_V5 ->
+            case rabbit_misc:table_lookup(Args, <<"x-mqtt-subscription-opts">>) of
+                {table, Table} ->
+                    %% binding args v2
+                    subscription_opts_from_table(Table);
+                undefined ->
+                    %% binding args v1
+                    Opts0 = #mqtt_subscription_opts{} = lists:keyfind(
+                                                          mqtt_subscription_opts, 1, Args),
+                    %% Migrate v1 to v2.
+                    %% Note that this migration must be in place even for some versions
+                    %% (jump upgrade) after feature flag 'rabbitmq_4.1.0' has become
+                    %% required since enabling the feature flag doesn't migrate binding
+                    %% args for existing connections.
+                    NewArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts0),
+                    ok = recreate_subscription(TopicFilter, Args, NewArgs, QoS, State),
+                    Opts0
+            end;
+        _ ->
+            %% session downgrade
+            ok = recreate_subscription(TopicFilter, Args, [], QoS, State),
+            #mqtt_subscription_opts{qos = QoS}
     end.
 
 recreate_subscription(TopicFilter, OldBindingArgs, NewBindingArgs, Qos, State) ->
