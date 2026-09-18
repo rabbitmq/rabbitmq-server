@@ -36,7 +36,7 @@ endef
 
 LOCAL_DEPS = eldap public_key
 DEPS = rabbit_common rabbit cuttlefish
-TEST_DEPS = ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
+TEST_DEPS = ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk

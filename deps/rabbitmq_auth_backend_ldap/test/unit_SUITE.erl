@@ -27,6 +27,8 @@ all() ->
      ad_variable_pattern_escaping_rmq_4282,
      bare_username_pattern_gh_17271,
      non_dn_pattern_no_escaping,
+     invalid_credentials_refused_is_not_a_format_string,
+     invalid_credentials_via_with_login_is_not_a_format_string,
      user_dn_pattern_gh_7161,
      format_different_types_of_ldap_attribute_values,
      ldap_log_domain_routing,
@@ -342,6 +344,64 @@ ad_variable_pattern_escaping_rmq_4282(_Config) ->
                         {ad_domain, <<"CORP">>}, {ad_user, <<",ou=Evil">>}]))
     after
         restore_env(user_bind_pattern, PrevBindPattern),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+invalid_credentials_refused_is_not_a_format_string(_Config) ->
+    MaliciousDN = "cn=~10000n,ou=People,dc=example,dc=com",
+    {refused, Format, Args} =
+        rabbit_auth_backend_ldap:invalid_credentials_refused(MaliciousDN),
+    Formatted = lists:flatten(rabbit_misc:format(Format, Args)),
+    ?assert(string:find(Formatted, MaliciousDN) =/= nomatch),
+    ?assert(length(Formatted) < 200),
+    CrashingDN = "cn=~s,ou=People,dc=example,dc=com",
+    ?assertError(badarg, rabbit_misc:format(CrashingDN, [])),
+    {refused, Format2, Args2} =
+        rabbit_auth_backend_ldap:invalid_credentials_refused(CrashingDN),
+    Formatted2 = lists:flatten(rabbit_misc:format(Format2, Args2)),
+    ?assert(string:find(Formatted2, CrashingDN) =/= nomatch),
+    ok.
+
+invalid_credentials_via_with_login_is_not_a_format_string(_Config) ->
+    PrevPattern = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
+    PrevBindPattern = application:get_env(rabbitmq_auth_backend_ldap, user_bind_pattern),
+    PrevStartTls = application:get_env(rabbitmq_auth_backend_ldap, use_starttls),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    try
+        ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+        ok = application:set_env(rabbitmq_auth_backend_ldap, user_dn_pattern,
+                                 "cn=${username},ou=People,dc=example,dc=com"),
+        %% Simple bind falls back to user_dn_pattern only when user_bind_pattern
+        %% is `none'; the application isn't loaded in this test, so its
+        %% PROJECT_ENV default doesn't apply and this must be set explicitly.
+        ok = application:set_env(rabbitmq_auth_backend_ldap, user_bind_pattern, none),
+        %% eldap_open/2 reads use_starttls with no default; same reason as above.
+        ok = application:set_env(rabbitmq_auth_backend_ldap, use_starttls, false),
+        ok = meck:new(eldap, [unstick, passthrough]),
+        meck:expect(eldap, open, fun(_Servers, _Opts) -> {ok, self()} end),
+        meck:expect(eldap, simple_bind, fun(_LDAP, _DN, _PW) -> {error, invalidCredentials} end),
+        meck:expect(eldap, close, fun(_LDAP) -> ok end),
+        %% Same DN construction a real bind would use for this pattern.
+        UserDN = rabbit_auth_backend_ldap:simple_bind_fill_pattern(<<"~10000n">>),
+        %% idle_timeout=0 keeps the connection transient, avoiding any
+        %% dependency on the ldap_pool worker pool started at boot.
+        Opts = [{idle_timeout, 0}, {port, 389}, {anon_auth, false}],
+        {refused, Format, Args} =
+            rabbit_auth_backend_ldap:with_login(
+              {UserDN, <<"wrong-password">>}, ["localhost"], Opts,
+              fun(_LDAP) -> ok end),
+        Formatted = lists:flatten(rabbit_misc:format(Format, Args)),
+        ?assert(length(Formatted) < 200),
+        ?assert(string:find(Formatted, "~10000n") =/= nomatch)
+    after
+        %% meck:new/2 may not have run (or may not have completed) if an
+        %% earlier step in the try block failed; make cleanup unconditional
+        %% so a partial setup can't leak env overrides into later tests.
+        try meck:unload(eldap) catch _:_ -> ok end,
+        restore_env(user_dn_pattern, PrevPattern),
+        restore_env(user_bind_pattern, PrevBindPattern),
+        restore_env(use_starttls, PrevStartTls),
         restore_env(log, PrevLog)
     end,
     ok.
