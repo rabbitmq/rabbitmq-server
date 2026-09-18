@@ -54,13 +54,28 @@ for _rmq_env_candidate_var in $(env | sed -n 's/^\(RABBITMQ_[A-Za-z0-9_]*\)=.*/\
             ;;
     esac
     eval "_rmq_env_candidate_value=\$$_rmq_env_candidate_var"
-    # An exported-but-empty variable is treated as unset everywhere
-    # else (see get_env_var/2 in rabbit_env.erl), so it must not beat
-    # a real value set in the conf file either.
-    if [ -n "$_rmq_env_candidate_value" ]; then
-        eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
-        _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
-    fi
+    case "$_rmq_env_candidate_var" in
+        RABBITMQ_FEATURE_FLAGS|RABBITMQ_ENABLED_PLUGINS)
+            # rabbit_env.erl reads these two with
+            # keep_empty_string_as_is: an exported empty value is a
+            # real, meaningful directive (force zero feature flags,
+            # enable no plugins), not equivalent to unset, so it must
+            # still beat the conf file the same way a non-empty value
+            # would.
+            eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
+            _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
+            ;;
+        *)
+            # An exported-but-empty variable is treated as unset
+            # everywhere else (see get_env_var/2 in rabbit_env.erl),
+            # so it must not beat a real value set in the conf file
+            # either.
+            if [ -n "$_rmq_env_candidate_value" ]; then
+                eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
+                _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
+            fi
+            ;;
+    esac
 done
 unset _rmq_env_candidate_var _rmq_env_candidate_value
 
@@ -156,9 +171,15 @@ fi
 # Restore whatever was preserved at the top of this script, warning
 # for any RABBITMQ_* variable the conf file just tried to change.
 for _rmq_env_preserved_var in $_rmq_env_preserved_vars; do
+    # A plain value comparison alone cannot tell "conf file left this
+    # alone" apart from "conf file did `unset VAR`" when the preserved
+    # value happens to be empty (RABBITMQ_FEATURE_FLAGS/
+    # RABBITMQ_ENABLED_PLUGINS, see above): both look like "" == "".
+    # Check whether the variable is still set at all first.
+    eval "_rmq_env_is_set=\${$_rmq_env_preserved_var+x}"
     eval "_rmq_env_new_value=\$$_rmq_env_preserved_var"
     eval "_rmq_env_old_value=\$_rmq_env_saved_$_rmq_env_preserved_var"
-    if [ "$_rmq_env_new_value" != "$_rmq_env_old_value" ]; then
+    if [ -z "$_rmq_env_is_set" ] || [ "$_rmq_env_new_value" != "$_rmq_env_old_value" ]; then
         case "$_rmq_env_preserved_var" in
             RABBITMQ_DEFAULT_PASS|RABBITMQ_ERLANG_COOKIE)
                 _rmq_env_display_value='******'
@@ -170,12 +191,17 @@ for _rmq_env_preserved_var in $_rmq_env_preserved_vars; do
         _rmq_env_pwarn "\$$_rmq_env_preserved_var was already set in the environment to:" \
             "$_rmq_env_display_value" \
             'The value set in rabbitmq-env.conf is ignored.'
-        eval "$_rmq_env_preserved_var=\$_rmq_env_old_value"
+        # `export`, not a plain assignment: if the conf file did
+        # `unset VAR` rather than reassigning it, VAR lost its export
+        # attribute along with its value, and a plain assignment here
+        # would restore the value into a shell-local variable that
+        # never reaches the `erl` process this script eventually execs.
+        eval "export $_rmq_env_preserved_var=\$_rmq_env_old_value"
     fi
     unset "_rmq_env_saved_$_rmq_env_preserved_var"
 done
 unset _rmq_env_preserved_vars _rmq_env_preserved_var _rmq_env_new_value _rmq_env_old_value \
-    _rmq_env_display_value
+    _rmq_env_display_value _rmq_env_is_set
 
 # Bump ETS table limit to 50000
 if [ -z "$ERL_MAX_ETS_TABLES" ]; then

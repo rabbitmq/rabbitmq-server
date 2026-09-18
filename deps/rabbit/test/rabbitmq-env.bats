@@ -325,3 +325,52 @@ setup() {
     echo "expected the warning to mention the variable but not the secret value, but got: $output"
     [[ $output == *"RABBITMQ_ERLANG_COOKIE was already set in the environment"* && $output != *"super-secret-cookie"* ]]
 }
+
+@test "an exported empty RABBITMQ_FEATURE_FLAGS takes precedence over conf file" {
+    # rabbit_env.erl reads this with keep_empty_string_as_is: an
+    # empty value means "force zero feature flags", a real directive,
+    # not the same as unset.
+    echo 'RABBITMQ_FEATURE_FLAGS=some_flag' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_FEATURE_FLAGS=""
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_FEATURE_FLAGS to remain empty, but got: $RABBITMQ_FEATURE_FLAGS"
+    [ "$RABBITMQ_FEATURE_FLAGS" = "" ]
+}
+
+@test "an exported empty RABBITMQ_ENABLED_PLUGINS takes precedence over conf file" {
+    # Same as RABBITMQ_FEATURE_FLAGS: an empty value here means
+    # "enable no plugins", not unset.
+    echo 'RABBITMQ_ENABLED_PLUGINS=rabbitmq_management' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_ENABLED_PLUGINS=""
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_ENABLED_PLUGINS to remain empty, but got: $RABBITMQ_ENABLED_PLUGINS"
+    [ "$RABBITMQ_ENABLED_PLUGINS" = "" ]
+}
+
+@test "conf file unsetting RABBITMQ_FEATURE_FLAGS does not defeat an exported empty value" {
+    # A value comparison alone can't tell "conf file left this alone"
+    # apart from "conf file ran `unset VAR`" when the preserved value
+    # is itself empty: both look like "" == "" to a plain compare.
+    echo 'unset RABBITMQ_FEATURE_FLAGS' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_FEATURE_FLAGS=""
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_FEATURE_FLAGS to still be set (to empty), but it is unset"
+    [ -n "${RABBITMQ_FEATURE_FLAGS+x}" ]
+}
+
+@test "a value restored after an unset conf file directive is exported to child processes" {
+    # `unset` in the conf file strips the export attribute along with
+    # the value; the restore must re-export, not just reassign, or
+    # the restored value never reaches the erl process this script
+    # eventually execs.
+    echo 'unset RABBITMQ_FEATURE_FLAGS' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_FEATURE_FLAGS=""
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    run sh -c 'echo "${RABBITMQ_FEATURE_FLAGS+set}"'
+
+    echo "expected the restored value to be exported to a child process, but got: $output"
+    [ "$output" = "set" ]
+}
