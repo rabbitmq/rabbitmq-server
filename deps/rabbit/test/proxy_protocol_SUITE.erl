@@ -25,7 +25,8 @@ groups() -> [
         {sequential_tests, [], [
             proxy_protocol_v1,
             proxy_protocol_v1_tls,
-            proxy_protocol_v2_local
+            proxy_protocol_v2_local,
+            proxy_protocol_v1_untrusted_source_rejected
         ]}
     ].
 
@@ -36,7 +37,8 @@ init_per_suite(Config) ->
     ]),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1, [
         {rabbit, [
-            {proxy_protocol, true}
+            {proxy_protocol, true},
+            {proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]}
         ]}
     ]),
     Config3 = rabbit_ct_helpers:set_config(Config2, {rabbitmq_ct_tls_verify, verify_none}),
@@ -108,6 +110,29 @@ proxy_protocol_v2_local(Config) ->
     gen_tcp:close(Socket),
     wait_for_connection_close(Config),
     ok.
+
+%% The test peer always connects from loopback, which is normally in
+%% proxy_protocol_trusted_proxies (see init_per_suite); temporarily
+%% pointing the allowlist elsewhere simulates the PROXY header arriving
+%% from a peer that isn't a trusted proxy, which must be rejected outright
+%% rather than trusting the header's claimed source.
+proxy_protocol_v1_untrusted_source_rejected(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, proxy_protocol_trusted_proxies, ["10.0.0.0/8"]]),
+    try
+        Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+        {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
+            [binary, {active, false}, {packet, raw}]),
+        ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        ok = inet:send(Socket, <<"AMQP", 0, 0, 9, 1>>),
+        {error, closed} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
+        gen_tcp:close(Socket)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, set_env,
+               [rabbit, proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]])
+    end.
 
 connection_name() ->
     Scope = rabbit:pg_scope_amqp091_connection(),

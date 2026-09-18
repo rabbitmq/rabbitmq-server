@@ -1564,6 +1564,26 @@ end}.
 {mapping, "proxy_protocol", "rabbit.proxy_protocol",
     [{datatype, boolean}]}.
 
+%% Trusted proxy source IPs/CIDRs. When proxy_protocol is enabled, the
+%% PROXY protocol header is only honoured when the immediately-connecting
+%% peer (not the source address claimed in the header itself) matches one
+%% of these entries; connections from any other peer are rejected. This
+%% must be set to something other than the default (empty, meaning no
+%% peer is trusted) when proxy_protocol is enabled, since the header is
+%% otherwise fully attacker-controlled.
+%%
+%% {proxy_protocol_trusted_proxies, ["10.0.0.0/8", "127.0.0.1", "::1"]}
+
+{mapping, "proxy_protocol.trusted_proxies.$index", "rabbit.proxy_protocol_trusted_proxies",[
+    {datatype, string}
+]}.
+
+{translation, "rabbit.proxy_protocol_trusted_proxies",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("proxy_protocol.trusted_proxies", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
 %% Whether to stop the rabbit application if a vhost has
 %% to terminate for any reason.
 
