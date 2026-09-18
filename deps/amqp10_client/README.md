@@ -36,6 +36,7 @@ The `connection_config` map contains various configuration properties.
       % required by some vendors such as Azure ServiceBus
       hostname => binary(),
       tls_opts => {secure_port, [ssl:tls_option()]}, % optional
+      connect_timeout => timeout(),
       notify => pid(), % Pid to receive protocol notifications. Set to self() if not provided
       max_frame_size => non_neg_integer(), % incoming max frame size
       idle_time_out => non_neg_integer(), % heartbeat
