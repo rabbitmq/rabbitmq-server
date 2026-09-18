@@ -61,7 +61,8 @@ remove_credentials(URI) ->
 %%
 %% The extra parameters that may be specified are channel_max,
 %% frame_max, heartbeat and auth_mechanism (the latter can appear more
-%% than once).  The extra parameters that may be specified for an SSL
+%% than once, and must be one of plain, amqplain, external or crdemo).
+%% The extra parameters that may be specified for an SSL
 %% connection are cacertfile, certfile, keyfile, verify,
 %% fail_if_no_peer_cert, password, depth, server_name_indication,
 %% and customize_hostname_check.
@@ -186,7 +187,7 @@ build_ssl_broker(ParsedUri, DefaultVHost) ->
                       [{fun find_path_parameter/1, cacertfile},
                        {fun find_path_parameter/1, certfile},
                        {fun find_path_parameter/1, keyfile},
-                       {fun find_atom_parameter/1, verify},
+                       {fun find_verify_parameter/1, verify},
                        {fun find_boolean_parameter/1, fail_if_no_peer_cert},
                        {fun find_identity_parameter/1, password},
                        {fun find_sni_parameter/1, server_name_indication},
@@ -273,10 +274,9 @@ find_boolean_parameter(Value) ->
         _       -> fail({require_boolean, Value})
     end.
 
-find_atom_parameter(Value) ->
-    try return(list_to_existing_atom(Value))
-    catch error:badarg -> fail({invalid_atom_parameter, Value})
-    end.
+find_verify_parameter("verify_peer") -> return(verify_peer);
+find_verify_parameter("verify_none") -> return(verify_none);
+find_verify_parameter(Value)         -> fail({invalid_verify_parameter, Value}).
 
 mechanisms(ParsedUri) ->
     Query = proplists:get_value('query', ParsedUri),
@@ -284,16 +284,20 @@ mechanisms(ParsedUri) ->
                      []    -> ["plain", "amqplain"];
                      Mechs -> Mechs
                  end,
-    [case [safe_mechanism_token(T) || T <- string:tokens(Mech, ":")] of
-         [F]    -> fun (R, P, S) -> amqp_auth_mechanisms:F(R, P, S) end;
-         [M, F] -> fun (R, P, S) -> M:F(R, P, S) end;
-         L      -> throw({not_mechanism, L})
-     end || Mech <- Mechanisms].
+    [mechanism(Mech) || Mech <- Mechanisms].
 
-safe_mechanism_token(T) ->
-    try list_to_existing_atom(T)
-    catch error:badarg -> throw({unknown_mechanism, T})
+mechanism(Mech) ->
+    case string:split(Mech, ":", all) of
+        [Name]                         -> mechanism_fun(Name, Mech);
+        ["amqp_auth_mechanisms", Name] -> mechanism_fun(Name, Mech);
+        _                              -> throw({unknown_mechanism, Mech})
     end.
+
+mechanism_fun("plain",    _Mech) -> fun amqp_auth_mechanisms:plain/3;
+mechanism_fun("amqplain", _Mech) -> fun amqp_auth_mechanisms:amqplain/3;
+mechanism_fun("external", _Mech) -> fun amqp_auth_mechanisms:external/3;
+mechanism_fun("crdemo",   _Mech) -> fun amqp_auth_mechanisms:crdemo/3;
+mechanism_fun(_Name,       Mech) -> throw({unknown_mechanism, Mech}).
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
