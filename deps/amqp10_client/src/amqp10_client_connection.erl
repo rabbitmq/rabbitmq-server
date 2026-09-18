@@ -59,6 +59,8 @@
       address => address(),
       port => inet:port_number(),
       tls_opts => {secure_port, [ssl:tls_option()]},
+      %% socket connect timeout, for TLS applied to the TCP connect and the TLS handshake separately
+      connect_timeout => timeout(),
       ws_path => string(),
       ws_opts => gun:opts(),
       notify => pid() | none, % the pid to send connection events to

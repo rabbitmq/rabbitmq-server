@@ -36,7 +36,7 @@ connect(Host, Port, #{ws_path := Path} = Opts) ->
         {ok, _Started} ?= application:ensure_all_started(gun),
         {ok, Pid} ?= gun:open(Host, Port, GunOpts),
         MRef = monitor(process, Pid),
-        {ok, HttpVsn} ?= gun:await_up(Pid, MRef),
+        {ok, HttpVsn} ?= gun:await_up(Pid, maps:get(connect_timeout, Opts, 5000), MRef),
         ok ?= case HttpVsn of
             http ->
                 ok;
@@ -51,16 +51,18 @@ connect(Host, Port, #{ws_path := Path} = Opts) ->
         {ok, StreamRef} ?= ws_upgrade(Pid, Path),
         {ok, {ws, Pid, StreamRef}}
     end;
-connect(Host, Port, #{tls_opts := {secure_port, Opts0}}) ->
+connect(Host, Port, #{tls_opts := {secure_port, Opts0}} = Config) ->
     Opts = rabbit_ssl_options:fix_client(Opts0),
-    case ssl:connect(Host, Port, ?TCP_OPTS ++ Opts) of
+    case ssl:connect(Host, Port, ?TCP_OPTS ++ Opts,
+                     maps:get(connect_timeout, Config, infinity)) of
         {ok, S} ->
             {ok, {ssl, S}};
         Err ->
             Err
     end;
-connect(Host, Port, _) ->
-    case gen_tcp:connect(Host, Port, ?TCP_OPTS) of
+connect(Host, Port, Config) ->
+    case gen_tcp:connect(Host, Port, ?TCP_OPTS,
+                         maps:get(connect_timeout, Config, infinity)) of
         {ok, S} ->
             {ok, {tcp, S}};
         Err ->
