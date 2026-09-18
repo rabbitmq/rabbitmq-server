@@ -27,7 +27,7 @@
 %% for tests
 -export([purge_connections/0,
          fill_user_dn_pattern/1, escaped_user_dn/1, simple_bind_fill_pattern/1,
-         fill_dn_with_username/2]).
+         fill_dn_with_username/2, ssl_options/0, ssl_options/1]).
 
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
@@ -791,9 +791,13 @@ ssl_options() ->
     ssl_options(env(ssl_options)).
 
 ssl_options(undefined) ->
-    ssl_options([{verify, verify_peer}]);
+    ssl_options([]);
 ssl_options(Opts0) ->
-    Opts1 = rabbit_ssl_options:fix_client(Opts0),
+    %% The Makefile's PROJECT_ENV bakes in `[]`, not `undefined`, as the
+    %% default `ssl_options`, so the `undefined` case above is normally
+    %% unreachable; `fix_verify/1` must default `verify` regardless of
+    %% whether `Opts0` is `[]` or a non-empty list missing `verify`.
+    Opts1 = fix_verify(rabbit_ssl_options:fix_client(Opts0)),
     case env(ssl_hostname_verification, undefined) of
         wildcard ->
             ?LOG_DEBUG("Enabling wildcard-aware hostname verification for LDAP client connections",
@@ -803,6 +807,12 @@ ssl_options(Opts0) ->
             [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts1];
         _ ->
             Opts1
+    end.
+
+fix_verify(Opts) ->
+    case proplists:is_defined(verify, Opts) of
+        true -> Opts;
+        false -> [{verify, verify_peer} | Opts]
     end.
 
 at_least(Ver) ->

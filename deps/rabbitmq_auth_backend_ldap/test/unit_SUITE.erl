@@ -30,7 +30,10 @@ all() ->
      user_dn_pattern_gh_7161,
      format_different_types_of_ldap_attribute_values,
      ldap_log_domain_routing,
-     ldap_log_callsites_carry_domain
+     ldap_log_callsites_carry_domain,
+     ssl_options_defaults_to_verify_peer,
+     ssl_options_empty_list_defaults_to_verify_peer,
+     ssl_options_preserves_explicit_verify
     ].
 
 fill(_Config) ->
@@ -423,6 +426,21 @@ ldap_log_domain_routing(_Config) ->
     after
         _ = logger:remove_handler(HandlerId)
     end.
+
+%% `ssl_options/1` is only reached with `undefined` when the app env key is
+%% entirely unset; the Makefile's PROJECT_ENV bakes in `[]` as the default,
+%% so the common case must be covered too, not just `undefined`.
+ssl_options_defaults_to_verify_peer(_Config) ->
+    Opts = rabbit_auth_backend_ldap:ssl_options(undefined),
+    ?assertEqual(verify_peer, proplists:get_value(verify, Opts)).
+
+ssl_options_empty_list_defaults_to_verify_peer(_Config) ->
+    Opts = rabbit_auth_backend_ldap:ssl_options([]),
+    ?assertEqual(verify_peer, proplists:get_value(verify, Opts)).
+
+ssl_options_preserves_explicit_verify(_Config) ->
+    Opts = rabbit_auth_backend_ldap:ssl_options([{verify, verify_none}]),
+    ?assertEqual(verify_none, proplists:get_value(verify, Opts)).
 
 %% Verifies that every `?LOG_*` call site in the LDAP plugin sources passes the
 %% LDAP domain in its metadata
