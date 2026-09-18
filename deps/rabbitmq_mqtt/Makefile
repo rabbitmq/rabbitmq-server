@@ -53,7 +53,7 @@ TEST_DEPS = cowlib emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helper
 PLT_APPS += rabbitmq_cli $(ELIXIR_ERL_EBIN)
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
-dep_emqtt = git https://github.com/emqx/emqtt.git 1.14.6
+dep_emqtt = git https://github.com/emqx/emqtt.git 1.16.1
 
 ELIXIR = system
 
@@ -67,7 +67,6 @@ include ../../erlang.mk
 ELIXIR_ERL_EBIN := $(shell dirname $$(elixir -e 'IO.puts(:code.which(:elixir_erl))' 2>/dev/null))
 DIALYZER_PLT_OPTS += -pa $(ELIXIR_ERL_EBIN)
 DIALYZER_OPTS += -pa $(ELIXIR_ERL_EBIN)
-
 
 clean::
 	if test -d test/java_SUITE_data; then cd test/java_SUITE_data && $(MAKE) clean; fi

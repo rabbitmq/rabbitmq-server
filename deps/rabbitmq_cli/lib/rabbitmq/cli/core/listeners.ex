@@ -205,6 +205,10 @@ defmodule RabbitMQ.CLI.Core.Listeners do
     nil
   end
 
+  def cert_validity({:error, _} = err) do
+    err
+  end
+
   def cert_validity(cert) do
     dsa_entries = :public_key.pem_decode(cert)
 
@@ -217,27 +221,63 @@ defmodule RabbitMQ.CLI.Core.Listeners do
 
         Enum.map(dsa_entries, fn
           {:Certificate, _, _} = dsa_entry ->
-            certificate(tbsCertificate: tbs_certificate) = :public_key.pem_entry_decode(dsa_entry)
-            tbscertificate(validity: validity) = tbs_certificate
-            validity(notAfter: not_after, notBefore: not_before) = validity
-            start = :pubkey_cert.time_str_2_gregorian_sec(not_before)
+            try do
+              certificate(tbsCertificate: tbs_certificate) = :public_key.pem_entry_decode(dsa_entry)
+              tbscertificate(validity: validity) = tbs_certificate
+              validity(notAfter: not_after, notBefore: not_before) = validity
 
-            case start > now do
-              true ->
-                {:ok, naive} =
-                  NaiveDateTime.from_erl(:calendar.gregorian_seconds_to_datetime(start))
+              case parse_time(not_before) do
+                {:error, _} = err ->
+                  err
 
-                startdate = NaiveDateTime.to_string(naive)
-                {:error, "Certificate is not yet valid. It starts on #{startdate}"}
+                start when start > now ->
+                  {:ok, naive} =
+                    NaiveDateTime.from_erl(:calendar.gregorian_seconds_to_datetime(start))
 
-              false ->
-                :pubkey_cert.time_str_2_gregorian_sec(not_after)
+                  startdate = NaiveDateTime.to_string(naive)
+                  {:error, "Certificate is not yet valid. It starts on #{startdate}"}
+
+                _start ->
+                  parse_time(not_after)
+              end
+            rescue
+              _ ->
+                {:error, "Malformed certificate entry"}
             end
 
           {type, _, _} ->
             {:error, "The certificate file provided contains a #{type} entry."}
         end)
     end
+  end
+
+  defp parse_time(time) do
+    try do
+      time_str_2_gregorian_sec(time)
+    rescue
+      _ ->
+        {:error, "Invalid date format in certificate"}
+    end
+  end
+
+  # RFC 5280 Section 4.1.2.5.1: YY >= 50 is interpreted as 19YY, YY < 50 as 20YY.
+  defp time_str_2_gregorian_sec({:utcTime, [y1, y2, m1, m2, d1, d2, h1, h2, min1, min2, s1, s2, ?Z]}) do
+    yy = List.to_integer([y1, y2])
+    year = if yy >= 50, do: 1900 + yy, else: 2000 + yy
+    month = List.to_integer([m1, m2])
+    day = List.to_integer([d1, d2])
+    hour = List.to_integer([h1, h2])
+    min = List.to_integer([min1, min2])
+    sec = List.to_integer([s1, s2])
+    :calendar.datetime_to_gregorian_seconds({{year, month, day}, {hour, min, sec}})
+  end
+
+  defp time_str_2_gregorian_sec({:utcTime, [y1, y2, m1, m2, d1, d2, h1, h2, min1, min2, ?Z]}) do
+    time_str_2_gregorian_sec({:utcTime, [y1, y2, m1, m2, d1, d2, h1, h2, min1, min2, ?0, ?0, ?Z]})
+  end
+
+  defp time_str_2_gregorian_sec(time) do
+    :pubkey_cert.time_str_2_gregorian_sec(time)
   end
 
   def listener_rows(listeners) do

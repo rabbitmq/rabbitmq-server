@@ -609,6 +609,7 @@ end}.
 %% as a temporary measure!) by setting this to rabbit_password_hashing_md5.
 %%
 %% To use SHA-512, set to rabbit_password_hashing_sha512.
+%% To use PBKDF2-HMAC-SHA256, set to rabbit_password_hashing_pbkdf2_sha256.
 %%
 %% {password_hashing_module, rabbit_password_hashing_sha256},
 
@@ -940,6 +941,25 @@ end}.
 {translation, "rabbit.consumer_max_per_channel",
  fun(Conf) ->
   case cuttlefish:conf_get("consumer_max_per_channel", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) andalso Val > 0 -> Val;
+      _         -> cuttlefish:invalid("should be positive integer or 'infinity'")
+  end
+ end
+}.
+
+%% Set the max number of publishes a channel will buffer for an open
+%% AMQP 0-9-1 transaction before rejecting further ones.
+%%
+%% {channel_tx_message_max, 10000},
+
+{mapping, "channel_tx_message_max", "rabbit.channel_tx_message_max",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.channel_tx_message_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("channel_tx_message_max", Conf, undefined) of
       undefined -> cuttlefish:unset();
       infinity  -> infinity;
       Val when is_integer(Val) andalso Val > 0 -> Val;

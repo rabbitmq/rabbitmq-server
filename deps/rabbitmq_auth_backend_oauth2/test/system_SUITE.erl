@@ -725,7 +725,7 @@ amqp_token_refresh_vhost_permission(Config) ->
     receive {amqp10_event,
              {connection, Connection,
               {closed, {unauthorized_access, Reason}}}} ->
-                ?assertMatch(<<"access to vhost / failed for new credential:", _/binary>>,
+                ?assertEqual(<<"access to vhost '/' failed for new credential">>,
                              Reason)
     after 5000 -> ct:fail({missing_event, ?LINE})
     end.

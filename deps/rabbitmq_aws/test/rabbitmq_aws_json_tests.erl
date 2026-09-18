@@ -91,5 +91,11 @@ parse_test_() ->
             Value = "{\"tags\": [{}]}",
             Expectation = [{"tags", [{}]}],
             ?assertEqual(Expectation, rabbitmq_aws_json:decode(Value))
+        end},
+        {"invalid JSON", fun() ->
+            ?assertMatch({error, _}, rabbitmq_aws_json:decode("{oops"))
+        end},
+        {"valid JSON, not an object", fun() ->
+            ?assertMatch({error, _}, rabbitmq_aws_json:decode("[1,2]"))
         end}
     ].

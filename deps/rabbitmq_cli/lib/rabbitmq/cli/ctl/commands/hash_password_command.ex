@@ -15,7 +15,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
     "sha-256" => :rabbit_password_hashing_sha256,
     "sha512" => :rabbit_password_hashing_sha512,
     "sha-512" => :rabbit_password_hashing_sha512,
-    "md5" => :rabbit_password_hashing_md5
+    "md5" => :rabbit_password_hashing_md5,
+    "pbkdf2_sha256" => :rabbit_password_hashing_pbkdf2_sha256,
+    "pbkdf2-sha256" => :rabbit_password_hashing_pbkdf2_sha256
   }
 
   def switches() do
@@ -76,15 +78,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
   def usage_additional() do
     [
       ["<cleartext_password>", "password to hash"],
-      ["--hashing-algorithm <algorithm>", "hashing algorithm to use: sha256, sha512, md5"]
+      [
+        "--hashing-algorithm <algorithm>",
+        "hashing algorithm to use: sha256, sha512, md5, pbkdf2_sha256"
+      ]
     ]
   end
 
-  def banner([arg], _options),
-    do: "Will hash password #{arg}"
-
-  def banner([], _options),
-    do: "Will hash provided password"
+  def banner(_args, _options),
+    do: "Will hash the provided password ..."
 
   def description(), do: "Hashes a plaintext password"
 

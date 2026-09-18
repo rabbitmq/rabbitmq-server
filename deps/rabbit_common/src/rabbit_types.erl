@@ -185,7 +185,7 @@
 
 -type(auth_user() ::
         #auth_user{username :: username(),
-                   tags     :: [atom()],
+                   tags     :: [atom() | binary()],
                    impl     :: any()}).
 
 -type(authz_data() ::
@@ -194,7 +194,7 @@
 
 -type(user() ::
         #user{username       :: username(),
-              tags           :: [atom()],
+              tags           :: [atom() | binary()],
               authz_backends :: [{atom(), any()}]}).
 
 -type(username() :: binary()).

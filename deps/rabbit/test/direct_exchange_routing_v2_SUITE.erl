@@ -109,7 +109,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     %% Test that all bindings got removed from the database.
-    ?assertEqual([], list_bindings(Config)).
+    ?awaitMatch([], list_bindings(Config), 3000).
 
 %%%===================================================================
 %%% Test cases

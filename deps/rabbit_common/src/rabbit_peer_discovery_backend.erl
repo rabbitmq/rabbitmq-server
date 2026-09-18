@@ -56,7 +56,13 @@
 
 -callback retry_strategy() -> limited | unlimited.
 
--optional_callbacks([init/0, retry_strategy/0]).
+%% Whether list_nodes/0 reports the cluster's full current membership,
+%% as opposed to e.g. a single bootstrap seed node. Peer discovery
+%% cleanup relies on this to decide whether a node missing from
+%% list_nodes/0 can be safely removed from the cluster.
+-callback reports_all_nodes() -> boolean().
+
+-optional_callbacks([init/0, retry_strategy/0, reports_all_nodes/0]).
 
 -export([api_version/0]).
 

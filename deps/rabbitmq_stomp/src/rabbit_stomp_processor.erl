@@ -444,10 +444,20 @@ process_connect(Implicit, Frame,
                             State)
               end,
               case {Res1, Implicit} of
+                  %% Success (Implicit)
+                  %% Update state without sending a CONNECTED frame
                   {{ok, _, StateN2}, implicit} ->
-                      self() ! connection_created, ok(StateN2);
-                  _ ->
-                      self() ! connection_created, Res1
+                      self() ! connection_created,
+                      ok(StateN2);
+                  %% Success (Explicit)
+                  %% Return the CONNECTED frame and update state
+                  {{ok, _, _}, _} ->
+                      self() ! connection_created,
+                      Res1;
+                  %% Failure (Authentication, quotas, etc.)
+                  %% Do NOT emit connection_created
+                  {ErrorRes, _} ->
+                      ErrorRes
               end
       end,
       State).
@@ -575,12 +585,16 @@ handle_frame(Command, _Frame, State) ->
 ack_action(Command, Frame,
            State = #state{cfg = #cfg{
                                    version              = Version,
+                                   session_id           = SessionId,
                                    default_nack_requeue = DefaultNackRequeue}}, Fun) ->
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
     case rabbit_stomp_frame:header(Frame, AckHeader) of
         {ok, AckValue} ->
+            %% SessionId is bound above: this also rejects an ack/message-id
+            %% token that wasn't issued for this connection, e.g. one sent
+            %% by a publisher via a message header.
             case rabbit_stomp_util:parse_message_id(AckValue) of
-                {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
+                {ok, {ConsumerTag, SessionId, DeliveryTag}} ->
                     %% Settle using state's `unacked_message_q` and the `#pending_ack` records.
                     %% This handles two problematic scenarios: a delivery that outlived its
                     %% subscription and the original ack mode for the race condition case where

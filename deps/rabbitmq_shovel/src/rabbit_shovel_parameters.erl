@@ -184,11 +184,31 @@ protocols(Def) ->
     Dst = dest_protocol(Def),
     {Src, Dst}.
 
-registered_protocol_to_atom(Protocol) when is_atom(Protocol) -> Protocol;
-registered_protocol_to_atom(<<"amqp091">>)                  -> amqp091;
-registered_protocol_to_atom(<<"amqp10">>)                   -> amqp10;
-registered_protocol_to_atom(<<"local">>)                    -> local;
-registered_protocol_to_atom(_)                              -> amqp091.
+registered_protocol_to_atom(Protocol) when is_atom(Protocol) ->
+    Protocol;
+registered_protocol_to_atom(Protocol) when is_binary(Protocol) ->
+    case lookup_registered_protocol(Protocol) of
+        {ok, Registered}   -> Registered;
+        {error, not_found} -> builtin_protocol_to_atom(Protocol)
+    end;
+registered_protocol_to_atom(_) ->
+    amqp091.
+
+lookup_registered_protocol(Protocol) ->
+    try
+        Atom = binary_to_existing_atom(Protocol),
+        case rabbit_registry:lookup_module(shovel_protocol, Atom) of
+            {ok, _Mod}         -> {ok, Atom};
+            {error, not_found} -> {error, not_found}
+        end
+    catch
+        error:badarg -> {error, not_found}
+    end.
+
+builtin_protocol_to_atom(<<"amqp091">>) -> amqp091;
+builtin_protocol_to_atom(<<"amqp10">>)  -> amqp10;
+builtin_protocol_to_atom(<<"local">>)   -> local;
+builtin_protocol_to_atom(_)             -> amqp091.
 
 %%----------------------------------------------------------------------------
 

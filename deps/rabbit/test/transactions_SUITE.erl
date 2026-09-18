@@ -24,7 +24,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 published_visible_after_commit,
-                                return_after_commit
+                                return_after_commit,
+                                tx_message_max_closes_channel
                                ]}
     ].
 
@@ -62,6 +63,8 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, application, unset_env,
+                                       [rabbit, channel_tx_message_max]),
     QName = queue_name(Config),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     delete_queue(Ch, QName),
@@ -99,6 +102,29 @@ return_after_commit(Config) ->
     ?assertEqual(return_after_commit, Result),
     #'tx.commit_ok'{} = amqp_channel:call(Ch, #'tx.commit'{}),
     rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+    ok.
+
+%% Without a cap, a channel that never commits/rolls back a transaction
+%% buffers every published message in its own process memory, unbounded.
+tx_message_max_closes_channel(Config) ->
+    QName = queue_name(Config),
+    ok = rabbit_ct_broker_helpers:rpc(Config, application, set_env,
+                                       [rabbit, channel_tx_message_max, 3]),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    #'tx.select_ok'{} = amqp_channel:call(Ch, #'tx.select'{}),
+    [publish(Ch, QName, <<"msg">>) || _ <- lists:seq(1, 3)],
+
+    Monitor = monitor(process, Ch),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName},
+                       #amqp_msg{payload = <<"one too many">>}),
+    receive
+        {'DOWN', Monitor, process, Ch,
+         {shutdown, {server_initiated_close, 406, _Error}}} ->
+            ok
+    after 5000 ->
+            exit(channel_did_not_close)
+    end,
+    rabbit_ct_client_helpers:close_connection(Conn),
     ok.
 
 queue_name(Config) ->

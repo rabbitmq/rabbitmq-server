@@ -26,7 +26,8 @@ groups() ->
           override_replaces_listener_value,
           listener_value_is_preserved_when_not_overridden,
           bare_atom_socket_option_is_preserved,
-          override_replaces_every_duplicate_listener_value
+          override_replaces_every_duplicate_listener_value,
+          keyfile_password_is_wrapped
         ]}
     ].
 
@@ -73,3 +74,9 @@ override_replaces_every_duplicate_listener_value(_Config) ->
     ok = application:set_env(rabbit, ssl_options_overrides, [{verify, verify_peer}]),
     Fixed = rabbit_networking:fix_ssl_options([{verify, verify_none}, {verify, verify_none}]),
     ?assertEqual([verify_peer], [V || {verify, V} <- Fixed]).
+
+keyfile_password_is_wrapped(_Config) ->
+    Fixed = rabbit_networking:fix_ssl_options([{password, "hunter2"}]),
+    Password = proplists:get_value(password, Fixed),
+    ?assert(is_function(Password, 0)),
+    ?assertEqual("hunter2", Password()).

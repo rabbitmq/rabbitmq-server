@@ -30,6 +30,7 @@ groups() ->
           parse_amqp091,
           parse_amqp10_mixed,
           parse_local,
+          parse_delete_after,
           source_without_declarations_is_arity_compatible,
           source_with_declarations_is_arity_compatible,
           destination_without_declarations_is_arity_compatible,
@@ -198,6 +199,20 @@ assert_uris_round_trip(#{source := #{uris := SrcUris},
                        ExpectedSrcUris, ExpectedDestUris) ->
     ?assertEqual(ExpectedSrcUris, rabbit_shovel_util:deobfuscate_uris(SrcUris)),
     ?assertEqual(ExpectedDestUris, rabbit_shovel_util:deobfuscate_uris(DestUris)).
+
+parse_delete_after(_Config) ->
+    ?assertEqual(never, rabbit_shovel_util:parse_delete_after(<<"never">>)),
+    ?assertEqual('queue-length',
+                 rabbit_shovel_util:parse_delete_after(<<"queue-length">>)),
+    ?assertEqual(0, rabbit_shovel_util:parse_delete_after(0)),
+    ?assertEqual(42, rabbit_shovel_util:parse_delete_after(42)),
+    %% A value rejected by rabbit_shovel_util:validate_delete_after/2 must not
+    %% be turned into a new atom.
+    Unexpected = <<"delete-after-value-that-is-not-a-valid-atom-yet">>,
+    ?assertError(function_clause,
+                 rabbit_shovel_util:parse_delete_after(Unexpected)),
+    ?assertError(badarg, binary_to_existing_atom(Unexpected, utf8)),
+    ok.
 
 %% Regression: an empty argument list resolved to a lower, non-existent arity
 %% once the connection context was appended.

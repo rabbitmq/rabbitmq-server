@@ -25,6 +25,8 @@ groups() ->
 all_tests() ->
     [
      mc_util_uuid_to_urn_roundtrip,
+     mc_util_urn_string_to_uuid_rejects_non_hex_body,
+     mc_util_urn_string_to_uuid_rejects_wrong_dash_placement,
      amqpl_defaults,
      amqpl_compat,
      amqpl_table_x_header,
@@ -40,6 +42,7 @@ all_tests() ->
      amqp_amqpl_message_id_large,
      amqp_amqpl_message_id_binary,
      amqp_amqpl_unsupported_values_not_converted,
+     amqp_amqpl_malformed_x_opt_deaths_dropped,
      amqp_to_amqpl_data_body,
      amqp_amqpl_amqp_bodies,
      amqpl_amqp_type_body_shapes,
@@ -496,6 +499,43 @@ mc_util_uuid_to_urn_roundtrip(_Config) ->
     S = mc_util:uuid_to_urn_string(UUID),
     ?assertEqual(<<"urn:uuid:58b867b0-8151-1f56-1bd4-73229807fd60">>, S),
     ?assertEqual({ok, UUID}, mc_util:urn_string_to_uuid(S)),
+    %% RFC 4122 requires readers to accept upper case hex
+    ?assertEqual({ok, UUID},
+                 mc_util:urn_string_to_uuid(
+                   <<"urn:uuid:58B867B0-8151-1F56-1BD4-73229807FD60">>)),
+    ok.
+
+%% Only the `urn:uuid:` prefix and the 36-byte body length were checked, so
+%% a non-hex body reached `binary:decode_hex/1`, which raises badarg.
+mc_util_urn_string_to_uuid_rejects_non_hex_body(_Config) ->
+    NotHexBody = <<"zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz">>,
+    ?assertEqual(36, byte_size(NotHexBody)),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", NotHexBody/binary>>)),
+    %% dashes in the wrong places, leaving segments `binary:decode_hex/1` rejects
+    OddSegmentBody = <<"abcdefg-1234-5678-9abc-def0123456789">>,
+    ?assertEqual(36, byte_size(OddSegmentBody)),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", OddSegmentBody/binary>>)),
+    ok.
+
+%% `binary:decode_hex/1` doesn't care where the dashes are, so a 36-byte body
+%% with misplaced dashes used to decode to a wrong-sized binary and reach the
+%% AMQP 1.0 encoder, which requires a uuid to be exactly 16 bytes.
+mc_util_urn_string_to_uuid_rejects_wrong_dash_placement(_Config) ->
+    %% no dashes at all: decodes to 18 bytes
+    NoDashes = binary:copy(<<"a">>, 36),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", NoDashes/binary>>)),
+    AllDashes = binary:copy(<<"-">>, 36),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", AllDashes/binary>>)),
+    %% 32 hex characters and 4 dashes, but grouped 16-4-16
+    HexHalf = binary:copy(<<"a">>, 16),
+    ClusteredDashes = <<HexHalf/binary, "----", HexHalf/binary>>,
+    ?assertEqual(36, byte_size(ClusteredDashes)),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", ClusteredDashes/binary>>)),
     ok.
 
 do_n(0, _) ->
@@ -530,6 +570,60 @@ amqp_amqpl_unsupported_values_not_converted(_Config) ->
     ?assertMatch(undefined, header(LongKey, HL)),
     %% RabbitMQ does not validate that keys are ascii as per spec
     %% that's ok after all who really cares?
+    ok.
+
+%% Malformed client-supplied x-opt-deaths entries are dropped on conversion to AMQP 0-9-1.
+amqp_amqpl_malformed_x_opt_deaths_dropped(_Config) ->
+    Malformed = {map, [{{symbol, <<"queue">>}, {utf8, <<"q">>}}]},
+    WellFormedKvs = [
+                     {{symbol, <<"queue">>}, {utf8, <<"q2">>}},
+                     {{symbol, <<"reason">>}, {symbol, <<"rejected">>}},
+                     {{symbol, <<"count">>}, {ulong, 3}},
+                     {{symbol, <<"first-time">>}, {timestamp, 1000}},
+                     {{symbol, <<"last-time">>}, {timestamp, 2000}},
+                     {{symbol, <<"exchange">>}, {utf8, <<"ex">>}},
+                     {{symbol, <<"routing-keys">>},
+                      {array, utf8, [{utf8, <<"rk1">>}]}}
+                    ],
+    WellFormed = {map, WellFormedKvs},
+    WrongType = {map, lists:keyreplace({symbol, <<"count">>}, 1, WellFormedKvs,
+                                       {{symbol, <<"count">>}, {uint, 3}})},
+    MAC = [
+           {{symbol, <<"x-opt-deaths">>},
+            {array, map, [Malformed, WrongType, WellFormed]}},
+           {{symbol, <<"x-other">>}, {utf8, <<"still-here">>}}
+          ],
+    M = #'v1_0.message_annotations'{content = MAC},
+    D = #'v1_0.data'{content = <<"data">>},
+    Payload = serialize_sections([M, D]),
+
+    Msg = mc:init(mc_amqp, Payload, annotations()),
+    MsgL = mc:convert(mc_amqpl, Msg),
+    #content{properties = #'P_basic'{headers = HL}} = mc:protocol_state(MsgL),
+    %% The malformed and wrong-type entries are dropped; the well-formed one
+    %% and the other x- annotations still convert.
+    {_, array, [{table, T}]} = header(<<"x-death">>, HL),
+    ?assertMatch({_, longstr, <<"q2">>}, header(<<"queue">>, T)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"reason">>, T)),
+    ?assertMatch({_, long, 3}, header(<<"count">>, T)),
+    ?assertMatch({_, longstr, <<"still-here">>}, header(<<"x-other">>, HL)),
+
+    %% A message whose only death entry is malformed converts to an empty
+    %% x-death array.
+    MAC1 = [{{symbol, <<"x-opt-deaths">>}, {array, map, [Malformed]}}],
+    Payload1 = serialize_sections([#'v1_0.message_annotations'{content = MAC1}, D]),
+    Msg1 = mc:init(mc_amqp, Payload1, annotations()),
+    MsgL1 = mc:convert(mc_amqpl, Msg1),
+    #content{properties = #'P_basic'{headers = HL1}} = mc:protocol_state(MsgL1),
+    ?assertMatch({_, array, []}, header(<<"x-death">>, HL1)),
+
+    %% An x-opt-deaths value that is not an array of maps is ignored.
+    MAC2 = [{{symbol, <<"x-opt-deaths">>}, {utf8, <<"junk">>}}],
+    Payload2 = serialize_sections([#'v1_0.message_annotations'{content = MAC2}, D]),
+    Msg2 = mc:init(mc_amqp, Payload2, annotations()),
+    MsgL2 = mc:convert(mc_amqpl, Msg2),
+    #content{properties = #'P_basic'{headers = HL2}} = mc:protocol_state(MsgL2),
+    ?assertEqual(undefined, header(<<"x-death">>, HL2)),
     ok.
 
 amqp_amqpl_amqp_uuid_correlation_id(_Config) ->

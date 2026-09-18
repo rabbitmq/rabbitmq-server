@@ -46,13 +46,14 @@
 
 -export([expiry_timestamp/1]).
 
--export([hashing_module_for_user/1, expand_topic_permission/2]).
+-export([hashing_module_for_user/1, password_matches/2, expand_topic_permission/2]).
 
 -export([max_user_tags/0, count_user_tags/1]).
 
 -ifdef(TEST).
 -export([extract_user_permission_params/2,
-         extract_topic_permission_params/2]).
+         extract_topic_permission_params/2,
+         dummy_sentinel_user/0]).
 -endif.
 
 -import(rabbit_data_coercion, [to_atom/1, to_list/1, to_binary/1]).
@@ -71,6 +72,16 @@
 hashing_module_for_user(User) ->
     ModOrUndefined = internal_user:get_hashing_algorithm(User),
     rabbit_password:hashing_mod(ModOrUndefined).
+
+password_matches(User, Cleartext) ->
+    Mod = hashing_module_for_user(User),
+    SaltLength = rabbit_password:salt_length(Mod),
+    case internal_user:get_password_hash(User) of
+        <<Salt:SaltLength/binary, Hash/binary>> ->
+            Hash =:= rabbit_password:salted_hash(Mod, Salt, Cleartext);
+        _ ->
+            false
+    end.
 
 %% Limit the number of tags a user can have.
 -define(MAX_USER_TAGS, 32).
@@ -101,15 +112,7 @@ user_login_authentication(Username, AuthProps) ->
         {password, Cleartext} ->
             internal_check_user_login(
               Username,
-              fun(User) ->
-                  case internal_user:get_password_hash(User) of
-                      <<Salt:4/binary, Hash/binary>> ->
-                          Hash =:= rabbit_password:salted_hash(
-                              hashing_module_for_user(User), Salt, Cleartext);
-                      _ ->
-                          false
-                  end
-              end);
+              fun(User) -> password_matches(User, Cleartext) end);
         false ->
             case proplists:get_value(rabbit_auth_backend_internal, AuthProps, undefined) of
                 undefined -> {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE, [Username]};
@@ -144,17 +147,18 @@ internal_check_user_login(Username, Fun) ->
             Refused
     end.
 
-%% A sentinel internal_user whose password hash will never match any real
-%% cleartext. Used solely to perform a dummy hash computation on the
-%% not-found path, equalising timing with the found-but-wrong-password path.
-%% Layout: 4 bytes zeroed salt + 32 bytes zeroed SHA-256 payload.
--define(DUMMY_PASSWORD_HASH, <<0:32, 0:256>>).
-
+%% The salt must be as wide as the configured module expects, otherwise
+%% `password_matches/2` performs no hashing at all. Nothing follows it because
+%% no digest equals <<>>.
+%%
+%% Users still hashed with a cheaper module verify faster and remain
+%% distinguishable by timing.
 dummy_sentinel_user() ->
     HashingMod = rabbit_password:hashing_mod(),
+    SaltLength = rabbit_password:salt_length(HashingMod),
     internal_user:set_password_hash(
         internal_user:new({hashing_algorithm, HashingMod}),
-        ?DUMMY_PASSWORD_HASH,
+        <<0:(SaltLength * 8)>>,
         HashingMod).
 
 check_vhost_access(#auth_user{username = Username}, VHostPath, _AuthzData) ->
@@ -277,7 +281,7 @@ add_user_sans_validation(Username, Password, ActingUser, Limits, Tags) ->
     HashingMod = rabbit_password:hashing_mod(),
     PasswordHash = hash_password(HashingMod, Password),
     User0 = internal_user:create_user(Username, PasswordHash, HashingMod),
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+    ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
     User1 = internal_user:set_tags(User0, ConvertedTags),
     User = case Limits of
                undefined -> User1;
@@ -287,7 +291,7 @@ add_user_sans_validation(Username, Password, ActingUser, Limits, Tags) ->
 
 add_user_sans_validation(Username, PasswordHash, HashingMod, Tags, Limits, ActingUser) ->
     ?LOG_DEBUG("Asked to create a new user '~ts' with password hash", [Username]),
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+    ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
     User0 = internal_user:create_user(Username, PasswordHash, HashingMod),
     User1 = internal_user:set_tags(
               internal_user:set_password_hash(User0, PasswordHash, HashingMod),
@@ -406,7 +410,7 @@ update_user_sans_validation(Tags, Limits) ->
 
                 ?LOG_DEBUG("Asked to set user tags for user '~ts' to ~tp", [Username, Tags]),
 
-                ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+                ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
                 R = update_user_with_hash(Username,
                                           hash_password(rabbit_password:hashing_mod(),
                                                         Password),
@@ -471,10 +475,10 @@ update_user_with_hash(Username, PasswordHash, HashingAlgorithm, ConvertedTags, L
                                   internal_user:set_tags(User2, ConvertedTags)
                           end).
 
--spec set_tags(rabbit_types:username(), [atom()], rabbit_types:username()) -> 'ok'.
+-spec set_tags(rabbit_types:username(), [atom() | binary()], rabbit_types:username()) -> 'ok'.
 
 set_tags(Username, Tags, ActingUser) ->
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+    ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
     ?LOG_DEBUG("Asked to set user tags for user '~ts' to ~tp", [Username, ConvertedTags]),
     try
         R = rabbit_db_user:update(Username, fun(User) ->
@@ -741,7 +745,7 @@ put_user(User, Version, ActingUser) ->
                               throw({error, tags_not_present});
                           {undefined, AdminS} ->
                               case rabbit_misc:parse_bool(AdminS) of
-                                  true  -> [administrator];
+                                  true  -> [coerce_tag(administrator)];
                                   false -> []
                               end;
                           {TagsVal, _} ->
@@ -812,7 +816,7 @@ update_user_password_hash(Username, PasswordHash, Tags, Limits, User, Version) -
     HashingAlgorithm = hashing_algorithm(User, Version),
 
     Hash = rabbit_misc:b64decode_or_throw(PasswordHash),
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
+    ConvertedTags = [coerce_tag(I) || I <- validate_tag_count(Tags)],
     update_user_with_hash(
       Username, Hash, HashingAlgorithm, ConvertedTags, Limits).
 
@@ -896,15 +900,21 @@ clear_user_limits(Username, LimitType, ActingUser) ->
     notify_limit_clear(Username, ActingUser).
 
 tag_list_from(Tags) when is_list(Tags) ->
-    [to_atom(string:trim(to_list(T))) || T <- validate_tag_count(Tags)];
+    [coerce_tag(string:trim(to_list(T))) || T <- validate_tag_count(Tags)];
 tag_list_from(Tags) when is_binary(Tags) ->
-    [to_atom(string:trim(T)) ||
+    [coerce_tag(string:trim(T)) ||
         T <- validate_tag_count(string:lexemes(to_list(Tags), ","))].
 
 validate_tag_count(Tags) when is_list(Tags), length(Tags) =< ?MAX_USER_TAGS ->
     Tags;
 validate_tag_count(_) ->
     throw({error, {too_many_tags, ?MAX_USER_TAGS}}).
+
+coerce_tag(Tag) ->
+    case rabbit_feature_flags:is_enabled('rabbitmq_4.4.0') of
+        true  -> to_binary(Tag);
+        false -> to_atom(Tag)
+    end.
 
 -spec max_user_tags() -> non_neg_integer().
 max_user_tags() ->
@@ -1103,7 +1113,26 @@ hashing_algorithm(User, Version) ->
                 <<"3.0.", _/binary>> -> rabbit_password_hashing_md5;
                 _                    -> rabbit_password:hashing_mod()
             end;
-        Alg       -> rabbit_data_coercion:to_atom(Alg, utf8)
+        Alg       -> known_hashing_algorithm(Alg)
+    end.
+
+known_hashing_algorithm(Alg) when is_atom(Alg) ->
+    validate_hashing_module(Alg);
+known_hashing_algorithm(Alg) when is_binary(Alg); is_list(Alg) ->
+    Mod = try
+              binary_to_existing_atom(iolist_to_binary(Alg), utf8)
+          catch
+              error:badarg -> throw({error, {unsupported_hashing_algorithm, Alg}})
+          end,
+    validate_hashing_module(Mod);
+known_hashing_algorithm(Alg) ->
+    throw({error, {unsupported_hashing_algorithm, Alg}}).
+
+validate_hashing_module(Mod) ->
+    case code:ensure_loaded(Mod) =:= {module, Mod} andalso
+         erlang:function_exported(Mod, hash, 1) of
+        true  -> Mod;
+        false -> throw({error, {unsupported_hashing_algorithm, Mod}})
     end.
 
 is_over_connection_limit(Username) ->

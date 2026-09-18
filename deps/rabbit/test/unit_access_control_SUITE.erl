@@ -24,6 +24,7 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           password_hashing,
+          put_user_hashing_algorithm,
           version_negotiation,
           expand_topic_permission_prop,
           is_loopback_prop,
@@ -34,7 +35,10 @@ groups() ->
           login_of_passwordless_user,
           login_of_nonexistent_user,
           set_tags_for_passwordless_user,
+          set_tags_atom_creation_gated_by_feature_flag,
           change_password,
+          login_with_pbkdf2_sha256_hashed_password,
+          login_with_legacy_4_byte_salt_hashed_password,
           auth_backend_internal_expand_topic_permission
       ]}
     ].
@@ -110,6 +114,68 @@ password_hashing1(_Config) ->
 
     passed.
 
+put_user_hashing_algorithm(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, put_user_hashing_algorithm1, [Config]).
+
+put_user_hashing_algorithm1(_Config) ->
+    ActingUser = <<"put_user_hashing_algorithm_test">>,
+    Username = <<"put_user_hashing_algorithm_test_user">>,
+    PasswordHash = base64:encode(crypto:strong_rand_bytes(20)),
+
+    %% Every algorithm this node ships must be accepted, on user creation
+    %% and on update, and so must a plugin-provided module.
+    KnownAlgorithms = [rabbit_password_hashing_md5,
+                       rabbit_password_hashing_sha256,
+                       rabbit_password_hashing_sha512,
+                       rabbit_password_hashing_pbkdf2_sha256,
+                       dummy_password_hashing],
+    [begin
+         User = #{name => Username, password_hash => PasswordHash,
+                  hashing_algorithm => atom_to_binary(Alg, utf8),
+                  tags => <<"">>},
+         _ = rabbit_auth_backend_internal:put_user(User, ActingUser),
+         {ok, StoredUser} = rabbit_auth_backend_internal:lookup_user(Username),
+         Alg = rabbit_auth_backend_internal:hashing_module_for_user(StoredUser)
+     end || Alg <- KnownAlgorithms],
+
+    %% An unrecognised algorithm must be rejected, not turned into a new
+    %% atom: atom creation from user input can exhaust the atom table.
+    Garbage1 = unique_nonexistent_hashing_module_name(),
+    User1 = #{name => Username, password_hash => PasswordHash,
+              hashing_algorithm => Garbage1, tags => <<"">>},
+    ?assertThrow({error, {unsupported_hashing_algorithm, Garbage1}},
+                 rabbit_auth_backend_internal:put_user(User1, ActingUser)),
+    ?assertException(error, badarg, binary_to_existing_atom(Garbage1, utf8)),
+
+    Garbage2 = unique_nonexistent_hashing_module_name(),
+    User2 = User1#{hashing_algorithm => Garbage2},
+    ?assertThrow({error, {unsupported_hashing_algorithm, Garbage2}},
+                 rabbit_auth_backend_internal:put_user(User2, ActingUser)),
+    ?assertException(error, badarg, binary_to_existing_atom(Garbage2, utf8)),
+
+    %% A module that exists but does not export `hash/1` must be rejected, too.
+    User3 = User1#{hashing_algorithm => <<"lists">>},
+    ?assertThrow({error, {unsupported_hashing_algorithm, lists}},
+                 rabbit_auth_backend_internal:put_user(User3, ActingUser)),
+
+    %% A JSON number or object is neither an atom, a binary nor a list, so
+    %% it must be rejected instead of failing with a `function_clause`.
+    User4 = User1#{hashing_algorithm => 42},
+    ?assertThrow({error, {unsupported_hashing_algorithm, 42}},
+                 rabbit_auth_backend_internal:put_user(User4, ActingUser)),
+    User5 = User1#{hashing_algorithm => #{}},
+    ?assertThrow({error, {unsupported_hashing_algorithm, #{}}},
+                 rabbit_auth_backend_internal:put_user(User5, ActingUser)),
+
+    ok = rabbit_auth_backend_internal:delete_user(Username, ActingUser),
+    passed.
+
+unique_nonexistent_hashing_module_name() ->
+    iolist_to_binary(
+      io_lib:format("nonexistent_hashing_module_~b",
+                     [erlang:unique_integer([positive])])).
+
 change_password(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, change_password1, [Config]).
@@ -145,6 +211,67 @@ change_password1(_Config) ->
             UserName, [{password, Password}]),
     passed.
 
+
+login_with_pbkdf2_sha256_hashed_password(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, login_with_pbkdf2_sha256_hashed_password1, [Config]).
+
+login_with_pbkdf2_sha256_hashed_password1(_Config) ->
+    UserName = <<"login_with_pbkdf2_sha256_hashed_password-user">>,
+    Password = <<"login_with_pbkdf2_sha256_hashed_password-password">>,
+    case rabbit_auth_backend_internal:lookup_user(UserName) of
+        {ok, _} -> rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>);
+        _       -> ok
+    end,
+    PreviousMod = application:get_env(rabbit, password_hashing_module),
+    ok = application:set_env(rabbit, password_hashing_module,
+                             rabbit_password_hashing_pbkdf2_sha256),
+    ok = rabbit_auth_backend_internal:add_user(UserName, Password, <<"acting-user">>),
+
+    {ok, User} = rabbit_auth_backend_internal:lookup_user(UserName),
+    ?assertEqual(48, byte_size(internal_user:get_password_hash(User))),
+
+    %% The sentinel salt has to track the configured module's salt width.
+    Sentinel = rabbit_auth_backend_internal:dummy_sentinel_user(),
+    ?assertEqual(16, byte_size(internal_user:get_password_hash(Sentinel))),
+    ?assertNot(rabbit_auth_backend_internal:password_matches(Sentinel, Password)),
+
+    {ok, #auth_user{username = UserName}} =
+        rabbit_auth_backend_internal:user_login_authentication(
+            UserName, [{password, Password}]),
+    {refused, _, [UserName]} =
+        rabbit_auth_backend_internal:user_login_authentication(
+            UserName, [{password, <<"wrong password">>}]),
+
+    ok = rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>),
+    ok = case PreviousMod of
+             {ok, Mod} -> application:set_env(rabbit, password_hashing_module, Mod);
+             undefined -> application:unset_env(rabbit, password_hashing_module)
+         end,
+    passed.
+
+login_with_legacy_4_byte_salt_hashed_password(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, login_with_legacy_4_byte_salt_hashed_password1, [Config]).
+
+login_with_legacy_4_byte_salt_hashed_password1(_Config) ->
+    UserName = <<"login_with_legacy_4_byte_salt_hashed_password-user">>,
+    Password = <<"login_with_legacy_4_byte_salt_hashed_password-password">>,
+    case rabbit_auth_backend_internal:lookup_user(UserName) of
+        {ok, _} -> rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>);
+        _       -> ok
+    end,
+    ok = rabbit_auth_backend_internal:add_user(UserName, Password, <<"acting-user">>),
+    Hash = rabbit_password:hash(rabbit_password_hashing_sha256, Password),
+    ok = rabbit_auth_backend_internal:change_password_hash(
+           UserName, Hash, rabbit_password_hashing_sha256),
+
+    {ok, #auth_user{username = UserName}} =
+        rabbit_auth_backend_internal:user_login_authentication(
+            UserName, [{password, Password}]),
+
+    ok = rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>),
+    passed.
 
 login_with_credentials_but_no_password(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -225,13 +352,13 @@ set_tags_for_passwordless_user1(_Config) ->
                                                <<"acting-user">>),
 
     {ok, User1} = rabbit_auth_backend_internal:lookup_user(Username),
-    ?assertEqual([management], internal_user:get_tags(User1)),
+    ?assertEqual([<<"management">>], internal_user:get_tags(User1)),
 
     ok = rabbit_auth_backend_internal:set_tags(Username, [management, policymaker],
                                                <<"acting-user">>),
 
     {ok, User2} = rabbit_auth_backend_internal:lookup_user(Username),
-    ?assertEqual([management, policymaker], internal_user:get_tags(User2)),
+    ?assertEqual([<<"management">>, <<"policymaker">>], internal_user:get_tags(User2)),
 
     ok = rabbit_auth_backend_internal:set_tags(Username, [],
                                                <<"acting-user">>),
@@ -244,6 +371,55 @@ set_tags_for_passwordless_user1(_Config) ->
 
     passed.
 
+set_tags_atom_creation_gated_by_feature_flag(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, set_tags_atom_creation_gated_by_feature_flag1, []).
+
+set_tags_atom_creation_gated_by_feature_flag1() ->
+    Username = <<"set_tags_atom_creation_gated_by_feature_flag">>,
+    ok = rabbit_auth_backend_internal:add_user(Username, <<"hunter2-1234567890">>,
+                                               <<"acting-user">>),
+    ok = meck:new(rabbit_feature_flags, [passthrough, no_link]),
+    try
+        ok = meck:expect(rabbit_feature_flags, is_enabled,
+                         fun('rabbitmq_4.4.0') -> false;
+                            (Other) -> meck:passthrough([Other])
+                         end),
+        LegacyTag = unique_tag(),
+        ok = rabbit_auth_backend_internal:set_tags(Username, [LegacyTag],
+                                                   <<"acting-user">>),
+        %% While the flag is disabled, tags are still atomized for
+        %% compatibility with nodes that predate the binary switch.
+        ?assert(is_atom(binary_to_existing_atom(LegacyTag, utf8))),
+
+        %% `internal_user:get_tags/1` still normalizes that legacy atom
+        %% to a binary on read.
+        {ok, LegacyUser} = rabbit_auth_backend_internal:lookup_user(Username),
+        ?assertEqual([LegacyTag], internal_user:get_tags(LegacyUser)),
+
+        ok = meck:expect(rabbit_feature_flags, is_enabled,
+                         fun('rabbitmq_4.4.0') -> true;
+                            (Other) -> meck:passthrough([Other])
+                         end),
+        NewTag = unique_tag(),
+        ok = rabbit_auth_backend_internal:set_tags(Username, [NewTag],
+                                                   <<"acting-user">>),
+        %% Once the flag is enabled, a never-before-seen tag must not
+        %% become an atom, regardless of how many distinct tags an
+        %% administrator sets.
+        ?assertException(error, badarg, binary_to_existing_atom(NewTag, utf8)),
+
+        {ok, User} = rabbit_auth_backend_internal:lookup_user(Username),
+        ?assertEqual([NewTag], internal_user:get_tags(User))
+    after
+        meck:unload(rabbit_feature_flags),
+        rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>)
+    end,
+    passed.
+
+unique_tag() ->
+    list_to_binary("unit_access_control_tag_" ++
+                    integer_to_list(erlang:unique_integer([positive]))).
 
 auth_backend_internal_expand_topic_permission(_Config) ->
     ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},

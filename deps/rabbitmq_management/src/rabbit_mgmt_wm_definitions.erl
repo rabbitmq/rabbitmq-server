@@ -302,14 +302,8 @@ accept_multipart(ReqData0, Context) ->
                                                  ExtraFields,
                                                  ReqData, Context);
                 true ->
-                    Redirect = get_part(<<"redirect">>, Parts),
                     Payload = get_part(<<"file">>, Parts),
-                    Resp = {Res, _, _} = accept(Payload, ReqData, Context),
-                    case {Res, Redirect} of
-                        {true, unknown} -> {true, ReqData, Context};
-                        {true, _}       -> {{true, Redirect}, ReqData, Context};
-                        _               -> Resp
-                    end
+                    accept(Payload, ReqData, Context)
             end
     end.
 
@@ -421,7 +415,8 @@ get_all_parts(Req0, BodySize0, BodySizeLimit, Acc, FileFilename) ->
     end.
 
 is_acceptable_filename(Filename) ->
-    not rabbit_mgmt_features:is_definition_json_extension_required()
+    Settings = rabbit_mgmt_features:get_definitions_settings(),
+    not proplists:get_value(require_definition_json_extension, Settings, false)
         orelse has_json_extension(Filename).
 
 has_json_extension(unknown) ->

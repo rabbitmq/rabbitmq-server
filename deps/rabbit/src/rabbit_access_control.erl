@@ -20,6 +20,10 @@
 -export([set_max_heap_size_unauthenticated/1,
          clear_max_heap_size/0]).
 
+-ifdef(TEST).
+-export([check_user_id0/2]).
+-endif.
+
 %%----------------------------------------------------------------------------
 
 -spec ensure_auth_backends_are_enabled() -> Ret when
@@ -416,7 +420,8 @@ check_user_id0(_, #user{authz_backends = [{rabbit_auth_backend_dummy, _}]}) ->
     ok;
 check_user_id0(ClaimedUserName, #user{username = ActualUserName,
                                       tags = Tags}) ->
-    case lists:member(impersonator, Tags) of
+    TagsBin = [rabbit_data_coercion:to_binary(T) || T <- Tags],
+    case lists:member(<<"impersonator">>, TagsBin) of
         true ->
             ok;
         false ->

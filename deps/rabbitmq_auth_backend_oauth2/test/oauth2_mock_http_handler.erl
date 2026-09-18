@@ -16,7 +16,8 @@ init(Req, #{kind := discovery, issuer := Issuer,
             token_endpoint := TokenEndpoint} = State) ->
     Body = rabbit_json:encode(#{
         <<"issuer">> => Issuer,
-        <<"authorization_endpoint">> => <<Issuer/binary, "/authorize">>,
+        <<"authorization_endpoint">> => maps:get(authorization_endpoint, State,
+            <<Issuer/binary, "/authorize">>),
         <<"token_endpoint">> => TokenEndpoint,
         <<"jwks_uri">> => <<Issuer/binary, "/keys">>,
         <<"response_types_supported">> => [<<"code">>]}),

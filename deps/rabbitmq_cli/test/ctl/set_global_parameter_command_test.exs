@@ -10,7 +10,7 @@ defmodule SetGlobalParameterCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.SetGlobalParameterCommand
 
-  @key :mqtt_default_vhosts
+  @key "mqtt_default_vhosts"
   @value "{\"O=client,CN=dummy\":\"somevhost\"}"
 
   setup_all do
@@ -75,6 +75,16 @@ defmodule SetGlobalParameterCommandTest do
   test "banner", context do
     assert @command.banner([context[:key], context[:value]], context[:opts]) =~
              ~r/Setting global runtime parameter \"#{context[:key]}\" to \"#{context[:value]}\" \.\.\./
+  end
+
+  @tag key: @key, value: "{\"uri\":\"amqps://alice:s3cr3t@host1?password=passphr4se\"}"
+  test "banner: does not echo credentials embedded in a URI value", context do
+    banner = @command.banner([context[:key], context[:value]], context[:opts])
+
+    refute banner =~ "s3cr3t"
+    refute banner =~ "passphr4se"
+    assert banner =~ to_string(context[:key])
+    assert banner =~ "host1"
   end
 
   # Checks each element of the first parameter against the expected context values

@@ -15,6 +15,8 @@
 
 -define(BUILD(Opts),
         rabbit_web_dispatch_sup:build_ranch_transport_opts(Opts)).
+-define(COMBINE(Results),
+        rabbit_web_dispatch_sup:combine_ensure_results(Results)).
 -define(PROP_ITERATIONS, 500).
 
 all() ->
@@ -32,7 +34,14 @@ groups() ->
        infinity_value_is_preserved,
        socket_opts_preserved_alongside_ranch_opt,
        bare_atoms_stay_in_socket_opts,
-       ranch_opt_value_passed_through_verbatim]},
+       ranch_opt_value_passed_through_verbatim,
+       configured_ip_is_the_only_ip,
+       certificate_forms_are_recognised,
+       missing_certificate_is_detected,
+       only_new_is_new,
+       new_with_anything_else_is_mixed,
+       existing_wins_over_ignore,
+       all_ignored_is_ignore]},
      {property_tests, [],
       [prop_legacy_form_is_passthrough,
        prop_map_form_when_any_ranch_opt,
@@ -112,6 +121,38 @@ ranch_opt_value_passed_through_verbatim(_) ->
     Sentinel = {tagged, 42},
     Result = ?BUILD([{max_connections, Sentinel}]),
     ?assertMatch(#{max_connections := Sentinel}, Result).
+
+configured_ip_is_the_only_ip(_) ->
+    Options = rabbit_web_dispatch_sup:transport_config(
+                [{port, 15671}, {ip, {127, 0, 0, 1}}, {certfile, "c"}, {ip, {0, 0, 0, 0, 0, 0, 0, 0}}]),
+    ?assertEqual([{ip, {127, 0, 0, 1}}], proplists:lookup_all(ip, Options)),
+    ?assertEqual("c", proplists:get_value(certfile, Options)).
+
+certificate_forms_are_recognised(_) ->
+    [?assert(rabbit_web_dispatch_sup:has_certificate([{Key, ignored}]))
+     || Key <- [cert, certfile, certs_keys, sni_fun, sni_hosts]].
+
+missing_certificate_is_detected(_) ->
+    ?assertNot(rabbit_web_dispatch_sup:has_certificate([])),
+    ?assertNot(rabbit_web_dispatch_sup:has_certificate(
+                 [{keyfile, "k"}, {cacertfile, "ca"}, {verify, verify_peer}])).
+
+only_new_is_new(_) ->
+    ?assertEqual(new, ?COMBINE([new])),
+    ?assertEqual(new, ?COMBINE([new, new])).
+
+new_with_anything_else_is_mixed(_) ->
+    ?assertEqual(mixed, ?COMBINE([existing, new])),
+    ?assertEqual(mixed, ?COMBINE([new, existing])),
+    ?assertEqual(mixed, ?COMBINE([new, ignore])),
+    ?assertEqual(mixed, ?COMBINE([ignore, new])),
+    ?assertEqual(mixed, ?COMBINE([ignore, new, existing])).
+
+existing_wins_over_ignore(_) ->
+    ?assertEqual(existing, ?COMBINE([ignore, existing])).
+
+all_ignored_is_ignore(_) ->
+    ?assertEqual(ignore, ?COMBINE([ignore, ignore])).
 
 %%--------------------------------------------------------------------
 %% Property cases

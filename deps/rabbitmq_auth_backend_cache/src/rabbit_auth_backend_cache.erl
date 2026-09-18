@@ -130,7 +130,8 @@ with_cache(BackendType, {F, A}, Fun) ->
 %% Keep plaintext credentials out of the cache key. The full args are still
 %% passed to the underlying backend; only the lookup key is redacted.
 -spec cache_key(atom(), [term()]) -> {atom(), [term()]}.
-cache_key(user_login_authentication = F, [Username, AuthProps]) ->
+cache_key(F, [Username, AuthProps])
+  when F =:= user_login_authentication; F =:= user_login_authorization ->
     {F, [Username, redact_credentials(AuthProps)]};
 cache_key(F, A) ->
     {F, A}.

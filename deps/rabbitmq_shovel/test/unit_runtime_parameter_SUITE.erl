@@ -21,7 +21,8 @@
 
 all() ->
     [
-      {group, tests}
+      {group, tests},
+      {group, registry}
     ].
 
 groups() ->
@@ -45,6 +46,9 @@ groups() ->
           test_protocols_explicit,
           test_protocols_mixed,
           test_protocols_with_maps
+        ]},
+      {registry, [], [
+          custom_registered_protocol
         ]}
     ].
 
@@ -410,6 +414,44 @@ validate_amqp10_with_a_map_0() ->
                                                 "my-shovel", Params, none),
         [] = validate_ok(Res),
         ok.
+
+custom_registered_protocol(Config) ->
+    rabbit_ct_broker_helpers:add_code_path_to_all_nodes(
+      Config, dummy_shovel_protocol),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_registry, register,
+           [shovel_protocol, <<"dummy">>, dummy_shovel_protocol]),
+    try
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, custom_registered_protocol0, [])
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, rabbit_registry, unregister,
+               [shovel_protocol, <<"dummy">>])
+    end.
+
+custom_registered_protocol0() ->
+    Params = [{<<"src-protocol">>, <<"dummy">>},
+              {<<"src-dummy-target">>, <<"a-src-target">>},
+              {<<"dest-protocol">>, <<"dummy">>},
+              {<<"dest-dummy-target">>, <<"a-dest-target">>}],
+
+    ?assertEqual(dummy, rabbit_shovel_parameters:src_protocol(Params)),
+    ?assertEqual(dummy, rabbit_shovel_parameters:dest_protocol(Params)),
+    ?assertEqual({dummy, dummy}, rabbit_shovel_parameters:protocols(Params)),
+
+    Res = rabbit_shovel_parameters:validate(<<"my-vhost">>, <<"shovel">>,
+                                            <<"my-shovel">>, Params, none),
+    [] = validate_ok(Res),
+
+    {ok, Parsed} = rabbit_shovel_parameters:parse({<<"my-vhost">>, <<"my-shovel">>},
+                                                  my_cluster, Params),
+    ?assertMatch(#{source := #{module := dummy_shovel_protocol,
+                               dummy_target := <<"a-src-target">>},
+                   dest := #{module := dummy_shovel_protocol,
+                             dummy_target := <<"a-dest-target">>}},
+                 Parsed),
+    ok.
 
 validate_ok([ok | T]) ->
     validate_ok(T);

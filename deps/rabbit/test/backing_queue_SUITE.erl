@@ -75,6 +75,7 @@ groups() ->
           msg_store_recovers_from_truncated_file_summary_dump,
           msg_store_recovers_from_truncated_index_dump,
           msg_store_dirty_recovery_dispatch_failure_does_not_hang,
+          msg_store_dirty_recovery_counts_each_reference_once,
           msg_store_recovers_torn_current_file,
           msg_store_recovers_from_corrupted_file,
           msg_store_recovers_from_corrupted_file_no_fd_leak,
@@ -1108,11 +1109,6 @@ msg_store_v1_compat1(_Config) ->
     GCPid = rabbit_msg_store:gc_pid(StorePid),
     Path = msg_store_file_path(?VHOST, ?PERSISTENT_MSG_STORE, "0.rdq"),
     SizeBeforeCompact = filelib:file_size(Path),
-    %% count_msg_refs registers refs via ets:update_counter/4, whose
-    %% Default already carries ref_count=1; on a fresh key the Increment
-    %% is added on top of that, so a message recovered this way starts
-    %% at ref_count=2 and needs two removes to be fully dereferenced.
-    {ok, _} = rabbit_msg_store:remove([{make_ref(), MsgId1}], MSCState7),
     {ok, _} = rabbit_msg_store:remove([{make_ref(), MsgId1}], MSCState7),
     timer:sleep(200),
     ok = rabbit_msg_store_gc:compact(GCPid, 0),
@@ -1129,7 +1125,6 @@ msg_store_v1_compat1(_Config) ->
 
     %% Removing the last legacy message empties the v1 file, which goes
     %% through delete_file's v1 dispatch and disappears entirely.
-    {ok, _} = rabbit_msg_store:remove([{make_ref(), MsgId2}], MSCState8),
     {ok, _} = rabbit_msg_store:remove([{make_ref(), MsgId2}], MSCState8),
     timer:sleep(500),
     {ok, Files2} = file:list_dir(Dir),
@@ -2025,6 +2020,54 @@ msg_store_v1_scan_failure_crashes_recovery1(_Config) ->
     false = rabbit_vhost_msg_store:successfully_recovered_state(?VHOST, ?PERSISTENT_MSG_STORE),
     MSCState0 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     {{ok, LegacyMsg}, MSCState1} = rabbit_msg_store:read(MsgId, MSCState0),
+    ok = rabbit_msg_store:client_terminate(MSCState1),
+
+    restart_msg_store_empty(),
+    passed.
+
+%% Dirty recovery rebuilds ref_count from the queue indexes. A message
+%% referenced by N queues must come back with exactly N references, so
+%% that N removes bring it to zero and its file can be reclaimed; one
+%% reference too many leaks the message on disk for good.
+msg_store_dirty_recovery_counts_each_reference_once(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_dirty_recovery_counts_each_reference_once1, [Config]).
+
+msg_store_dirty_recovery_counts_each_reference_once1(_Config) ->
+    restart_msg_store_empty(),
+    Ref0 = rabbit_guid:gen(),
+    {Cap0, MSCState0} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref0),
+    MsgIdOnce = msg_id_bin(refcount_once),
+    MsgIdTwice = msg_id_bin(refcount_twice),
+    ok = rabbit_msg_store:write(1, MsgIdOnce, {payload, <<"referenced by one queue">>}, MSCState0),
+    ok = rabbit_msg_store:write(2, MsgIdTwice, {payload, <<"referenced by two queues">>}, MSCState0),
+    ok = on_disk_await(Cap0, [{1, MsgIdOnce}, {2, MsgIdTwice}]),
+    ok = rabbit_msg_store:client_terminate(MSCState0),
+    ok = on_disk_stop(Cap0),
+
+    ok = rabbit_variable_queue:stop_msg_store(?VHOST),
+    Dir = filename:join([rabbit_vhost:msg_store_dir_path(?VHOST), atom_to_list(?PERSISTENT_MSG_STORE)]),
+    ok = file:delete(filename:join(Dir, "clean.dot")),
+
+    %% The generator yields one msg_id per queue index entry, the way
+    %% rabbit_classic_queue_index_v2:queue_index_walker/1 does.
+    Ref = rabbit_guid:gen(),
+    Gen = fun
+        ([])  -> finished;
+        (Ids) -> {Ids, []}
+    end,
+    ok = rabbit_variable_queue:start_msg_store(?VHOST, [Ref],
+           {Gen, [MsgIdOnce, MsgIdTwice, MsgIdTwice]}),
+    false = rabbit_vhost_msg_store:successfully_recovered_state(?VHOST, ?PERSISTENT_MSG_STORE),
+
+    MSCState1 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    true = rabbit_msg_store:contains(MsgIdOnce, MSCState1),
+    true = rabbit_msg_store:contains(MsgIdTwice, MSCState1),
+    {ok, []} = rabbit_msg_store:remove([{1, MsgIdOnce}, {2, MsgIdTwice}], MSCState1),
+    false = rabbit_msg_store:contains(MsgIdOnce, MSCState1),
+    true = rabbit_msg_store:contains(MsgIdTwice, MSCState1),
+    {ok, []} = rabbit_msg_store:remove([{3, MsgIdTwice}], MSCState1),
+    false = rabbit_msg_store:contains(MsgIdTwice, MSCState1),
     ok = rabbit_msg_store:client_terminate(MSCState1),
 
     restart_msg_store_empty(),

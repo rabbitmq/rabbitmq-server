@@ -85,7 +85,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
     ]
 
     os_env_lines = [
-      "#{line_separator()}#{bright("Env variable ")} #{bright_red("(Deprecated)")}",
+      "#{line_separator()}#{bright("Env variable")}",
       "RABBITMQ_ERLANG_COOKIE value set? #{result[:os_env_cookie_set]}",
       "RABBITMQ_ERLANG_COOKIE value length: #{result[:os_env_cookie_value_length] || 0}"
     ]

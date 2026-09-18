@@ -11,7 +11,7 @@
 -export([start/2, stop/1, reset_dispatcher/1]).
 
 -ifdef(TEST).
--export([get_listeners_config/0]).
+-export([get_listeners_config/0, listeners_with_contexts/0]).
 -endif.
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -19,6 +19,7 @@
 
 -define(TCP_CONTEXT, rabbitmq_management_tcp).
 -define(TLS_CONTEXT, rabbitmq_management_tls).
+-define(CONTEXTS_KEY, active_listener_contexts).
 -define(DEFAULT_PORT, 15672).
 -define(DEFAULT_TLS_PORT, 15671).
 
@@ -58,9 +59,45 @@ reset_dispatcher(IgnoreApps) ->
 
 -spec start_configured_listeners([atom()], boolean()) -> ok.
 start_configured_listeners(IgnoreApps, NeedLogStartup) ->
-    [start_listener(Listener, IgnoreApps, NeedLogStartup)
-      || Listener <- get_listeners_config()],
-    ok.
+    Listeners = listeners_with_contexts(),
+    ok = application:set_env(rabbitmq_management, ?CONTEXTS_KEY,
+                             [Context || {Context, _} <- Listeners]),
+    start_listeners(Listeners, IgnoreApps, NeedLogStartup, []).
+
+%% A later listener's registration failure must not leave an earlier
+%% context registered with nothing owning it; contexts already started in
+%% this call are unregistered before the failure is re-raised.
+start_listeners([], _IgnoreApps, _NeedLogStartup, _Started) ->
+    ok;
+start_listeners([{Context, Listener} | Rest], IgnoreApps, NeedLogStartup, Started) ->
+    try start_listener(Context, Listener, IgnoreApps, NeedLogStartup) of
+        ok -> start_listeners(Rest, IgnoreApps, NeedLogStartup, [Context | Started])
+    catch
+        Class:Reason:Stacktrace ->
+            _ = [rabbit_web_dispatch:unregister_context(C) || C <- Started],
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
+
+-spec listeners_with_contexts() -> [{atom(), [{atom(), any()}]}].
+listeners_with_contexts() ->
+    {Named, _} = lists:mapfoldl(
+        fun(Listener, Seen) ->
+            Base = case is_tls(Listener) of
+                       true  -> ?TLS_CONTEXT;
+                       false -> ?TCP_CONTEXT
+                   end,
+            N = maps:get(Base, Seen, 0),
+            {{context_name(Base, N), Listener}, Seen#{Base => N + 1}}
+        end, #{}, get_listeners_config()),
+    Named.
+
+%% Numbered rather than named after the port, because two listeners can share
+%% one port on different interfaces.
+-spec context_name(atom(), non_neg_integer()) -> atom().
+context_name(Base, 0) ->
+    Base;
+context_name(Base, N) ->
+    list_to_atom(atom_to_list(Base) ++ "_" ++ integer_to_list(N)).
 
 get_listeners_config() ->
     Listeners = case {has_configured_legacy_listener(),
@@ -94,7 +131,25 @@ get_listeners_config() ->
             [get_tcp_listener(),
              get_tls_listener()]
     end,
-    maybe_disable_sendfile(Listeners).
+    maybe_disable_sendfile(Listeners ++ extra_listeners()).
+
+extra_listeners() ->
+    TcpConfig = application:get_env(rabbitmq_management, tcp_config, []),
+    [tcp_listener(with_address(Address, TcpConfig))
+     || Address <- application:get_env(rabbitmq_management, tcp_listeners, [])] ++
+    [extra_tls_listener(Address)
+     || Address <- application:get_env(rabbitmq_management, ssl_listeners, [])].
+
+extra_tls_listener(Address) ->
+    case application:get_env(rabbitmq_management, ssl_config) of
+        {ok, SslConfig} -> tls_listener(with_address(Address, SslConfig));
+        undefined       -> [{ssl, true} | with_address(Address, [])]
+    end.
+
+with_address(Port, Config) when is_integer(Port) ->
+    lists:keystore(port, 1, lists:keydelete(ip, 1, Config), {port, Port});
+with_address({IP, Port}, Config) ->
+    lists:keystore(ip, 1, with_address(Port, Config), {ip, IP}).
 
 maybe_disable_sendfile(Listeners) ->
     DisableSendfile = [{sendfile, false}],
@@ -128,35 +183,34 @@ get_legacy_listener() ->
 
 get_tls_listener() ->
     {ok, Listener0} = application:get_env(rabbitmq_management, ssl_config),
+    tls_listener(Listener0).
+
+tls_listener(Listener0) ->
     {ok, Listener1} = ensure_port(tls, Listener0),
     Listener2 = rabbit_ssl:wrap_password_opt(Listener1),
-    Port = proplists:get_value(port, Listener1),
-     case proplists:get_value(cowboy_opts, Listener0) of
+    Address = [{port, proplists:get_value(port, Listener1)} |
+               [{ip, IP} || {ip, IP} <- Listener1]],
+    case proplists:get_value(cowboy_opts, Listener0) of
         undefined ->
-             [
-                 {port, Port},
-                 {ssl, true},
-                 {ssl_opts, Listener2}
-             ];
+            Address ++ [{ssl, true},
+                        {ssl_opts, Listener2}];
         CowboyOpts ->
-            WithoutCowboyOpts = lists:keydelete(cowboy_opts, 1, Listener2),
-            [
-                {port, Port},
-                {ssl, true},
-                {ssl_opts, WithoutCowboyOpts},
-                {cowboy_opts, CowboyOpts}
-            ]
-     end.
+            Address ++ [{ssl, true},
+                        {ssl_opts, lists:keydelete(cowboy_opts, 1, Listener2)},
+                        {cowboy_opts, CowboyOpts}]
+    end.
 
 get_tcp_listener() ->
-    Listener0 = application:get_env(rabbitmq_management, tcp_config, []),
+    tcp_listener(application:get_env(rabbitmq_management, tcp_config, [])).
+
+tcp_listener(Listener0) ->
     {ok, Listener1} = ensure_port(tcp, Listener0),
     Listener1.
 
-start_listener(Listener, IgnoreApps, NeedLogStartup) ->
-    {Type, ContextName} = case is_tls(Listener) of
-        true  -> {tls, ?TLS_CONTEXT};
-        false -> {tcp, ?TCP_CONTEXT}
+start_listener(ContextName, Listener, IgnoreApps, NeedLogStartup) ->
+    Type = case is_tls(Listener) of
+        true  -> tls;
+        false -> tcp
     end,
     {ok, _} = register_context(ContextName, Listener, IgnoreApps),
     case NeedLogStartup of
@@ -172,8 +226,10 @@ register_context(ContextName, Listener, IgnoreApps) ->
       Dispatcher, "RabbitMQ Management").
 
 unregister_all_contexts() ->
-    rabbit_web_dispatch:unregister_context(?TCP_CONTEXT),
-    rabbit_web_dispatch:unregister_context(?TLS_CONTEXT).
+    Contexts = application:get_env(rabbitmq_management, ?CONTEXTS_KEY,
+                                   [?TCP_CONTEXT, ?TLS_CONTEXT]),
+    _ = [rabbit_web_dispatch:unregister_context(Context) || Context <- Contexts],
+    ok.
 
 ensure_port(tls, Listener) ->
     do_ensure_port(?DEFAULT_TLS_PORT, Listener);

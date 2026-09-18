@@ -73,4 +73,10 @@ defmodule CoreListenersTest do
     assert not listener_expiring_within(listener, 86400 * (validityInDays - 5))
     assert listener_expiring_within(listener, 86400 * (validityInDays + 5))
   end
+
+  test "cert_validity handles file read errors and empty PEM" do
+    assert cert_validity(nil) == nil
+    assert cert_validity({:error, :enoent}) == {:error, :enoent}
+    assert cert_validity("") == {:error, "The certificate file provided does not contain any PEM entry."}
+  end
 end

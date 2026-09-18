@@ -296,10 +296,26 @@ endpoint_tld(_Other) ->
 %% structure. The response body will attempt to be decoded by invoking the
 %% maybe_decode_body/2 method.
 %% @end
-format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
-    {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
+format_response({ok, {{_Version, StatusCode, _Message}, Headers, Body}}) when
+    StatusCode >= 200, StatusCode < 300
+->
+    case maybe_decode_body(get_content_type(Headers), Body) of
+        {error, Reason} ->
+            ?LOG_WARNING("Could not decode AWS response body: ~tp", [Reason]),
+            {error, "Malformed response body", {Headers, Body}};
+        Payload ->
+            {ok, {Headers, Payload}}
+    end;
 format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
-    {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
+    case maybe_decode_body(get_content_type(Headers), Body) of
+        {error, Reason} ->
+            ?LOG_WARNING("Could not decode AWS error response body: ~tp", [Reason]),
+            {error, Message, {Headers, Body}};
+        Payload ->
+            {error, Message, {Headers, Payload}}
+    end;
+format_response({ok, {{_Version, _StatusCode, Message}, Headers, Body}}) ->
+    {error, Message, {Headers, Body}};
 format_response({error, Reason}) ->
     {error, Reason, undefined}.
 
@@ -381,7 +397,7 @@ local_time() ->
     Value.
 
 -spec maybe_decode_body(ContentType :: {nonempty_string(), nonempty_string()}, Body :: body()) ->
-    list() | body().
+    list() | body() | {error, term()}.
 %% @doc Attempt to decode the response body by its MIME
 %% @end
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->

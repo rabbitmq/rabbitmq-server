@@ -26,3 +26,8 @@
 
 -define(DIRECT_OPERATION_TIMEOUT,  120000).
 -define(CALL_TIMEOUT_DEVIATION,    10000).
+
+%% Frame size ceiling enforced by amqp_main_reader before frame_max is
+%% negotiated. It is the RabbitMQ default frame_max, comfortably above any
+%% realistic connection.start.
+-define(HANDSHAKE_FRAME_MAX, 131072).

@@ -278,14 +278,18 @@ limit_max_messages(Config) ->
 limit_max_size_bytes(Config) ->
     ok = set_limits(Config, infinity, 0),
     ClientId = atom_to_binary(?FUNCTION_NAME),
-    C1 = connect(ClientId, Config),
+    C1 = connect(<<ClientId/binary, "-1">>, Config),
     {ok, _} = emqtt:publish(C1, <<"size/1">>, <<"m1">>, [{retain, true}, {qos, 1}]),
     {ok, _, _} = emqtt:subscribe(C1, <<"size/1">>, qos1),
     ok = expect_nothing(),
     ok = emqtt:disconnect(C1),
 
     ok = set_limits(Config, infinity, infinity),
-    C2 = connect(ClientId, Config),
+    %% Use a different client ID than C1: its qos1 subscription queue is
+    %% exclusive and torn down asynchronously on disconnect, and reusing
+    %% the same client ID here would race that deletion with C2 declaring
+    %% a same-named queue, killing C2's connection.
+    C2 = connect(<<ClientId/binary, "-2">>, Config),
     {ok, _} = emqtt:publish(C2, <<"size/1">>, <<"m1">>, [{retain, true}, {qos, 1}]),
     {ok, _, _} = emqtt:subscribe(C2, <<"size/1">>, qos1),
     ok = expect_publishes(C2, <<"size/1">>, [<<"m1">>]),

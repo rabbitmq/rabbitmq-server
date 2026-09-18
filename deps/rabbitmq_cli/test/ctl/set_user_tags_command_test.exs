@@ -62,10 +62,10 @@ defmodule SetUserTagsCommandTest do
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     opts = %{node: :jake@thedog, timeout: 200}
 
-    assert match?({:badrpc, _}, @command.run([@user, :emperor], opts))
+    assert match?({:badrpc, _}, @command.run([@user, "emperor"], opts))
   end
 
-  @tag user: @user, tags: [:emperor]
+  @tag user: @user, tags: ["emperor"]
   test "run: on a single optional argument, add a flag to the user", context do
     @command.run(
       [context[:user] | context[:tags]],
@@ -81,7 +81,7 @@ defmodule SetUserTagsCommandTest do
     assert result[:tags] == context[:tags]
   end
 
-  @tag user: "interloper", tags: [:emperor]
+  @tag user: "interloper", tags: ["emperor"]
   test "run: when user does not exist, returns an error", context do
     assert @command.run(
              [context[:user] | context[:tags]],
@@ -89,7 +89,7 @@ defmodule SetUserTagsCommandTest do
            ) == {:error, {:no_such_user, context[:user]}}
   end
 
-  @tag user: @user, tags: [:emperor, :generalissimo]
+  @tag user: @user, tags: ["emperor", "generalissimo"]
   test "run: with multiple optional arguments, adds multiple tags", context do
     @command.run(
       [context[:user] | context[:tags]],
@@ -105,7 +105,7 @@ defmodule SetUserTagsCommandTest do
     assert result[:tags] == context[:tags]
   end
 
-  @tag user: @user, tags: [:emperor]
+  @tag user: @user, tags: ["emperor"]
   test "run: without optional arguments, clears user tags", context do
     set_user_tags(context[:user], context[:tags])
 
@@ -120,7 +120,7 @@ defmodule SetUserTagsCommandTest do
     assert result[:tags] == []
   end
 
-  @tag user: @user, tags: [:emperor]
+  @tag user: @user, tags: ["emperor"]
   test "run: identical calls are idempotent", context do
     set_user_tags(context[:user], context[:tags])
 
@@ -138,7 +138,7 @@ defmodule SetUserTagsCommandTest do
     assert result[:tags] == context[:tags]
   end
 
-  @tag user: @user, old_tags: [:emperor], new_tags: [:generalissimo]
+  @tag user: @user, old_tags: ["emperor"], new_tags: ["generalissimo"]
   test "run: overwrites existing tags", context do
     set_user_tags(context[:user], context[:old_tags])
 

@@ -329,8 +329,14 @@ discover(<<>>) ->
 discover(undefined) ->
     fallback();
 discover(TypeDescriptor) ->
-    {ok, TypeModule} = rabbit_registry:lookup_type_module(queue, TypeDescriptor),
-    TypeModule.
+    case rabbit_registry:lookup_type_module(queue, TypeDescriptor) of
+        {ok, TypeModule} ->
+            TypeModule;
+        {error, not_found} ->
+            rabbit_misc:protocol_error(
+              precondition_failed, "unknown queue type '~ts'",
+              [rabbit_data_coercion:to_binary(TypeDescriptor)])
+    end.
 
 -spec short_alias_of(TypeDescriptor) -> Ret when
       TypeDescriptor :: {utf8, binary()} | atom() | binary(),

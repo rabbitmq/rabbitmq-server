@@ -115,6 +115,59 @@ defmodule HelpersTest do
     assert want == got
   end
 
+  ## ------------------- redact_uri_credentials/1 tests --------------------
+
+  test "redact_uri_credentials: strips userinfo from a URI" do
+    assert Helpers.redact_uri_credentials("amqp://alice:s3cr3t@host1:5672/vhost") ==
+             "amqp://host1:5672/vhost"
+  end
+
+  test "redact_uri_credentials: strips userinfo from every URI found in a JSON blob" do
+    value =
+      "{\"src-uri\":\"amqp://alice:s3cr3t@host1\",\"dest-uri\":\"amqp://bob:hunter2@host2\",\"src-queue\":\"q\"}"
+
+    redacted = Helpers.redact_uri_credentials(value)
+
+    refute redacted =~ "s3cr3t"
+    refute redacted =~ "hunter2"
+    assert redacted =~ "host1"
+    assert redacted =~ "host2"
+    assert redacted =~ "src-queue"
+    assert redacted =~ "\"q\""
+  end
+
+  test "redact_uri_credentials: leaves a value without credentials untouched" do
+    assert Helpers.redact_uri_credentials("{\"uri\":\"amqp://127.0.0.1:5672\"}") ==
+             "{\"uri\":\"amqp://127.0.0.1:5672\"}"
+  end
+
+  test "redact_uri_credentials: strips the query string, which can carry a private key passphrase" do
+    assert Helpers.redact_uri_credentials(
+             "{\"src-uri\":\"amqps://host1?keyfile=%2Fpath%2Fkey.pem&password=s3cr3t\"}"
+           ) == "{\"src-uri\":\"amqps://host1\"}"
+  end
+
+  test "redact_uri_credentials: strips both the userinfo and the query string of the same URI" do
+    assert Helpers.redact_uri_credentials(
+             "{\"src-uri\":\"amqps://alice:s3cr3t@host1?password=hunter2\",\"src-queue\":\"q\"}"
+           ) == "{\"src-uri\":\"amqps://host1\",\"src-queue\":\"q\"}"
+  end
+
+  test "redact_uri_credentials: does not mistake a literal @ in the query string for userinfo" do
+    assert Helpers.redact_uri_credentials("amqp://myhost?ssl_options.password=p@ssw0rd") ==
+             "amqp://myhost"
+  end
+
+  test "redact_uri_credentials: leaves a question mark outside a URI alone" do
+    assert Helpers.redact_uri_credentials("{\"note\":\"why? because\",\"max-hops\":1}") ==
+             "{\"note\":\"why? because\",\"max-hops\":1}"
+  end
+
+  test "redact_uri_credentials: strips the whole userinfo when it contains a literal @, e.g. an email-style username" do
+    assert Helpers.redact_uri_credentials("amqp://alice@example.com:s3cr3t@host1:5672/") ==
+             "amqp://host1:5672/"
+  end
+
   ## ------------------- require_rabbit/1 tests --------------------
 
   test "locate plugin with version number in filename" do

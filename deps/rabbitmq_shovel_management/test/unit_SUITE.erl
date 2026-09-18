@@ -5,9 +5,12 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 all() ->
-    [blocked_status].
+    [blocked_status,
+     filter_vhost_user_tag_representation].
 
 init_per_testcase(_, Config) ->
     meck:expect(rabbit_shovel_dyn_worker_sup_sup, cleanup_specs, 0, ok),
@@ -75,3 +78,33 @@ get_shovel_states() ->
     [{{proplists:get_value(vhost, S), proplists:get_value(name, S)},
       proplists:get_value(state, S)}
      || S <- rabbit_shovel_mgmt_util:status(node())].
+
+%% `#user.tags` may hold binaries (the internal backend, which avoids
+%% interning admin-supplied tag strings) or atoms (LDAP, HTTP, OAuth2
+%% backends); both must grant an administrator visibility of static
+%% (vhost-less) shovels.
+filter_vhost_user_tag_representation(_Config) ->
+    ok = meck:new(rabbit_mgmt_util, [passthrough, no_link]),
+    try
+        meck:expect(rabbit_mgmt_util, list_login_vhosts_names,
+                    fun(_, _) -> [] end),
+        StaticShovel = [{name, <<"static">>}],
+
+        AdminBin = #context{user = #user{tags = [<<"administrator">>]}},
+        ?assertEqual([StaticShovel],
+                     rabbit_shovel_mgmt_util:filter_vhost_user(
+                       [StaticShovel], undefined, AdminBin)),
+
+        AdminAtom = #context{user = #user{tags = [administrator]}},
+        ?assertEqual([StaticShovel],
+                     rabbit_shovel_mgmt_util:filter_vhost_user(
+                       [StaticShovel], undefined, AdminAtom)),
+
+        NonAdmin = #context{user = #user{tags = [<<"monitoring">>]}},
+        ?assertEqual([],
+                     rabbit_shovel_mgmt_util:filter_vhost_user(
+                       [StaticShovel], undefined, NonAdmin))
+    after
+        meck:unload(rabbit_mgmt_util)
+    end,
+    ok.

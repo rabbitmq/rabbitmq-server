@@ -17,6 +17,84 @@
                          ]}],
    [rabbitmq_prometheus]},
 
+   {additional_tcp_listeners,
+    "prometheus.listeners.tcp.1 = 15680
+     prometheus.listeners.tcp.2 = 192.168.1.2:15681",
+    [{rabbitmq_prometheus,[
+                           {tcp_listeners, [15680, {"192.168.1.2", 15681}]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {additional_ipv6_listener,
+    "prometheus.listeners.tcp.1 = 127.0.0.1:15680
+     prometheus.listeners.tcp.2 = ::1:15681",
+    [{rabbitmq_prometheus,[
+                           {tcp_listeners, [{"127.0.0.1", 15680}, {"::1", 15681}]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {additional_ssl_listeners,
+    "prometheus.ssl.ip   = 192.168.1.2
+     prometheus.ssl.port = 15691
+     prometheus.ssl.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+     prometheus.ssl.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem
+     prometheus.ssl.keyfile = test/config_schema_SUITE_data/certs/server_key.pem
+     prometheus.ssl.verify   = verify_none
+     prometheus.ssl.fail_if_no_peer_cert = false
+     prometheus.listeners.ssl.1 = 127.0.0.1:15682
+     prometheus.listeners.ssl.2 = 15683",
+    [{rabbitmq_prometheus,[
+                           {ssl_config,[
+                                        {ip, "192.168.1.2"},
+                                        {port,15691},
+                                        {ssl_opts, [
+                                          {cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+                                          {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+                                          {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
+                                          {verify, verify_none},
+                                          {fail_if_no_peer_cert, false}
+                                        ]}
+                                    ]},
+                           {ssl_listeners, [{"127.0.0.1", 15682}, 15683]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tcp_listener_with_additional_listeners,
+    "prometheus.tcp.port = 15692
+     prometheus.listeners.tcp.1 = 127.0.0.1:15680",
+    [{rabbitmq_prometheus,[
+                           {tcp_config,[
+                                        {port,15692}
+                                       ]},
+                           {tcp_listeners, [{"127.0.0.1", 15680}]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tcp_options_with_additional_listeners,
+    "prometheus.tcp.compress = true
+     prometheus.tcp.idle_timeout = 120
+     prometheus.listeners.tcp.1 = 15680",
+    [
+     {rabbitmq_prometheus, [
+                            {tcp_config, [{cowboy_opts, [{compress,     true},
+                                                       {idle_timeout, 120}]}]},
+                            {tcp_listeners, [15680]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {one_key_listener_with_additional_listeners,
+    "prometheus.tcp.listener = 192.1.1.2:15676
+     prometheus.listeners.tcp.1 = 15680",
+    [{rabbitmq_prometheus,[
+                           {tcp_config,[
+                                        {ip, "192.1.1.2"},
+                                        {port,15676}
+                                       ]},
+                           {tcp_listeners, [15680]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
    %%
    %% TCP listener
    %%

@@ -224,8 +224,14 @@ add_replica(Q, Node) when ?is_amqqueue(Q) ->
     try
         ReplState0 = osiris_writer:query_replication_state(Pid),
         {{_, InitTs}, ReplState} = maps:take(node(Pid), ReplState0),
-        {MaxTs, MinTs} = maps:fold(fun (_, {_, Ts}, {Max, Min}) ->
-                                           {max(Ts, Max), min(Ts, Min)}
+        %% a replica with an empty log (e.g. one that hasn't received its
+        %% first chunk yet) can report a non-integer timestamp such as
+        %% `empty`; treat it as agreeing with the leader's own timestamp
+        %% rather than letting it corrupt the min/max comparison below
+        {MaxTs, MinTs} = maps:fold(fun (_, {_, Ts}, {Max, Min}) when is_integer(Ts) ->
+                                           {max(Ts, Max), min(Ts, Min)};
+                                       (_, {_, _NonNumericTs}, Acc) ->
+                                           Acc
                                    end, {InitTs, InitTs}, ReplState),
         case (MaxTs - MinTs) > ?REPLICA_FRESHNESS_LIMIT_MS of
             true ->

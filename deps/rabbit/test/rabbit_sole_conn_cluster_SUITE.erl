@@ -31,6 +31,8 @@ groups() ->
         node_rejoins_cluster_after_abrupt_shutdown,
         forget_node_should_remove_node,
         status_should_return_ra_metrics,
+        status_should_return_ra_metrics_when_peer_runs_different_code,
+        status_should_report_unreachable_node,
         status_should_not_crash_when_never_bootstrapped,
         concurrent_acquire_should_not_crash_on_bootstrap,
         wipe_should_reset_store_on_all_nodes,
@@ -75,16 +77,27 @@ end_per_testcase(_Testcase, Config) ->
     Nodes = ?config(peer_nodes, Config),
     lists:foreach(
         fun({Node, _Peer}) ->
-            %% Stop the gen_server safely
-            call(Config, Node, erlang, apply, [fun() -> 
-                case whereis(?SOLE_CONN_MOD) of
-                    undefined -> ok;
-                    Pid -> gen_server:stop(Pid)
-                end
-            end, []]),
-            
-            call(Config, Node, khepri, stop, [?STORE_ID]),
-            
+            %% Stop the gen_server safely. Wrapped in try/catch: a testcase
+            %% may have deliberately left a peer node stopped, in which case
+            %% call/5 falls back to an erpc call that raises noconnection,
+            %% which would otherwise abort cleanup for the remaining nodes.
+            try
+                call(Config, Node, erlang, apply, [fun() ->
+                    case whereis(?SOLE_CONN_MOD) of
+                        undefined -> ok;
+                        Pid -> gen_server:stop(Pid)
+                    end
+                end, []])
+            catch
+                _:_ -> ok
+            end,
+
+            try
+                call(Config, Node, khepri, stop, [?STORE_ID])
+            catch
+                _:_ -> ok
+            end,
+
             try 
                 call(Config, Node, meck, unload, [rabbit_nodes]) 
             catch 
@@ -109,12 +122,28 @@ end_per_testcase(_Testcase, Config) ->
                 call(Config, Node, meck, unload, [erpc])
             catch
                 _:_ -> ok
+            end,
+
+            try
+                call(Config, Node, meck, unload, [rabbit_sole_conn])
+            catch
+                _:_ -> ok
             end
         end, Nodes),
     lists:foreach(
         fun({Node, _Peer}) ->
-            call(Config, Node, application, stop, [khepri]),
-            call(Config, Node, application, stop, [ra]),
+            %% Same as above: a deliberately stopped peer node must not
+            %% stop stop_erlang_node/2 from being called on the others.
+            try
+                call(Config, Node, application, stop, [khepri])
+            catch
+                _:_ -> ok
+            end,
+            try
+                call(Config, Node, application, stop, [ra])
+            catch
+                _:_ -> ok
+            end,
             ok = stop_erlang_node(Config, Node)
         end, Nodes),
     Config.
@@ -462,6 +491,98 @@ status_should_return_ra_metrics(Config) ->
     %% Cleanup the dummy process
     kill_disposable(Config, Node1, Pid1),
 
+    ok.
+
+%% Reproduces a rolling upgrade: Node2 and Node3 run a different compiled
+%% version of rabbit_sole_conn than Node1. Before the fix, status0/0 sent a
+%% closure over ra:key_metrics/1 to those nodes, and the closure could not be
+%% resolved there, raising badfun.
+status_should_return_ra_metrics_when_peer_runs_different_code(Config) ->
+    PeerNodes = ?config(peer_nodes, Config),
+    [Node1, Node2, Node3] = [N || {N, _Peer} <- PeerNodes],
+
+    %% The single acquire on Node1 eagerly expands the cluster to all 3 nodes
+    Pid1 = spawn_disposable(Config, Node1),
+    ok = acq_ref_conn(Config, Node1, ?VH, ?CID1, ?USER, Pid1),
+
+    %% meck:new/2 replaces the module on Node2 and Node3 with a proxy that
+    %% has its own fun table, which is what makes a closure defined against
+    %% Node1's copy of the module unresolvable there. The passthrough option
+    %% keeps local_key_metrics/0 answering.
+    call(Config, Node2, meck, new, [?SOLE_CONN_MOD, [passthrough, no_link]]),
+    call(Config, Node3, meck, new, [?SOLE_CONN_MOD, [passthrough, no_link]]),
+
+    FinalStatus = call(Config, Node1, ?SOLE_CONN_MOD, status, []),
+    ?assertEqual(3, length(FinalStatus)),
+
+    lists:foreach(
+      fun(NodeMetrics) ->
+              RaftState = proplists:get_value(<<"Raft State">>, NodeMetrics),
+              Term = proplists:get_value(<<"Term">>, NodeMetrics),
+              %% A real Raft state is an atom; the badfun exception this
+              %% test guards against would be rendered as a string.
+              ?assert(is_atom(RaftState)),
+              ?assertNotEqual(<<>>, Term)
+      end, FinalStatus),
+
+    RaftStates = [proplists:get_value(<<"Raft State">>, NodeMetrics) || NodeMetrics <- FinalStatus],
+    LeaderCount = length([RS || RS <- RaftStates, RS =:= leader]),
+    ?assertEqual(1, LeaderCount),
+
+    call(Config, Node2, meck, unload, [?SOLE_CONN_MOD]),
+    call(Config, Node3, meck, unload, [?SOLE_CONN_MOD]),
+
+    kill_disposable(Config, Node1, Pid1),
+    ok.
+
+status_should_report_unreachable_node(Config0) ->
+    PeerNodes = ?config(peer_nodes, Config0),
+    [Node1, Node2, Node3] = [N || {N, _Peer} <- PeerNodes],
+
+    Pid1 = spawn_disposable(Config0, Node1),
+    ok = acq_ref_conn(Config0, Node1, ?VH, ?CID1, ?USER, Pid1),
+    Pid2 = spawn_disposable(Config0, Node2),
+    ok = acq_ref_conn(Config0, Node2, ?VH, ?CID2, ?USER, Pid2),
+
+    %% Stop Node3 the way node_rejoins_cluster_after_abrupt_shutdown does, so
+    %% it stays a member of the Ra cluster but becomes unreachable.
+    ct:pal("Stopping Node 3 (~p)", [Node3]),
+    stop_erlang_node(Config0, Node3),
+
+    ExtractNodeName = fun(NodeMetrics) ->
+                              proplists:get_value(<<"Node Name">>, NodeMetrics)
+                      end,
+
+    %% Distributed Erlang can take a moment to notice Node3 is gone, so
+    %% retry instead of failing on a status/0 call made just before that.
+    %% A real Raft state is an atom; rabbit_misc:format/2, used for the
+    %% error case, returns a string.
+    rabbit_ct_helpers:eventually(
+      ?_test(?assert(
+                is_list(
+                  proplists:get_value(
+                    <<"Raft State">>,
+                    hd([M || M <- call(Config0, Node1, ?SOLE_CONN_MOD, status, []),
+                             ExtractNodeName(M) =:= Node3]))))),
+      1000, 10),
+
+    FinalStatus = call(Config0, Node1, ?SOLE_CONN_MOD, status, []),
+    ?assertEqual(3, length(FinalStatus)),
+    {[Node3Metrics], OtherMetrics} =
+        lists:partition(fun(M) -> ExtractNodeName(M) =:= Node3 end, FinalStatus),
+
+    ?assertEqual(<<>>, proplists:get_value(<<"Term">>, Node3Metrics)),
+
+    lists:foreach(
+      fun(NodeMetrics) ->
+              RaftState = proplists:get_value(<<"Raft State">>, NodeMetrics),
+              Term = proplists:get_value(<<"Term">>, NodeMetrics),
+              ?assert(is_atom(RaftState)),
+              ?assertNotEqual(<<>>, Term)
+      end, OtherMetrics),
+
+    kill_disposable(Config0, Node1, Pid1),
+    kill_disposable(Config0, Node2, Pid2),
     ok.
 
 status_should_not_crash_when_never_bootstrapped(Config) ->

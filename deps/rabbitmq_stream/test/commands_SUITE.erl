@@ -12,6 +12,7 @@
 
 % -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbit/include/rabbit_stream_queue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
@@ -862,6 +863,16 @@ add_super_stream_validate(_Config) ->
                 {#{stream_max_segment_size_bytes => <<"100gb">>}, ok},
                 {#{stream_max_segment_size_bytes => <<"50mb">>}, ok},
                 {#{stream_max_segment_size_bytes => <<"50bm">>}, error},
+                {#{stream_initial_offset => 1000}, ok},
+                {#{stream_initial_offset => <<"1000">>}, ok},
+                {#{stream_initial_offset => 0}, ok},
+                {#{stream_initial_offset => <<"-1">>}, error},
+                {#{stream_initial_offset =>
+                       integer_to_binary(?MAX_STREAM_INITIAL_OFFSET)}, ok},
+                {#{stream_initial_offset =>
+                       integer_to_binary(?MAX_STREAM_INITIAL_OFFSET + 1)},
+                 error},
+                {#{stream_initial_offset => <<"foo">>}, error},
                 {#{leader_locator => <<"client-local">>}, ok},
                 {#{leader_locator => <<"least-leaders">>}, ok},
                 {#{leader_locator => <<"random">>}, ok},
@@ -929,6 +940,7 @@ add_delete_super_stream_run(Config) ->
           max_length_bytes => <<"50mb">>,
           max_age => <<"PT10M">>,
           stream_max_segment_size_bytes => <<"1mb">>,
+          stream_initial_offset => <<"1000">>,
           leader_locator => <<"random">>,
           initial_cluster_size => <<"1">>},
 
@@ -951,6 +963,8 @@ add_delete_super_stream_run(Config) ->
                  rabbit_misc:table_lookup(Args, <<"x-max-length-bytes">>)),
     ?assertMatch({_, <<"stream">>},
                  rabbit_misc:table_lookup(Args, <<"x-queue-type">>)),
+    ?assertMatch({_, 1000},
+                 rabbit_misc:table_lookup(Args, <<"x-stream-initial-offset">>)),
 
     ?assertMatch({ok, _},
                  ?COMMAND_DELETE_SUPER_STREAM_CLI:run([<<"invoices">>], Opts)),

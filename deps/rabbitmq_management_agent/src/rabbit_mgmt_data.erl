@@ -12,6 +12,10 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -export([empty/2, pick_range/2]).
 
+-ifdef(TEST).
+-export([filter_user/2]).
+-endif.
+
 % delegate api
 -export([overview_data/4,
          consumer_data/2,
@@ -589,5 +593,8 @@ filter_user(List, #user{username = Username, tags = Tags}) ->
         false -> [I || I <- List, pget(user, I) == Username]
     end.
 
-is_monitor(T)     -> intersects(T, [administrator, monitoring]).
-intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
+is_monitor(T)     -> intersects(T, [<<"administrator">>, <<"monitoring">>]).
+
+intersects(A, B) ->
+    ABin = [rabbit_data_coercion:to_binary(I) || I <- A],
+    lists:any(fun(I) -> lists:member(I, B) end, ABin).

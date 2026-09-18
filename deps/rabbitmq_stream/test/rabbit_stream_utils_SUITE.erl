@@ -36,7 +36,13 @@ groups() ->
        write_messages_sub_batch_unknown_compression_type_rejected,
        write_messages_sub_batch_empty_batch_with_compression_rejected,
        write_messages_sub_batch_high_compression_ratio_accepted,
-       write_messages_fail_fast_after_first_invalid_sub_batch]}].
+       write_messages_fail_fast_after_first_invalid_sub_batch,
+       classify_endpoint_valid_result,
+       classify_endpoint_invalid_result,
+       classify_endpoint_legacy_peer,
+       classify_endpoint_foreign_undef,
+       classify_endpoint_other_error,
+       transient_endpoint_error_classification]}].
 
 init_per_suite(Config) ->
     Config.
@@ -283,6 +289,78 @@ flush_one() ->
     after 100 ->
         no_message
     end.
+
+%%%===================================================================
+%%% node_endpoints/3 helpers
+%%%===================================================================
+
+classify_endpoint_valid_result(_Config) ->
+    ?assertEqual({#{node1 => {<<"host1">>, 5552}}, []},
+                 rabbit_stream_utils:classify_endpoint(
+                   advertised_endpoint,
+                   {node1, {ok, {<<"host1">>, 5552}}},
+                   {#{}, []})),
+    ok.
+
+classify_endpoint_invalid_result(_Config) ->
+    %% a malformed reply is neither added to the endpoints nor treated as a
+    %% legacy peer: it is only logged.
+    ?assertEqual({#{}, []},
+                 rabbit_stream_utils:classify_endpoint(
+                   advertised_endpoint,
+                   {node1, {ok, {<<"host1">>, {error, no_listener}}}},
+                   {#{}, []})),
+    ?assertEqual({#{}, []},
+                 rabbit_stream_utils:classify_endpoint(
+                   advertised_endpoint,
+                   {node1, {ok, {not_a_binary, 5552}}},
+                   {#{}, []})),
+    ok.
+
+classify_endpoint_legacy_peer(_Config) ->
+    Result = {error, {exception, undef,
+                      [{rabbit_stream, advertised_endpoint, [tcp], []}]}},
+    ?assertEqual({#{}, [node1]},
+                 rabbit_stream_utils:classify_endpoint(
+                   advertised_endpoint, {node1, Result}, {#{}, []})),
+    ok.
+
+classify_endpoint_foreign_undef(_Config) ->
+    %% undef raised deeper in the call, not at rabbit_stream:Fun/1 itself,
+    %% must not be mistaken for an old peer.
+    Result = {error, {exception, undef,
+                      [{some_other_module, some_fun, [], []}]}},
+    ?assertEqual({#{}, []},
+                 rabbit_stream_utils:classify_endpoint(
+                   advertised_endpoint, {node1, Result}, {#{}, []})),
+    Result2 = {error, {exception, undef,
+                       [{rabbit_stream, some_other_fun, [], []}]}},
+    ?assertEqual({#{}, []},
+                 rabbit_stream_utils:classify_endpoint(
+                   advertised_endpoint, {node1, Result2}, {#{}, []})),
+    ok.
+
+classify_endpoint_other_error(_Config) ->
+    [?assertEqual({#{}, []},
+                  rabbit_stream_utils:classify_endpoint(
+                    advertised_endpoint, {node1, Result}, {#{}, []}))
+     || Result <- [{error, {erpc, timeout}},
+                   {error, {erpc, noconnection}},
+                   {error, {exception, some_error, []}}]],
+    ok.
+
+transient_endpoint_error_classification(_Config) ->
+    [?assertEqual(true, rabbit_stream_utils:transient_endpoint_error(Result))
+     || Result <- [{error, {erpc, timeout}},
+                   {error, {erpc, noconnection}},
+                   {error, {exception, undef,
+                           [{rabbit_stream, advertised_endpoint, [tcp], []}]}}]],
+    [?assertEqual(false, rabbit_stream_utils:transient_endpoint_error(Result))
+     || Result <- [{error, {exception, error, []}},
+                   {error, {exception, undef,
+                           [{some_other_module, foo, [], []}]}},
+                   {error, some_other_reason}]],
+    ok.
 
 binding(Destination, Order) ->
     #binding{destination = #resource{name = Destination},

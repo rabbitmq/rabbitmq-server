@@ -152,13 +152,16 @@ headers_post_process(Headers) ->
 headers(SessionId, ConsumerTag, DeliveryTag,
         ExchangeBin, RoutingKey, Redelivered,
         Properties, AckMode, Version) ->
+    %% Message properties/headers are publisher-controlled (STOMP or AMQP),
+    %% so the server-generated values must win on key conflict, not the
+    %% other way round.
     maps:merge(
+      maps:from_list(
+        headers_post_process(message_headers(Properties))),
       maps:from_list(
         headers_extra(SessionId, ConsumerTag, DeliveryTag,
                       ExchangeBin, RoutingKey, Redelivered,
-                      AckMode, Version)),
-      maps:from_list(
-        headers_post_process(message_headers(Properties)))).
+                      AckMode, Version))).
 
 tag_to_id(<<?INTERNAL_TAG_PREFIX, Id/binary>>) ->
     {ok, {internal, Id}};
@@ -188,7 +191,11 @@ user_header(Hdr)
        Hdr =:= ?HEADER_TYPE orelse
        Hdr =:= ?HEADER_USER_ID orelse
        Hdr =:= ?HEADER_APP_ID orelse
-       Hdr =:= ?HEADER_DESTINATION ->
+       Hdr =:= ?HEADER_DESTINATION orelse
+       Hdr =:= ?HEADER_MESSAGE_ID orelse
+       Hdr =:= ?HEADER_ACK orelse
+       Hdr =:= ?HEADER_SUBSCRIPTION orelse
+       Hdr =:= ?HEADER_REDELIVERED ->
     false;
 user_header(_) ->
     true.

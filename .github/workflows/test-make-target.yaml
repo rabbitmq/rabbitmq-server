@@ -56,7 +56,7 @@ jobs:
           https://cdn.jsdelivr.net/hex
 
     - name: MIXED CLUSTERS - FETCH SIGNING KEYS
-      uses: dsaltares/fetch-gh-release-asset@master
+      uses: dsaltares/fetch-gh-release-asset@1.1.2
       if: inputs.mixed_clusters
       with:
         repo: rabbitmq/signing-keys
@@ -64,7 +64,7 @@ jobs:
 
     - name: MIXED CLUSTERS - FETCH PREVIOUS VERSION
       id: fetch_secondary_dist
-      uses: dsaltares/fetch-gh-release-asset@master
+      uses: dsaltares/fetch-gh-release-asset@1.1.2
       if: inputs.mixed_clusters
       with:
         version: ${{ inputs.previous_version }}

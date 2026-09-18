@@ -109,6 +109,7 @@
           consumer_timeout,
           authz_context,
           max_consumers,  % taken from rabbit.consumer_max_per_channel
+          max_tx_messages,  % taken from rabbit.channel_tx_message_max
           %% defines how ofter gc will be executed
           writer_gc_threshold,
           msg_interceptor_ctx :: rabbit_msg_interceptor:context()
@@ -174,6 +175,11 @@
 -define(QUEUE, lqueue).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
+
+%% A transaction's publishes are buffered in the channel process until
+%% tx.commit, with none of the credit-flow backpressure that applies
+%% outside a transaction; this bounds that buffer.
+-define(MAX_CHANNEL_TX_MESSAGES, 10_000).
 
 -define(REFRESH_TIMEOUT, 15000).
 
@@ -440,6 +446,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, User, VHost,
     OptionalVariables = extract_variable_map_from_amqp_params(AmqpParams),
     {ok, GCThreshold} = application:get_env(rabbit, writer_gc_threshold),
     MaxConsumers = application:get_env(rabbit, consumer_max_per_channel, infinity),
+    MaxTxMessages = application:get_env(rabbit, channel_tx_message_max,
+                                         ?MAX_CHANNEL_TX_MESSAGES),
     MsgIcptCtx = #{protocol => amqp091,
                    vhost => VHost,
                    username => User#user.username,
@@ -460,6 +468,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, User, VHost,
                             consumer_timeout = ConsumerTimeout,
                             authz_context = OptionalVariables,
                             max_consumers = MaxConsumers,
+                            max_tx_messages = MaxTxMessages,
                             writer_gc_threshold = GCThreshold,
                             msg_interceptor_ctx = MsgIcptCtx},
                 limiter = Limiter,
@@ -979,6 +988,18 @@ extract_variable_map_from_amqp_params([Value]) ->
 extract_variable_map_from_amqp_params(_) ->
     #{}.
 
+check_tx_size({Msgs, _Acks}, MaxTxMessages) ->
+    case ?QUEUE:len(Msgs) >= MaxTxMessages of
+        true ->
+            rabbit_misc:precondition_failed(
+              "transaction has reached the maximum of ~B uncommitted publishes",
+              [MaxTxMessages]);
+        false ->
+            ok
+    end;
+check_tx_size(_Tx, _MaxTxMessages) ->
+    ok.
+
 check_msg_size(Content, GCThreshold) ->
     MaxMessageSize = persistent_term:get(max_message_size),
     Size = rabbit_basic:maybe_gc_large_msg(Content, GCThreshold),
@@ -1179,12 +1200,14 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                                 trace_state = TraceState,
                                                 authz_context = AuthzContext,
                                                 writer_gc_threshold = GCThreshold,
+                                                max_tx_messages = MaxTxMessages,
                                                 msg_interceptor_ctx = MsgIcptCtx
                                                },
                                    tx               = Tx,
                                    confirm_enabled  = ConfirmEnabled,
                                    delivery_flow    = Flow
                                    }) ->
+    check_tx_size(Tx, MaxTxMessages),
     State1 = maybe_increase_global_publishers(State0),
     rabbit_global_counters:messages_received(amqp091, 1),
     check_msg_size(Content, GCThreshold),

@@ -158,6 +158,7 @@ translate_oauth_providers(Conf) ->
             Settings),
         extract_oauth_providers_algorithm(Settings),
         extract_oauth_providers_https(Settings),
+        extract_oauth_providers_discovery(Settings),
         extract_oauth_providers_signing_keys(Settings)
         ]).
 
@@ -323,6 +324,16 @@ mapHttpProperty({Key, Value}) ->
         cacertfile -> validator_pem_file(Key, Value);
         _ -> Value
     end}.
+
+extract_oauth_providers_discovery(Settings) ->
+    ExtractProviderNameFun = fun extract_key_as_binary/1,
+
+    AttributesPerProvider = [{Name, {list_to_atom(Key), V}} ||
+        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, "discovery", Key], V} <- Settings ],
+
+    maps:map(fun(_K,V)-> [{discovery, V}] end,
+        maps:groups_from_list(ExtractProviderNameFun, fun({_, V}) -> V end,
+            AttributesPerProvider)).
 
 extract_oauth_providers_algorithm(Settings) ->
     KeyFun = fun extract_key_as_binary/1,

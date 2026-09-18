@@ -20,7 +20,9 @@ all() ->
 groups() ->
     [
      {lookup, [], [lookup_type_module,
-                   lookup_type_name
+                   lookup_type_name,
+                   lookup_type_module_rejects_never_interned_binary,
+                   lookup_type_module_rejects_existing_but_unregistered_atom
                   ]}
     ].
 
@@ -79,6 +81,19 @@ lookup_type_name(_Config) ->
 
     ?assertMatch({error, not_found}, rabbit_registry:lookup_type_name(runtime_parameter, another_param)).
 
+%% A binary that was never interned as an atom must not crash
+%% `binary_to_existing_atom/1` inside the registry.
+lookup_type_module_rejects_never_interned_binary(_Config) ->
+    Bogus = <<"never-interned-registry-type-xyz-",
+              (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    ?assertMatch({error, not_found},
+                 rabbit_registry:lookup_type_module(runtime_parameter, Bogus)).
+
+%% An atom that already exists (e.g. a bare Erlang keyword) but was never
+%% registered under this class must also be rejected cleanly.
+lookup_type_module_rejects_existing_but_unregistered_atom(_Config) ->
+    ?assertMatch({error, not_found},
+                 rabbit_registry:lookup_type_module(runtime_parameter, <<"true">>)).
 
 %% -------------------------------------------------------------------
 %% Utility.

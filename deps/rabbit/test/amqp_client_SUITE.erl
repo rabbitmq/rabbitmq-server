@@ -149,6 +149,8 @@ groups() ->
        modified_quorum_queue_delivery_time,
        modified_quorum_queue_deferral_token,
        modified_quorum_queue_deferral_token_ranged_disposition,
+       disposition_reversed_range_rejected,
+       session_flow_max_incoming_window,
        modified_quorum_queue_deferral_token_precedes_backlog,
        modified_quorum_queue_deferral_token_survives_in_flight_credit_req,
        modified_quorum_queue_deferral_token_invalid_annotation_type,
@@ -1097,6 +1099,56 @@ modified_quorum_queue_deferral_token_ranged_disposition(Config) ->
     ok = amqp10_client:detach_link(Receiver),
     ?assertMatch({ok, #{message_count := 0}},
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% A reversed disposition range ends the session with amqp:invalid-field.
+disposition_reversed_range_rejected(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    {ok, M1} = amqp10_client:get_msg(Receiver),
+    DeliveryId = amqp10_msg:delivery_id(M1),
+
+    %% first is after last.
+    ok = amqp10_client_session:disposition(
+           Receiver, DeliveryId + 1, DeliveryId, true, accepted),
+    receive
+        {amqp10_event,
+         {session, Session,
+          {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
+    after 30000 -> flush(missing_ended),
+                   ct:fail("did not receive expected error")
+    end,
+    ok = close_connection_sync(Connection).
+
+%% A session FLOW may advertise the largest uint as its incoming window.
+session_flow_max_incoming_window(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    ok = amqp10_client_session:flow(Session, 16#ffffffff, never),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, false)),
+    ok = wait_for_accepted(<<"t1">>),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, settled),
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(Msg)),
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = close(Init).
 
 %% Test that deferral tokens submitted in a FLOW while a previous credit

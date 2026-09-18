@@ -83,7 +83,6 @@
          peer_cert_validity]).
 -define(UNKNOWN_FIELD, unknown_field).
 -define(SILENT_CLOSE_DELAY, 3_000).
--define(METADATA_TIMEOUT, 10_000).
 -define(SAC_MOD, rabbit_stream_sac_coordinator).
 %% publisher_id and subscription_id are encoded as a single byte on the wire.
 -define(MAX_PUBLISHERS_PER_CONNECTION, 256).
@@ -116,6 +115,8 @@
 -ifdef(TEST).
 -export([ensure_token_expiry_timer/2,
          evaluate_state_after_secret_update/4,
+         handle_frame_post_auth/4,
+         clean_state_after_super_stream_deletion/5,
          clean_subscriptions/4,
          negotiate_frame_max/2,
          publishing_ids_from_messages/2]).
@@ -1285,6 +1286,13 @@ close_sent(info, Msg, _StatemData) ->
     ?LOG_WARNING("Ignored unknown message ~tp in state ~ts",
                                   [Msg, ?FUNCTION_NAME]),
     keep_state_and_data;
+close_sent(cast, {queue_event, _, _}, _StatemData) ->
+    %% Ignore confirmations and offset notifications while closing.
+    keep_state_and_data;
+close_sent(cast, Msg, _StatemData) ->
+    ?LOG_WARNING("Ignored unknown cast ~tp in state ~ts",
+                                  [Msg, ?FUNCTION_NAME]),
+    keep_state_and_data;
 close_sent({call, From}, {info, _Items}, _StateData) ->
     %% must be a CLI call, returning no information
     {keep_state_and_data, {reply, From, []}}.
@@ -1627,8 +1635,8 @@ handle_frame_pre_auth(Transport,
             ok ?= check_user_connection_limit(Username),
             ok ?= check_vhost_access(User, VirtualHost, S),
 
-            AdHost = advertised_host(TransportLayer),
-            AdPort = rabbit_data_coercion:to_binary(advertised_port(TransportLayer)),
+            AdHost = rabbit_stream:advertised_host(TransportLayer),
+            AdPort = rabbit_data_coercion:to_binary(rabbit_stream:advertised_port(TransportLayer)),
             ConnProps = #{<<"advertised_host">> => AdHost,
                           <<"advertised_port">> => AdPort},
 
@@ -2513,6 +2521,16 @@ handle_frame_post_auth(Transport,
                              CorrelationId,
                              ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
                     increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                    {Connection, State};
+                {error, Error} ->
+                    ?LOG_WARNING("Error while trying to delete stream ~tp: ~tp",
+                                 [Stream, Error]),
+                    response(Transport,
+                             Connection,
+                             delete_stream,
+                             CorrelationId,
+                             ?RESPONSE_CODE_INTERNAL_ERROR),
+                    increase_protocol_counter(?INTERNAL_ERROR),
                     {Connection, State}
             end;
         error ->
@@ -2589,28 +2607,7 @@ handle_frame_post_auth(Transport,
                              =:= false
                      end,
                      Nodes0),
-        HostFun = advertised_host_fun(TransportLayer),
-        PortFun = advertised_port_fun(TransportLayer),
-
-        FetchFun = fun() -> {rabbit_stream:HostFun(), rabbit_stream:PortFun()} end,
-        Results = erpc:multicall(Nodes, FetchFun, ?METADATA_TIMEOUT),
-        NodeEndpoints =
-        lists:foldl(
-          fun({Node, {ok, {Host, Port}}}, Acc) when is_binary(Host), is_integer(Port) ->
-                  %% Happy path: Node responded in time with valid data
-                  Acc#{Node => {Host, Port}};
-             ({Node, {ok, {Host, Port}}}, Acc) ->
-                  %% Node responded, but data was malformed
-                  ?LOG_WARNING("Error when retrieving broker '~tp' metadata: ~tp ~tp",
-                               [Node, Host, Port]),
-                  Acc;
-             ({Node, Error}, Acc) ->
-                  %% Node timed out, was unreachable, or threw an exception
-                  ?LOG_WARNING("Error/Timeout when retrieving broker '~tp' metadata: ~tp",
-                               [Node, Error]),
-                  Acc
-          end,
-          #{}, lists:zip(Nodes, Results)),
+        NodeEndpoints = rabbit_stream_utils:node_endpoints(Nodes, TransportLayer),
 
         Metadata =
         lists:foldl(fun(Stream, Acc) ->
@@ -3033,19 +3030,40 @@ handle_frame_post_auth(Transport,
                             %% Pass the authorization-checked partition snapshot directly to avoid
                             %% a TOCTOU race where a queue.bind between the authz check and the
                             %% deletion could allow unauthorized streams to be deleted.
-                            rabbit_stream_manager:delete_super_stream(VirtualHost,
-                                                                      SuperStream,
-                                                                      Partitions,
-                                                                      Username),
-                            response_ok(Transport,
-                                        Connection,
-                                        delete_super_stream,
-                                        CorrelationId),
-                            {Connection1, State1} = clean_state_after_super_stream_deletion(Partitions,
-                                                                                            Connection,
-                                                                                            State,
-                                                                                            Transport, S),
-                            {Connection1, State1};
+                            case rabbit_stream_manager:delete_super_stream(VirtualHost,
+                                                                            SuperStream,
+                                                                            Partitions,
+                                                                            Username) of
+                                ok ->
+                                    response_ok(Transport,
+                                                Connection,
+                                                delete_super_stream,
+                                                CorrelationId),
+                                    {Connection1, State1} =
+                                        clean_state_after_super_stream_deletion(Partitions,
+                                                                                  Connection,
+                                                                                  State,
+                                                                                  Transport, S),
+                                    {Connection1, State1};
+                                {error,
+                                 {Result, DeletedPartitions, _} = Error}
+                                  when Result =:= partitions_not_deleted;
+                                       Result =:= exchange_not_deleted ->
+                                    ?LOG_WARNING(
+                                      "Error while trying to delete super stream ~tp: ~tp",
+                                      [SuperStream, Error]),
+                                    response(Transport,
+                                             Connection,
+                                             delete_super_stream,
+                                             CorrelationId,
+                                             ?RESPONSE_CODE_INTERNAL_ERROR),
+                                    increase_protocol_counter(?INTERNAL_ERROR),
+                                    {Connection1, State1} =
+                                        clean_state_after_super_stream_deletion(
+                                          DeletedPartitions, Connection, State,
+                                          Transport, S),
+                                    {Connection1, State1}
+                            end;
                         error ->
                             response(Transport,
                                      Connection,
@@ -4441,24 +4459,6 @@ retry_sac_call(Call, N) ->
         R ->
             R
     end.
-
-advertised_host(Transport) ->
-    F = advertised_host_fun(Transport),
-    rabbit_stream:F().
-
-advertised_port(Transport) ->
-    F = advertised_port_fun(Transport),
-    rabbit_stream:F().
-
-advertised_host_fun(tcp) ->
-    host;
-advertised_host_fun(ssl) ->
-    tls_host.
-
-advertised_port_fun(tcp) ->
-    port;
-advertised_port_fun(ssl) ->
-    tls_port.
 
 check_node_connection_limit(undefined) ->
     ok;

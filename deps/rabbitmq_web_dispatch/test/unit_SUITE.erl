@@ -23,7 +23,8 @@ groups() ->
                                     unrelativise_test,
                                     resolve_log_dir_test,
                                     extract_rotation_spec_test,
-                                    access_log_fmt_test
+                                    access_log_fmt_test,
+                                    access_control_tag_representation_test
                                    ]}
     ].
 
@@ -131,3 +132,22 @@ access_log_fmt_test(_Config) ->
     %% Unknown message shape is dropped.
     ?assertEqual([], Fmt(#{msg => something_unexpected}, Cfg)),
     ok.
+
+%% A user's tags can hold atoms (LDAP, HTTP, OAuth2 backends; or an
+%% internal-backend record written before the atom->binary switch) and
+%% binaries (the internal backend once the switch has taken effect) at
+%% the same time, since backends are merged (rabbit_access_control:user/2).
+access_control_tag_representation_test(_Config) ->
+    ?assert(rabbit_web_dispatch_access_control:is_admin([<<"administrator">>])),
+    ?assert(rabbit_web_dispatch_access_control:is_admin([administrator])),
+    ?assert(rabbit_web_dispatch_access_control:is_admin([<<"administrator">>, monitoring])),
+    ?assertNot(rabbit_web_dispatch_access_control:is_admin([<<"management">>, monitoring])),
+
+    ?assert(rabbit_web_dispatch_access_control:is_mgmt_user([management])),
+    ?assert(rabbit_web_dispatch_access_control:is_mgmt_user([<<"monitoring">>])),
+    ?assertNot(rabbit_web_dispatch_access_control:is_mgmt_user([<<"impersonator">>])),
+
+    ?assert(rabbit_web_dispatch_access_control:is_protected_user([protected])),
+    ?assert(rabbit_web_dispatch_access_control:is_protected_user([<<"protected">>])),
+    ?assertNot(rabbit_web_dispatch_access_control:is_protected_user([<<"administrator">>])),
+    passed.

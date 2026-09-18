@@ -82,7 +82,7 @@ shared_validation() ->
      {<<"consumer-tag">>,   fun rabbit_parameter_validation:binary/2, optional},
      {<<"prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"reconnect-delay">>,fun rabbit_parameter_validation:number/2, optional},
-     {<<"max-hops">>,       fun rabbit_parameter_validation:number/2, optional},
+     {<<"max-hops">>,       fun validate_max_hops/2, optional},
      {<<"expires">>,        fun rabbit_parameter_validation:number/2, optional},
      {<<"message-ttl">>,    fun rabbit_parameter_validation:number/2, optional},
      {<<"trust-user-id">>,  fun rabbit_parameter_validation:boolean/2, optional},
@@ -95,6 +95,14 @@ shared_validation() ->
      {<<"bind-nowait">>,    fun rabbit_parameter_validation:boolean/2, optional},
      {<<"channel-use-mode">>, rabbit_parameter_validation:enum(
                               ['multiple', 'single']), optional}].
+
+validate_max_hops(_Name, Term) when is_integer(Term) andalso
+                                    Term >= ?MIN_MAX_HOPS andalso
+                                    Term =< ?MAX_MAX_HOPS ->
+    ok;
+validate_max_hops(Name, Term) ->
+    {error, "~ts should be an integer between ~b and ~b, actually was ~tp",
+     [Name, ?MIN_MAX_HOPS, ?MAX_MAX_HOPS, Term]}.
 
 validate_uri(User) ->
     fun (Name, Term) -> validate_uri(Name, Term, User) end.

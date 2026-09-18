@@ -37,7 +37,10 @@ groups() ->
                   get_shovel_parameters,
                   create_and_delete_a_dynamic_shovel_that_successfully_connects,
                   create_and_delete_a_dynamic_shovel_that_fails_to_connect,
-                  delete_a_starting_dynamic_shovel_removes_its_status
+                  delete_a_starting_dynamic_shovel_removes_its_status,
+                  delete_a_dynamic_shovel_whose_name_starts_with_restart,
+                  delete_a_dynamic_shovel_in_a_vhost_named_restart,
+                  restart_a_dynamic_shovel_via_the_restart_route
                  ]},
 
     {static_shovels, [], [
@@ -412,6 +415,57 @@ delete_a_starting_dynamic_shovel_removes_its_status(Config) ->
             rabbit_shovel_dyn_worker_sup_sup, stop_child, [ID]),
     await_shovel_removed(Config, ID).
 
+%% The delete and restart routes must be told apart by which route matched,
+%% not by searching the request path for "/restart".
+delete_a_dynamic_shovel_whose_name_starts_with_restart(Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = <<"restart-orders">>,
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+
+    declare_local_shovel(Config, Name),
+    await_shovel_startup(Config, ID),
+
+    delete_shovel(Config, Name),
+    await_shovel_removed(Config, ID).
+
+%% Same as above, with "restart" in the vhost segment of the path.
+delete_a_dynamic_shovel_in_a_vhost_named_restart(Config) ->
+    VHost = <<"restart">>,
+    Name = <<"orders">>,
+    ID = {VHost, Name},
+    Perms = #{configure => <<".*">>, write => <<".*">>, read => <<".*">>},
+    http_put(Config, "/vhosts/restart", none, {group, '2xx'}),
+    http_put(Config, "/permissions/restart/guest", Perms, ?NO_CONTENT),
+    try
+        await_shovel_removed(Config, ID),
+        declare_local_shovel(Config, "restart", Name),
+        await_shovel_running(Config, ID),
+
+        delete_shovel(Config, "restart", Name),
+        await_shovel_removed(Config, ID)
+    after
+        remove_all_dynamic_shovels(Config, VHost),
+        catch http_delete(Config, "/vhosts/restart", ?NO_CONTENT)
+    end.
+
+%% The real /restart route must still restart, not delete.
+restart_a_dynamic_shovel_via_the_restart_route(Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = <<"shovel-to-restart">>,
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+
+    declare_local_shovel(Config, Name),
+    await_shovel_startup(Config, ID),
+
+    Path = io_lib:format("/shovels/vhost/%2F/~ts/restart", [Name]),
+    http_delete(Config, Path, ?NO_CONTENT),
+    await_shovel_startup(Config, ID),
+
+    delete_shovel(Config, Name),
+    await_shovel_removed(Config, ID).
+
 delete_shovel_requires_policymaker(Config) ->
     remove_all_dynamic_shovels(Config, <<"/">>),
     Name = <<"auth-test-shovel">>,
@@ -608,17 +662,23 @@ declare_amqp091_shovel_with_publish_properties(Config, Name, Props) ->
         }, ?CREATED).
 
 declare_local_shovel(Config, Name) ->
+    declare_local_shovel(Config, "%2f", Name).
+
+%% Important: callers must make sure that the shovel is created
+%% in the correct the virtual host.
+declare_local_shovel(Config, VHost, Name) ->
     Port = integer_to_binary(
         rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
-    http_put(Config, io_lib:format("/parameters/shovel/%2f/~ts", [Name]),
+    Uri = iolist_to_binary(io_lib:format("amqp://localhost:~s/~s", [Port, VHost])),
+    http_put(Config, io_lib:format("/parameters/shovel/~ts/~ts", [VHost, Name]),
         #{
             value => #{
                 <<"src-protocol">> => <<"local">>,
-                <<"src-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"src-uri">> => Uri,
                 <<"src-queue">>  => <<"local.src.test">>,
                 <<"src-delete-after">> => <<"never">>,
                 <<"dest-protocol">> => <<"local">>,
-                <<"dest-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"dest-uri">> => Uri,
                 <<"dest-queue">> => <<"local.dest.test">>
             }
         }, ?CREATED).
