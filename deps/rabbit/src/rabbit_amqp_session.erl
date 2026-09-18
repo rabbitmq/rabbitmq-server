@@ -3009,8 +3009,16 @@ ensure_source(Source0 = #'v1_0.source'{address = Address,
                     try cow_uri:urldecode(QNameBinQuoted) of
                         QNameBin ->
                             QName = queue_resource(Vhost, QNameBin),
+                            %% Check read access before revealing whether the
+                            %% queue exists, matching the anti-enumeration
+                            %% design already used for passive AMQP 0-9-1
+                            %% queue.declare: read is the permission this
+                            %% same queue is unconditionally checked against
+                            %% again once attach succeeds, in the receiver
+                            %% clause of handle_attach/2.
+                            PermCache1 = check_resource_access(QName, read, User, PermCache),
                             ok = error_if_absent(QName),
-                            {ok, QName, Source, PermCache, TopicPermCache}
+                            {ok, QName, Source, PermCache1, TopicPermCache}
                     catch error:_ ->
                               {error, {bad_address, Address}}
                     end;
@@ -3164,12 +3172,8 @@ ensure_target(Target = #'v1_0.target'{address = Address,
         false ->
             case target_address_version(Address) of
                 2 ->
-                    case ensure_target_v2(Address, Vhost) of
-                        {ok, to, RKey, QNameBin} ->
-                            {ok, to, RKey, QNameBin, Target, PermCache0};
-                        {ok, XNameBin, RKey, QNameBin} ->
-                            {ok, Exchange, PermCache} = check_exchange(XNameBin, User,
-                                                                       Vhost, PermCache0),
+                    case ensure_target_v2(Address, Vhost, User, PermCache0) of
+                        {ok, Exchange, RKey, QNameBin, PermCache} ->
                             {ok, Exchange, RKey, QNameBin, Target, PermCache};
                         {error, _} = Err ->
                             Err
@@ -3229,20 +3233,26 @@ target_address_version(_Address) ->
 %%  /exchanges/:exchange
 %%  /queues/:queue
 %%  <null>
-ensure_target_v2({utf8, String}, Vhost) ->
+ensure_target_v2({utf8, String}, Vhost, User, PermCache0) ->
     case parse_target_v2_string(String) of
-        {ok, _XNameBin, _RKey, undefined} = Ok ->
-            Ok;
-        {ok, _XNameBin, _RKey, QNameBin} = Ok ->
+        {ok, XNameBin, RKey, undefined} ->
+            {ok, Exchange, PermCache} = check_exchange(XNameBin, User, Vhost, PermCache0),
+            {ok, Exchange, RKey, undefined, PermCache};
+        {ok, XNameBin, RKey, QNameBin} ->
+            %% Check write access to the exchange (the default exchange for
+            %% a /queues/:queue address) before revealing whether the
+            %% target queue exists, matching the anti-enumeration design
+            %% already used for passive AMQP 0-9-1 queue.declare.
+            {ok, Exchange, PermCache} = check_exchange(XNameBin, User, Vhost, PermCache0),
             ok = error_if_absent(queue, Vhost, QNameBin),
-            Ok;
+            {ok, Exchange, RKey, QNameBin, PermCache};
         {error, bad_address} ->
             {error, {bad_address_string, String}}
     end;
-ensure_target_v2(undefined, _) ->
+ensure_target_v2(undefined, _, _, PermCache0) ->
     %% anonymous terminus
     %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
-    {ok, to, to, undefined}.
+    {ok, to, to, undefined, PermCache0}.
 
 parse_target_v2_string(String) ->
     try parse_target_v2_string0(String)

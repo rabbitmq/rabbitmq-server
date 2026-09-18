@@ -66,6 +66,8 @@ groups() ->
        receiver_settle_mode_first,
        publishing_to_non_existing_queue_should_settle_with_released,
        attach_link_to_non_existing_destination,
+       attach_receiver_link_to_non_existing_queue_requires_read_permission,
+       attach_sender_link_to_non_existing_queue_requires_write_permission,
        roundtrip_with_drain_classic_queue,
        roundtrip_with_drain_quorum_queue,
        roundtrip_with_drain_stream,
@@ -2217,6 +2219,74 @@ attach_link_to_non_existing_destination(Config) ->
      end || Address <- Addresses],
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
+
+%% Test that attaching a receiver to a non-existing v2 queue address is
+%% refused with the same generic error a user without read access to an
+%% *existing* queue would get, instead of leaking the queue's
+%% non-existence to a user who lacks read permission on it.
+attach_receiver_link_to_non_existing_queue_requires_read_permission(Config) ->
+    Vhost = ?config(rmq_vhost, Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    %% Deny read access to everything (the queue doesn't exist anyway),
+    %% keeping write/configure untouched.
+    ok = rabbit_ct_broker_helpers:set_permissions(
+           Config, <<"guest">>, Vhost, <<".*">>, <<".*">>, <<"^$">>),
+    try
+        OpnConf = connection_config(Config),
+        {ok, Connection} = amqp10_client:open_connection(OpnConf),
+        {ok, Session} = amqp10_client:begin_session_sync(Connection),
+        Address = rabbitmq_amqp_address:queue(QName),
+        {ok, _Receiver} = amqp10_client:attach_receiver_link(
+                            Session, <<"receiver">>, Address, unsettled),
+        %% check_resource_access/4's failure exits the whole session
+        %% (unlike error_if_absent's, which only detaches the link), so
+        %% the session ends rather than the link merely detaching.
+        receive
+            {amqp10_event,
+             {session, Session,
+              {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS}}}} -> ok
+        after 9000 -> flush(missing_ended),
+                      ct:fail("did not receive expected error")
+        end,
+        ok = close_connection_sync(Connection)
+    after
+        ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost)
+    end.
+
+%% Test that attaching a sender to a non-existing v2 queue target address
+%% is refused with the same generic error a user without write access to
+%% the default exchange would get, instead of leaking the queue's
+%% non-existence to a user unauthorized to publish there.
+attach_sender_link_to_non_existing_queue_requires_write_permission(Config) ->
+    Vhost = ?config(rmq_vhost, Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    %% Deny write access to everything. Note that permission checks
+    %% against the default exchange (whose real name is the empty
+    %% string) are matched against the literal name "amq.default"
+    %% instead (see rabbit_access_control:check_resource_access/4).
+    ok = rabbit_ct_broker_helpers:set_permissions(
+           Config, <<"guest">>, Vhost, <<".*">>, <<"^$">>, <<".*">>),
+    try
+        OpnConf = connection_config(Config),
+        {ok, Connection} = amqp10_client:open_connection(OpnConf),
+        {ok, Session} = amqp10_client:begin_session_sync(Connection),
+        Address = rabbitmq_amqp_address:queue(QName),
+        {ok, _Sender} = amqp10_client:attach_sender_link(
+                          Session, <<"sender">>, Address),
+        %% check_exchange/4's failure exits the whole session (unlike
+        %% error_if_absent's, which only detaches the link), so the
+        %% session ends rather than the link merely detaching.
+        receive
+            {amqp10_event,
+             {session, Session,
+              {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS}}}} -> ok
+        after 9000 -> flush(missing_ended),
+                      ct:fail("did not receive expected error")
+        end,
+        ok = close_connection_sync(Connection)
+    after
+        ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost)
+    end.
 
 roundtrip_with_drain_classic_queue(Config) ->
     QName  = atom_to_binary(?FUNCTION_NAME),
