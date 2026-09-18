@@ -1001,6 +1001,30 @@ credential_validator.regexp = ^abc\\d+",
     ]}],
   []},
 
+ %% DEPRECATED; just for backwards compatibility
+ {mirroring_sync_batch_size,
+  "mirroring_sync_batch_size = 4096",
+  [{rabbit, [
+      {mirroring_sync_batch_size, 4096}
+    ]}],
+  []},
+
+ %% DEPRECATED; just for backwards compatibility
+ {mirroring_sync_max_throughput,
+  "mirroring_sync_max_throughput = 1000000",
+  [{rabbit, [
+      {mirroring_sync_max_throughput, 1000000}
+    ]}],
+  []},
+
+ %% DEPRECATED; just for backwards compatibility
+ {mirroring_sync_max_throughput_unit_suffix,
+  "mirroring_sync_max_throughput = 200MB",
+  [{rabbit, [
+      {mirroring_sync_max_throughput, "200MB"}
+    ]}],
+  []},
+
   {kernel_net_ticktime,
    "net_ticktime = 20",
    [{kernel, [
