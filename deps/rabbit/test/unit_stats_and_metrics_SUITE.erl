@@ -141,6 +141,7 @@ channel_statistics1(_Config) ->
              end,
     test_ch_metrics(Check4, ?TIMEOUT),
 
+    unlink(Ch),
     rabbit_channel:shutdown(Ch),
     dummy_event_receiver:stop(),
     passed.
