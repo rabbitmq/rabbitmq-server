@@ -16,7 +16,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {pending = #{} :: #{key() => {amqqueue:amqqueue(), rabbit_types:username()}},
+-record(state, {pending = [] :: [{key(), {amqqueue:amqqueue(), rabbit_types:username()}}],
                 fence = undefined :: undefined | {pid(), reference()}}).
 
 -type key() :: {rabbit_amqqueue:name(), pid() | none}.
@@ -38,24 +38,23 @@ handle_call(Request, From, State) ->
 handle_cast({retry_delete, Q, Username},
             State0 = #state{pending = Pending0}) ->
     Key = {amqqueue:get_name(Q), amqqueue:get_exclusive_owner(Q)},
-    Pending = Pending0#{Key => {Q, Username}},
+    Pending = [{Key, {Q, Username}} | Pending0],
     {noreply, maybe_wait_for_khepri(State0#state{pending = Pending})};
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.
 
 handle_info(retry_delete, State0 = #state{pending = Pending0}) ->
-    case maps:to_list(Pending0) of
+    case Pending0 of
         [] ->
             {noreply, State0};
-        [{Key, {Q, Username}} | _] ->
+        [{Key, {Q, Username}} | Rest] ->
             case rabbit_queue_type:delete(Q, false, false, Username) of
                 {error, timeout} ->
                     {noreply, maybe_wait_for_khepri(State0)};
                 _ ->
                     ?LOG_INFO("Deleting stale MQTT QoS0 queue metadata: ~0p", [Key]),
-                    Pending = maps:remove(Key, Pending0),
                     self() ! retry_delete,
-                    {noreply, State0#state{pending = Pending}}
+                    {noreply, State0#state{pending = Rest}}
             end
     end;
 handle_info({khepri_available, Pid},
@@ -77,8 +76,7 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-maybe_wait_for_khepri(State = #state{pending = Pending, fence = undefined})
-  when map_size(Pending) > 0 ->
+maybe_wait_for_khepri(State = #state{pending = [_ | _], fence = undefined}) ->
     Parent = self(),
     {Pid, Ref} = spawn_monitor(fun() -> wait_for_khepri(Parent) end),
     State#state{fence = {Pid, Ref}};

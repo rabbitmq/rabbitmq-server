@@ -455,7 +455,7 @@ stale_qos0_queue_delete_does_not_delete_reconnected_client_queue(Config) ->
        fun() ->
                {state, Pending, _} = rpc(Config, sys, get_state,
                                          [rabbit_mqtt_qos0_queue_cleanup]),
-               ?assertEqual(0, map_size(Pending))
+               ?assertEqual([], Pending)
        end},
       100, 50),
     ?assertEqual([NewQ],
