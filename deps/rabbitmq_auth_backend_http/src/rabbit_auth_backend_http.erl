@@ -13,7 +13,7 @@
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
--export([description/0, p/1, q/1, join_tags/1]).
+-export([description/0, p/1, q/1, join_tags/1, ssl_options/0, http_options/2]).
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4,
          expiry_timestamp/1]).
@@ -239,8 +239,7 @@ do_http_req(Path0, Query) ->
             _ -> RequestTimeout
         end,
     ?LOG_DEBUG("auth_backend_http: request timeout: ~tp, connection timeout: ~tp", [RequestTimeout, ConnectionTimeout]),
-    HttpOpts = [{timeout, RequestTimeout},
-                {connect_timeout, ConnectionTimeout}] ++ ssl_options(),
+    HttpOpts = http_options(RequestTimeout, ConnectionTimeout),
     case httpc:request(Method, Request, HttpOpts, [{body_format, binary}]) of
         {ok, {{_HTTP, Code, _}, _Headers, BodyBin}} ->
             Body = unicode:characters_to_list(BodyBin),
@@ -255,21 +254,40 @@ do_http_req(Path0, Query) ->
             E
     end.
 
+%% The configured auth service URL is not expected to redirect; disabling
+%% `autoredirect` also prevents a redirect from downgrading an
+%% already-verified https:// request (carrying credentials) to plain
+%% http://.
+-spec http_options(timeout(), timeout()) -> proplists:proplist().
+http_options(RequestTimeout, ConnectionTimeout) ->
+    [{timeout, RequestTimeout},
+     {connect_timeout, ConnectionTimeout},
+     {autoredirect, false}] ++ ssl_options().
+
 ssl_options() ->
-    case application:get_env(?APP, ssl_options) of
-        {ok, SslOpts0} when is_list(SslOpts0) ->
-            SslOpts1 = rabbit_ssl_options:fix_client(SslOpts0),
-            case application:get_env(?APP, ssl_hostname_verification) of
-                {ok, wildcard} ->
-                    ?LOG_DEBUG("Enabling wildcard-aware hostname verification for HTTP client connections"),
-                    %% Needed for HTTPS connections that connect to servers that use wildcard certificates.
-                    %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
-                    SslOpts2 = [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | SslOpts1],
-                    [{ssl, SslOpts2}];
-                _ ->
-                    [{ssl, SslOpts1}]
-            end;
-        _ -> []
+    SslOpts0 = case application:get_env(?APP, ssl_options) of
+                   {ok, Opts} when is_list(Opts) -> Opts;
+                   _ -> []
+               end,
+    SslOpts1 = fix_verify(rabbit_ssl_options:fix_client(SslOpts0)),
+    case application:get_env(?APP, ssl_hostname_verification) of
+        {ok, wildcard} ->
+            ?LOG_DEBUG("Enabling wildcard-aware hostname verification for HTTP client connections"),
+            %% Needed for HTTPS connections that connect to servers that use wildcard certificates.
+            %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
+            SslOpts2 = [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | SslOpts1],
+            [{ssl, SslOpts2}];
+        _ ->
+            [{ssl, SslOpts1}]
+    end.
+
+%% rabbit_ssl_options:fix_client/1 does not set a default `verify`; without
+%% one, `ssl` defaults to `verify_none` for HTTPS auth backend requests,
+%% exposing the credentials in the request to on-path MITM.
+fix_verify(Opts) ->
+    case proplists:is_defined(verify, Opts) of
+        true -> Opts;
+        false -> [{verify, verify_peer} | Opts]
     end.
 
 p(PathName) ->

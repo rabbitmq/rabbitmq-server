@@ -21,7 +21,10 @@ groups() ->
     [
         {parallel_tests, [], [
             query,
-            join_tags
+            join_tags,
+            ssl_options_defaults_to_verify_peer,
+            ssl_options_preserves_explicit_verify,
+            http_options_disables_autoredirect
         ]}
     ].
 
@@ -44,6 +47,22 @@ query(_Config) ->
             {variable_map, #{<<"username">> => <<"guest">>,
                              <<"vhost">>    => <<"other-vhost">>}
             }])).
+
+ssl_options_defaults_to_verify_peer(_Config) ->
+    ok = application:unset_env(rabbitmq_auth_backend_http, ssl_options),
+    [{ssl, Opts}] = rabbit_auth_backend_http:ssl_options(),
+    ?assertEqual(verify_peer, proplists:get_value(verify, Opts)).
+
+ssl_options_preserves_explicit_verify(_Config) ->
+    ok = application:set_env(rabbitmq_auth_backend_http, ssl_options,
+                              [{verify, verify_none}]),
+    [{ssl, Opts}] = rabbit_auth_backend_http:ssl_options(),
+    ok = application:unset_env(rabbitmq_auth_backend_http, ssl_options),
+    ?assertEqual(verify_none, proplists:get_value(verify, Opts)).
+
+http_options_disables_autoredirect(_Config) ->
+    HttpOpts = rabbit_auth_backend_http:http_options(infinity, infinity),
+    ?assertEqual(false, proplists:get_value(autoredirect, HttpOpts)).
 
 join_tags(_Config) ->
   ?assertEqual("management administrator custom",
