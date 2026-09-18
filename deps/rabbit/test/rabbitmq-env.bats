@@ -258,7 +258,7 @@ setup() {
     run source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected output to mention RABBITMQ_BOOT_MODULE was already set, but got: $output"
-    [[ $output == *"RABBITMQ_BOOT_MODULE was already set in the environment"* ]]
+    [[ $output == *"RABBITMQ_BOOT_MODULE is already set in the environment"* ]]
 }
 
 @test "no precedence conflict means no warning" {
@@ -266,7 +266,7 @@ setup() {
     run source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected no warning, but got: $output"
-    [[ $output != *"was already set in the environment"* ]]
+    [[ $output != *"is already set in the environment"* ]]
 }
 
 @test "an embedded newline in one variable's value does not corrupt another" {
@@ -278,16 +278,21 @@ setup() {
     [ "$RABBITMQ_NODENAME" = "real" ]
 }
 
-@test "a precedence conflict on a secret redacts the value in the warning" {
-    echo 'RABBITMQ_DEFAULT_PASS=from-conf-file' > "$RABBITMQ_CONF_ENV_FILE"
-    export RABBITMQ_DEFAULT_PASS=super-secret-value
+@test "a precedence conflict never prints the value, not just for named secrets" {
+    # The warning must not print a value at all: RABBITMQ_* is an
+    # open-ended namespace, not limited to the names rabbit_env.erl
+    # itself treats as secret (e.g. RABBITMQ_CTL_ERL_ARGS can carry
+    # "-setcookie ..."), and this warning isn't gated behind debug
+    # logging. Checked here on an arbitrary, non-allowlisted variable.
+    echo 'RABBITMQ_CTL_ERL_ARGS=-proto_dist_from_conf_file' > "$RABBITMQ_CONF_ENV_FILE"
+    export RABBITMQ_CTL_ERL_ARGS=-setcookie_super_secret_value
     run source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     # A single compound assertion: bats 0.4 only checks the exit status
     # of a test's last statement, so two separate `[[ ]]` lines here
     # would let a passing second one mask a failing first one.
     echo "expected the warning to mention the variable but not the secret value, but got: $output"
-    [[ $output == *"RABBITMQ_DEFAULT_PASS was already set in the environment"* && $output != *"super-secret-value"* ]]
+    [[ $output == *"RABBITMQ_CTL_ERL_ARGS is already set in the environment"* && $output != *"super_secret_value"* ]]
 }
 
 @test "set -a auto-exporting RABBITMQ_HOME does not block a conf file override" {
@@ -317,13 +322,13 @@ setup() {
     [ "$RABBITMQ_SCRIPTS_DIR" = "$expected" ]
 }
 
-@test "a precedence conflict on the erlang cookie redacts the value in the warning" {
+@test "a precedence conflict on the erlang cookie never prints the value" {
     echo 'RABBITMQ_ERLANG_COOKIE=from-conf-file' > "$RABBITMQ_CONF_ENV_FILE"
     export RABBITMQ_ERLANG_COOKIE=super-secret-cookie
     run source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
 
     echo "expected the warning to mention the variable but not the secret value, but got: $output"
-    [[ $output == *"RABBITMQ_ERLANG_COOKIE was already set in the environment"* && $output != *"super-secret-cookie"* ]]
+    [[ $output == *"RABBITMQ_ERLANG_COOKIE is already set in the environment"* && $output != *"super-secret-cookie"* ]]
 }
 
 @test "an exported empty RABBITMQ_FEATURE_FLAGS takes precedence over conf file" {
@@ -373,4 +378,19 @@ setup() {
 
     echo "expected the restored value to be exported to a child process, but got: $output"
     [ "$output" = "set" ]
+}
+
+@test "an embedded newline cannot fake RABBITMQ_FEATURE_FLAGS into looking set" {
+    # RABBITMQ_FEATURE_FLAGS is preserved unconditionally, even when
+    # empty (see above), so it must not be fooled by env's line-based
+    # parsing into treating a genuinely-unset variable as if it had
+    # been exported empty: that would block a legitimate conf file
+    # value the same way a real conflict would.
+    unset RABBITMQ_FEATURE_FLAGS
+    export RABBITMQ_SOME_VAR="$(printf 'line one\nRABBITMQ_FEATURE_FLAGS=forged')"
+    echo 'RABBITMQ_FEATURE_FLAGS=legit_operator_value' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_FEATURE_FLAGS to be 'legit_operator_value', but got: $RABBITMQ_FEATURE_FLAGS"
+    [ "$RABBITMQ_FEATURE_FLAGS" = "legit_operator_value" ]
 }

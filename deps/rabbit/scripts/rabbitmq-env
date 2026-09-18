@@ -61,9 +61,18 @@ for _rmq_env_candidate_var in $(env | sed -n 's/^\(RABBITMQ_[A-Za-z0-9_]*\)=.*/\
             # real, meaningful directive (force zero feature flags,
             # enable no plugins), not equivalent to unset, so it must
             # still beat the conf file the same way a non-empty value
-            # would.
-            eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
-            _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
+            # would. Preserving unconditionally here (instead of the
+            # non-empty check the other branch uses) would reopen the
+            # embedded-newline problem above: `env`'s line-based
+            # parsing can invent a candidate name for a variable that
+            # was never actually exported, which dereferences to ""
+            # just like a genuinely-exported-empty one would. Check
+            # presence, not just value, to tell the two apart.
+            eval "_rmq_env_candidate_is_set=\${$_rmq_env_candidate_var+x}"
+            if [ -n "$_rmq_env_candidate_is_set" ]; then
+                eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
+                _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
+            fi
             ;;
         *)
             # An exported-but-empty variable is treated as unset
@@ -77,7 +86,7 @@ for _rmq_env_candidate_var in $(env | sed -n 's/^\(RABBITMQ_[A-Za-z0-9_]*\)=.*/\
             ;;
     esac
 done
-unset _rmq_env_candidate_var _rmq_env_candidate_value
+unset _rmq_env_candidate_var _rmq_env_candidate_value _rmq_env_candidate_is_set
 
 if [ -z "$RABBITMQ_SCRIPTS_DIR" ]; then
     # We set +e here since since our test for "readlink -f" below needs to
@@ -180,16 +189,12 @@ for _rmq_env_preserved_var in $_rmq_env_preserved_vars; do
     eval "_rmq_env_new_value=\$$_rmq_env_preserved_var"
     eval "_rmq_env_old_value=\$_rmq_env_saved_$_rmq_env_preserved_var"
     if [ -z "$_rmq_env_is_set" ] || [ "$_rmq_env_new_value" != "$_rmq_env_old_value" ]; then
-        case "$_rmq_env_preserved_var" in
-            RABBITMQ_DEFAULT_PASS|RABBITMQ_ERLANG_COOKIE)
-                _rmq_env_display_value='******'
-                ;;
-            *)
-                _rmq_env_display_value="$_rmq_env_old_value"
-                ;;
-        esac
-        _rmq_env_pwarn "\$$_rmq_env_preserved_var was already set in the environment to:" \
-            "$_rmq_env_display_value" \
+        # Never print the value here: this covers every RABBITMQ_*
+        # variable, an open-ended namespace that isn't limited to the
+        # two names rabbit_env.erl itself treats as secret (e.g.
+        # RABBITMQ_CTL_ERL_ARGS can carry "-setcookie ..."), and this
+        # warning is not gated behind debug logging.
+        _rmq_env_pwarn "\$$_rmq_env_preserved_var is already set in the environment." \
             'The value set in rabbitmq-env.conf is ignored.'
         # `export`, not a plain assignment: if the conf file did
         # `unset VAR` rather than reassigning it, VAR lost its export
@@ -201,7 +206,7 @@ for _rmq_env_preserved_var in $_rmq_env_preserved_vars; do
     unset "_rmq_env_saved_$_rmq_env_preserved_var"
 done
 unset _rmq_env_preserved_vars _rmq_env_preserved_var _rmq_env_new_value _rmq_env_old_value \
-    _rmq_env_display_value _rmq_env_is_set
+    _rmq_env_is_set
 
 # Bump ETS table limit to 50000
 if [ -z "$ERL_MAX_ETS_TABLES" ]; then
