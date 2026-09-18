@@ -25,7 +25,8 @@
         [rpc/5,
          set_full_permissions/3]).
 -import(rabbit_ct_helpers, [testcase_started/2]).
--import(util, [non_clean_sess_opts/0]).
+-import(util, [non_clean_sess_opts/0,
+               expect_publishes/3]).
 
 all() ->
     [
@@ -102,6 +103,10 @@ sub_groups() ->
        queue_consume_permission,
        queue_consume_permission_on_connect,
        subscription_queue_delete_permission,
+       session_resume_revokes_subscription_on_topic_permission_change,
+       session_resume_revokes_qos0_subscription_on_topic_permission_change,
+       session_resume_by_different_user_does_not_inherit_subscription,
+       session_resume_rejects_connect_when_any_subscription_loses_topic_access,
        will_queue_create_permission_queue_read,
        will_queue_create_permission_exchange_write,
        will_queue_publish_permission_exchange_write,
@@ -515,6 +520,22 @@ end_per_testcase(T = user_connection_limit, Config) ->
     close_all_connections(Config),
     rabbit_ct_helpers:testcase_finished(Config, T);
 
+end_per_testcase(T, Config)
+  when T == session_resume_revokes_subscription_on_topic_permission_change;
+       T == session_resume_revokes_qos0_subscription_on_topic_permission_change;
+       T == session_resume_by_different_user_does_not_inherit_subscription;
+       T == session_resume_rejects_connect_when_any_subscription_loses_topic_access ->
+    %% Best-effort: the test body already restores these on its own success
+    %% path, but if it fails before reaching that point (which is exactly
+    %% when the assertion these tests exist for would trip), a leftover
+    %% denied topic permission or extra user would otherwise cascade into
+    %% unrelated failures in the rest of this group.
+    catch set_topic_permissions(".*", ".*", Config),
+    catch rabbit_ct_broker_helpers:rabbitmqctl(
+            Config, 0, ["delete_user", <<"mqtt-user-hijacker">>]),
+    close_all_connections(Config),
+    rabbit_ct_helpers:testcase_finished(Config, T);
+
 end_per_testcase(Testcase, Config) ->
     close_all_connections(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -808,6 +829,208 @@ queue_unbind_permission(Config) ->
     {ok, C3} = emqtt:start_link([{clean_start, true} | Opts]),
     {ok, _} = emqtt:connect(C3),
     ok = emqtt:disconnect(C3).
+
+%% A session's queue is looked up by Client ID alone, with no binding to the
+%% authenticated username: resuming a persistent session must therefore
+%% re-check topic access for the resuming user (who may be a different user
+%% reusing the same Client ID, or the same user with since-revoked
+%% permissions) instead of silently handing over pre-existing subscriptions.
+session_resume_revokes_subscription_on_topic_permission_change(Config) ->
+    User = ?config(mqtt_user, Config),
+    Vhost = ?config(mqtt_vhost, Config),
+    set_full_permissions(Config, User, Vhost),
+    set_topic_permissions(".*", ".*", Config),
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    Opts = [{host, "localhost"},
+            {port, P},
+            {proto_ver, ?config(mqtt_version, Config)},
+            {clientid, User},
+            {username, User},
+            {password, ?config(mqtt_password, Config)}],
+    Topic = <<"secret/topic">>,
+    QueueNameBin = <<"mqtt-subscription-", User/binary, "qos1">>,
+    {ok, C1} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
+    {ok, _} = emqtt:connect(C1),
+    ?assertMatch({ok, _Properties, [1]},
+                 emqtt:subscribe(C1, Topic, qos1)),
+    ?assertNotEqual([], remaining_bindings(Config, QueueNameBin)),
+    ok = emqtt:disconnect(C1),
+
+    %% Revoke topic-read access, simulating either a permission change or a
+    %% different, lower-privileged user reconnecting with the same Client ID.
+    set_topic_permissions(".*", "", Config),
+
+    {ok, C2} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
+    unlink(C2),
+    process_flag(trap_exit, true),
+    %% Resuming the session must be rejected outright rather than silently
+    %% dropping the subscription: the pre-existing binding is left untouched.
+    ExpectedError = expected_topic_access_error(Config),
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C2)),
+    ?assertNotEqual([], remaining_bindings(Config, QueueNameBin)),
+
+    %% Clean up the qos1 queue.
+    set_topic_permissions(".*", ".*", Config),
+    {ok, C3} = emqtt:start_link([{clean_start, true} | Opts]),
+    {ok, _} = emqtt:connect(C3),
+    ok = emqtt:disconnect(C3).
+
+%% existing_queue_names/1 checks both the QoS 0 and the QoS 1 queue: a QoS 0
+%% subscription is bound the same way as a QoS 1 one as long as the session
+%% survives the reconnect (clean_start=false, and for MQTT 5.0 also
+%% Session-Expiry-Interval > 0), so it must be covered by the same
+%% topic-access recheck.
+session_resume_revokes_qos0_subscription_on_topic_permission_change(Config) ->
+    User = ?config(mqtt_user, Config),
+    Vhost = ?config(mqtt_vhost, Config),
+    set_full_permissions(Config, User, Vhost),
+    set_topic_permissions(".*", ".*", Config),
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    Opts = [{host, "localhost"},
+            {port, P},
+            {proto_ver, ?config(mqtt_version, Config)},
+            {clientid, User},
+            {username, User},
+            {password, ?config(mqtt_password, Config)}],
+    Topic = <<"secret/topic">>,
+    QueueNameBin = <<"mqtt-subscription-", User/binary, "qos0">>,
+    {ok, C1} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
+    {ok, _} = emqtt:connect(C1),
+    ?assertMatch({ok, _Properties, [0]},
+                 emqtt:subscribe(C1, Topic, qos0)),
+    ?assertNotEqual([], remaining_bindings(Config, QueueNameBin)),
+    ok = emqtt:disconnect(C1),
+
+    set_topic_permissions(".*", "", Config),
+
+    {ok, C2} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
+    unlink(C2),
+    process_flag(trap_exit, true),
+    ExpectedError = expected_topic_access_error(Config),
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C2)),
+    ?assertNotEqual([], remaining_bindings(Config, QueueNameBin)),
+
+    %% Clean up the qos0 queue.
+    set_topic_permissions(".*", ".*", Config),
+    {ok, C3} = emqtt:start_link([{clean_start, true} | Opts]),
+    {ok, _} = emqtt:connect(C3),
+    ok = emqtt:disconnect(C3).
+
+%% The headline scenario: a different, unrelated user reconnecting with the
+%% same Client ID as an existing persistent session must not inherit that
+%% session's topic subscriptions merely because it passes the queue-level
+%% resource permission check.
+session_resume_by_different_user_does_not_inherit_subscription(Config) ->
+    User1 = ?config(mqtt_user, Config),
+    Vhost = ?config(mqtt_vhost, Config),
+    set_full_permissions(Config, User1, Vhost),
+    set_topic_permissions(".*", ".*", Config),
+
+    User2 = <<"mqtt-user-hijacker">>,
+    Pass2 = <<"mqtt-user-hijacker-pass">>,
+    ok = rabbit_ct_broker_helpers:add_user(Config, User2, Pass2),
+    ok = rabbit_ct_broker_helpers:set_permissions(
+           Config, User2, Vhost, <<".*">>, <<".*">>, <<".*">>),
+    %% Absent any topic permission row, topic access defaults to allowed
+    %% (`rabbit_auth_backend_internal:check_topic_access/4`), so User2's
+    %% read access must be explicitly denied to simulate a lower-privileged
+    %% user, rather than merely omitting a topic permission for them.
+    ok = rpc(Config, 0, rabbit_auth_backend_internal, set_topic_permissions,
+             [User2, Vhost, <<"amq.topic">>, <<".*">>, <<"">>, <<"acting-user">>]),
+
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    Topic = <<"secret/topic">>,
+    QueueNameBin = <<"mqtt-subscription-", ClientId/binary, "qos1">>,
+
+    {ok, C1} = connect_user(User1, ?config(mqtt_password, Config), Config,
+                            ClientId, non_clean_sess_opts()),
+    {ok, _} = emqtt:connect(C1),
+    ?assertMatch({ok, _Properties, [1]},
+                 emqtt:subscribe(C1, Topic, qos1)),
+    ?assertNotEqual([], remaining_bindings(Config, QueueNameBin)),
+    ok = emqtt:disconnect(C1),
+
+    %% A different user tries to resume the session by reusing the same
+    %% Client ID: this must be rejected outright, leaving the original
+    %% subscription's binding untouched rather than destroying it.
+    {ok, C2} = connect_user(User2, Pass2, Config, ClientId, non_clean_sess_opts()),
+    unlink(C2),
+    process_flag(trap_exit, true),
+    ExpectedError = expected_topic_access_error(Config),
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C2)),
+    ?assertNotEqual([], remaining_bindings(Config, QueueNameBin)),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["delete_user", User2]),
+
+    %% The legitimate user can still resume the session normally: their
+    %% subscription was never destroyed by the rejected hijack attempt, and
+    %% is still active, not merely present as an inert binding.
+    {ok, C3} = connect_user(User1, ?config(mqtt_password, Config), Config,
+                            ClientId, non_clean_sess_opts()),
+    {ok, _} = emqtt:connect(C3),
+    {ok, _} = emqtt:publish(C3, Topic, <<"payload">>, qos1),
+    ok = expect_publishes(C3, Topic, [<<"payload">>]),
+    ok = emqtt:disconnect(C3),
+
+    %% Clean up the qos1 queue.
+    {ok, C4} = connect_user(User1, ?config(mqtt_password, Config), Config,
+                            ClientId, [{clean_start, true}]),
+    {ok, _} = emqtt:connect(C4),
+    ok = emqtt:disconnect(C4).
+
+%% Losing read access to just one of several existing subscriptions is
+%% enough to reject the whole CONNECT: the design rejects the session
+%% wholesale rather than unbinding only the now-unauthorized subscription,
+%% so the still-authorized one must survive untouched as well.
+session_resume_rejects_connect_when_any_subscription_loses_topic_access(Config) ->
+    User = ?config(mqtt_user, Config),
+    Vhost = ?config(mqtt_vhost, Config),
+    set_full_permissions(Config, User, Vhost),
+    set_topic_permissions(".*", ".*", Config),
+    Opts = [{host, "localhost"},
+            {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)},
+            {proto_ver, ?config(mqtt_version, Config)},
+            {clientid, User},
+            {username, User},
+            {password, ?config(mqtt_password, Config)}],
+    AllowedTopic = <<"public/topic">>,
+    RevokedTopic = <<"secret/topic">>,
+    QueueNameBin = <<"mqtt-subscription-", User/binary, "qos1">>,
+    {ok, C1} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
+    {ok, _} = emqtt:connect(C1),
+    ?assertMatch({ok, _Properties, [1]},
+                 emqtt:subscribe(C1, AllowedTopic, qos1)),
+    ?assertMatch({ok, _Properties, [1]},
+                 emqtt:subscribe(C1, RevokedTopic, qos1)),
+    ?assertEqual(2, length(remaining_bindings(Config, QueueNameBin))),
+    ok = emqtt:disconnect(C1),
+
+    %% Revoke read access to only one of the two subscribed topics.
+    set_topic_permissions(".*", "^public\\..*", Config),
+
+    {ok, C2} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
+    unlink(C2),
+    process_flag(trap_exit, true),
+    ExpectedError = expected_topic_access_error(Config),
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C2)),
+    ?assertEqual(2, length(remaining_bindings(Config, QueueNameBin))),
+
+    %% Clean up the qos1 queue.
+    set_topic_permissions(".*", ".*", Config),
+    {ok, C3} = emqtt:start_link([{clean_start, true} | Opts]),
+    {ok, _} = emqtt:connect(C3),
+    ok = emqtt:disconnect(C3).
+
+expected_topic_access_error(Config) ->
+    case ?config(mqtt_version, Config) of
+        v4 -> unauthorized_client;
+        v5 -> not_authorized
+    end.
+
+remaining_bindings(Config, QueueNameBin) ->
+    Vhost = ?config(mqtt_vhost, Config),
+    Src = rpc(Config, 0, rabbit_misc, r, [Vhost, exchange, <<"amq.topic">>]),
+    Dst = rpc(Config, 0, rabbit_misc, r, [Vhost, queue, QueueNameBin]),
+    rpc(Config, 0, rabbit_binding, list_for_source_and_destination, [Src, Dst, true]).
 
 queue_consume_permission(Config) ->
     ExpectedLogs =
