@@ -1919,7 +1919,7 @@ maybe_grow(Q, Node, Membership, Size) ->
 
 maybe_grow(Q, Node, Membership, Size, QNodes) ->
     QName = amqqueue:get_name(Q),
-    {ok, RaName} = qname_to_internal_name(QName),
+    {RaName, _} = amqqueue:get_pid(Q),
     case rabbit_queue_type_ra:all_members_stable(RaName, QNodes) of
         true ->
             ?LOG_INFO("~ts: adding a new member (replica) on node ~w",

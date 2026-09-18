@@ -123,7 +123,7 @@ sheet_header() ->
 sheet_body(PrevState) ->
     {_, RaStates} = rabbit_quorum_queue:all_replica_states(),
     Body = [begin
-                #resource{name = Name, virtual_host = Vhost} = amqqueue:get_name(Q),
+                #resource{name = Name} = amqqueue:get_name(Q),
                 case rabbit_amqqueue:pid_of(Q) of
                     none ->
                         empty_row(Name);
@@ -138,7 +138,6 @@ sheet_body(PrevState) ->
                                         empty_row(Name);
                                     _ ->
                                         QQCounters = maps:get({QName, node()}, ra_counters:overview()),
-                                        {ok, InternalName} = rabbit_queue_type_util:qname_to_internal_name(#resource{virtual_host = Vhost, name= Name}),
                                         #{snapshot_index := SnapIdx,
                                             last_written_index := LW,
                                             term := CT,
@@ -148,7 +147,7 @@ sheet_body(PrevState) ->
                                         [
                                          Pid,
                                          QName,
-                                         case maps:get(InternalName, RaStates, undefined) of
+                                         case maps:get(QName, RaStates, undefined) of
                                              leader -> "L";
                                              follower -> "F";
                                              promotable -> "f";  %% temporary non-voter
@@ -158,7 +157,7 @@ sheet_body(PrevState) ->
                                          format_int(proplists:get_value(memory, ProcInfo)),
                                          format_int(proplists:get_value(message_queue_len, ProcInfo)),
                                          format_int(maps:get(commands, QQCounters)),
-                                         case maps:get(InternalName, RaStates, undefined) of
+                                         case maps:get(QName, RaStates, undefined) of
                                              leader -> format_int(maps:get(snapshots_written, QQCounters));
                                              follower -> format_int(maps:get(snapshot_installed, QQCounters));
                                              _ -> "?"
