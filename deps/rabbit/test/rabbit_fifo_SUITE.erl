@@ -5440,6 +5440,140 @@ consumer_disconnected_timeout_test(Config) ->
     {_State1, _} = run_log(Config, State0, Entries),
     ok.
 
+%% a `once' lifetime consumer (e.g. an unsettled basic.get) has spent its
+%% only credit on the message it was given, so `consumer_disconnected_timeout'
+%% must return that message and remove the consumer in the same step; this
+%% must not crash even though `update_or_remove_con/4' has already dropped
+%% the consumer from the state by the time `apply_/3' looks for it again.
+once_consumer_disconnected_timeout_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    EnqIdx = 1,
+    DownIdx = 2,
+    TimeoutIdx = 3,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {once, {simple_prefetch, 1}}, #{})},
+     {EnqIdx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{credit = 0,
+                                                          checked_out = Ch}}}
+               when map_size(Ch) == 1),
+     {DownIdx, {down, C1Pid, noconnection}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {suspected_down, up}}}}),
+     {TimeoutIdx, {timeout, {consumer_disconnected_timeout, CK1}}},
+     %% the consumer's sole checked-out message is returned and, since it
+     %% had no remaining credit, the consumer is removed at the same time
+     ?ASSERT(#rabbit_fifo{consumers = Cons} when map_size(Cons) == 0)
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
+%% same as above, but the `once' consumer still has unspent credit left
+%% (it was only ever given one of the two messages it had credit for), so
+%% `update_or_remove_con/4' does *not* remove it on timeout; this exercises
+%% the other branch of the fix, where the consumer is still present and
+%% `release_deferred_claims/3' is called on it directly.
+once_consumer_disconnected_timeout_with_remaining_credit_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    EnqIdx = 1,
+    DownIdx = 2,
+    TimeoutIdx = 3,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {once, {simple_prefetch, 2}}, #{})},
+     {EnqIdx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{credit = 1,
+                                                          checked_out = Ch}}}
+               when map_size(Ch) == 1),
+     {DownIdx, {down, C1Pid, noconnection}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {suspected_down, up}}}}),
+     {TimeoutIdx, {timeout, {consumer_disconnected_timeout, CK1}}},
+     %% the checked-out message is returned, but the consumer still has
+     %% unspent credit so it is kept around rather than removed
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{credit = 1,
+                                             checked_out = Ch}}}
+               when map_size(Ch) == 0)
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
+%% same as once_consumer_disconnected_timeout_test above, but this consumer
+%% is given a second message (so it has something left to park) and holds
+%% a deferred claim on it; `release_deferred_claims/3' must hand that claim
+%% back to the shared deferred map rather than lose it when
+%% `update_or_remove_con/4' removes the consumer as part of returning its
+%% last checked-out message.
+once_consumer_disconnected_timeout_releases_claim_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    Enq1Idx = 1,
+    Enq2Idx = 2,
+    ModifyIdx = 3,
+    ClaimIdx = 4,
+    DownIdx = 5,
+    TimeoutIdx = 6,
+    {CK2, C2} = {7, {?LINE_B, test_util:fake_pid(n2)}},
+    Claim2Idx = 8,
+    Token = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {once, {simple_prefetch, 2}}, #{})},
+     {Enq1Idx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     {Enq2Idx, rabbit_fifo:make_enqueue(self(), 2, two)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{credit = 0,
+                                                          checked_out = Ch}}}
+               when map_size(Ch) == 2),
+     %% park the second checked-out message under a token and immediately
+     %% re-claim it: the consumer now holds a deferred claim while its
+     %% credit is fully spent
+     {ModifyIdx, rabbit_fifo:make_modify(CK1, [1], false, false, Anns)},
+     {ClaimIdx, rabbit_fifo:make_delayed({assign_deferred, CK1, [Token]})},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{credit = 0,
+                                             deferred_claims =
+                                               #{Token := [_]}}},
+                          claimed_consumers = #{CK1 := true}}),
+     {DownIdx, {down, C1Pid, noconnection}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {suspected_down, up}}}}),
+     {TimeoutIdx, {timeout, {consumer_disconnected_timeout, CK1}}},
+     %% the consumer's last checked-out message is returned and, since it
+     %% has no credit left, the consumer is removed; its claim must still
+     %% be reachable via the shared deferred map, not dropped with it, and
+     %% it must no longer be tracked as a claim holder
+     ?ASSERT(#rabbit_fifo{consumers = Cons,
+                          delayed = #delayed{deferred = #{Token := [_]}},
+                          claimed_consumers = Claimed}
+               when map_size(Cons) == 0 andalso map_size(Claimed) == 0),
+     %% a different consumer can now claim and actually receive the same
+     %% token, proving it is genuinely reachable rather than merely present
+     %% in the map
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{})},
+     {Claim2Idx, rabbit_fifo:make_delayed({assign_deferred, CK2, [Token]})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{checked_out = Ch2}}}
+               when map_size(Ch2) == 1)
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
 consumer_timeout_cancelled_test(Config) ->
     R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
     State0 = init(#{name => ?FUNCTION_NAME,
