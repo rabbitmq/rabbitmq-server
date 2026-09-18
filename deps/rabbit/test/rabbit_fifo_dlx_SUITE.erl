@@ -128,7 +128,7 @@ switch_strategies(_Config) ->
                      name = <<"blah">>},
     application:set_env(rabbit, dead_letter_worker_consumer_prefetch, 1),
     application:set_env(rabbit, dead_letter_worker_publisher_confirm_timeout, 1000),
-    {ok, _} = rabbit_fifo_dlx_sup:start_link(),
+    {ok, _} = rabbit_fifo_dlx_sup_sup:start_link(),
     S0 = rabbit_fifo_dlx:init(),
 
     Handler0 = undefined,
@@ -141,7 +141,8 @@ switch_strategies(_Config) ->
                   {aux, {dlx, setup}}],
                  Effects0),
     rabbit_fifo_dlx:handle_aux(leader, {dlx, setup}, fake_aux, QRes, Handler1, S1),
-    [{_, WorkerPid, worker, _}] = supervisor:which_children(rabbit_fifo_dlx_sup),
+    [{_, WorkerSupPid, supervisor, _}] = supervisor:which_children(rabbit_fifo_dlx_sup_sup),
+    [{_, WorkerPid, worker, _}] = supervisor:which_children(WorkerSupPid),
     {S2, _} = rabbit_fifo_dlx:discard([make_msg(1)], because, Handler1, S1),
     Checkout = rabbit_fifo_dlx:make_checkout(WorkerPid, 1),
     {S3, _} = rabbit_fifo_dlx:apply(meta(2), Checkout, Handler1, S2),
@@ -158,7 +159,7 @@ switch_strategies(_Config) ->
                     [1, 1, "queue 'blah' in vhost '/'"]]}],
                  Effects),
     ?assertMatch([_, {active, 0}, _, _],
-                 supervisor:count_children(rabbit_fifo_dlx_sup)),
+                 supervisor:count_children(rabbit_fifo_dlx_sup_sup)),
     ?assertMatch(#{num_discarded := 0}, rabbit_fifo_dlx:overview(S5)),
     ok.
 
