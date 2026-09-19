@@ -91,6 +91,8 @@
 -define(HIBERNATE_AFTER, 6_000).
 %% Capability defined in amqp-bindmap-jms-v1.0-wd10 [5.2] and sent by Qpid JMS client.
 -define(CAP_TEMPORARY_QUEUE, <<"temporary-queue">>).
+%% Management stats requests resolve one session at a time, so keep this short.
+-define(CONNECTION_PID_TIMEOUT, 1_000).
 -define(CAP_VOLATILE_QUEUE, <<"rabbitmq:volatile-queue">>).
 
 -export([start_link/9,
@@ -101,7 +103,9 @@
          check_read_permitted_on_topic/4,
          reset_authz/2,
          info/1,
-         is_local/1
+         connection_pid/1,
+         is_local/1,
+         outcomes/1
         ]).
 
 -export([init/1,
@@ -537,6 +541,8 @@ handle_call({has_state, QName, QType},
     reply(Reply, State);
 handle_call(infos, _From, State) ->
     reply(infos(State), State);
+handle_call(connection_pid, _From, #state{cfg = #cfg{reader_pid = ReaderPid}} = State) ->
+    reply(ReaderPid, State);
 handle_call(Msg, _From, State) ->
     Reply = {error, {not_understood, Msg}},
     reply(Reply, State).
@@ -4071,6 +4077,17 @@ info(Pid) ->
     try gen_server:call(Pid, infos) of
         Infos ->
             {ok, Infos}
+    catch _:Reason ->
+              {error, Reason}
+    end.
+
+%% Returns the pid of the connection the session belongs to.
+-spec connection_pid(pid()) ->
+    {ok, pid()} | {error, term()}.
+connection_pid(Pid) ->
+    try gen_server:call(Pid, connection_pid, ?CONNECTION_PID_TIMEOUT) of
+        ReaderPid ->
+            {ok, ReaderPid}
     catch _:Reason ->
               {error, Reason}
     end.
