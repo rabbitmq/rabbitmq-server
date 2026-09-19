@@ -242,6 +242,7 @@ all_tests() -> [
     connections_amqpl,
     connections_amqp,
     amqp_sessions,
+    amqp_consumer_channel_details,
     amqpl_sessions,
     enable_plugin_amqp,
     cluster_and_node_tags_test,
@@ -1384,6 +1385,53 @@ amqp_sessions(Config) ->
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = amqp10_client:close_connection(C).
+
+%% Test that an AMQP 1.0 consumer is reported with the details of its
+%% connection: an AMQP 1.0 session is neither a channel nor a connection.
+amqp_consumer_channel_details(Config) ->
+    QName = <<"amqp-consumer-channel-details">>,
+    QPath = "/queues/%2F/" ++ binary_to_list(QName),
+    http_put(Config, QPath, [{durable, true}], {group, '2xx'}),
+    User = <<"amqp-consumer-user">>,
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => ?config(rmq_hostname, Config),
+                port => Port,
+                container_id => <<"my container">>,
+                sasl => {plain, User, User}},
+    {ok, C} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, C, opened}} -> ok
+    after 5000 -> ct:fail(opened_timeout)
+    end,
+    {ok, Session} = amqp10_client:begin_session_sync(C),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"my receiver">>,
+                       rabbitmq_amqp_address:queue(QName)),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    [#{name := ConnectionName}] = http_get(Config, "/connections"),
+    eventually(?_assertMatch(
+                  [#{channel_details := #{name := <<>>,
+                                          number := 0,
+                                          user := User,
+                                          connection_name := ConnectionName}}],
+                  http_get(Config, "/consumers")), 1000, 10),
+    ?assertMatch(#{consumer_details := [#{channel_details := #{name := <<>>,
+                                                               connection_name := ConnectionName}}]},
+                 http_get(Config, QPath)),
+    %% Users without the monitoring tag only see consumers of their own connections.
+    ?assertMatch([#{channel_details := #{connection_name := ConnectionName}}],
+                 http_get(Config, "/consumers", User, User, ?OK)),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:close_connection(C),
+    http_delete(Config, QPath, {group, '2xx'}),
+    rabbit_ct_broker_helpers:delete_user(Config, User).
 
 %% Test that GET /connections/:name/sessions returns
 %% 400 Bad Request for non-AMQP 1.0 connections.
