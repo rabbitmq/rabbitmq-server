@@ -27,7 +27,7 @@
 %% for tests
 -export([purge_connections/0,
          fill_user_dn_pattern/1, escaped_user_dn/1, simple_bind_fill_pattern/1,
-         fill_dn_with_username/2]).
+         fill_dn_with_username/2, invalid_credentials_refused/1, with_login/4]).
 
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
@@ -599,7 +599,7 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
                                  {error, invalidCredentials} ->
                                      ?L1("bind returned \"invalid credentials\": ~ts",
                                          [scrub_dn(UserDN, env(log))]),
-                                     {refused, UserDN, []};
+                                     invalid_credentials_refused(UserDN);
                                  {error, ldap_closed} ->
                                      purge_connection(Creds, Servers, Opts),
                                      with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
@@ -920,6 +920,9 @@ dn_lookup(Username, LDAP) ->
         {error, _} = E ->
             exit(E)
     end.
+
+invalid_credentials_refused(UserDN) ->
+    {refused, "LDAP bind failed with invalid credentials for DN '~ts'", [UserDN]}.
 
 fill_user_dn_pattern(Username) ->
     fill_raw(env(user_dn_pattern), Username).
