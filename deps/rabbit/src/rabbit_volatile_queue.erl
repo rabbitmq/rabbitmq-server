@@ -366,7 +366,10 @@ policy_apply_to_name() ->
     rabbit_misc:resource_name().
 new_name() ->
     EncodedPid = encode_pid(self()),
-    EncodedKey = base64:encode(rabbit_guid:gen()),
+    %% This key is a capability: any client that obtains it can consume from
+    %% the pseudo-queue. It must be unpredictable, so use gen_secure/0 rather
+    %% than gen/0.
+    EncodedKey = base64:encode(rabbit_guid:gen_secure()),
     <<?PREFIX, EncodedPid/binary, ".", EncodedKey/binary>>.
 
 %% This pid encoding function produces values that are of mostly fixed size
