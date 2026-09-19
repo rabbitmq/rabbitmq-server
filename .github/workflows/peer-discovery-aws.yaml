@@ -31,7 +31,7 @@ jobs:
     - name: CHECKOUT REPOSITORY
       if: steps.authorized.outputs.authorized == 'true'
       uses: actions/checkout@v6
-    - uses: docker/metadata-action@v6
+    - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
       if: steps.authorized.outputs.authorized == 'true'
       id: metadata
       with:
@@ -40,7 +40,7 @@ jobs:
           suffix=-otp${{ env.OTP_VERSION }}
         tags: |
           type=sha,format=long
-    - uses: int128/wait-for-docker-image-action@v1
+    - uses: int128/wait-for-docker-image-action@73f2f1c93773e1314c4cc77236f31a1b2885adad # v1.29.0
       if: steps.authorized.outputs.authorized == 'true'
       with:
         tags: ${{ steps.metadata.outputs.tags }}
@@ -48,7 +48,7 @@ jobs:
         polling-seconds: 60
     - name: CONFIGURE OTP & ELIXIR
       if: steps.authorized.outputs.authorized == 'true'
-      uses: erlef/setup-beam@v1
+      uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
       with:
         otp-version: ${{ env.OTP_VERSION }}
         elixir-version: "1.18"
