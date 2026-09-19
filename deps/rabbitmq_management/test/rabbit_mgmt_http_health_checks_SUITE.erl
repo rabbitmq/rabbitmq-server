@@ -49,7 +49,9 @@ groups() ->
                         quorum_queues_without_elected_leader_single_node_test,
                         quorum_queues_without_elected_leader_across_all_virtual_hosts_single_node_test,
                         quorum_queues_without_elected_leader_requires_virtual_host_access_single_node_test,
-                        quorum_queues_leaderless_all_vhosts_vhost_access_single_node_test
+                        quorum_queues_leaderless_all_vhosts_vhost_access_single_node_test,
+                        quorum_queues_without_elected_leader_across_all_vhosts_requires_monitor_tag_single_node_test,
+                        node_is_quorum_critical_requires_monitor_tag_single_node_test
      ]}
     ].
 
@@ -300,7 +302,7 @@ is_quorum_critical_test(Config) ->
     User = <<"is_quorum_critical_test-user">>,
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     rabbit_ct_broker_helpers:add_user(Config, User, User),
-    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management, monitoring]),
     rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
 
     ?assertNot(queue_visible(Config, EndpointPath, User, QName)),
@@ -336,7 +338,7 @@ is_quorum_critical_vhost_named_not_applicable_test(Config) ->
     User = <<"is_quorum_critical_vhost_named_not_applicable_test-user">>,
     add_vhost(Config, VHost),
     rabbit_ct_broker_helpers:add_user(Config, User, User),
-    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management, monitoring]),
     rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
 
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -551,7 +553,7 @@ quorum_queues_leaderless_all_vhosts_vhost_access_single_node_test(Config) ->
     User = <<"quorum_queues_leaderless_all_vhosts_vhost_access-user">>,
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     rabbit_ct_broker_helpers:add_user(Config, User, User),
-    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management, monitoring]),
     rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
 
     RestrictedCheck = http_get(Config, EndpointPath, User, User, ?OK),
@@ -585,6 +587,38 @@ quorum_queues_leaderless_all_vhosts_vhost_access_single_node_test(Config) ->
                 false
             end
         end),
+
+    passed.
+
+quorum_queues_without_elected_leader_across_all_vhosts_requires_monitor_tag_single_node_test(Config) ->
+    EndpointPath = "/health/checks/quorum-queues-without-elected-leaders/all-vhosts/",
+    User = <<"health-check-user">>,
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+
+    http_get(Config, EndpointPath, User, User, ?NOT_AUTHORISED),
+
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [monitoring]),
+    Check0 = http_get(Config, EndpointPath, User, User, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+
+    passed.
+
+node_is_quorum_critical_requires_monitor_tag_single_node_test(Config) ->
+    EndpointPath = "/health/checks/node-is-quorum-critical",
+    User = <<"health-check-user">>,
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+
+    http_get(Config, EndpointPath, User, User, ?NOT_AUTHORISED),
+
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [monitoring]),
+    Check0 = http_get(Config, EndpointPath, User, User, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    rabbit_ct_broker_helpers:delete_user(Config, User),
 
     passed.
 
