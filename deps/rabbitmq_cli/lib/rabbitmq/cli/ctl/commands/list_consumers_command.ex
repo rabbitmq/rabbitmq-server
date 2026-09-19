@@ -41,13 +41,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
     info_keys = InfoKeys.prepare_info_keys(args)
 
     Helpers.with_nodes_in_cluster(node_name, fn nodes ->
-      RpcStream.receive_list_items_with_fun(
+      RpcStream.receive_list_items(
         node_name,
         [{:rabbit_amqqueue, :emit_consumers_all, [nodes, vhost]}],
         timeout,
         info_keys,
-        Kernel.length(nodes),
-        fn item -> fill_consumer_active_fields(item) end
+        Kernel.length(nodes)
       )
     end)
   end
@@ -77,31 +76,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConsumersCommand do
   end
 
   def banner(_, %{vhost: vhost}), do: "Listing consumers in vhost #{vhost} ..."
-
-  #
-  # Implementation
-  #
-
-  # add missing fields if response comes from node < 3.8
-  def fill_consumer_active_fields({[], {chunk, :continue}}) do
-    {[], {chunk, :continue}}
-  end
-
-  def fill_consumer_active_fields({items, {chunk, :continue}}) do
-    {Enum.map(items, fn item ->
-       case Keyword.has_key?(item, :active) do
-         true ->
-           item
-
-         false ->
-           Keyword.drop(item, [:arguments]) ++
-             [active: true, activity_status: :up] ++
-             [arguments: Keyword.get(item, :arguments, [])]
-       end
-     end), {chunk, :continue}}
-  end
-
-  def fill_consumer_active_fields(v) do
-    v
-  end
 end

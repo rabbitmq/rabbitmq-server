@@ -138,7 +138,7 @@ get_memory_use(ratio) ->
 %% according to http://erlang.org/doc/man/erlang.html#memory-0
 %% erlang:memory(total) under-reports memory usage by around 20%
 %%
-%% Win32 Note: 3.6.12 shipped with code that used wmic.exe to get the
+%% Win32 Note: this module used to shell out to wmic.exe to get the
 %% WorkingSetSize value for the running erl.exe process. Unfortunately
 %% even with a moderate invocation rate of 1 ops/second that uses more
 %% CPU resources than some Windows users are willing to tolerate.

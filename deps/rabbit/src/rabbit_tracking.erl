@@ -105,8 +105,7 @@ delete_tracked_entry_internal(Node, Tab, TableNameFun, Key) ->
         ok ->
             ok;
         _ ->
-            %% Node could be down, but also in a mixed version cluster this function is not
-            %% implemented on pre 3.11.x releases. Ensure that we clean up any ETS table
+            %% Node could be down. Ensure that we clean up any ETS table
             _ = ets:delete(TableNameFun(Node), Key)
     end,
     ok.

@@ -104,7 +104,6 @@
    {classic_queue_type_delivery_support,
     #{desc          => "Bug fix for classic queue deliveries using mixed versions",
       doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/5931",
-      %%TODO remove compatibility code
       stability     => required,
       require_level => hard,
       depends_on    => [stream_queue]

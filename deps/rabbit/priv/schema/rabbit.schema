@@ -1080,7 +1080,7 @@ end}.
 %%
 %% {vm_memory_high_watermark, {absolute, 1073741824}},
 %%
-%% Or you can set absolute value using memory unit symbols (with RabbitMQ 3.6.0+).
+%% Or you can set absolute value using memory unit symbols.
 %%
 %% {vm_memory_high_watermark, {absolute, "1024M"}},
 %%
@@ -1253,15 +1253,18 @@ end}.
     {datatype, {integer, non_negative}}
 ]}.
 
+%% DEPRECATED. Not used since RabbitMQ 4.0, classic queue mirroring was removed.
+%%
 %% Mirror sync batch size, in messages. Increasing this will speed
 %% up syncing but total batch size in bytes must not exceed 2 GiB.
-%% Available in RabbitMQ 3.6.0 or later.
 %%
 %% {mirroring_sync_batch_size, 4096},
 
 {mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size",
     [{datatype, bytesize}, {validators, ["mirroring_sync_batch_size"]}]}.
 
+%% DEPRECATED. Not used since RabbitMQ 4.0, classic queue mirroring was removed.
+%%
 %% Mirror sync max throughput (in bytes) per second.
 %% Supported unit symbols:
 %% k, kiB: kibibytes (2^10 - 1,024 bytes)
@@ -2092,6 +2095,8 @@ end}.
     {datatype, integer}
 ]}.
 
+%% DEPRECATED. Not used since RabbitMQ 4.0, classic queue mirroring was removed.
+%%
 %% Mirroring log.
 {mapping, "log.mirroring.level", "rabbit.log.categories.mirroring.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
