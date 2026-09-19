@@ -39,7 +39,7 @@
          next_serial_in_khepri_tx/1,
          delete_in_khepri/3,
          get_in_khepri_tx/1,
-         update_in_khepri_tx/2,
+         update_in_khepri_tx/3,
          clear_exchanges_in_khepri/0,
          clear_exchange_serials_in_khepri/0,
          put_options/1
@@ -246,20 +246,24 @@ update(XName, Fun) ->
 %% update_in_khepri_tx().
 %% -------------------------------------------------------------------
 
--spec update_in_khepri_tx(ExchangeName, UpdateFun) -> Ret when
-      ExchangeName :: rabbit_exchange:name(),
+-spec update_in_khepri_tx(VHost, ExchangeName, UpdateFun) -> Ret when
+      VHost :: vhost:name(),
+      ExchangeName :: khepri_path:pattern_component(),
       Exchange :: rabbit_types:exchange(),
       UpdateFun :: fun((Exchange) -> Exchange),
       Ret :: not_found | Exchange.
 
-update_in_khepri_tx(Name, Fun) ->
-    Path = khepri_exchange_path(Name),
+update_in_khepri_tx(VHost, Pattern, Fun) ->
+    Path = khepri_exchange_path(VHost, Pattern),
     case khepri_tx:get(Path) of
         {ok, X} ->
             X1 = Fun(X),
             ok = khepri_tx:put(Path, X1),
             X1;
-        _ -> not_found
+        {error, ?khepri_error(mismatching_node, _)} ->
+            khepri_tx:abort(mismatching_node);
+        _ ->
+            not_found
     end.
 
 %% -------------------------------------------------------------------

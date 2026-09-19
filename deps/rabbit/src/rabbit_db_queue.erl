@@ -61,7 +61,7 @@
 
 %% Used by other rabbit_db_* modules
 -export([
-         update_in_khepri_tx/2,
+         update_in_khepri_tx/3,
          get_in_khepri_tx/1
         ]).
 
@@ -964,19 +964,22 @@ set_dirty(_Q) ->
 %% update_in_khepri_tx().
 %% -------------------------------------------------------------------
 
--spec update_in_khepri_tx(QName, UpdateFun) -> Ret when
-      QName :: rabbit_amqqueue:name(),
+-spec update_in_khepri_tx(VHost, QName, UpdateFun) -> Ret when
+      VHost :: vhost:name(),
+      QName :: khepri_path:pattern_component(),
       Queue :: amqqueue:amqqueue(),
       UpdateFun :: fun((Queue) -> Queue),
       Ret :: Queue | not_found.
 
-update_in_khepri_tx(Name, Fun) ->
-    Path = khepri_queue_path(Name),
+update_in_khepri_tx(VHost, Pattern, Fun) ->
+    Path = khepri_queue_path(VHost, Pattern),
     case khepri_tx:get(Path) of
         {ok, Q} ->
             Q1 = Fun(Q),
             ok = khepri_tx:put(Path, Q1),
             Q1;
+        {error, ?khepri_error(mismatching_node, _)} ->
+            khepri_tx:abort(mismatching_node);
         _  ->
             not_found
     end.
