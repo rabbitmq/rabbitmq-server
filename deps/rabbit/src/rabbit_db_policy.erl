@@ -7,6 +7,8 @@
 
 -module(rabbit_db_policy).
 
+-include_lib("khepri/include/khepri.hrl").
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
@@ -31,25 +33,33 @@ update(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
     Queues0 = rabbit_db_queue:get_all(VHost),
     Exchanges = [GetUpdatedExchangeFun(X) || X <- Exchanges0],
     Queues = [GetUpdatedQueueFun(Q) || Q <- Queues0],
-    rabbit_khepri:transaction(
-      fun() ->
-              {[update_exchange_policies(Map, fun rabbit_db_exchange:update_in_khepri_tx/2)
-                || Map <- Exchanges, is_map(Map)],
-               [update_queue_policies(Map, fun rabbit_db_queue:update_in_khepri_tx/2)
-                || Map <- Queues, is_map(Map)]}
-      end, rw).
+    try
+        rabbit_khepri:transaction(
+          fun() ->
+                  {[update_exchange_policies(Map, fun rabbit_db_exchange:update_in_khepri_tx/3)
+                    || Map <- Exchanges, is_map(Map)],
+                   [update_queue_policies(Map, fun rabbit_db_queue:update_in_khepri_tx/3)
+                    || Map <- Queues, is_map(Map)]}
+          end, rw)
+    catch
+        throw:{error, mismatching_node} ->
+            update(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun)
+    end.
 
 update_exchange_policies(#{exchange := X = #exchange{name = XName},
                            update_function := UpdateFun}, StoreFun) ->
-    NewExchange = StoreFun(XName, UpdateFun),
+    #resource{virtual_host = VHost, name = Name} = XName,
+    Pattern = #if_all{conditions = [Name, #if_data_matches{pattern = X}]},
+    NewExchange = StoreFun(VHost, Pattern, UpdateFun),
     case NewExchange of
         #exchange{} = X1 -> {X, X1};
         not_found        -> {X, X }
     end.
 
 update_queue_policies(#{queue := Q0, update_function := UpdateFun}, StoreFun) ->
-    QName = amqqueue:get_name(Q0),
-    NewQueue = StoreFun(QName, UpdateFun),
+    #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q0),
+    Pattern = #if_all{conditions = [Name, #if_data_matches{pattern = Q0}]},
+    NewQueue = StoreFun(VHost, Pattern, UpdateFun),
     case NewQueue of
         Q1 when ?is_amqqueue(Q1) ->
             {Q0, Q1};
