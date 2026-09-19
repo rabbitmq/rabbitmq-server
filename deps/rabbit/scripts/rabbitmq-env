@@ -10,6 +10,84 @@ if [ "$RABBITMQ_ENV_LOADED" = 1 ]; then
     return 0;
 fi
 
+# $RABBITMQ_CONF_ENV_FILE is sourced into this same shell further
+# below, so a plain assignment in it would otherwise silently
+# overwrite any RABBITMQ_* variable already set in the environment,
+# reversing the documented precedence (environment, then
+# rabbitmq-env.conf, then built-in defaults). Save every RABBITMQ_*
+# variable already set so it can be restored afterwards if the conf
+# file tries to change it.
+#
+# This must run before this script computes and exports anything
+# itself (RABBITMQ_SCRIPTS_DIR, RABBITMQ_HOME, RABBITMQ_CONF_ENV_FILE
+# via rabbitmq-defaults, ...), so that only a genuine operator
+# override is ever recorded here -- callers that source this script
+# with `set -a` (e.g. rabbitmqctl) would otherwise auto-export those
+# internal values and make this mistake them for one. This only sees
+# variables already exported to this process; a variable set by an
+# init script without exporting it is out of scope here, which is why
+# $RABBITMQ_PID_FILE below still has its own, separate save.
+_rmq_env_preserved_vars=""
+for _rmq_env_candidate_var in $(env | sed -n 's/^\(RABBITMQ_[A-Za-z0-9_]*\)=.*/\1/p'); do
+    case " $_rmq_env_preserved_vars " in
+        *" $_rmq_env_candidate_var "*)
+            # Already recorded. `env`'s output is parsed one line per
+            # variable, so a variable whose value contains an
+            # embedded newline can make a later line look like a
+            # second "RABBITMQ_X=" assignment for a var already seen;
+            # recording it twice would make the restore loop below
+            # find its own backup already consumed and unset on the
+            # second pass, and wipe the real value.
+            continue
+            ;;
+    esac
+    case "$_rmq_env_candidate_var" in
+        RABBITMQ_HOME)
+            # Unconditionally recomputed a few lines below regardless
+            # of any prior value (unlike RABBITMQ_SCRIPTS_DIR, which
+            # is only computed if unset and so is already safe to
+            # preserve here). If a genuinely pre-exported value were
+            # recorded, the recomputed value would look like a conf
+            # file conflict and get reverted to the stale value, even
+            # with no conf file involved at all.
+            continue
+            ;;
+    esac
+    eval "_rmq_env_candidate_value=\$$_rmq_env_candidate_var"
+    case "$_rmq_env_candidate_var" in
+        RABBITMQ_FEATURE_FLAGS|RABBITMQ_ENABLED_PLUGINS)
+            # rabbit_env.erl reads these two with
+            # keep_empty_string_as_is: an exported empty value is a
+            # real, meaningful directive (force zero feature flags,
+            # enable no plugins), not equivalent to unset, so it must
+            # still beat the conf file the same way a non-empty value
+            # would. Preserving unconditionally here (instead of the
+            # non-empty check the other branch uses) would reopen the
+            # embedded-newline problem above: `env`'s line-based
+            # parsing can invent a candidate name for a variable that
+            # was never actually exported, which dereferences to ""
+            # just like a genuinely-exported-empty one would. Check
+            # presence, not just value, to tell the two apart.
+            eval "_rmq_env_candidate_is_set=\${$_rmq_env_candidate_var+x}"
+            if [ -n "$_rmq_env_candidate_is_set" ]; then
+                eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
+                _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
+            fi
+            ;;
+        *)
+            # An exported-but-empty variable is treated as unset
+            # everywhere else (see get_env_var/2 in rabbit_env.erl),
+            # so it must not beat a real value set in the conf file
+            # either.
+            if [ -n "$_rmq_env_candidate_value" ]; then
+                eval "_rmq_env_saved_$_rmq_env_candidate_var=\$_rmq_env_candidate_value"
+                _rmq_env_preserved_vars="$_rmq_env_preserved_vars $_rmq_env_candidate_var"
+            fi
+            ;;
+    esac
+done
+unset _rmq_env_candidate_var _rmq_env_candidate_value _rmq_env_candidate_is_set
+
 if [ -z "$RABBITMQ_SCRIPTS_DIR" ]; then
     # We set +e here since since our test for "readlink -f" below needs to
     # be able to fail.
@@ -89,16 +167,46 @@ ESCRIPT_DIR="${RABBITMQ_HOME}/escript"
 . ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-defaults
 
 # We save the current value of $RABBITMQ_PID_FILE in case it was set by
-# an init script. If $CONF_ENV_FILE overrides it again, we must ignore
-# it and warn the user.
+# an init script. If $RABBITMQ_CONF_ENV_FILE overrides it again, we must
+# ignore it and warn the user.
 saved_RABBITMQ_PID_FILE="$RABBITMQ_PID_FILE"
 
 ## Get configuration variables from the configure environment file
-[ "x" = "x$RABBITMQ_CONF_ENV_FILE" ] && RABBITMQ_CONF_ENV_FILE="$CONF_ENV_FILE"
 if [ -f "$RABBITMQ_CONF_ENV_FILE" ]; then
     CONF_ENV_FILE_PHASE=rabbitmq-env
     . "$RABBITMQ_CONF_ENV_FILE" || true
 fi
+
+# Restore whatever was preserved at the top of this script, warning
+# for any RABBITMQ_* variable the conf file just tried to change.
+for _rmq_env_preserved_var in $_rmq_env_preserved_vars; do
+    # A plain value comparison alone cannot tell "conf file left this
+    # alone" apart from "conf file did `unset VAR`" when the preserved
+    # value happens to be empty (RABBITMQ_FEATURE_FLAGS/
+    # RABBITMQ_ENABLED_PLUGINS, see above): both look like "" == "".
+    # Check whether the variable is still set at all first.
+    eval "_rmq_env_is_set=\${$_rmq_env_preserved_var+x}"
+    eval "_rmq_env_new_value=\$$_rmq_env_preserved_var"
+    eval "_rmq_env_old_value=\$_rmq_env_saved_$_rmq_env_preserved_var"
+    if [ -z "$_rmq_env_is_set" ] || [ "$_rmq_env_new_value" != "$_rmq_env_old_value" ]; then
+        # Never print the value here: this covers every RABBITMQ_*
+        # variable, an open-ended namespace that isn't limited to the
+        # two names rabbit_env.erl itself treats as secret (e.g.
+        # RABBITMQ_CTL_ERL_ARGS can carry "-setcookie ..."), and this
+        # warning is not gated behind debug logging.
+        _rmq_env_pwarn "\$$_rmq_env_preserved_var is already set in the environment." \
+            'The value set in rabbitmq-env.conf is ignored.'
+        # `export`, not a plain assignment: if the conf file did
+        # `unset VAR` rather than reassigning it, VAR lost its export
+        # attribute along with its value, and a plain assignment here
+        # would restore the value into a shell-local variable that
+        # never reaches the `erl` process this script eventually execs.
+        eval "export $_rmq_env_preserved_var=\$_rmq_env_old_value"
+    fi
+    unset "_rmq_env_saved_$_rmq_env_preserved_var"
+done
+unset _rmq_env_preserved_vars _rmq_env_preserved_var _rmq_env_new_value _rmq_env_old_value \
+    _rmq_env_is_set
 
 # Bump ETS table limit to 50000
 if [ -z "$ERL_MAX_ETS_TABLES" ]; then
@@ -115,40 +223,29 @@ fi
 [ -n "$ERL_EPMD_ADDRESS" ] && export ERL_EPMD_ADDRESS
 
 DEFAULT_SCHEDULER_BIND_TYPE="db"
-[ -n "$SCHEDULER_BIND_TYPE" ] || SCHEDULER_BIND_TYPE="$DEFAULT_SCHEDULER_BIND_TYPE"
-[ -n "$RABBITMQ_SCHEDULER_BIND_TYPE" ] || RABBITMQ_SCHEDULER_BIND_TYPE="$SCHEDULER_BIND_TYPE"
+[ -n "$RABBITMQ_SCHEDULER_BIND_TYPE" ] || RABBITMQ_SCHEDULER_BIND_TYPE="$DEFAULT_SCHEDULER_BIND_TYPE"
 
 DEFAULT_DISTRIBUTION_BUFFER_SIZE=128000
-[ -n "$DISTRIBUTION_BUFFER_SIZE" ] || DISTRIBUTION_BUFFER_SIZE="$DEFAULT_DISTRIBUTION_BUFFER_SIZE"
-[ -n "$RABBITMQ_DISTRIBUTION_BUFFER_SIZE" ] || RABBITMQ_DISTRIBUTION_BUFFER_SIZE="$DISTRIBUTION_BUFFER_SIZE"
+[ -n "$RABBITMQ_DISTRIBUTION_BUFFER_SIZE" ] || RABBITMQ_DISTRIBUTION_BUFFER_SIZE="$DEFAULT_DISTRIBUTION_BUFFER_SIZE"
 
 DEFAULT_MAX_NUMBER_OF_PROCESSES=1048576
-[ -n "$MAX_NUMBER_OF_PROCESSES" ] || MAX_NUMBER_OF_PROCESSES="$DEFAULT_MAX_NUMBER_OF_PROCESSES"
-[ -n "$RABBITMQ_MAX_NUMBER_OF_PROCESSES" ] || RABBITMQ_MAX_NUMBER_OF_PROCESSES="$MAX_NUMBER_OF_PROCESSES"
+[ -n "$RABBITMQ_MAX_NUMBER_OF_PROCESSES" ] || RABBITMQ_MAX_NUMBER_OF_PROCESSES="$DEFAULT_MAX_NUMBER_OF_PROCESSES"
 
 DEFAULT_MAX_NUMBER_OF_ATOMS=5000000
-[ -n "$MAX_NUMBER_OF_ATOMS" ] || MAX_NUMBER_OF_ATOMS="$DEFAULT_MAX_NUMBER_OF_ATOMS"
-[ -n "$RABBITMQ_MAX_NUMBER_OF_ATOMS" ] || RABBITMQ_MAX_NUMBER_OF_ATOMS="$MAX_NUMBER_OF_ATOMS"
+[ -n "$RABBITMQ_MAX_NUMBER_OF_ATOMS" ] || RABBITMQ_MAX_NUMBER_OF_ATOMS="$DEFAULT_MAX_NUMBER_OF_ATOMS"
 
 DEFAULT_SCHEDULER_BUSY_WAIT_THRESHOLD=none
-[ -n "$SCHEDULER_BUSY_WAIT_THRESHOLD" ] || SCHEDULER_BUSY_WAIT_THRESHOLD="$DEFAULT_SCHEDULER_BUSY_WAIT_THRESHOLD"
-[ -n "$RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD" ] || RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD="$SCHEDULER_BUSY_WAIT_THRESHOLD"
+[ -n "$RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD" ] || RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD="$DEFAULT_SCHEDULER_BUSY_WAIT_THRESHOLD"
 
 ## Common server defaults
 SERVER_ERL_ARGS="+pc unicode +P $RABBITMQ_MAX_NUMBER_OF_PROCESSES +t $RABBITMQ_MAX_NUMBER_OF_ATOMS +stbt $RABBITMQ_SCHEDULER_BIND_TYPE +zdbbl $RABBITMQ_DISTRIBUTION_BUFFER_SIZE +sbwt $RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD +sbwtdcpu $RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD +sbwtdio $RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD"
 
 ##--- Set environment vars RABBITMQ_<var_name> to defaults if not set
 
-[ "x" = "x$RABBITMQ_CTL_ERL_ARGS" ] && RABBITMQ_CTL_ERL_ARGS="$CTL_ERL_ARGS"
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN="$CTL_DIST_PORT_MIN"
-[ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX="$CTL_DIST_PORT_MAX"
 [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MIN" ] && RABBITMQ_CTL_DIST_PORT_MIN='35672'
 [ "x" = "x$RABBITMQ_CTL_DIST_PORT_MAX" ] && RABBITMQ_CTL_DIST_PORT_MAX="$(($RABBITMQ_CTL_DIST_PORT_MIN + 10))"
 
 [ "x" = "x$RABBITMQ_SERVER_ERL_ARGS" ] && RABBITMQ_SERVER_ERL_ARGS=${SERVER_ERL_ARGS}
-[ "x" = "x$RABBITMQ_SERVER_START_ARGS" ] && RABBITMQ_SERVER_START_ARGS=${SERVER_START_ARGS}
-[ "x" = "x$RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS" ] && RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=${SERVER_ADDITIONAL_ERL_ARGS}
-[ "x" = "x$RABBITMQ_SERVER_CODE_PATH" ] && RABBITMQ_SERVER_CODE_PATH=${SERVER_CODE_PATH}
 [ "x" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT="true"
 [ "xtrue" = "x$RABBITMQ_IGNORE_SIGINT" ] && RABBITMQ_IGNORE_SIGINT_FLAG="+B i"
 
@@ -162,7 +259,7 @@ then
     RABBITMQ_PID_FILE="$saved_RABBITMQ_PID_FILE"
 fi
 
-[ "x" = "x$RABBITMQ_BOOT_MODULE" ] && RABBITMQ_BOOT_MODULE=${BOOT_MODULE}
+[ -n "$RABBITMQ_BOOT_MODULE" ] || RABBITMQ_BOOT_MODULE="rabbit"
 
 ##--- End of overridden <var_name> variables
 

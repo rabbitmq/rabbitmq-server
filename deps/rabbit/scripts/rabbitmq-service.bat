@@ -31,30 +31,19 @@ if "!RABBITMQ_USE_LONGNAME!"=="true" (
     set RABBITMQ_NAME_TYPE=-name
     set NAMETYPE=longnames
 ) else (
-    if "!USE_LONGNAME!"=="true" (
-        set RABBITMQ_USE_LONGNAME=true
-        set RABBITMQ_NAME_TYPE=-name
-        set NAMETYPE=longnames
-    ) else (
-        set RABBITMQ_USE_LONGNAME=false
-        set RABBITMQ_NAME_TYPE=-sname
-        set NAMETYPE=shortnames
-    )
+    set RABBITMQ_USE_LONGNAME=false
+    set RABBITMQ_NAME_TYPE=-sname
+    set NAMETYPE=shortnames
 )
 
-REM [ "x" = "x$RABBITMQ_NODENAME" ] && RABBITMQ_NODENAME=${NODENAME}
 if "!RABBITMQ_NODENAME!"=="" (
-    if "!NODENAME!"=="" (
-        REM We use Erlang to query the local hostname because
-        REM !COMPUTERNAME! and Erlang may return different results.
-        REM Start erl with -sname to make sure epmd is started.
-        call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -sname rabbit-prelaunch-epmd -eval "init:stop()." >nul 2>&1
-        for /f "delims=" %%F in ('call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -eval "net_kernel:start([list_to_atom(""rabbit-gethostname-"" ++ os:getpid()), %NAMETYPE%]), [_, H] = string:tokens(atom_to_list(node()), ""@""), io:format(""~s~n"", [H]), init:stop()."') do @set HOSTNAME=%%F
-        set RABBITMQ_NODENAME=rabbit@!HOSTNAME!
-        set HOSTNAME=
-    ) else (
-        set RABBITMQ_NODENAME=!NODENAME!
-    )
+    REM We use Erlang to query the local hostname because
+    REM !COMPUTERNAME! and Erlang may return different results.
+    REM Start erl with -sname to make sure epmd is started.
+    call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -sname rabbit-prelaunch-epmd -eval "init:stop()." >nul 2>&1
+    for /f "delims=" %%F in ('call "%ERLANG_HOME%\bin\erl.exe" -A0 -noinput -boot start_clean -eval "net_kernel:start([list_to_atom(""rabbit-gethostname-"" ++ os:getpid()), %NAMETYPE%]), [_, H] = string:tokens(atom_to_list(node()), ""@""), io:format(""~s~n"", [H]), init:stop()."') do @set HOSTNAME=%%F
+    set RABBITMQ_NODENAME=rabbit@!HOSTNAME!
+    set HOSTNAME=
 )
 set NAMETYPE=
 
@@ -64,23 +53,11 @@ REM We do this only for the Windows service because in this case, the node has
 REM to start with the distribution enabled on the command line. For all other
 REM cases, distribution is configured at runtime.
 if "!RABBITMQ_NODE_PORT!"=="" (
-    if not "!NODE_PORT!"=="" (
-        set RABBITMQ_NODE_PORT=!NODE_PORT!
-    ) else (
-        set RABBITMQ_NODE_PORT=5672
-    )
+    set RABBITMQ_NODE_PORT=5672
 )
 
 if "!RABBITMQ_DIST_PORT!"=="" (
-    if "!DIST_PORT!"=="" (
-        if "!RABBITMQ_NODE_PORT!"=="" (
-            set RABBITMQ_DIST_PORT=25672
-        ) else (
-            set /a RABBITMQ_DIST_PORT=20000+!RABBITMQ_NODE_PORT!
-        )
-    ) else (
-        set RABBITMQ_DIST_PORT=!DIST_PORT!
-    )
+    set /a RABBITMQ_DIST_PORT=20000+!RABBITMQ_NODE_PORT!
 )
 
 set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
