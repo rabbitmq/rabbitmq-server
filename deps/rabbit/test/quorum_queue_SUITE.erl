@@ -77,6 +77,7 @@ groups() ->
                                             cleanup_data_dir,
                                             channel_handles_ra_event,
                                             declare_during_node_down,
+                                            projection_timeout_cleanup,
                                             simple_confirm_availability_on_leader_change,
                                             publishing_to_unavailable_queue,
                                             confirm_availability_on_leader_change,
@@ -408,6 +409,8 @@ init_per_testcase(Testcase, Config) ->
         leader_locator_client_local when IsMixed ->
             {skip, "leader_locator_client_local isn't mixed versions compatible because "
              "delete_declare isn't mixed versions reliable"};
+        projection_timeout_cleanup when IsMixed ->
+            {skip, "projection_timeout_cleanup requires a same-version Khepri cluster"};
         leader_locator_balanced_random_maintenance when IsMixed ->
             {skip, "leader_locator_balanced_random_maintenance isn't mixed versions compatible because "
              "delete_declare isn't mixed versions reliable"};
@@ -3569,6 +3572,62 @@ declare_during_node_down(Config) ->
             wait_for_messages_ready(Servers, RaName, 0),
             ok
     end.
+
+projection_timeout_cleanup(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    SeedQueues = [?config(alt_queue_name, Config),
+                  ?config(alt_2_queue_name, Config)],
+    ClientLocalArgs = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                       {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}],
+    BalancedArgs = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                    {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}],
+
+    %% Seed leaders on the declaring node, so the balanced locator selects a
+    %% remote leader for QQ in this three-node cluster.
+    [?assertEqual({'queue.declare_ok', Queue, 0, 0},
+                  declare(Ch, Queue, ClientLocalArgs))
+     || Queue <- SeedQueues],
+
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ok = rabbit_ct_broker_helpers:rpc(Config, Server, meck, new,
+                                      [rabbit_queue_type_util, [passthrough, no_link]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, Server, meck, expect,
+           [rabbit_queue_type_util, wait_for_projection,
+            fun(Leader, QName0) when QName0 =:= QName, Leader =/= Server ->
+                    exit({timeout, wait_for_remote_projection, Leader, QName0});
+               (Leader, QName0) ->
+                    meck:passthrough([Leader, QName0])
+            end]),
+
+    try
+        Result = rabbit_ct_broker_helpers:rpc(
+                   Config, Server, rabbit_amqqueue, declare,
+                   [QName, true, false, BalancedArgs, none, <<"test-user">>]),
+        ?assertMatch(
+           {protocol_error, internal_error, _,
+            [_, _, _, {timeout, wait_for_remote_projection, _, QName}]}, Result),
+        %% The timeout happened before ra:start_cluster/3. The queue definition
+        %% must be removed so a later declaration can create a real Ra cluster.
+        ?assertEqual({error, not_found},
+                     rabbit_ct_broker_helpers:rpc(Config, Server,
+                                                  rabbit_amqqueue, lookup, [QName]))
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, Server, meck, unload,
+                                          [rabbit_queue_type_util])
+    end,
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, BalancedArgs)),
+    publish(Ch, QQ),
+    wait_for_messages_ready(Servers, ra_name(QQ), 1),
+    ?assertEqual(1, basic_get_tag(Ch, QQ, false)),
+
+    [?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Queue}))
+     || Queue <- [QQ | SeedQueues]],
+    ok.
 
 simple_confirm_availability_on_leader_change(Config) ->
     [Node1, Node2, _Node3] = Servers =
