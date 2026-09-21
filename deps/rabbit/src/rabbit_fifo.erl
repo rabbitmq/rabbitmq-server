@@ -661,8 +661,17 @@ apply_(Meta, {timeout, {consumer_disconnected_timeout, CKey}},
             %% otherwise a token stays stuck on this entry until a genuine
             %% down arrives, which may never happen if the client
             %% reconnects as a new consumer instead
-            #{CKey := Con1} = State1#?STATE.consumers,
-            State2 = release_deferred_claims(CKey, Con1, State1),
+            %%
+            %% `return_all/6' can already have removed the consumer here: a
+            %% `once' lifetime consumer with no credit left and nothing else
+            %% checked out is dropped by `update_or_remove_con/4', which
+            %% already releases its deferred claims
+            State2 = case State1#?STATE.consumers of
+                        #{CKey := Con1} ->
+                            release_deferred_claims(CKey, Con1, State1);
+                        _ ->
+                            State1
+                    end,
 
             checkout(Meta, State0, State2, Effects0);
         _ ->
