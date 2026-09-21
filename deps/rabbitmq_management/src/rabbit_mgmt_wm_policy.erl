@@ -46,7 +46,7 @@ to_json(ReqData, Context) ->
 accept_content(ReqData0, Context = #context{user = #user{username = Username}}) ->
     case rabbit_mgmt_util:vhost(ReqData0) of
         not_found ->
-            rabbit_mgmt_util:not_found(vhost_not_found, ReqData0, Context);
+            rabbit_mgmt_util:not_found(<<"Not Found">>, ReqData0, Context);
         VHost ->
             rabbit_mgmt_util:with_decode(
               [pattern, definition], ReqData0, Context,
