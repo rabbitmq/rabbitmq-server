@@ -815,7 +815,10 @@ join_or_evict_ghost_and_retry(StoreId, PeerNode, RetryTimeout) ->
 
             %% Retry the join now that the cluster views us as a clean slate
             ?LOG_DEBUG("Ghost evicted. Retrying join..."),
-            khepri_cluster:join(StoreId, PeerNode)
+            try khepri_cluster:join(StoreId, PeerNode)
+            catch Class:Reason ->
+                {error, {Class, Reason}}
+            end
     end.
 
 get_ra_system() ->
