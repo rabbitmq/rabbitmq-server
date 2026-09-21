@@ -176,6 +176,7 @@ all_tests() -> [
     bindings_e2e_test,
     permissions_administrator_test,
     permissions_vhost_test,
+    permissions_vhost_existence_disclosure_test,
     permissions_amqp_test,
     permissions_queue_delete_test,
     permissions_connection_channel_consumer_test,
@@ -393,6 +394,11 @@ end_per_testcase0(permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser2">>),
+    Config;
+end_per_testcase0(permissions_vhost_existence_disclosure_test, Config) ->
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"nfd_vhost">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"nfd_user">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"nfd_policy_user">>),
     Config;
 end_per_testcase0(config_environment_test, Config) ->
     rpc(Config, application, unset_env, [rabbit, config_environment_test_env]),
@@ -1959,6 +1965,70 @@ permissions_vhost_test(Config) ->
     http_delete(Config, "/vhosts/myvhost2", {group, '2xx'}),
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     http_delete(Config, "/users/myadmin", {group, '2xx'}),
+    passed.
+
+%% A vhost that exists but that the caller has no permission on must be
+%% indistinguishable from a vhost that does not exist at all: both must
+%% produce the exact same 404 body.
+permissions_vhost_existence_disclosure_test(Config) ->
+    QArgs = #{durable => true},
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/users/nfd_user", [{password, <<"nfd_user">>},
+                                         {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/vhosts/nfd_vhost", none, {group, '2xx'}),
+    http_put(Config, "/permissions/nfd_vhost/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/queues/nfd_vhost/nfd_queue", QArgs, {group, '2xx'}),
+
+    GetBody = fun(Path) ->
+                      Body = http_get_no_decode(Config, Path, "nfd_user", "nfd_user",
+                                                 ?NOT_FOUND),
+                      rabbit_json:decode(Body)
+              end,
+    %% ExistingVhostNoPerm is rejected by is_authorized (is_authorized_vhost),
+    %% before resource_exists ever runs; NonExistentVhost passes is_authorized
+    %% (vhost existence is not checked there) and gets its 404 from
+    %% resource_exists returning false, filled in by rabbit_cowboy_stream_h.
+    ExistingVhostNoPerm = GetBody("/queues/nfd_vhost/nfd_queue"),
+    NonExistentVhost    = GetBody("/queues/does-not-exist-nfd-vhost/nfd_queue"),
+    ?assertEqual(<<"not_found">>, maps:get(<<"error">>, ExistingVhostNoPerm)),
+    ?assertEqual(ExistingVhostNoPerm, NonExistentVhost),
+
+    ReqBody = fun(User, Method, Path, Body) ->
+                      {ok, {{_, 404, _}, _, RespBody}} =
+                          req(Config, 0, Method, Path,
+                              [auth_header(User, User),
+                               {"content-type", "application/json"}],
+                              rabbit_json:encode(Body)),
+                      rabbit_json:decode(RespBody)
+              end,
+    NotFound = #{<<"error">> => <<"not_found">>, <<"reason">> => <<"Not Found">>},
+    %% is_authorized_vhost gated: PUT declares a queue. resource_exists still
+    %% runs and returns false, but that does not block PUT from creating a new
+    %% resource, so with_vhost_and_props/3 is reached instead.
+    ?assertEqual(NotFound, ReqBody("nfd_user", put, "/queues/nfd_vhost/some-other-queue", QArgs)),
+    ?assertEqual(NotFound,
+                 ReqBody("nfd_user", put, "/queues/does-not-exist-nfd-vhost/some-other-queue",
+                         QArgs)),
+    %% is_authorized_vhost gated: set_resp_not_found/2 fills in a custom (non-empty) body.
+    ?assertEqual(NotFound, ReqBody("nfd_user", post, "/queues/nfd_vhost/nfd_queue/get", #{})),
+    ?assertEqual(NotFound,
+                 ReqBody("nfd_user", post, "/queues/does-not-exist-nfd-vhost/nfd_queue/get", #{})),
+
+    %% is_authorized_policies is a different auth conjunction (is_admin orelse
+    %% (is_policymaker andalso ...)): a policymaker-only user must be denied the
+    %% same way as above, via with_vhost_and_props/3 (through accept_content/2).
+    http_put(Config, "/users/nfd_policy_user", [{password, <<"nfd_policy_user">>},
+                                                {tags, <<"policymaker">>}], {group, '2xx'}),
+    Policy = #{pattern => <<".*">>, definition => #{'max-length' => 1}},
+    ?assertEqual(NotFound,
+                 ReqBody("nfd_policy_user", put, "/policies/nfd_vhost/nfd_policy", Policy)),
+    ?assertEqual(NotFound,
+                 ReqBody("nfd_policy_user", put,
+                         "/policies/does-not-exist-nfd-vhost/nfd_policy", Policy)),
+
+    http_delete(Config, "/vhosts/nfd_vhost", {group, '2xx'}),
+    http_delete(Config, "/users/nfd_user", {group, '2xx'}),
+    http_delete(Config, "/users/nfd_policy_user", {group, '2xx'}),
     passed.
 
 permissions_amqp_test(Config) ->
