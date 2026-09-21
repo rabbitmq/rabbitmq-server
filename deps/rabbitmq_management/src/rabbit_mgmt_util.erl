@@ -980,8 +980,7 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
 with_vhost_and_props(Fun, ReqData, Context) ->
     case vhost(ReqData) of
         not_found ->
-            not_found(rabbit_data_coercion:to_binary("vhost_not_found"),
-                      ReqData, Context);
+            not_found(<<"Not Found">>, ReqData, Context);
         VHost ->
             case read_complete_body(ReqData) of
                 {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
@@ -1362,7 +1361,7 @@ sublist(List, S, L) when is_integer(L), L >= 0 ->
 set_resp_not_found(NotFoundBin, ReqData) ->
     ErrorMessage = case rabbit_mgmt_util:vhost(ReqData) of
         not_found ->
-            <<"vhost_not_found">>;
+            <<"Not Found">>;
         _ ->
             NotFoundBin
     end,
