@@ -1940,9 +1940,6 @@ permissions_vhost_test(Config) ->
     http_delete(Config, "/users/myadmin", {group, '2xx'}),
     passed.
 
-%% A vhost that exists but that the caller has no permission on must be
-%% indistinguishable from a vhost that does not exist at all: both must
-%% produce the exact same 404 body.
 permissions_vhost_existence_disclosure_test(Config) ->
     QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
@@ -1957,10 +1954,8 @@ permissions_vhost_existence_disclosure_test(Config) ->
                                                  ?NOT_FOUND),
                       rabbit_json:decode(Body)
               end,
-    %% ExistingVhostNoPerm is rejected by is_authorized (is_authorized_vhost),
-    %% before resource_exists ever runs; NonExistentVhost passes is_authorized
-    %% (vhost existence is not checked there) and gets its 404 from
-    %% resource_exists returning false, filled in by rabbit_cowboy_stream_h.
+    %% ExistingVhostNoPerm is rejected by `is_authorized/2`
+    %% before `resource_exists/2` runs.
     ExistingVhostNoPerm = GetBody("/queues/nfd_vhost/nfd_queue"),
     NonExistentVhost    = GetBody("/queues/does-not-exist-nfd-vhost/nfd_queue"),
     ?assertEqual(<<"not_found">>, maps:get(<<"error">>, ExistingVhostNoPerm)),
@@ -1975,21 +1970,16 @@ permissions_vhost_existence_disclosure_test(Config) ->
                       rabbit_json:decode(RespBody)
               end,
     NotFound = #{<<"error">> => <<"not_found">>, <<"reason">> => <<"Not Found">>},
-    %% is_authorized_vhost gated: PUT declares a queue. resource_exists still
-    %% runs and returns false, but that does not block PUT from creating a new
-    %% resource, so with_vhost_and_props/3 is reached instead.
+
     ?assertEqual(NotFound, ReqBody("nfd_user", put, "/queues/nfd_vhost/some-other-queue", QArgs)),
     ?assertEqual(NotFound,
                  ReqBody("nfd_user", put, "/queues/does-not-exist-nfd-vhost/some-other-queue",
                          QArgs)),
-    %% is_authorized_vhost gated: set_resp_not_found/2 fills in a custom (non-empty) body.
+
     ?assertEqual(NotFound, ReqBody("nfd_user", post, "/queues/nfd_vhost/nfd_queue/get", #{})),
     ?assertEqual(NotFound,
                  ReqBody("nfd_user", post, "/queues/does-not-exist-nfd-vhost/nfd_queue/get", #{})),
 
-    %% is_authorized_policies is a different auth conjunction (is_admin orelse
-    %% (is_policymaker andalso ...)): a policymaker-only user must be denied the
-    %% same way as above, via with_vhost_and_props/3 (through accept_content/2).
     http_put(Config, "/users/nfd_policy_user", [{password, <<"nfd_policy_user">>},
                                                 {tags, <<"policymaker">>}], {group, '2xx'}),
     Policy = #{pattern => <<".*">>, definition => #{'max-length' => 1}},
