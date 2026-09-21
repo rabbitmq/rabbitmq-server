@@ -645,10 +645,10 @@ apply_(Meta, {timeout, {consumer_disconnected_timeout, CKey}},
             %% down arrives, which may never happen if the client
             %% reconnects as a new consumer instead
             %%
-            %% return_all/6 may itself have already removed the consumer
-            %% (e.g. a `once' lifetime consumer with no credit left and no
-            %% other checked-out messages), in which case its deferred
-            %% claims were already released as part of that removal
+            %% `return_all/6' can already have removed the consumer here: a
+            %% `once' lifetime consumer with no credit left and nothing else
+            %% checked out is dropped by `update_or_remove_con/4', which
+            %% already releases its deferred claims
             State2 = case State1#?STATE.consumers of
                         #{CKey := Con1} ->
                             release_deferred_claims(CKey, Con1, State1);
