@@ -19,6 +19,8 @@
 
 -compile(export_all).
 
+-define(TEST_MAX_SUPER_STREAM_PARTITIONS, 10).
+
 all() ->
     [{group, non_parallel_tests}].
 
@@ -61,8 +63,15 @@ init_per_suite(Config) ->
                                                     [{collect_statistics_interval,
                                                       500}]})
                 end,
+            RmqStreamSetupStep =
+                fun(StepConfig) ->
+                   rabbit_ct_helpers:merge_app_env(StepConfig,
+                                                   {rabbitmq_stream,
+                                                    [{max_super_stream_partitions,
+                                                      ?TEST_MAX_SUPER_STREAM_PARTITIONS}]})
+                end,
             rabbit_ct_helpers:run_setup_steps(Config2,
-                                              [SetupStep]
+                                              [SetupStep, RmqStreamSetupStep]
                                               ++ rabbit_ct_broker_helpers:setup_steps()
                                               ++ rabbit_ct_client_helpers:setup_steps())
     end.
@@ -180,15 +189,13 @@ create_super_stream_partition_limits(Config) ->
     http_put(Config, "/stream/super-streams/%2F/neg-parts",
              #{partitions => -5}, ?BAD_REQUEST),
     http_put(Config, "/stream/super-streams/%2F/over-parts",
-             #{partitions => 1001}, ?BAD_REQUEST),
+             #{partitions => ?TEST_MAX_SUPER_STREAM_PARTITIONS + 1},
+             ?BAD_REQUEST),
     http_put(Config, "/stream/super-streams/%2F/huge-parts",
-             #{partitions => 500000000}, ?BAD_REQUEST),
-    %% the default limit is 1000, but declaring 1000 parts
-    %% flaked in CI. Validating we can declare 500 by default
-    %% seems like a good enough check. There are other
-    %% tests that validate that limits are enforced
+             #{partitions => ?TEST_MAX_SUPER_STREAM_PARTITIONS * 2},
+             ?BAD_REQUEST),
     http_put(Config, "/stream/super-streams/%2F/many-parts",
-             #{partitions => 500}, {group, '2xx'}),
+             #{partitions => ?TEST_MAX_SUPER_STREAM_PARTITIONS}, {group, '2xx'}),
     ok.
 
 create_super_stream_binding_keys_limit(Config) ->
