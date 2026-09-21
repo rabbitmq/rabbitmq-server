@@ -986,6 +986,14 @@ credential_validator.regexp = ^abc\\d+",
  {proxy_protocol_off,
   "proxy_protocol = false",
   [{rabbit,[{proxy_protocol,false}]}],[]},
+ {proxy_protocol_trusted_proxies,
+  "proxy_protocol.trusted_proxies.1 = 10.0.0.0/8
+proxy_protocol.trusted_proxies.2 = 127.0.0.1
+proxy_protocol.trusted_proxies.3 = ::1",
+  [{rabbit,
+       [{proxy_protocol_trusted_proxies,
+            ["10.0.0.0/8","127.0.0.1","::1"]}]}],
+  []},
 
  {default_worker_pool_size,
   "default_worker_pool_size = 512",

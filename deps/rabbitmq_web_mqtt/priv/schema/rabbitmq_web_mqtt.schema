@@ -172,7 +172,9 @@ end}.
     [{datatype, {integer, non_negative}}]
 }.
 
-%% Whether or not to enable proxy protocol support.
+%% Whether or not to enable proxy protocol support. This also requires
+%% the core proxy_protocol.trusted_proxies setting (see rabbit.schema) to
+%% be configured, or PROXY-fronted connections will be rejected.
 %%
 %% {proxy_protocol, false}
 

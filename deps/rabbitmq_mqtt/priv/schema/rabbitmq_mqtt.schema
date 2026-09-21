@@ -107,7 +107,9 @@ end}.
 {mapping, "mqtt.retained_message_store.max_size_bytes", "rabbitmq_mqtt.retained_message_store_max_size_bytes",
     [{datatype, [{atom, infinity}, integer]}, {validators, ["non_negative_integer"]}]}.
 
-%% Whether or not to enable proxy protocol support.
+%% Whether or not to enable proxy protocol support. This also requires
+%% the core proxy_protocol.trusted_proxies setting (see rabbit.schema) to
+%% be configured, or PROXY-fronted connections will be rejected.
 %%
 %% {proxy_protocol, false}
 
