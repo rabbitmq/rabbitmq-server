@@ -790,8 +790,6 @@ ssl_conf(false) ->
 ssl_options() ->
     ssl_options(env(ssl_options)).
 
-ssl_options(undefined) ->
-    ssl_options([{verify, verify_peer}]);
 ssl_options(Opts0) ->
     Opts1 = rabbit_ssl_options:fix_client(Opts0),
     case env(ssl_hostname_verification, undefined) of
