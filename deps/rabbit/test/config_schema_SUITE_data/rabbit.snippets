@@ -747,6 +747,27 @@ tcp_listen_options.exit_on_close = false",
              {versions,['tlsv1.2','tlsv1.1']}]}]}],
   []},
 
+ {ssl_options_supported_groups,
+  "listeners.ssl.1 = 5671
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
+   ssl_options.versions.1 = tlsv1.3
+   ssl_options.supported_groups.1 = x25519mlkem768
+   ssl_options.supported_groups.2 = x25519
+   ssl_options.supported_groups.3 = secp256r1",
+  [{ssl,[{versions,['tlsv1.3']}]}],
+  [{ssl,[{versions,['tlsv1.3']}]},
+   {rabbit,
+       [{ssl_listeners,[5671]},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
+             {supported_groups, [x25519mlkem768, x25519, secp256r1]},
+             {versions,['tlsv1.3']}]}]}],
+  []},
+
  {ssl_options_allow_poodle,
   "listeners.ssl.1 = 5671
    ssl_allow_poodle_attack = true
