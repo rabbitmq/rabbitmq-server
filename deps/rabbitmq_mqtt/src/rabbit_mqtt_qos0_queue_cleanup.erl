@@ -51,7 +51,7 @@ handle_info(retry_delete, State0 = #state{pending = Pending0}) ->
         [Q | Rest] ->
             case rabbit_queue_type:delete(Q, false, false, ?INTERNAL_USER) of
                 {ok, _} ->
-                    ?LOG_INFO("Deleted stale MQTT QoS0 queue metadata: ~0p",
+                    ?LOG_INFO("Retried deletion of stale MQTT QoS0 queue metadata: ~0p",
                               [{amqqueue:get_name(Q), amqqueue:get_exclusive_owner(Q)}]),
                     self() ! retry_delete,
                     {noreply, State0#state{pending = Rest}};
