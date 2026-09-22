@@ -486,8 +486,10 @@ stale_qos0_queue_deleted_after_metadata_store_timeout(Config) ->
        end},
       500, 20),
     ?assertEqual([Q], rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue])),
-    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-    ok = rabbit_ct_broker_helpers:start_node(Config, 2),
+    ok = rabbit_ct_broker_helpers:async_start_node(Config, 1),
+    ok = rabbit_ct_broker_helpers:async_start_node(Config, 2),
+    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(1),
+    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(2),
     [util:enable_plugin(Config, Plugin) || Plugin <- ?config(test_plugins, Config)],
     rabbit_ct_helpers:eventually(
       {?LINE,
