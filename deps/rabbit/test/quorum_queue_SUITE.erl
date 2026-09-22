@@ -413,7 +413,8 @@ init_per_testcase(Testcase, Config) ->
             {skip, "leader_locator_client_local isn't mixed versions compatible because "
              "delete_declare isn't mixed versions reliable"};
         projection_timeout_cleanup when IsMixed ->
-            {skip, "projection_timeout_cleanup requires a same-version Khepri cluster"};
+            {skip, "projection_timeout_cleanup isn't mixed versions compatible because "
+             "it relies on the balanced locator picking a remote leader"};
         leader_locator_balanced_random_maintenance when IsMixed ->
             {skip, "leader_locator_balanced_random_maintenance isn't mixed versions compatible because "
              "delete_declare isn't mixed versions reliable"};
@@ -3605,16 +3606,19 @@ projection_timeout_cleanup(Config) ->
     QName = rabbit_misc:r(<<"/">>, queue, QQ),
     ok = rabbit_ct_broker_helpers:rpc(Config, Server, meck, new,
                                       [rabbit_queue_type_util, [passthrough, no_link]]),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, Server, meck, expect,
-           [rabbit_queue_type_util, wait_for_projection,
-            fun(Leader, QName0) when QName0 =:= QName, Leader =/= Server ->
-                    exit({timeout, wait_for_remote_projection, Leader, QName0});
-               (Leader, QName0) ->
-                    meck:passthrough([Leader, QName0])
-            end]),
-
     try
+        %% Exhausting the retries raises the real exit, so that a change to it
+        %% cannot leave the clause that catches it unreachable.
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, Server, meck, expect,
+               [rabbit_queue_type_util, wait_for_projection,
+                fun(Leader, QName0) when QName0 =:= QName, Leader =/= Server ->
+                        rabbit_queue_type_util:wait_for_remote_projection(
+                          Leader, QName0, 0);
+                   (Leader, QName0) ->
+                        meck:passthrough([Leader, QName0])
+                end]),
+
         Result = rabbit_ct_broker_helpers:rpc(
                    Config, Server, rabbit_amqqueue, declare,
                    [QName, true, false, BalancedArgs, none, <<"test-user">>]),
@@ -3623,16 +3627,19 @@ projection_timeout_cleanup(Config) ->
             [_, _, _, {timeout, wait_for_remote_projection, _, QName}]}, Result),
         %% The timeout happened before ra:start_cluster/3. The queue definition
         %% must be removed so a later declaration can create a real Ra cluster.
-        ?assertEqual({error, not_found},
-                     rabbit_ct_broker_helpers:rpc(Config, Server,
-                                                  rabbit_amqqueue, lookup, [QName]))
+        ?awaitMatch({error, not_found},
+                    rabbit_ct_broker_helpers:rpc(Config, Server,
+                                                 rabbit_amqqueue, lookup, [QName]),
+                    30_000)
     after
         ok = rabbit_ct_broker_helpers:rpc(Config, Server, meck, unload,
                                           [rabbit_queue_type_util])
     end,
 
     ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, BalancedArgs)),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     publish(Ch, QQ),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
     wait_for_messages_ready(Servers, ra_name(QQ), 1),
     ?assertEqual(1, basic_get_tag(Ch, QQ, false)),
 
