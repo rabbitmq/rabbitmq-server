@@ -125,6 +125,17 @@ describe('fmt_escape_html0', () => {
       '&lt;a href=&quot;x&quot;&gt;&amp;&quot;&lt;/a&gt;'
     );
   });
+
+  it("escapes ' so the result is safe inside a single-quoted attribute", () => {
+    assert.equal(
+      sandbox.fmt_escape_html0("' onmouseover='alert(1)"),
+      '&#39; onmouseover=&#39;alert(1)'
+    );
+  });
+
+  it('escapes the ampersand it introduces only once', () => {
+    assert.equal(sandbox.fmt_escape_html0("'"), '&#39;');
+  });
 });
 
 describe('fmt_rate_num', () => {
