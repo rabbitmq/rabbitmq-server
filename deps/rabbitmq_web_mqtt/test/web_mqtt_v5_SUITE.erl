@@ -58,6 +58,7 @@ session_expiry_reconnect_zero(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 session_expiry_reconnect_infinity_to_zero(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 zero_session_expiry_disconnect_autodeletes_qos0_queue(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 stale_qos0_queue_delete_does_not_delete_reconnected_client_queue(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+stale_qos0_queue_deleted_after_metadata_store_timeout(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 client_publish_qos2(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 client_rejects_publish(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 client_receive_maximum_min(Config) -> v5_SUITE:?FUNCTION_NAME(Config).

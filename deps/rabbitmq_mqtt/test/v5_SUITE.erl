@@ -136,7 +136,8 @@ cluster_size_1_tests() ->
 cluster_size_3_tests() ->
     [session_migrate_v3_v5,
      session_takeover_v3_v5,
-     will_delay_node_restart
+     will_delay_node_restart,
+     stale_qos0_queue_deleted_after_metadata_store_timeout
     ].
 
 suite() ->
@@ -203,7 +204,8 @@ init_per_testcase(T, Config)
 
 init_per_testcase(T, Config)
     when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue;
-         T =:= stale_qos0_queue_delete_does_not_delete_reconnected_client_queue ->
+         T =:= stale_qos0_queue_delete_does_not_delete_reconnected_client_queue;
+         T =:= stale_qos0_queue_deleted_after_metadata_store_timeout ->
   rpc(Config, rabbit_registry, register, [queue, <<"qos0">>, rabbit_mqtt_qos0_queue]),
   init_per_testcase0(T, Config);
 
@@ -223,7 +225,8 @@ end_per_testcase(T, Config)
     end_per_testcase0(T, Config);
 end_per_testcase(T, Config)
     when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue;
-         T =:= stale_qos0_queue_delete_does_not_delete_reconnected_client_queue ->
+         T =:= stale_qos0_queue_delete_does_not_delete_reconnected_client_queue;
+         T =:= stale_qos0_queue_deleted_after_metadata_store_timeout ->
   ok = rpc(Config, rabbit_registry, unregister, [queue, <<"qos0">>]),
   end_per_testcase0(T, Config);
 
@@ -448,19 +451,51 @@ stale_qos0_queue_delete_does_not_delete_reconnected_client_queue(Config) ->
     ?assertNotEqual(amqqueue:get_pid(OldQ), amqqueue:get_pid(NewQ)),
 
     %% A retry carries the old exclusive owner and must not match the new queue.
-    ok = rpc(Config, rabbit_mqtt_qos0_queue_cleanup, retry_delete,
-             [OldQ]),
+    Server = rabbit_mqtt_qos0_queue_cleanup,
+    ok = rpc(Config, sys, log, [Server, true]),
+    ok = rpc(Config, Server, retry_delete, [OldQ]),
     rabbit_ct_helpers:eventually(
       {?LINE,
        fun() ->
-               {state, Pending, _} = rpc(Config, sys, get_state,
-                                         [rabbit_mqtt_qos0_queue_cleanup]),
-               ?assertEqual([], Pending)
+               {ok, Events} = rpc(Config, sys, log, [Server, get]),
+               ?assert(lists:member({in, retry_delete}, Events)),
+               ?assertMatch({state, [], _}, rpc(Config, sys, get_state, [Server]))
        end},
       100, 50),
+    ok = rpc(Config, sys, log, [Server, false]),
     ?assertEqual([NewQ],
                  rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue])),
     ok = emqtt:disconnect(C2).
+
+stale_qos0_queue_deleted_after_metadata_store_timeout(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C = connect(ClientId, Config),
+    {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
+    [Q] = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    {ok, Timeout} = rpc(Config, application, get_env, [khepri, default_timeout]),
+    ok = rpc(Config, application, set_env, [khepri, default_timeout, 1000]),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 2),
+    ok = emqtt:disconnect(C),
+    %% Node 0 is in a minority, so the delete on disconnect times out and is queued.
+    rabbit_ct_helpers:eventually(
+      {?LINE,
+       fun() ->
+               ?assertMatch({state, [Q], Pid} when is_pid(Pid),
+                            rpc(Config, sys, get_state, [rabbit_mqtt_qos0_queue_cleanup]))
+       end},
+      500, 20),
+    ?assertEqual([Q], rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue])),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 2),
+    [util:enable_plugin(Config, Plugin) || Plugin <- ?config(test_plugins, Config)],
+    rabbit_ct_helpers:eventually(
+      {?LINE,
+       fun() ->
+               ?assertEqual([], rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]))
+       end},
+      1000, 60),
+    ok = rpc(Config, application, set_env, [khepri, default_timeout, Timeout]).
 
 session_expiry_disconnect_decrease(QueueType, Config) ->
     ClientId = ?FUNCTION_NAME,
