@@ -453,16 +453,19 @@ stale_qos0_queue_delete_does_not_delete_reconnected_client_queue(Config) ->
     %% A retry carries the old exclusive owner and must not match the new queue.
     Server = rabbit_mqtt_qos0_queue_cleanup,
     ok = rpc(Config, sys, log, [Server, true]),
-    ok = rpc(Config, Server, retry_delete, [OldQ]),
-    rabbit_ct_helpers:eventually(
-      {?LINE,
-       fun() ->
-               {ok, Events} = rpc(Config, sys, log, [Server, get]),
-               ?assert(lists:member({in, retry_delete}, Events)),
-               ?assertMatch({state, [], _}, rpc(Config, sys, get_state, [Server]))
-       end},
-      100, 50),
-    ok = rpc(Config, sys, log, [Server, false]),
+    try
+        ok = rpc(Config, Server, retry_delete, [OldQ]),
+        rabbit_ct_helpers:eventually(
+          {?LINE,
+           fun() ->
+                   {ok, Events} = rpc(Config, sys, log, [Server, get]),
+                   ?assert(lists:member({in, retry_delete}, Events)),
+                   ?assertMatch({state, [], _}, rpc(Config, sys, get_state, [Server]))
+           end},
+          100, 50)
+    after
+        ok = rpc(Config, sys, log, [Server, false])
+    end,
     ?assertEqual([NewQ],
                  rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue])),
     ok = emqtt:disconnect(C2).
@@ -474,30 +477,33 @@ stale_qos0_queue_deleted_after_metadata_store_timeout(Config) ->
     [Q] = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
     {ok, Timeout} = rpc(Config, application, get_env, [khepri, default_timeout]),
     ok = rpc(Config, application, set_env, [khepri, default_timeout, 1000]),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, 2),
-    ok = emqtt:disconnect(C),
-    %% Node 0 is in a minority, so the delete on disconnect times out and is queued.
-    rabbit_ct_helpers:eventually(
-      {?LINE,
-       fun() ->
-               ?assertMatch({state, [Q], Pid} when is_pid(Pid),
-                            rpc(Config, sys, get_state, [rabbit_mqtt_qos0_queue_cleanup]))
-       end},
-      500, 20),
-    ?assertEqual([Q], rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue])),
-    ok = rabbit_ct_broker_helpers:async_start_node(Config, 1),
-    ok = rabbit_ct_broker_helpers:async_start_node(Config, 2),
-    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(1),
-    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(2),
-    [util:enable_plugin(Config, Plugin) || Plugin <- ?config(test_plugins, Config)],
-    rabbit_ct_helpers:eventually(
-      {?LINE,
-       fun() ->
-               ?assertEqual([], rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]))
-       end},
-      1000, 60),
-    ok = rpc(Config, application, set_env, [khepri, default_timeout, Timeout]).
+    try
+        ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
+        ok = rabbit_ct_broker_helpers:stop_node(Config, 2),
+        ok = emqtt:disconnect(C),
+        %% Node 0 is in a minority, so the delete on disconnect times out and is queued.
+        rabbit_ct_helpers:eventually(
+          {?LINE,
+           fun() ->
+                   ?assertMatch({state, [Q], Pid} when is_pid(Pid),
+                                rpc(Config, sys, get_state, [rabbit_mqtt_qos0_queue_cleanup]))
+           end},
+          500, 20),
+        ?assertEqual([Q], rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue])),
+        ok = rabbit_ct_broker_helpers:async_start_node(Config, 1),
+        ok = rabbit_ct_broker_helpers:async_start_node(Config, 2),
+        ok = rabbit_ct_broker_helpers:wait_for_async_start_node(1),
+        ok = rabbit_ct_broker_helpers:wait_for_async_start_node(2),
+        [util:enable_plugin(Config, Plugin) || Plugin <- ?config(test_plugins, Config)],
+        rabbit_ct_helpers:eventually(
+          {?LINE,
+           fun() ->
+                   ?assertEqual([], rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]))
+           end},
+          1000, 60)
+    after
+        ok = rpc(Config, application, set_env, [khepri, default_timeout, Timeout])
+    end.
 
 session_expiry_disconnect_decrease(QueueType, Config) ->
     ClientId = ?FUNCTION_NAME,
