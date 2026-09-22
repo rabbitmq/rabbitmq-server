@@ -4646,6 +4646,74 @@ consumer_disconnected_timeout_test(Config) ->
     {_State1, _} = run_log(Config, State0, Entries),
     ok.
 
+%% a `once' lifetime consumer, such as an unsettled `basic.get', spends its
+%% only credit on the message it is given, so `consumer_disconnected_timeout'
+%% returns that message and removes the consumer in the same step
+%%
+%% `update_or_remove_con/4' drops the consumer while `return_all/6' is still
+%% running, so nothing after it may assume the consumer is still present
+once_consumer_disconnected_timeout_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    EnqIdx = 1,
+    DownIdx = 2,
+    TimeoutIdx = 3,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {once, {simple_prefetch, 1}}, #{})},
+     {EnqIdx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{credit = 0,
+                                                          checked_out = Ch}}}
+               when map_size(Ch) == 1),
+     {DownIdx, {down, C1Pid, noconnection}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {suspected_down, up}}}}),
+     {TimeoutIdx, {timeout, {consumer_disconnected_timeout, CK1}}},
+     %% the consumer's sole checked-out message is returned, and with no
+     %% credit left, it is removed at the same time
+     ?ASSERT(#rabbit_fifo{consumers = Cons} when map_size(Cons) == 0)
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
+%% same as above, but this `once' consumer still has one message's worth of
+%% unspent credit, so `update_or_remove_con/4' keeps it instead of removing
+%% it on timeout
+once_consumer_disconnected_timeout_with_remaining_credit_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    EnqIdx = 1,
+    DownIdx = 2,
+    TimeoutIdx = 3,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {once, {simple_prefetch, 2}}, #{})},
+     {EnqIdx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{credit = 1,
+                                                          checked_out = Ch}}}
+               when map_size(Ch) == 1),
+     {DownIdx, {down, C1Pid, noconnection}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {suspected_down, up}}}}),
+     {TimeoutIdx, {timeout, {consumer_disconnected_timeout, CK1}}},
+     %% the checked-out message is returned, but the consumer still has
+     %% unspent credit so it is kept around rather than removed
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{credit = 1,
+                                             checked_out = Ch}}}
+               when map_size(Ch) == 0)
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
 consumer_timeout_cancelled_test(Config) ->
     R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
     State0 = init(#{name => ?FUNCTION_NAME,
