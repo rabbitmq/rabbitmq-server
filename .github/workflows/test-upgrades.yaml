@@ -28,8 +28,8 @@ jobs:
       - name: Setup Erlant/OTP
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
-          otp-version: '27' # Erlang/OTP version repeated later in this file.
-          elixir-version: '1.18'
+          otp-version: '29' # Erlang/OTP version repeated later in this file.
+          elixir-version: '1.20'
           hexpm-mirrors: |
             https://builds.hex.pm
             https://cdn.jsdelivr.net/hex
@@ -61,8 +61,8 @@ jobs:
       - name: Setup Erlant/OTP
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with: # Versions repeated later in this file.
-          otp-version: '27'
-          elixir-version: '1.19'
+          otp-version: '29'
+          elixir-version: '1.20'
           hexpm-mirrors: |
             https://builds.hex.pm
             https://cdn.jsdelivr.net/hex
@@ -122,8 +122,8 @@ jobs:
       - name: Setup Erlant/OTP
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
-          otp-version: '27'
-          elixir-version: '1.19'
+          otp-version: '29'
+          elixir-version: '1.20'
           hexpm-mirrors: |
             https://builds.hex.pm
             https://cdn.jsdelivr.net/hex

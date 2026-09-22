@@ -1,4 +1,4 @@
-ARG OTP_VERSION="27"
+ARG OTP_VERSION="29"
 
 FROM erlang:${OTP_VERSION}-slim AS base
 
