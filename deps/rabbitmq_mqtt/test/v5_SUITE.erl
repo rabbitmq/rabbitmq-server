@@ -228,7 +228,8 @@ end_per_testcase(T, Config)
 end_per_testcase(T, Config)
     when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue;
          T =:= stale_qos0_queue_delete_does_not_delete_reconnected_client_queue;
-         T =:= stale_qos0_queue_deleted_after_metadata_store_timeout ->
+         T =:= stale_qos0_queue_deleted_after_metadata_store_timeout;
+         T =:= stale_qos0_queue_deleted_after_plugin_restart ->
   ok = rpc(Config, rabbit_registry, unregister, [queue, <<"qos0">>]),
   end_per_testcase0(T, Config);
 
