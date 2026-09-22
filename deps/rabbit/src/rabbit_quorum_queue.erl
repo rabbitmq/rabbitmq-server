@@ -385,11 +385,15 @@ start_cluster(Q) ->
             RaConfs = [make_ra_conf(NewQ, ServerId, voter, MinVersion)
                        || ServerId <- members(NewQ)],
 
-            %% khepri projections on remote nodes are eventually consistent
-            rabbit_queue_type_util:wait_for_projection(LeaderNode, QName),
-            try erpc_call(LeaderNode, ra, start_cluster,
+            try
+                %% Khepri projections on remote nodes are eventually consistent.
+                %% This call is inside the try so that a timeout is cleaned up
+                %% like a failed Ra cluster start.
+                rabbit_queue_type_util:wait_for_projection(LeaderNode, QName),
+                erpc_call(LeaderNode, ra, start_cluster,
                           [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
-                          ?START_CLUSTER_RPC_TIMEOUT) of
+                          ?START_CLUSTER_RPC_TIMEOUT)
+            of
                 {ok, _, _} ->
                     %% ensure the latest config is evaluated properly
                     %% even when running the machine version from 0
@@ -414,6 +418,8 @@ start_cluster(Q) ->
                 {error, Error} ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             catch
+                exit:{timeout, wait_for_remote_projection, _, _} = Error ->
+                    declare_queue_error(Error, NewQ, LeaderNode, ActingUser);
                 error:Error ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             end;

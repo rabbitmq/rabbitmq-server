@@ -20,6 +20,10 @@
          coarse_message_counts/1,
          wait_for_projection/2]).
 
+-ifdef(TEST).
+-export([wait_for_remote_projection/3]).
+-endif.
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
