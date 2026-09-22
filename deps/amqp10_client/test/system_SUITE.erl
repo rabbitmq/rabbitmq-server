@@ -60,12 +60,9 @@ groups() ->
                  disposition_large_range_settles_outgoing,
                  link_credit_max,
                  drain_with_nothing_available,
-<<<<<<< HEAD
                  frame_size_too_small_rejected,
-                 max_frame_size_exceeded_rejected
-=======
+                 max_frame_size_exceeded_rejected,
                  connect_timeout
->>>>>>> ee53713 (AMQP 1.0 client: add a configurable socket connect timeout)
                 ]}
     ].
 
