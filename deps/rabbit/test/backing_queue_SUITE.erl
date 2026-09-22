@@ -9,6 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("amqqueue.hrl").
 
 -compile(nowarn_export_all).
@@ -770,21 +771,19 @@ msg_store_compaction_v2_index_update_survives_fanout_rewrite2() ->
         Result
     end),
     ok = rabbit_msg_store_gc:compact(GCPid, 0),
-    %% Let the compaction cast (and the delete cast it triggers once
-    %% file 0's valid_total_size reaches 0 from the injected remove
-    %% above) run to completion before we unload the mock.
-    timer:sleep(500),
+    %% File 0 has nothing left referencing it (the stale copy compaction
+    %% moved there is orphaned, unindexed) and must be cleanly deleted by
+    %% the automatic delete the injected remove triggered -- proving the
+    %% GC process never crashed scanning it. That delete only runs once
+    %% the compaction cast (and the fan-out remove/write injected into
+    %% it above) has fully completed, so polling for it also proves
+    %% those are done, without a fixed sleep racing CI scheduling.
+    false = ?awaitMatch(false, filelib:is_file(Path0), 5000),
     ok = meck:unload(file),
 
     %% The index must point at the fresh copy in file 1, not at whatever
     %% offset compaction planned for the stale copy in file 0.
     {{ok, NewBody}, MSCState1} = rabbit_msg_store:read(MsgIdFanout, MSCState),
-
-    %% File 0 has nothing left referencing it (the stale copy compaction
-    %% moved there is orphaned, unindexed) and must be cleanly deleted by
-    %% the automatic delete the injected remove triggered -- proving the
-    %% GC process never crashed scanning it.
-    false = filelib:is_file(Path0),
 
     ok = rabbit_msg_store:client_terminate(MSCState1),
     ok = on_disk_stop(Cap),
