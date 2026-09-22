@@ -374,8 +374,8 @@ start_cluster(Q) ->
 
             try
                 %% Khepri projections on remote nodes are eventually consistent.
-                %% A timeout must go through the same cleanup as a failed
-                %% Ra cluster start, otherwise the queue metadata remains.
+                %% This call is inside the try so that a timeout is cleaned up
+                %% like a failed Ra cluster start.
                 rabbit_queue_type_util:wait_for_projection(LeaderNode, QName),
                 erpc_call(LeaderNode, ra, start_cluster,
                           [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
@@ -405,7 +405,7 @@ start_cluster(Q) ->
                 {error, Error} ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             catch
-                exit:{timeout, wait_for_remote_projection, LeaderNode, QName} = Error ->
+                exit:{timeout, wait_for_remote_projection, _, _} = Error ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser);
                 error:Error ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
