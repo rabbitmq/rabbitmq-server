@@ -24,7 +24,7 @@ on:
         # a tag of the erlang image, see https://hub.docker.com/_/erlang for available tags
         # also used in the setup-beam step (same tag should work for both)
         description: OTP version (eg. `26`, `26.2.5.6`)
-        default: 28
+        default: 29
       build_arm:
         description: Build for ARM64 as well?
         type: boolean
@@ -35,7 +35,7 @@ env:
   # For workflow_run events github.sha is the default branch HEAD, not the triggering branch HEAD.
   # Use the actual branch HEAD SHA in both cases.
   HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
-  VERSION: 4.3.0+${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
+  VERSION: 5.0.0+${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
@@ -44,7 +44,7 @@ jobs:
     strategy:
       matrix:
         otp_version:
-        - ${{ github.event.inputs.otp_version || '28' }}
+        - ${{ github.event.inputs.otp_version || '29' }}
     runs-on: ubuntu-latest
     outputs:
       # When dependabot, or a user from a fork, creates PRs, secrets are not injected, and the OCI workflow can't push the image
@@ -86,7 +86,7 @@ jobs:
       fail-fast: false
       matrix:
         otp_version:
-        - ${{ github.event.inputs.otp_version || '28' }}
+        - ${{ github.event.inputs.otp_version || '29' }}
     needs: build-package-generic-unix
     runs-on: ubuntu-latest
     if: ${{ needs.build-package-generic-unix.outputs.authorized == 'true' }}

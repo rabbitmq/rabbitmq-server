@@ -36,7 +36,7 @@ jobs:
             project_version: 4.3.0
           # Add OTP 28 combinations
           - branch: main
-            otp_version: '28'
+            otp_version: '29'
             project_version: 5.0.0
           - branch: v4.4.x
             otp_version: '28'
