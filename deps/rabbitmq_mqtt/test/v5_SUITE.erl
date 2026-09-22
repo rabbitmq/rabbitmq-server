@@ -137,7 +137,8 @@ cluster_size_3_tests() ->
     [session_migrate_v3_v5,
      session_takeover_v3_v5,
      will_delay_node_restart,
-     stale_qos0_queue_deleted_after_metadata_store_timeout
+     stale_qos0_queue_deleted_after_metadata_store_timeout,
+     stale_qos0_queue_deleted_after_plugin_restart
     ].
 
 suite() ->
@@ -205,7 +206,8 @@ init_per_testcase(T, Config)
 init_per_testcase(T, Config)
     when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue;
          T =:= stale_qos0_queue_delete_does_not_delete_reconnected_client_queue;
-         T =:= stale_qos0_queue_deleted_after_metadata_store_timeout ->
+         T =:= stale_qos0_queue_deleted_after_metadata_store_timeout;
+         T =:= stale_qos0_queue_deleted_after_plugin_restart ->
   rpc(Config, rabbit_registry, register, [queue, <<"qos0">>, rabbit_mqtt_qos0_queue]),
   init_per_testcase0(T, Config);
 
@@ -469,6 +471,44 @@ stale_qos0_queue_delete_does_not_delete_reconnected_client_queue(Config) ->
     ?assertEqual([NewQ],
                  rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue])),
     ok = emqtt:disconnect(C2).
+
+stale_qos0_queue_deleted_after_plugin_restart(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C = connect(ClientId, Config),
+    {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
+    [Q] = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    unlink(C),
+    {ok, Timeout} = rpc(Config, application, get_env, [khepri, default_timeout]),
+    ok = rpc(Config, application, set_env, [khepri, default_timeout, 1000]),
+    try
+        ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
+        ok = rabbit_ct_broker_helpers:stop_node(Config, 2),
+        [ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, Plugin)
+         || Plugin <- lists:reverse(?config(test_plugins, Config))],
+        [ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, Plugin)
+         || Plugin <- ?config(test_plugins, Config)],
+        rabbit_ct_helpers:eventually(
+          {?LINE,
+           fun() ->
+                   ?assertMatch({state, [Q], Pid} when is_pid(Pid),
+                                rpc(Config, sys, get_state, [rabbit_mqtt_qos0_queue_cleanup]))
+           end},
+          500, 20),
+        ?assertEqual([Q], rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue])),
+        ok = rabbit_ct_broker_helpers:async_start_node(Config, 1),
+        ok = rabbit_ct_broker_helpers:async_start_node(Config, 2),
+        ok = rabbit_ct_broker_helpers:wait_for_async_start_node(1),
+        ok = rabbit_ct_broker_helpers:wait_for_async_start_node(2),
+        [util:enable_plugin(Config, Plugin) || Plugin <- ?config(test_plugins, Config)],
+        rabbit_ct_helpers:eventually(
+          {?LINE,
+           fun() ->
+                   ?assertEqual([], rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]))
+           end},
+          1000, 60)
+    after
+        ok = rpc(Config, application, set_env, [khepri, default_timeout, Timeout])
+    end.
 
 stale_qos0_queue_deleted_after_metadata_store_timeout(Config) ->
     ClientId = ?FUNCTION_NAME,

@@ -32,7 +32,12 @@ retry_delete(Q) ->
 
 init([]) ->
     process_flag(trap_exit, true),
-    {ok, #state{}}.
+    Stale = [Q || Q <- rabbit_db_queue:get_all_durable_by_type(rabbit_mqtt_qos0_queue),
+                  Pid <- [amqqueue:get_pid(Q)],
+                  node(Pid) =:= node(),
+                  not is_process_alive(Pid)],
+    self() ! retry_delete,
+    {ok, #state{pending = Stale}}.
 
 handle_call(Request, From, State) ->
     {stop, {unexpected_call, Request, From}, State}.
