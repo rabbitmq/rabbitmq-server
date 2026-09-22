@@ -24,6 +24,8 @@
                    {active, false},
                    {nodelay, true}]).
 
+-define(DEFAULT_CONNECT_TIMEOUT, 90_000).
+
 -spec connect(inet:hostname() | inet:ip_address(),
               inet:port_number(),
               amqp10_client_connection:connection_config()) ->
@@ -56,7 +58,7 @@ connect(Host, Port, #{ws_path := Path} = Opts) ->
 connect(Host, Port, #{tls_opts := {secure_port, Opts0}} = Config) ->
     Opts = rabbit_ssl_options:fix_client(Opts0),
     case ssl:connect(Host, Port, ?TCP_OPTS ++ Opts,
-                     maps:get(connect_timeout, Config, infinity)) of
+                     maps:get(connect_timeout, Config, ?DEFAULT_CONNECT_TIMEOUT)) of
         {ok, S} ->
             {ok, {ssl, S}};
         Err ->
@@ -64,7 +66,7 @@ connect(Host, Port, #{tls_opts := {secure_port, Opts0}} = Config) ->
     end;
 connect(Host, Port, Config) ->
     case gen_tcp:connect(Host, Port, ?TCP_OPTS,
-                         maps:get(connect_timeout, Config, infinity)) of
+                         maps:get(connect_timeout, Config, ?DEFAULT_CONNECT_TIMEOUT)) of
         {ok, S} ->
             {ok, {tcp, S}};
         Err ->
