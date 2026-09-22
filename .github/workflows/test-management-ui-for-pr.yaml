@@ -21,11 +21,11 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "29.0"
+        - "29.1"
         browser:
         - chrome
         include:
-        - erlang_version: "29.0"
+        - erlang_version: "29.1"
           elixir_version: "1.20"
     env:
       SELENIUM_DIR: selenium
