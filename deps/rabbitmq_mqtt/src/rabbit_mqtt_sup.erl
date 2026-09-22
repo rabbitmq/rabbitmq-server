@@ -48,6 +48,13 @@ init([{Listeners, SslListeners0}]) ->
          restart => transient,
          shutdown => ?SUPERVISOR_WAIT,
          type => supervisor
+        },
+       #{
+         id => rabbit_mqtt_qos0_queue_cleanup,
+         start => {rabbit_mqtt_qos0_queue_cleanup, start_link, []},
+         restart => permanent,
+         shutdown => ?WORKER_WAIT,
+         type => worker
         }
        | listener_specs(
            fun tcp_listener_spec/1,
