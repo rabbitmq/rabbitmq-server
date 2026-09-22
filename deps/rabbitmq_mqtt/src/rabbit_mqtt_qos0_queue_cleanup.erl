@@ -10,7 +10,6 @@
 -behaviour(gen_server).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -export([start_link/0, retry_delete/1]).
