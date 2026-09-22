@@ -31,7 +31,8 @@ groups() ->
         proxy_protocol_v2_local,
         loopback_user_via_non_loopback_proxy_is_rejected,
         loopback_user_via_local_proxy_is_accepted,
-        proxy_protocol_v1_untrusted_source_rejected
+        proxy_protocol_v1_untrusted_source_rejected,
+        proxy_protocol_v1_unconfigured_trusted_proxies_is_accepted
     ],
     [{https_tests, [], Tests},
      {http_tests, [], Tests}].
@@ -146,6 +147,32 @@ proxy_protocol_v1_untrusted_source_rejected(Config) ->
         %% the rejection must be asserted from the response line itself.
         {ok, [{http_response, Http}]} = rfc6455_client:open(WS),
         match = re:run(Http, "^HTTP/1\\.1 400 ", [{capture, none}])
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, set_env,
+               [rabbit, proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]])
+    end.
+
+%% Unconfigured proxy_protocol_trusted_proxies must still accept the PROXY
+%% header (with a warning), not reject it, to avoid breaking deployments
+%% upgrading from before this allowlist existed.
+proxy_protocol_v1_unconfigured_trusted_proxies_is_accepted(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, proxy_protocol_trusted_proxies, []]),
+    try
+        Port = list_to_integer(rabbit_ws_test_util:get_web_stomp_port_str(Config)),
+        PortStr = integer_to_list(Port),
+        Protocol = ?config(protocol, Config),
+        WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
+            undefined, [], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        {ok, _} = rfc6455_client:open(WS),
+        Frame = stomp:marshal("CONNECT", [{"login","proxy_test"}, {"passcode", "proxy_test"}], <<>>),
+        rfc6455_client:send(WS, Frame),
+        {ok, _P} = rfc6455_client:recv(WS),
+        await_connection_name_match(
+          Config, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>),
+        {close, _} = rfc6455_client:close(WS)
     after
         ok = rabbit_ct_broker_helpers:rpc(
                Config, 0, application, set_env,

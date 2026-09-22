@@ -152,8 +152,9 @@ end}.
     [{datatype, {integer, non_negative}}]}.
 
 %% Whether or not to enable proxy protocol support. This also requires
-%% the core proxy_protocol.trusted_proxies setting (see rabbit.schema) to
-%% be configured, or PROXY-fronted connections will be rejected.
+%% the core proxy_protocol.trusted_proxies setting (see rabbit.schema);
+%% until it is set, the PROXY header is accepted from any peer with a
+%% warning logged, but this will become a hard requirement in future.
 %%
 %% Defaults to false.
 

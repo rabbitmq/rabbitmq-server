@@ -389,9 +389,19 @@ check_proxy_header_trusted(Req) ->
             ok;
         _ProxyHeader ->
             {PeerAddress, _PeerPort} = cowboy_req:peer(Req),
-            case rabbit_networking:is_trusted_proxy_source(PeerAddress) of
-                true -> ok;
-                false -> {error, untrusted_proxy_source}
+            case rabbit_networking:trusted_proxies_configured() of
+                false ->
+                    %% Temporary leniency, see rabbit_networking:check_proxy_protocol_trusted_source/2.
+                    ?LOG_WARNING(
+                       "Web MQTT: accepting PROXY protocol header from ~ts "
+                       "even though proxy_protocol_trusted_proxies is not "
+                       "configured", [rabbit_misc:ntoa(PeerAddress)]),
+                    ok;
+                true ->
+                    case rabbit_networking:is_trusted_proxy_source(PeerAddress) of
+                        true -> ok;
+                        false -> {error, untrusted_proxy_source}
+                    end
             end
     end.
 

@@ -33,7 +33,7 @@
          close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, handshake/3, tcp_host/1,
-         is_trusted_proxy_source/1,
+         is_trusted_proxy_source/1, trusted_proxies_configured/0,
          ranch_ref/1, ranch_ref/2, ranch_refs_of_protocol/1, ranch_ref_to_protocol/1,
          listener_ip_addresses/1, listener_per_ip_address/1,
          listeners_of_protocol/1, stop_ranch_listeners_of_protocol/1,
@@ -669,21 +669,38 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
 check_proxy_protocol_trusted_source(Ref, Sock) ->
     case rabbit_net:peername(Sock) of
         {ok, {PeerAddress, _PeerPort}} ->
-            case is_trusted_proxy_source(PeerAddress) of
-                true ->
-                    ok;
+            case trusted_proxies_configured() of
                 false ->
+                    %% Temporary leniency so existing proxy_protocol
+                    %% deployments don't break on upgrade; a future release
+                    %% will require proxy_protocol_trusted_proxies to be set.
                     ?LOG_WARNING(
-                       "Rejecting PROXY protocol header from ~ts: not a "
-                       "configured proxy_protocol_trusted_proxies entry",
-                       [rabbit_misc:ntoa(PeerAddress)]),
-                    _ = rabbit_net:fast_close(Sock),
-                    exit({shutdown, {proxy_protocol_untrusted_source, Ref}})
+                       "Accepting PROXY protocol header from ~ts even though "
+                       "proxy_protocol_trusted_proxies is not configured; "
+                       "configure it to restrict which peers may use the "
+                       "PROXY protocol header",
+                       [rabbit_misc:ntoa(PeerAddress)]);
+                true ->
+                    case is_trusted_proxy_source(PeerAddress) of
+                        true ->
+                            ok;
+                        false ->
+                            ?LOG_WARNING(
+                               "Rejecting PROXY protocol header from ~ts: not a "
+                               "configured proxy_protocol_trusted_proxies entry",
+                               [rabbit_misc:ntoa(PeerAddress)]),
+                            _ = rabbit_net:fast_close(Sock),
+                            exit({shutdown, {proxy_protocol_untrusted_source, Ref}})
+                    end
             end;
         {error, Reason} ->
             _ = rabbit_net:fast_close(Sock),
             exit({shutdown, {proxy_protocol_peername_error, Reason}})
     end.
+
+-spec trusted_proxies_configured() -> boolean().
+trusted_proxies_configured() ->
+    application:get_env(rabbit, proxy_protocol_trusted_proxies, []) =/= [].
 
 -spec is_trusted_proxy_source(inet:ip_address()) -> boolean().
 is_trusted_proxy_source(PeerAddress0) ->

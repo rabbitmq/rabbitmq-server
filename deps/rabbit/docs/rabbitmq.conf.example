@@ -883,9 +883,10 @@
 ## Trusted proxy source IPs/CIDRs. When proxy_protocol is enabled, the
 ## PROXY protocol header is only honoured when the immediately-connecting
 ## peer (not the source address claimed in the header itself) matches one
-## of these entries; connections from any other peer are rejected. This
-## must be set to something other than the default (empty, meaning no
-## peer is trusted) for proxy_protocol to be usable.
+## of these entries; connections from any other peer are rejected. If
+## left at the default (empty), the header is accepted from any peer but
+## a warning is logged; this will become a hard requirement in a future
+## release, so set this now if proxy_protocol is enabled.
 ##
 # proxy_protocol.trusted_proxies.1 = 10.0.0.0/8
 # proxy_protocol.trusted_proxies.2 = 127.0.0.1

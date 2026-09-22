@@ -38,7 +38,9 @@ groups() ->
           trusted_proxy_source_ipv6_cidr_match,
           trusted_proxy_source_mismatched_family_does_not_match,
           trusted_proxy_source_malformed_entry_does_not_match_or_crash,
-          trusted_proxy_source_malformed_term_entry_does_not_match_or_crash
+          trusted_proxy_source_malformed_term_entry_does_not_match_or_crash,
+          trusted_proxies_configured_is_false_for_empty_list,
+          trusted_proxies_configured_is_true_for_non_empty_list
         ]}
     ].
 
@@ -181,6 +183,20 @@ trusted_proxy_source_malformed_term_entry_does_not_match_or_crash(_Config) ->
       fun() ->
               ?assert(rabbit_networking:is_trusted_proxy_source({10, 1, 2, 3})),
               ?assertNot(rabbit_networking:is_trusted_proxy_source({11, 1, 2, 3}))
+      end).
+
+trusted_proxies_configured_is_false_for_empty_list(_Config) ->
+    with_trusted_proxies(
+      [],
+      fun() ->
+              ?assertNot(rabbit_networking:trusted_proxies_configured())
+      end).
+
+trusted_proxies_configured_is_true_for_non_empty_list(_Config) ->
+    with_trusted_proxies(
+      ["10.0.0.0/8"],
+      fun() ->
+              ?assert(rabbit_networking:trusted_proxies_configured())
       end).
 
 with_trusted_proxies(TrustedProxies, Fun) ->
