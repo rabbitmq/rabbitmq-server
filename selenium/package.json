@@ -16,7 +16,7 @@
     "chromedriver": "^153.0.0",
     "ejs": "^6.0.1",
     "express": "^5.1.0",
-    "geckodriver": "^6.0.2",
+    "geckodriver": "^7.0.0",
     "http-proxy": "^1.18.1",
     "mqtt": "^5.14.1",
     "path": "^0.12.7",
