@@ -61,7 +61,8 @@ groups() ->
                  link_credit_max,
                  drain_with_nothing_available,
                  frame_size_too_small_rejected,
-                 max_frame_size_exceeded_rejected
+                 max_frame_size_exceeded_rejected,
+                 connect_timeout
                 ]}
     ].
 
@@ -830,6 +831,29 @@ insufficient_credit(Config) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ok.
+
+connect_timeout(_Config) ->
+    %% A listener that accepts the TCP connection but never performs the TLS
+    %% handshake, leaving the client blocked in ssl:connect/4.
+    {ok, Listener} = gen_tcp:listen(0, [{active, false}]),
+    {ok, Port} = inet:port(Listener),
+    Cfg = #{address => "localhost",
+            port => Port,
+            sasl => none,
+            connect_timeout => 500,
+            tls_opts => {secure_port, [{verify, verify_none}]}},
+    {Pid, MRef} = spawn_monitor(
+                    fun() -> exit({returned, amqp10_client:open_connection(Cfg)}) end),
+    receive
+        {'DOWN', MRef, process, Pid, {returned, Result}} ->
+            ?assertMatch({error, _}, Result);
+        {'DOWN', MRef, process, Pid, Reason} ->
+            ct:fail({unexpected_exit, Reason})
+    after 5000 ->
+            exit(Pid, kill),
+            ct:fail(connect_timeout_not_honoured)
+    end,
+    ok = gen_tcp:close(Listener).
 
 open_refused(Config) ->
     Hostname = ?config(mock_host, Config),
