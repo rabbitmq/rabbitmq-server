@@ -358,11 +358,9 @@ process_connect(State0) ->
     ok | {error, reason_code()}.
 check_existing_subscriptions_topic_access(#state{cfg = #cfg{clean_start = true}}) ->
     ok;
-%% On session resume we cannot assume that the existing subscriptions
-%% are still available to the authenticated user. When a subscription
-%% is unavailable we return an error which leads to the CONNECT being
-%% rejected. The client can reconnect with clean_start=true for a
-%% fresh session.
+%% The session queue is keyed on client ID, not the user, so a resume can't
+%% assume its subscriptions are still readable; reject the CONNECT and let
+%% the client retry with clean_start=true.
 check_existing_subscriptions_topic_access(#state{cfg = #cfg{exchange = Exchange}} = State) ->
     QNames = existing_queue_names(State),
     TopicFilters =
