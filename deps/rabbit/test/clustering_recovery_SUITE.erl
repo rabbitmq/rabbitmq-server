@@ -41,7 +41,8 @@ groups() ->
                                                  exclusive_transient_queue_after_partition_recovery_1,
                                                  exclusive_durable_queue_after_partition_recovery_1,
                                                  exclusive_transient_queue_after_node_loss,
-                                                 exclusive_durable_queue_after_node_loss
+                                                 exclusive_durable_queue_after_node_loss,
+                                                 mnesia_split_is_reported_and_cleared
                                                 ]}
                           ]}
                         ]},
@@ -149,6 +150,17 @@ init_per_testcase(Testcase, Config) ->
                         Config1,
                         {rabbit,
                          [{cluster_partition_handling, pause_minority}]});
+                  mnesia_split_is_reported_and_cleared ->
+                      %% 'ignore' keeps the split in place: no node pauses, so
+                      %% nothing restarts Mnesia and re-merges it behind the
+                      %% test's back. The short keepalive interval is what the
+                      %% detection runs on, so it bounds how long the test
+                      %% waits for a report.
+                      rabbit_ct_helpers:merge_app_env(
+                        Config1,
+                        {rabbit,
+                         [{cluster_partition_handling, ignore},
+                          {cluster_keepalive_interval, 1000}]});
                   _ ->
                       Config1
               end,
@@ -1120,9 +1132,76 @@ temporary_queue_after_node_loss(Config, QueueDeclare) ->
             ok
     end.
 
+%% Mnesia never re-merges a partition it has detected, and with
+%% cluster_partition_handling = ignore nothing restarts the node either, so the
+%% metadata store stays split long after the network recovered. While it is
+%% split, distribution is up and the 'rabbit' application runs everywhere,
+%% which leaves an operator with nothing to go on. The node monitor should
+%% report that state for as long as it lasts, and stop reporting it once Mnesia
+%% has merged again.
+mnesia_split_is_reported_and_cleared(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% The assertions call rabbit_node_monitor:mnesia_split/0, which
+            %% the older nodes of a mixed-version cluster do not export.
+            {skip, "Requires rabbit_node_monitor:mnesia_split/0 on all nodes"};
+        false ->
+            mnesia_split_is_reported_and_cleared1(Config)
+    end.
+
+mnesia_split_is_reported_and_cleared1(Config) ->
+    [Node1, Node2, Node3] = rabbit_ct_broker_helpers:get_node_configs(
+                              Config, nodename),
+    Peers = lists:sort([Node1, Node3]),
+    AllNodes = lists:sort([Node1, Node2, Node3]),
+    Timeout = 60000,
+
+    ?assertEqual(AllNodes, running_db_nodes(Config, Node2)),
+    ?assertEqual([], mnesia_split(Config, Node2)),
+
+    %% net_ticktime is 5s under CT, so Mnesia sees both peers go down a few
+    %% seconds after the block. Neither side stops, which is what leaves both
+    %% of them holding a mnesia_down for the other.
+    [rabbit_ct_broker_helpers:block_traffic_between(Node2, Peer)
+     || Peer <- Peers],
+    ?awaitMatch([Node2], running_db_nodes(Config, Node2), Timeout),
+
+    %% Distribution recovers. Mnesia does not.
+    [rabbit_ct_broker_helpers:allow_traffic_between(Node2, Peer)
+     || Peer <- Peers],
+    [?awaitMatch(pong,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, Node2, net_adm, ping, [Peer]),
+                 Timeout)
+     || Peer <- Peers],
+    ?assertEqual([Node2], running_db_nodes(Config, Node2)),
+
+    %% So the split is reported, and keeps being reported.
+    ?awaitMatch(Peers, mnesia_split(Config, Node2), Timeout),
+
+    %% Re-merge without restarting the node, so the report has to clear itself
+    %% rather than being reset by a fresh node monitor process.
+    ?assertMatch({ok, _},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, Node2, mnesia, change_config,
+                   [extra_db_nodes, Peers])),
+    ?awaitMatch(AllNodes, running_db_nodes(Config, Node2), Timeout),
+    ?awaitMatch([], mnesia_split(Config, Node2), Timeout),
+    ok.
+
 %% -------------------------------------------------------------------
 %% Internal utils
 %% -------------------------------------------------------------------
+mnesia_split(Config, Node) ->
+    lists:sort(
+      rabbit_ct_broker_helpers:rpc(
+        Config, Node, rabbit_node_monitor, mnesia_split, [])).
+
+running_db_nodes(Config, Node) ->
+    lists:sort(
+      rabbit_ct_broker_helpers:rpc(
+        Config, Node, mnesia, system_info, [running_db_nodes])).
+
 declare_and_publish_to_queue(Config, Node, QName, Args) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Node),
     declare(Ch, QName, Args),

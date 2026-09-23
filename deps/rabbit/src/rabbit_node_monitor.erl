@@ -22,7 +22,7 @@
          write_cluster_status/1, read_cluster_status/0,
          update_cluster_status/0, reset_cluster_status/0]).
 -export([notify_node_up/0, notify_joined_cluster/0, notify_left_cluster/1]).
--export([partitions/0, partitions/1, status/1, subscribe/1]).
+-export([partitions/0, partitions/1, mnesia_split/0, status/1, subscribe/1]).
 -export([pause_partition_guard/0]).
 -export([global_sync/0]).
 
@@ -40,8 +40,14 @@
 -define(RABBIT_DOWN_PING_INTERVAL, 1000).
 -define(NODE_DISCONNECTION_TIMEOUT, 1000).
 
+%% How often a Mnesia partition is repeated in the log while it lasts. The
+%% condition has no other symptom, so an operator arriving long after it
+%% started still needs to find it.
+-define(MNESIA_SPLIT_LOG_INTERVAL, 600000).
+
 -record(state, {monitors, partitions, subscribers, down_ping_timer,
-                keepalive_timer, autoheal, guid, node_guids}).
+                keepalive_timer, autoheal, guid, node_guids,
+                mnesia_split = [], mnesia_split_logged_at}).
 
 %%----------------------------------------------------------------------------
 %% Start
@@ -202,6 +208,15 @@ partitions() ->
 partitions(Nodes) ->
     {Replies, _} = gen_server:multi_call(Nodes, ?SERVER, partitions, ?NODE_REPLY_TIMEOUT),
     Replies.
+
+-spec mnesia_split() -> [node()].
+%% @doc Returns the cluster members this node's Mnesia is partitioned from.
+%%
+%% A member appears here while it is reachable and running the `rabbit'
+%% application, but Mnesia leaves it out of its running nodes.
+
+mnesia_split() ->
+    gen_server:call(?SERVER, mnesia_split, infinity).
 
 -spec status([node()]) -> {[{node(), [node()]}], [node()]}.
 
@@ -422,6 +437,9 @@ init([]) ->
 
 handle_call(partitions, _From, State = #state{partitions = Partitions}) ->
     {reply, Partitions, State};
+
+handle_call(mnesia_split, _From, State = #state{mnesia_split = Split}) ->
+    {reply, Split, State};
 
 handle_call(status, _From, State = #state{partitions = Partitions}) ->
     {reply, [{partitions, Partitions},
@@ -711,7 +729,20 @@ handle_info(ping_up_nodes, State) ->
     %% In this case we need to ensure that we ping "quickly" -
     %% i.e. only nodes that we know to be up.
     [cast(N, keepalive) || N <- alive_nodes() -- [node()]],
-    {noreply, ensure_keepalive_timer(State#state{keepalive_timer = undefined})};
+    %% The timer is re-armed before anything else below, so that slow work
+    %% cannot stretch the keepalive interval.
+    State1 = ensure_keepalive_timer(State#state{keepalive_timer = undefined}),
+    %% get_feature_state/0 rather than is_enabled/0: the latter blocks while
+    %% Khepri is being enabled and Mnesia tables are migrated, and this runs on
+    %% a timer.
+    _ = case rabbit_khepri:get_feature_state() of
+            enabled -> ok;
+            _       -> request_mnesia_split_check()
+        end,
+    {noreply, State1};
+
+handle_info({mnesia_split, Split}, State) ->
+    {noreply, report_mnesia_split(Split, State)};
 
 handle_info({'EXIT', _, _} = Info, State = #state{autoheal = AState0}) ->
     AState = rabbit_autoheal:process_down(Info, AState0),
@@ -877,6 +908,65 @@ handle_dead_rabbit(Node, State) ->
                  false -> on_node_down_using_mnesia(Node, State)
              end,
     ensure_ping_timer(State1).
+
+%% Mnesia never re-merges a partition it has detected. With
+%% cluster_partition_handling set to 'ignore' nothing re-merges it either, and
+%% 'pause_minority' only recovers when it engages, which it does not when the
+%% outage is shorter than its detection window. What is left is a node whose
+%% Mnesia excludes a peer that is reachable and running the 'rabbit'
+%% application: no partition event, no alarm, and nothing in the log pointing
+%% at the metadata store.
+%%
+%% This reports that state and nothing more. In particular it does not touch
+%% #state.partitions, which the partition handling strategies act on.
+request_mnesia_split_check() ->
+    Self = self(),
+    %% possibly_partitioned_nodes/0 pings the members and makes an RPC to each
+    %% one, so as always we must not run it in the node monitor itself.
+    _ = spawn_link(
+          fun () ->
+                  %% The subtraction guards the case where Mnesia is down
+                  %% locally: cluster_nodes(running) then comes from the
+                  %% cluster status file with the local node stripped, while
+                  %% this node remains a member of itself.
+                  Split = lists:sort(possibly_partitioned_nodes() -- [node()]),
+                  Self ! {mnesia_split, Split}
+          end),
+    ok.
+
+report_mnesia_split(Split, State = #state{mnesia_split = Split,
+                                          mnesia_split_logged_at = LoggedAt})
+  when Split =/= [] ->
+    Now = erlang:monotonic_time(millisecond),
+    case Now - LoggedAt >= ?MNESIA_SPLIT_LOG_INTERVAL of
+        true  -> log_mnesia_split(Split),
+                 State#state{mnesia_split_logged_at = Now};
+        false -> State
+    end;
+report_mnesia_split(Split, State = #state{mnesia_split = Split}) ->
+    State;
+report_mnesia_split([], State = #state{mnesia_split = Reported}) ->
+    %% Logged at the same level as the warning below on purpose: with
+    %% log.default.level set to warning, a lower level would show an operator
+    %% the split and never its resolution.
+    ?LOG_WARNING("Mnesia is no longer partitioned from ~tp", [Reported]),
+    State#state{mnesia_split = [], mnesia_split_logged_at = undefined};
+report_mnesia_split(Split, State) ->
+    log_mnesia_split(Split),
+    State#state{mnesia_split = Split,
+                mnesia_split_logged_at = erlang:monotonic_time(millisecond)}.
+
+log_mnesia_split(Split) ->
+    ?LOG_WARNING(
+      "Mnesia is partitioned from ~tp.~n"
+      "Those nodes are reachable and the 'rabbit' application is running on "
+      "them, but Mnesia excludes them from its running nodes, so this node's "
+      "view of the metadata store is incomplete. Mnesia does not re-merge on "
+      "its own. Restarting the 'rabbit' application on one side, with "
+      "`rabbitmqctl stop_app` followed by `rabbitmqctl start_app`, re-merges "
+      "the cluster; the side that is restarted loses any metadata changes it "
+      "accepted while partitioned.",
+      [Split]).
 
 on_node_down_using_mnesia(Node, State = #state{partitions = Partitions,
                                                autoheal   = Autoheal}) ->
