@@ -24,6 +24,10 @@ all() ->
     [
      absent_argument_skips_checks,
      invalid_argument_type_rejected,
+     args_amqp_to_amqpl_unconvertible_value_rejected,
+     args_amqp_to_amqpl_converts_supported_values,
+     args_amqp_to_amqpl_long_key_rejected,
+     args_amqp_to_amqpl_nested_unconvertible_value_rejected,
      both_permissions_granted,
      source_read_denied_skips_target_write,
      target_write_denied,
@@ -70,6 +74,32 @@ invalid_argument_type_rejected(_Config) ->
        {rabbit_amqp_management, <<"400">>, _},
        rabbit_amqp_management:check_routing_arg(
          source(<<"x.1">>), Args, <<"alternate-exchange">>, user(), [])).
+
+args_amqp_to_amqpl_unconvertible_value_rejected(_Config) ->
+    Args = {map, [{{utf8, <<"x-arg">>}, {uuid, <<0:128>>}}]},
+    ?assertThrow(
+       {rabbit_amqp_management, <<"400">>, _},
+       rabbit_amqp_management:args_amqp_to_amqpl(Args)).
+
+args_amqp_to_amqpl_converts_supported_values(_Config) ->
+    Args = {map, [{{utf8, <<"x-arg">>}, {utf8, <<"v">>}}]},
+    ?assertEqual(
+       [{<<"x-arg">>, longstr, <<"v">>}],
+       rabbit_amqp_management:args_amqp_to_amqpl(Args)).
+
+args_amqp_to_amqpl_long_key_rejected(_Config) ->
+    LongKey = binary:copy(<<"k">>, 256),
+    Args = {map, [{{utf8, LongKey}, {utf8, <<"v">>}}]},
+    ?assertThrow(
+       {rabbit_amqp_management, <<"400">>, _},
+       rabbit_amqp_management:args_amqp_to_amqpl(Args)).
+
+args_amqp_to_amqpl_nested_unconvertible_value_rejected(_Config) ->
+    Args = {map, [{{utf8, <<"x-arg">>},
+                   {map, [{{utf8, <<"nested">>}, {uuid, <<0:128>>}}]}}]},
+    ?assertThrow(
+       {rabbit_amqp_management, <<"400">>, _},
+       rabbit_amqp_management:args_amqp_to_amqpl(Args)).
 
 both_permissions_granted(_Config) ->
     Source = source(<<"x.1">>),

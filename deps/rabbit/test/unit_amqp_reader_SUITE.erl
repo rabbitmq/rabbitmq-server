@@ -26,6 +26,9 @@ groups() ->
       [
        socket_stat_on_live_socket,
        socket_stat_on_closed_socket,
+       client_properties_drops_unconvertible_value,
+       client_properties_drops_long_key,
+       client_properties_drops_nested_unconvertible_value,
        undersized_frame,
        oversized_frame,
        undersized_data_offset,
@@ -77,6 +80,32 @@ socket_stat_on_closed_socket(_Config) ->
     0 = rabbit_amqp_reader:i(send_oct, #v1{sock = LSock}),
     0 = rabbit_amqp_reader:i(send_cnt, #v1{sock = LSock}),
     0 = rabbit_amqp_reader:i(send_pend, #v1{sock = LSock}),
+    passed.
+
+client_properties_drops_unconvertible_value(_Config) ->
+    Props = {map, [{{symbol, <<"platform">>}, {utf8, <<"erlang">>}},
+                    {{symbol, <<"bad">>}, {uuid, <<0:128>>}}]},
+    State = #v1{connection = #v1_connection{properties = Props}},
+    Result = rabbit_amqp_reader:i(client_properties, State),
+    ?assertEqual([{<<"platform">>, longstr, <<"erlang">>}], Result),
+    passed.
+
+client_properties_drops_long_key(_Config) ->
+    LongKey = binary:copy(<<"k">>, 256),
+    Props = {map, [{{symbol, <<"platform">>}, {utf8, <<"erlang">>}},
+                    {{symbol, LongKey}, {utf8, <<"v">>}}]},
+    State = #v1{connection = #v1_connection{properties = Props}},
+    Result = rabbit_amqp_reader:i(client_properties, State),
+    ?assertEqual([{<<"platform">>, longstr, <<"erlang">>}], Result),
+    passed.
+
+client_properties_drops_nested_unconvertible_value(_Config) ->
+    Props = {map, [{{symbol, <<"platform">>}, {utf8, <<"erlang">>}},
+                    {{symbol, <<"bad">>},
+                     {map, [{{utf8, <<"nested">>}, {uuid, <<0:128>>}}]}}]},
+    State = #v1{connection = #v1_connection{properties = Props}},
+    Result = rabbit_amqp_reader:i(client_properties, State),
+    ?assertEqual([{<<"platform">>, longstr, <<"erlang">>}], Result),
     passed.
 
 undersized_frame(_Config) ->
