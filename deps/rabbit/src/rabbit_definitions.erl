@@ -986,8 +986,20 @@ add_binding_int(Binding, Source, Destination, ActingUser) ->
             throw(Err)
     end.
 
+%% destination_type is a binary from JSON, or an atom from all_definitions/0 (CLI erlang export/import).
 dest_type(Binding) ->
-    rabbit_data_coercion:to_atom(maps:get(destination_type, Binding, undefined)).
+    case maps:get(destination_type, Binding, undefined) of
+        <<"queue">>    -> queue;
+        <<"exchange">> -> exchange;
+        queue          -> queue;
+        exchange       -> exchange;
+        Other          -> throw({error, invalid_destination_type_message(Other)})
+    end.
+
+-spec invalid_destination_type_message(any()) -> binary().
+invalid_destination_type_message(Other) ->
+    rabbit_data_coercion:to_utf8_binary(
+      rabbit_misc:format("~tp is not a valid binding destination_type", [Other])).
 
 r(Type, Props) -> r(Type, name, Props).
 
