@@ -66,9 +66,7 @@
 %% or by remote-incoming window (i.e. session flow control).
 -define(DEFAULT_MAX_QUEUE_CREDIT, 256).
 -define(DEFAULT_MAX_INCOMING_WINDOW, 400).
-%% Maximum number of deferral tokens a single FLOW frame may request. Each
-%% token is resolved within one Ra command, so this bounds both the size of
-%% that command and the work it does.
+%% Max deferral tokens per FLOW frame, or combined across stashed frames: bounds Ra command size.
 -define(MAX_DEFERRAL_TOKENS, 256).
 %% Maximum byte length of a single deferral token. Tokens are stored as Ra
 %% command/queue-state map keys, so an unbounded client-chosen string would
@@ -3403,13 +3401,27 @@ handle_outgoing_link_flow_control(
                               #credit_req{tokens = T} ->
                                   T
                           end,
+            %% parse_deferred_tokens/1 only caps each individual FLOW
+            %% frame's own batch; since FLOW frames aren't subject to
+            %% session incoming-window flow control, a client can
+            %% pipeline many of them while a credit request is in
+            %% flight and grow the stash unboundedly if the combined
+            %% length isn't capped here too.
+            Tokens = PrevTokens ++ parse_deferred_tokens(FlowProps),
+            NumTokens = length(Tokens),
+            NumTokens =< ?MAX_DEFERRAL_TOKENS orelse
+                protocol_error(
+                  ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                  "rabbitmq:deferral-tokens must contain at most ~b tokens "
+                  "across FLOW frames not yet processed, got: ~b",
+                  [?MAX_DEFERRAL_TOKENS, NumTokens]),
             Link = Link0#outgoing_link{
                      stashed_credit_req = #credit_req{
                                              delivery_count = DeliveryCountRcv,
                                              credit = LinkCreditRcv,
                                              drain = Drain,
                                              echo = Echo,
-                                             tokens = PrevTokens ++ parse_deferred_tokens(FlowProps)}},
+                                             tokens = Tokens}},
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
 
