@@ -17,7 +17,8 @@
 -export([check_routing_arg/5,
          check_alternate_exchange/4,
          check_dead_letter_exchange/4,
-         handle_http_req/8]).
+         handle_http_req/8,
+         args_amqp_to_amqpl/1]).
 -endif.
 
 -type permission_caches() :: {rabbit_amqp_session:permission_cache(),
@@ -556,9 +557,15 @@ encode_bindings(Bindings) ->
 
 args_amqp_to_amqpl({map, KVList}) ->
     lists:map(fun({{T, Key}, TypeVal})
-                    when T =:= utf8 orelse
-                         T =:= symbol ->
-                      mc_amqpl:to_091(Key, TypeVal);
+                    when (T =:= utf8 orelse T =:= symbol) ->
+                      case mc_amqpl:is_representable(Key, TypeVal) of
+                          true ->
+                              mc_amqpl:to_091(Key, TypeVal);
+                          false ->
+                              throw(<<"400">>,
+                                    "unsupported argument name or value ~tp",
+                                    [{{T, Key}, TypeVal}])
+                      end;
                  (Arg) ->
                       throw(<<"400">>,
                             "unsupported argument ~tp",
