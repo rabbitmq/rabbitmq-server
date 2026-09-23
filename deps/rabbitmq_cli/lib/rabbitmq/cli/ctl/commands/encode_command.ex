@@ -57,12 +57,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
   end
 
   def run([], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
-    case Input.consume_single_line_string_with_prompt("Value to encode: ", opts) do
+    case Input.infer_password("Value to encode: ", opts) do
       :eof ->
         {:error, :not_enough_args}
 
       value ->
-        case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
+        case Input.infer_password("Passphrase: ", opts) do
           :eof ->
             {:error, :not_enough_args}
 
@@ -77,7 +77,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
               {:ok, result}
             catch
               _, _ ->
-                IO.inspect(__STACKTRACE__)
                 {:error, "Error during cipher operation"}
             end
         end
@@ -85,7 +84,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
   end
 
   def run([value], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
-    case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
+    case Input.infer_password("Passphrase: ", opts) do
       :eof ->
         {:error, :not_enough_args}
 
@@ -100,7 +99,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
           {:ok, result}
         catch
           _, _ ->
-            IO.inspect(__STACKTRACE__)
             {:error, "Error during cipher operation"}
         end
     end
@@ -117,7 +115,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
       {:ok, result}
     catch
       _, _ ->
-        IO.inspect(__STACKTRACE__)
         {:error, "Error during cipher operation"}
     end
   end
