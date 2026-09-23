@@ -28,6 +28,10 @@ all() ->
      args_amqp_to_amqpl_converts_supported_values,
      args_amqp_to_amqpl_long_key_rejected,
      args_amqp_to_amqpl_nested_unconvertible_value_rejected,
+     args_amqp_to_amqpl_unconvertible_value_error_message_bounded,
+     decode_queue_bad_property_error_message_bounded,
+     decode_exchange_bad_property_error_message_bounded,
+     decode_binding_bad_property_error_message_bounded,
      both_permissions_granted,
      source_read_denied_skips_target_write,
      target_write_denied,
@@ -39,7 +43,11 @@ all() ->
      get_bindings_exchange_destination,
      get_bindings_destination_write_denied,
      get_bindings_source_read_denied,
-     get_bindings_destination_write_checked_first
+     get_bindings_destination_write_checked_first,
+     get_bindings_missing_destination_error_message_bounded,
+     parse_uri_normalize_error_message_bounded,
+     parse_uri_dissect_query_error_message_bounded,
+     decode_binding_path_segment_error_message_bounded
     ].
 
 init_per_testcase(_Testcase, Config) ->
@@ -100,6 +108,40 @@ args_amqp_to_amqpl_nested_unconvertible_value_rejected(_Config) ->
     ?assertThrow(
        {rabbit_amqp_management, <<"400">>, _},
        rabbit_amqp_management:args_amqp_to_amqpl(Args)).
+
+args_amqp_to_amqpl_unconvertible_value_error_message_bounded(_Config) ->
+    DeepValue = lists:foldl(fun(_, Acc) -> {list, [Acc]} end,
+                             {uuid, <<0:128>>}, lists:seq(1, 1000)),
+    Args = {map, [{{utf8, <<"x-arg">>}, DeepValue}]},
+    try
+        rabbit_amqp_management:args_amqp_to_amqpl(Args),
+        ?assert(false)
+    catch throw:{rabbit_amqp_management, <<"400">>, Reason} ->
+              ?assert(byte_size(Reason) < 1000)
+    end.
+
+decode_queue_bad_property_error_message_bounded(_Config) ->
+    ?assert(byte_size(bad_property_reason(
+                         fun rabbit_amqp_management:decode_queue/1)) < 1000).
+
+decode_exchange_bad_property_error_message_bounded(_Config) ->
+    ?assert(byte_size(bad_property_reason(
+                         fun rabbit_amqp_management:decode_exchange/1)) < 1000).
+
+decode_binding_bad_property_error_message_bounded(_Config) ->
+    ?assert(byte_size(bad_property_reason(
+                         fun rabbit_amqp_management:decode_binding/1)) < 1000).
+
+bad_property_reason(DecodeFun) ->
+    DeepValue = lists:foldl(fun(_, Acc) -> {list, [Acc]} end,
+                             {utf8, <<"v">>}, lists:seq(1, 1000)),
+    KVList = [{{utf8, <<"not-a-real-property">>}, DeepValue}],
+    try
+        DecodeFun({map, KVList}),
+        ?assert(false)
+    catch throw:{rabbit_amqp_management, <<"400">>, Reason} ->
+              Reason
+    end.
 
 both_permissions_granted(_Config) ->
     Source = source(<<"x.1">>),
@@ -207,6 +249,58 @@ get_bindings_destination_write_checked_first(_Config) ->
        get_bindings(<<"src.x">>, {queue, <<"dst.q">>}, <<"key">>)),
     ?assertEqual(1, num_calls(Destination, write)),
     ?assertEqual(0, num_calls(Source, read)).
+
+get_bindings_missing_destination_error_message_bounded(_Config) ->
+    ok = mock_permitted([]),
+    HugeJunk = binary:copy(<<"x">>, 1_000_000),
+    QueryMap = #{<<"src">> => <<"src.x">>, <<"key">> => <<"key">>,
+                 <<"junk">> => HugeJunk},
+    try
+        rabbit_amqp_management:handle_http_req(
+          <<"GET">>, [<<"bindings">>], QueryMap, null,
+          ?VHOST, user(), self(), {[], []}),
+        ?assert(false)
+    catch throw:{rabbit_amqp_management, <<"400">>, Reason} ->
+              ?assert(byte_size(Reason) < 1000)
+    end.
+
+parse_uri_normalize_error_message_bounded(_Config) ->
+    HugeJunk = binary:copy(<<"x">>, 1_000_000),
+    Uri = <<HugeJunk/binary, "%zz">>,
+    try
+        rabbit_amqp_management:parse_uri(Uri),
+        ?assert(false)
+    catch throw:{rabbit_amqp_management, <<"400">>, Reason} ->
+              ?assert(byte_size(Reason) < 1000)
+    end.
+
+%% uri_string:normalize/2 rejects malformed percent-encoding across the
+%% whole URI before uri_string:dissect_query/1 ever runs, so
+%% dissect_query's own error branch can't be reached with a real
+%% malformed query; it's mocked here instead.
+parse_uri_dissect_query_error_message_bounded(_Config) ->
+    HugeQuery = binary:copy(<<"x">>, 1_000_000),
+    HugeTerm = binary:copy(<<"y">>, 1_000_000),
+    ok = meck:new(uri_string, [unstick, passthrough]),
+    ok = meck:expect(uri_string, dissect_query,
+                      fun(_Query) -> {error, some_error, HugeTerm} end),
+    try
+        rabbit_amqp_management:parse_uri(<<"/bindings?", HugeQuery/binary>>),
+        ?assert(false)
+    catch throw:{rabbit_amqp_management, <<"400">>, Reason} ->
+              ?assert(byte_size(Reason) < 1000)
+    after
+        meck:unload(uri_string)
+    end.
+
+decode_binding_path_segment_error_message_bounded(_Config) ->
+    HugeJunk = binary:copy(<<"x">>, 1_000_000),
+    try
+        rabbit_amqp_management:decode_binding_path_segment(HugeJunk),
+        ?assert(false)
+    catch throw:{rabbit_amqp_management, <<"400">>, Reason} ->
+              ?assert(byte_size(Reason) < 1000)
+    end.
 
 %%%===================================================================
 %%% Property
