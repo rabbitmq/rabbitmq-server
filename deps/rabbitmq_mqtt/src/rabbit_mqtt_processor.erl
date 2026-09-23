@@ -582,11 +582,9 @@ process_request(?UNSUBSCRIBE,
     _ = send(Reply, State),
     {ok, State};
 
-process_request(?PINGREQ, #mqtt_packet{}, State = #state{cfg = #cfg{client_id = ClientId}}) ->
-    ?LOG_DEBUG("Received a PINGREQ from client ID ~s", [ClientId]),
+process_request(?PINGREQ, #mqtt_packet{}, State) ->
     Reply = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PINGRESP}},
     _ = send(Reply, State),
-    ?LOG_DEBUG("Sent a PINGRESP to client ID ~s", [ClientId]),
     {ok, State};
 
 process_request(?DISCONNECT,
