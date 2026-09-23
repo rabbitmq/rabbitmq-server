@@ -55,7 +55,10 @@ groups() ->
                                import_case20,
                                import_case21,
                                import_case22,
-                               import_case23
+                               import_case23,
+                               import_case27,
+                               import_case28,
+                               import_case29
                               ]},
 
         {boot_time_import_using_classic_source, [], [
@@ -327,6 +330,38 @@ import_case20(Config) ->
     end.
 
 import_case21(Config) -> import_invalid_file_case(Config, "failing_case21").
+
+import_case27(Config) ->
+    CasePath = filename:join(?config(data_dir, Config), "failing_case27.json"),
+    {ok, Body} = file:read_file(CasePath),
+    {error, Msg} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_raw, [Body]),
+    ?assert(binary:match(Msg, <<"not a valid binding destination_type">>) =/= nomatch),
+    %% Must never be converted to an atom, to avoid atom table exhaustion.
+    ?assertNot(rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, atom_exists,
+                                            [<<"not_a_real_destination_type_27">>])),
+    ok.
+
+atom_exists(Bin) ->
+    try binary_to_existing_atom(Bin, utf8), true
+    catch error:badarg -> false
+    end.
+
+import_case28(Config) ->
+    CasePath = filename:join(?config(data_dir, Config), "failing_case28.json"),
+    {ok, Body} = file:read_file(CasePath),
+    {error, Msg} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_raw, [Body]),
+    %% A destination_type with codepoints above 255 must still produce the
+    %% descriptive error, not a bare 'badarg' from a failed binary conversion.
+    ?assert(binary:match(Msg, <<"not a valid binding destination_type">>) =/= nomatch),
+    ok.
+
+import_case29(Config) ->
+    CasePath = filename:join(?config(data_dir, Config), "failing_case29.json"),
+    {ok, Body} = file:read_file(CasePath),
+    {error, Msg} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, import_raw, [Body]),
+    %% The error message must be valid UTF-8, or the HTTP API JSON response crashes later.
+    ?assertNotMatch({error, _, _}, unicode:characters_to_binary(Msg)),
+    ok.
 
 import_case22(Config) ->
     import_file_case(Config, "case22"),
