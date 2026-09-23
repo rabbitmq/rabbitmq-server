@@ -66,7 +66,11 @@
 %% or by remote-incoming window (i.e. session flow control).
 -define(DEFAULT_MAX_QUEUE_CREDIT, 256).
 -define(DEFAULT_MAX_INCOMING_WINDOW, 400).
+<<<<<<< HEAD
 %% Max deferral tokens per `FLOW` frame, and combined across stashed frames.
+=======
+%% Max deferral tokens per FLOW frame, or combined across stashed frames: bounds Ra command size.
+>>>>>>> 3381d72 (Cap combined AMQP 1.0 deferral tokens across stashed FLOW frames)
 -define(MAX_DEFERRAL_TOKENS, 256).
 %% Maximum byte length of a single deferral token. Tokens are stored as Ra
 %% command/queue-state map keys, so an unbounded client-chosen string would
@@ -3401,7 +3405,16 @@ handle_outgoing_link_flow_control(
                               #credit_req{tokens = T} ->
                                   T
                           end,
+<<<<<<< HEAD
             %% Also cap the combined token count across stashed `FLOW` frames.
+=======
+            %% parse_deferred_tokens/1 only caps each individual FLOW
+            %% frame's own batch; since FLOW frames aren't subject to
+            %% session incoming-window flow control, a client can
+            %% pipeline many of them while a credit request is in
+            %% flight and grow the stash unboundedly if the combined
+            %% length isn't capped here too.
+>>>>>>> 3381d72 (Cap combined AMQP 1.0 deferral tokens across stashed FLOW frames)
             Tokens = PrevTokens ++ parse_deferred_tokens(FlowProps),
             NumTokens = length(Tokens),
             NumTokens =< ?MAX_DEFERRAL_TOKENS orelse
