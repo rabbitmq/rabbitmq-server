@@ -33,20 +33,33 @@ defmodule RabbitMQ.CLI.Core.Input do
   @doc false
   def normalize_line(:eof), do: :eof
   def normalize_line({:error, _reason}), do: :eof
-  # get_password/0 can return a charlist and pre-strips the line terminator, unlike IO.read/2.
+  # `get_password/0` can return a charlist and pre-strips the line terminator, unlike `IO.read/2`.
   def normalize_line(data), do: data |> IO.chardata_to_string() |> String.trim()
 
-  # io:get_password/0 (OTP 28.0+) suppresses echo; prompt is printed only right before its read, so a fast sender can't beat raw mode.
+  # The prompt is printed only after switching to raw mode, so a fast automated
+  # sender cannot type the value before echo is suppressed.
   defp read_password_line(prompt) do
     cond do
       masking_available?() ->
         case :shell.start_interactive({:noshell, :raw}) do
           :ok ->
-            try do
-              maybe_puts_raw(prompt)
-              :io.get_password()
-            after
-              :shell.start_interactive({:noshell, :cooked})
+            result =
+              try do
+                maybe_puts_raw(prompt)
+                :io.get_password()
+              after
+                :shell.start_interactive({:noshell, :cooked})
+              end
+
+            case result do
+              # The group process learns about the mode switch by message, so it can
+              # still report the mode as unsupported right after the switch.
+              {:error, :enotsup} ->
+                if stdin_is_terminal?(), do: warn_echoing(:masking_unavailable)
+                IO.read(:stdio, :line)
+
+              other ->
+                other
             end
 
           {:error, _reason} ->
@@ -55,7 +68,7 @@ defmodule RabbitMQ.CLI.Core.Input do
             IO.read(:stdio, :line)
         end
 
-      function_exported?(:io, :get_password, 0) ->
+      masking_supported_by_otp?() ->
         if stdin_is_terminal?(), do: warn_echoing(:masking_unavailable)
         maybe_puts(prompt)
         IO.read(:stdio, :line)
@@ -74,10 +87,19 @@ defmodule RabbitMQ.CLI.Core.Input do
   # Raw mode disables the driver's LF-to-CRLF translation, so write \r\n explicitly.
   defp maybe_puts_raw(prompt), do: IO.write(prompt <> "\r\n")
 
-  # io:get_password/0 reads from `user`, bypassing a substituted group leader (e.g. tests).
+  # `io:get_password/0` always reads from `user`, bypassing a substituted group leader (e.g. tests).
   defp masking_available?() do
-    function_exported?(:io, :get_password, 0) and
+    masking_supported_by_otp?() and
       Process.group_leader() == Process.whereis(:user)
+  end
+
+  # `io:get_password/0` has been exported for much longer, but it only works outside of
+  # an interactive shell in OTP 28.0 and later, where `shell:start_interactive/1` gained
+  # the `{noshell, raw}` mode it reads in. On OTP 27 that same argument is taken for a
+  # shell start spec instead: it switches the terminal to raw mode, cannot be switched
+  # back, and every later read on that terminal blocks.
+  defp masking_supported_by_otp?() do
+    List.to_integer(:erlang.system_info(:otp_release)) >= 28
   end
 
   # `terminal` reflects stdout, not stdin; prefer `stdin` (OTP 27.0+), falling back below that.
@@ -106,7 +128,6 @@ defmodule RabbitMQ.CLI.Core.Input do
     )
   end
 
-  # Guards against printing this once per prompt when a command asks for more than one secret.
   defp warn_once(message) do
     if Process.get(:rabbitmqctl_masking_warned) != true do
       Process.put(:rabbitmqctl_masking_warned, true)
