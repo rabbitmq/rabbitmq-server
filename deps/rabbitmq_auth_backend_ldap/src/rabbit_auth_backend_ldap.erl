@@ -827,6 +827,7 @@ env(ssl_options) ->
     case application:get_env(?APP, ssl_options) of
         {ok, undefined} -> [{verify, verify_peer}];
         {ok, V}         -> V;
+        %% be extra defensive against `advanced.config` mistakes
         undefined       -> [{verify, verify_peer}]
     end;
 env(Key) ->
