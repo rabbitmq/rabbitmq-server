@@ -43,23 +43,11 @@ defmodule RabbitMQ.CLI.Core.Input do
       masking_available?() ->
         case :shell.start_interactive({:noshell, :raw}) do
           :ok ->
-            result =
-              try do
-                maybe_puts_raw(prompt)
-                :io.get_password()
-              after
-                :shell.start_interactive({:noshell, :cooked})
-              end
-
-            case result do
-              # The group process learns about the mode switch by message, so it can
-              # still report the mode as unsupported right after the switch.
-              {:error, :enotsup} ->
-                if stdin_is_terminal?(), do: warn_echoing(:masking_unavailable)
-                IO.read(:stdio, :line)
-
-              other ->
-                other
+            try do
+              maybe_puts_raw(prompt)
+              :io.get_password()
+            after
+              :shell.start_interactive({:noshell, :cooked})
             end
 
           {:error, _reason} ->
@@ -93,11 +81,9 @@ defmodule RabbitMQ.CLI.Core.Input do
       Process.group_leader() == Process.whereis(:user)
   end
 
-  # `io:get_password/0` has been exported for much longer, but it only works outside of
-  # an interactive shell in OTP 28.0 and later, where `shell:start_interactive/1` gained
-  # the `{noshell, raw}` mode it reads in. On OTP 27 that same argument is taken for a
-  # shell start spec instead: it switches the terminal to raw mode, cannot be switched
-  # back, and every later read on that terminal blocks.
+  # `io:get_password/0` is much older, but `{noshell, raw}`, the mode it reads in, was
+  # added in OTP 28.0. On OTP 27 that argument is taken for a shell start spec instead,
+  # leaving the terminal in raw mode with no way back and later reads on it blocked.
   defp masking_supported_by_otp?() do
     List.to_integer(:erlang.system_info(:otp_release)) >= 28
   end
