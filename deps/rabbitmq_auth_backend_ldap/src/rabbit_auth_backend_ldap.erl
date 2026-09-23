@@ -29,6 +29,8 @@
          fill_user_dn_pattern/1, escaped_user_dn/1, simple_bind_fill_pattern/1,
          fill_dn_with_username/2, invalid_credentials_refused/1, with_login/4]).
 
+-define(APP, rabbitmq_auth_backend_ldap).
+
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
 -define(L2(F, A), log("        LDAP " ++ F, A)).
@@ -821,14 +823,20 @@ get_expected_env_str(Key, Default) ->
         end,
     rabbit_data_coercion:to_list(V).
 
+env(ssl_options) ->
+    case application:get_env(?APP, ssl_options) of
+        {ok, undefined} -> [{verify, verify_peer}];
+        {ok, V}         -> V;
+        undefined       -> [{verify, verify_peer}]
+    end;
 env(Key) ->
-    case application:get_env(rabbitmq_auth_backend_ldap, Key) of
+    case application:get_env(?APP, Key) of
         {ok, V} -> V;
         undefined -> undefined
     end.
 
 env(Key, Default) ->
-    application:get_env(rabbitmq_auth_backend_ldap, Key, Default).
+    application:get_env(?APP, Key, Default).
 
 login_fun(User, UserDN, Password, AuthProps) ->
     fun(L) -> case pget(vhost, AuthProps) of
