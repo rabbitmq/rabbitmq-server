@@ -34,6 +34,13 @@ jobs:
             project_version: 4.4.0
           - branch: v4.3.x
             project_version: 4.3.0
+          # Add OTP 28 combinations
+          - branch: main
+            otp_version: '28'
+            project_version: 5.0.0
+          - branch: v4.4.x
+            otp_version: '28'
+            project_version: 4.4.0
 
     runs-on: ubuntu-latest
     steps:
@@ -89,6 +96,12 @@ jobs:
           - v4.3.x
           - v4.2.x
           - v4.1.x
+        include:
+          # Add OTP 28 combinations
+          - branch: main
+            otp_version: '28'
+          - branch: v4.4.x
+            otp_version: '28'
 
     needs: build-package-generic-unix
     runs-on: ubuntu-latest
