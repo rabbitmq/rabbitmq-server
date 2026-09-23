@@ -13,7 +13,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 env:
-  OTP_VERSION: "28"
+  OTP_VERSION: "29"
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
