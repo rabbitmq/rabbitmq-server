@@ -20,8 +20,9 @@ all() ->
      forged_suffixes_one_pid_cast_once_no_correlation,
      distinct_pids_not_deduplicated,
      new_name_matches_prefix,
-     new_name_is_unpredictable,
-     new_name_uses_gen_secure
+     new_name_values_are_distinct,
+     new_name_uses_gen_secure,
+     new_name_key_not_from_gen_chain
     ].
 
 init_per_suite(Config) ->
@@ -109,7 +110,9 @@ new_name_matches_prefix(_Config) ->
               ?assertMatch(<<"amq.rabbitmq.reply-to.", _/binary>>, Name)
       end).
 
-new_name_is_unpredictable(_Config) ->
+%% Distinctness is weaker than unpredictability: `gen/0' also yields distinct
+%% values.
+new_name_values_are_distinct(_Config) ->
     with_stubbed_gen_secure(
       fun() ->
               N = 1000,
@@ -117,8 +120,8 @@ new_name_is_unpredictable(_Config) ->
               ?assertEqual(N, length(lists:usort(Names)))
       end).
 
-%% The suffix of the name is a capability: knowing it is sufficient to
-%% consume from the pseudo-queue. It must be generated with gen_secure/0,
+%% The suffix of the name is a capability: whoever holds it can have a message
+%% delivered to the reply-to consumer. It must be generated with gen_secure/0,
 %% not the predictable gen/0.
 new_name_uses_gen_secure(_Config) ->
     with_stubbed_gen_secure(
@@ -127,6 +130,36 @@ new_name_uses_gen_secure(_Config) ->
               ?assert(meck:called(rabbit_guid, gen_secure, [])),
               ?assertNot(meck:called(rabbit_guid, gen, []))
       end).
+
+%% Runs the real generator rather than a stub. `gen/0' derives each value from
+%% the one before as {B2 bxor B5, B3 bxor B5, B4 bxor B5, B5}, so for two
+%% consecutive values `Block1 bxor Block4' of the second equals `Block2' of the
+%% first, whatever hash `advance_blocks/2' uses. `gen_secure/0' has no such
+%% relation. This detects a reversion to `gen/0'; it does not establish that
+%% `gen_secure/0' is itself unguessable.
+new_name_key_not_from_gen_chain(_Config) ->
+    %% Both generators seed themselves from the `rabbit_guid' server on first
+    %% use. `init([Serial])' takes the serial directly, bypassing the on-disk
+    %% serial file.
+    {ok, Server} = gen_server:start({local, rabbit_guid}, rabbit_guid, [0], []),
+    try
+        Key1 = reply_to_key(rabbit_volatile_queue:new_name()),
+        Key2 = reply_to_key(rabbit_volatile_queue:new_name()),
+        ?assertNotEqual(Key1, Key2),
+        <<_:32, K1B2:32, K1B3:32, K1B4:32>> = Key1,
+        <<K2B1:32, K2B2:32, K2B3:32, K2B4:32>> = Key2,
+        ?assertNotEqual(K1B2, K2B1 bxor K2B4),
+        ?assertNotEqual(K1B3, K2B2 bxor K2B4),
+        ?assertNotEqual(K1B4, K2B3 bxor K2B4)
+    after
+        gen_server:stop(Server)
+    end.
+
+reply_to_key(<<"amq.rabbitmq.reply-to.", Rest/binary>>) ->
+    [_EncodedPid, EncodedKey] = binary:split(Rest, <<".">>),
+    Key = base64:decode(EncodedKey),
+    ?assertEqual(16, byte_size(Key)),
+    Key.
 
 targets(Pid, N) ->
     [target(Pid, I) || I <- lists:seq(1, N)].

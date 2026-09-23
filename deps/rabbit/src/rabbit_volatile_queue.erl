@@ -366,9 +366,9 @@ policy_apply_to_name() ->
     rabbit_misc:resource_name().
 new_name() ->
     EncodedPid = encode_pid(self()),
-    %% This key is a capability: any client that obtains it can consume from
-    %% the pseudo-queue. It must be unpredictable, so use gen_secure/0 rather
-    %% than gen/0.
+    %% This key is a capability: delivery is keyed on the full resource name,
+    %% so whoever holds the key can have a message delivered to the reply-to
+    %% consumer. It must be unpredictable, hence gen_secure/0 rather than gen/0.
     EncodedKey = base64:encode(rabbit_guid:gen_secure()),
     <<?PREFIX, EncodedPid/binary, ".", EncodedKey/binary>>.
 
