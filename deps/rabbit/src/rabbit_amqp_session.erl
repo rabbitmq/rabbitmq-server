@@ -2661,9 +2661,7 @@ incoming_link_transfer(
                                X, User, RoutingKeys, TopicPermCache0),
             Mc = rabbit_msg_interceptor:intercept_incoming(Mc1, MsgIcptCtx),
             QNames0 = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
-            {QNames1, PermCache1} = filter_unpermitted_default_exchange_queues(
-                                      X, QNames0, User, PermCache),
-            QNames = drop_jms_local(IsJms, ContainerId, QNames1),
+            QNames = drop_jms_local(IsJms, ContainerId, QNames0),
             rabbit_trace:tap_in(Mc, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
             Qs0 = rabbit_db_queue:get_targets(QNames),
@@ -2671,7 +2669,7 @@ incoming_link_transfer(
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of
                 {ok, QStates, Actions} ->
                     State1 = State0#state{queue_states = QStates,
-                                          permission_cache = PermCache1,
+                                          permission_cache = PermCache,
                                           topic_permission_cache = TopicPermCache},
                     %% Confirms must be registered before processing actions
                     %% because actions may contain rejections of publishes.
@@ -2734,19 +2732,6 @@ drop_jms_local(true, ContainerId, QNames) ->
         {error, not_implemented} -> QNames;
         QNames1 -> QNames1
     end.
-
-%% Default exchange: routing key is the queue name, so drop unpermitted targets silently, as if absent.
-filter_unpermitted_default_exchange_queues(
-  #exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME}}, QNames, User, PermCache0) ->
-    lists:foldr(
-      fun(QName, {Acc, Cache0}) ->
-              case is_any_resource_access_permitted(QName, User, Cache0) of
-                  {true, Cache} -> {[QName | Acc], Cache};
-                  {false, Cache} -> {Acc, Cache}
-              end
-      end, {[], PermCache0}, QNames);
-filter_unpermitted_default_exchange_queues(_, QNames, _, PermCache) ->
-    {QNames, PermCache}.
 
 lookup_target(#exchange{} = X, LinkRKey, Mc, _, _, _, PermCache) ->
     lookup_routing_key(X, LinkRKey, Mc, false, PermCache);
@@ -4149,29 +4134,6 @@ check_any_resource_access(Resource, User, [Perm | Rest], Cache) ->
         check_resource_access(Resource, Perm, User, Cache)
     catch exit:#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS} ->
               check_any_resource_access(Resource, User, Rest, Cache)
-    end.
-
-%% Like check_any_resource_access/3, but returns the outcome instead of exiting the session.
--spec is_any_resource_access_permitted(rabbit_types:r(exchange | queue),
-                                       rabbit_types:user(),
-                                       permission_cache()) ->
-    {boolean(), permission_cache()}.
-is_any_resource_access_permitted(Resource, User, Cache) ->
-    case lists:any(fun({Res, _Perm}) -> Res =:= Resource end, Cache) of
-        true ->
-            {true, Cache};
-        false ->
-            is_any_resource_access_permitted(Resource, User, [read, write, configure], Cache)
-    end.
-
-is_any_resource_access_permitted(_Resource, _User, [], Cache) ->
-    {false, Cache};
-is_any_resource_access_permitted(Resource, User, [Perm | Rest], Cache) ->
-    try check_resource_access(Resource, Perm, User, Cache) of
-        Cache1 ->
-            {true, Cache1}
-    catch exit:#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS} ->
-              is_any_resource_access_permitted(Resource, User, Rest, Cache)
     end.
 
 -spec check_write_permitted_on_topics(
