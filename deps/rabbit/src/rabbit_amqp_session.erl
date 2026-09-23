@@ -66,6 +66,15 @@
 %% or by remote-incoming window (i.e. session flow control).
 -define(DEFAULT_MAX_QUEUE_CREDIT, 256).
 -define(DEFAULT_MAX_INCOMING_WINDOW, 400).
+<<<<<<< HEAD
+=======
+%% Max deferral tokens per FLOW frame, or combined across stashed frames: bounds Ra command size.
+-define(MAX_DEFERRAL_TOKENS, 256).
+%% Maximum byte length of a single deferral token. Tokens are stored as Ra
+%% command/queue-state map keys, so an unbounded client-chosen string would
+%% inflate both.
+-define(MAX_DEFERRAL_TOKEN_SIZE, 256).
+>>>>>>> f4014fe (Cap combined AMQP 1.0 deferral tokens across stashed FLOW frames)
 -define(MAX_MANAGEMENT_LINK_CREDIT, 8).
 -define(MANAGEMENT_NODE_ADDRESS, <<"/management">>).
 -define(UINT_OUTGOING_WINDOW, {uint, ?UINT_MAX}).
@@ -3207,14 +3216,48 @@ handle_outgoing_link_flow_control(
             %% when the client floods us with credit requests, but closed its incoming-window.
             %% Processing one credit top up at a time between us and the queue is also easier
             %% to reason about. Therefore, we stash the new request. If there is already a
+<<<<<<< HEAD
             %% stashed request, we replace it because the latest flow control state from the
             %% client applies.
+=======
+            %% stashed request, we replace its flow control fields because the latest
+            %% flow control state from the client applies. Deferral tokens are not flow
+            %% control state though, but one-shot claim requests: any tokens from an
+            %% already-stashed request are carried over rather than dropped, so a FLOW
+            %% that itself gets stashed before it is popped never loses its tokens.
+            %% Submitted once the stashed request is processed, see pop_credit_req/4.
+            PrevTokens = case Link0#outgoing_link.stashed_credit_req of
+                              none ->
+                                  [];
+                              #credit_req{tokens = T} ->
+                                  T
+                          end,
+            %% parse_deferred_tokens/1 only caps each individual FLOW
+            %% frame's own batch; since FLOW frames aren't subject to
+            %% session incoming-window flow control, a client can
+            %% pipeline many of them while a credit request is in
+            %% flight and grow the stash unboundedly if the combined
+            %% length isn't capped here too.
+            Tokens = PrevTokens ++ parse_deferred_tokens(FlowProps),
+            NumTokens = length(Tokens),
+            NumTokens =< ?MAX_DEFERRAL_TOKENS orelse
+                protocol_error(
+                  ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                  "rabbitmq:deferral-tokens must contain at most ~b tokens "
+                  "across FLOW frames not yet processed, got: ~b",
+                  [?MAX_DEFERRAL_TOKENS, NumTokens]),
+>>>>>>> f4014fe (Cap combined AMQP 1.0 deferral tokens across stashed FLOW frames)
             Link = Link0#outgoing_link{
                      stashed_credit_req = #credit_req{
                                              delivery_count = DeliveryCountRcv,
                                              credit = LinkCreditRcv,
                                              drain = Drain,
+<<<<<<< HEAD
                                              echo = Echo}},
+=======
+                                             echo = Echo,
+                                             tokens = Tokens}},
+>>>>>>> f4014fe (Cap combined AMQP 1.0 deferral tokens across stashed FLOW frames)
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
 
