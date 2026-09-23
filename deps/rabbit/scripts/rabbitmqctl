@@ -118,7 +118,7 @@ case "$@" in
             maybe_noinput='noinput'
         fi
         ;;
-    *decode*|*encode*)
+    *decode*|*encode*|*decrypt_conf_value*|*encrypt_conf_value*)
         # It is unlikely that these commands will be run in a shell script loop
         # with redirection, so always assume that stdin input is needed
         #
