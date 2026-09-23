@@ -342,6 +342,7 @@ connect_reason_code_to_return_code(_) ->
 
 process_connect(State0) ->
     maybe
+        ok ?= check_existing_subscriptions_topic_access(State0),
         {ok, QoS0SessPresent, State1} ?= handle_clean_start_qos0(State0),
         {ok, SessPresent, State2} ?= handle_clean_start_qos1(QoS0SessPresent, State1),
         {ok, State} ?= init_subscriptions(SessPresent, State2),
@@ -351,6 +352,29 @@ process_connect(State0) ->
     else
         {error, _} = Error ->
             Error
+    end.
+
+-spec check_existing_subscriptions_topic_access(state()) ->
+    ok | {error, reason_code()}.
+check_existing_subscriptions_topic_access(#state{cfg = #cfg{clean_start = true}}) ->
+    ok;
+%% The session queue is keyed on client ID, not the user, so a resume can't
+%% assume its subscriptions are still readable; reject the CONNECT and let
+%% the client retry with clean_start=true.
+check_existing_subscriptions_topic_access(#state{cfg = #cfg{exchange = Exchange}} = State) ->
+    QNames = existing_queue_names(State),
+    TopicFilters =
+    [amqp_to_mqtt(Key)
+     || QName <- QNames,
+        #binding{key = Key} <- rabbit_binding:list_for_source_and_destination(
+                                  Exchange, QName, _Reverse = true)],
+    case lists:all(fun(TopicFilter) ->
+                           check_topic_access(TopicFilter, read, State) =:= ok
+                   end, TopicFilters) of
+        true ->
+            ok;
+        false ->
+            {error, ?RC_NOT_AUTHORIZED}
     end.
 
 -spec process_packet(mqtt_packet(), state()) ->
