@@ -664,6 +664,11 @@ consume_from_upstream_queue(
         false -> amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch});
         true  -> ok
     end,
+    %% Without this, an unmatched `basic.cancel` or `basic.deliver` results
+    %% in an exception. Note that this does not add a new consumer: the current
+    %% process will handle the delivered frames for "unknown" (e.g. recently cancelled)
+    %% consumers.
+    ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = NoAck}, self()),
