@@ -664,6 +664,10 @@ consume_from_upstream_queue(
         false -> amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch});
         true  -> ok
     end,
+    %% Without this, an unmatched basic.cancel/basic.deliver (e.g. from a
+    %% forced disconnect) crashes amqp_selective_consumer instead of
+    %% reaching handle_info/2.
+    ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = NoAck}, self()),
