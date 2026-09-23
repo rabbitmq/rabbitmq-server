@@ -66,6 +66,12 @@ groups() ->
        receiver_settle_mode_first,
        publishing_to_non_existing_queue_should_settle_with_released,
        attach_link_to_non_existing_destination,
+       attach_receiver_link_to_non_existing_queue_requires_read_permission,
+       attach_sender_link_to_non_existing_queue_requires_write_permission,
+       attach_sender_link_to_non_existing_queue_requires_queue_permission,
+       attach_sender_link_to_existing_queue_succeeds_with_any_queue_permission,
+       anonymous_terminus_to_queue_denied_settles_like_absent,
+       x_cc_annotation_denied_queue_gets_nothing,
        roundtrip_with_drain_classic_queue,
        roundtrip_with_drain_quorum_queue,
        roundtrip_with_drain_stream,
@@ -2167,6 +2173,204 @@ attach_link_to_non_existing_destination(Config) ->
      end || Address <- Addresses],
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
+
+%% Denied read access must settle the same whether the queue exists or not.
+attach_receiver_link_to_non_existing_queue_requires_read_permission(Config) ->
+    Vhost = ?config(rmq_vhost, Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    %% Deny read only; the queue doesn't exist anyway.
+    ok = rabbit_ct_broker_helpers:set_permissions(
+           Config, <<"guest">>, Vhost, <<".*">>, <<".*">>, <<"^$">>),
+    try
+        OpnConf = connection_config(Config),
+        {ok, Connection} = amqp10_client:open_connection(OpnConf),
+        {ok, Session} = amqp10_client:begin_session_sync(Connection),
+        Address = rabbitmq_amqp_address:queue(QName),
+        {ok, _Receiver} = amqp10_client:attach_receiver_link(
+                            Session, <<"receiver">>, Address, unsettled),
+        %% Permission denial ends the session; absence would only detach the link.
+        receive
+            {amqp10_event,
+             {session, Session,
+              {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS}}}} -> ok
+        after 9000 -> flush(missing_ended),
+                      ct:fail("did not receive expected error")
+        end,
+        ok = close_connection_sync(Connection)
+    after
+        ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost)
+    end.
+
+%% Denied exchange write access must settle the same whether the queue exists or not.
+attach_sender_link_to_non_existing_queue_requires_write_permission(Config) ->
+    Vhost = ?config(rmq_vhost, Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    %% Deny write; the default exchange's checks match literal name "amq.default".
+    ok = rabbit_ct_broker_helpers:set_permissions(
+           Config, <<"guest">>, Vhost, <<".*">>, <<"^$">>, <<".*">>),
+    try
+        OpnConf = connection_config(Config),
+        {ok, Connection} = amqp10_client:open_connection(OpnConf),
+        {ok, Session} = amqp10_client:begin_session_sync(Connection),
+        Address = rabbitmq_amqp_address:queue(QName),
+        {ok, _Sender} = amqp10_client:attach_sender_link(
+                          Session, <<"sender">>, Address),
+        %% Permission denial ends the session; absence would only detach the link.
+        receive
+            {amqp10_event,
+             {session, Session,
+              {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS}}}} -> ok
+        after 9000 -> flush(missing_ended),
+                      ct:fail("did not receive expected error")
+        end,
+        ok = close_connection_sync(Connection)
+    after
+        ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost)
+    end.
+
+%% Exchange write access alone must not reveal whether the destination queue exists.
+attach_sender_link_to_non_existing_queue_requires_queue_permission(Config) ->
+    Vhost = ?config(rmq_vhost, Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    %% Write on the default exchange only; no permission on the queue itself.
+    ok = rabbit_ct_broker_helpers:set_permissions(
+           Config, <<"guest">>, Vhost, <<"^$">>, <<"^amq\\.default$">>, <<"^$">>),
+    try
+        OpnConf = connection_config(Config),
+        {ok, Connection} = amqp10_client:open_connection(OpnConf),
+        {ok, Session} = amqp10_client:begin_session_sync(Connection),
+        Address = rabbitmq_amqp_address:queue(QName),
+        {ok, _Sender} = amqp10_client:attach_sender_link(
+                          Session, <<"sender">>, Address),
+        %% Permission denial ends the session; absence would only detach the link.
+        receive
+            {amqp10_event,
+             {session, Session,
+              {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS}}}} -> ok
+        after 9000 -> flush(missing_ended),
+                      ct:fail("did not receive expected error")
+        end,
+        ok = close_connection_sync(Connection)
+    after
+        ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost)
+    end.
+
+%% Any one of read/write/configure on the queue is enough to attach, not just write on the exchange.
+attach_sender_link_to_existing_queue_succeeds_with_any_queue_permission(Config) ->
+    Vhost = ?config(rmq_vhost, Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    OpnConf = connection_config(Config),
+    %% Separate connection: declaring here would cache a 'configure' grant on the test connection.
+    {ok, SetupConnection} = amqp10_client:open_connection(OpnConf),
+    {ok, SetupSession} = amqp10_client:begin_session_sync(SetupConnection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(SetupSession, <<"pair">>),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(SetupSession),
+    ok = close_connection_sync(SetupConnection),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    try
+        %% Write on the exchange and the queue, but neither configure nor read.
+        ok = rabbit_ct_broker_helpers:set_permissions(
+               Config, <<"guest">>, Vhost, <<"^$">>,
+               <<"^(amq\\.default|", QName/binary, ")$">>, <<"^$">>),
+        Address = rabbitmq_amqp_address:queue(QName),
+        {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+        ok = wait_for_credit(Sender),
+        DTag = <<"dtag">>,
+        Msg = amqp10_msg:new(DTag, <<"body">>, false),
+        ok = amqp10_client:send_msg(Sender, Msg),
+        ok = wait_for_accepted(DTag),
+        ok = amqp10_client:detach_link(Sender)
+    after
+        ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost),
+        ok = delete_queue(Session, QName),
+        ok = end_session_sync(Session),
+        ok = close_connection_sync(Connection)
+    end.
+
+%% Via the anonymous terminus, a denied queue must settle exactly like an absent one.
+anonymous_terminus_to_queue_denied_settles_like_absent(Config) ->
+    Vhost = ?config(rmq_vhost, Config),
+    ExistingQName = <<(atom_to_binary(?FUNCTION_NAME))/binary, "-existing">>,
+    AbsentQName = <<(atom_to_binary(?FUNCTION_NAME))/binary, "-absent">>,
+    OpnConf = connection_config(Config),
+    %% Separate connection: declaring here would cache a 'configure' grant on the test connection.
+    {ok, SetupConnection} = amqp10_client:open_connection(OpnConf),
+    {ok, SetupSession} = amqp10_client:begin_session_sync(SetupConnection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(SetupSession, <<"pair">>),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, ExistingQName, #{}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(SetupSession),
+    ok = close_connection_sync(SetupConnection),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    try
+        %% Write on the default exchange only: no permission on either queue.
+        ok = rabbit_ct_broker_helpers:set_permissions(
+               Config, <<"guest">>, Vhost, <<"^$">>, <<"^amq\\.default$">>, <<"^$">>),
+        {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, null),
+        ok = wait_for_credit(Sender),
+        ExistingTag = <<"existing">>,
+        ExistingMsg = amqp10_msg:set_properties(
+                        #{to => rabbitmq_amqp_address:queue(ExistingQName)},
+                        amqp10_msg:new(ExistingTag, <<"body">>, false)),
+        AbsentTag = <<"absent">>,
+        AbsentMsg = amqp10_msg:set_properties(
+                      #{to => rabbitmq_amqp_address:queue(AbsentQName)},
+                      amqp10_msg:new(AbsentTag, <<"body">>, false)),
+        ok = amqp10_client:send_msg(Sender, ExistingMsg),
+        ok = amqp10_client:send_msg(Sender, AbsentMsg),
+        ok = wait_for_settlement(ExistingTag, released),
+        ok = wait_for_settlement(AbsentTag, released),
+        ok = amqp10_client:detach_link(Sender)
+    after
+        ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost),
+        ok = delete_queue(Session, ExistingQName),
+        ok = end_session_sync(Session),
+        ok = close_connection_sync(Connection)
+    end.
+
+%% Same as anonymous_terminus_to_queue_denied_settles_like_absent, but via x-cc.
+x_cc_annotation_denied_queue_gets_nothing(Config) ->
+    Vhost = ?config(rmq_vhost, Config),
+    AllowedQName = <<(atom_to_binary(?FUNCTION_NAME))/binary, "-allowed">>,
+    DeniedQName = <<(atom_to_binary(?FUNCTION_NAME))/binary, "-denied">>,
+    OpnConf = connection_config(Config),
+    {ok, SetupConnection} = amqp10_client:open_connection(OpnConf),
+    {ok, SetupSession} = amqp10_client:begin_session_sync(SetupConnection),
+    {ok, LinkPair0} = rabbitmq_amqp_client:attach_management_link_pair_sync(SetupSession, <<"pair">>),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair0, AllowedQName, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair0, DeniedQName, #{}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair0),
+    ok = end_session_sync(SetupSession),
+    ok = close_connection_sync(SetupConnection),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    try
+        ok = rabbit_ct_broker_helpers:set_permissions(
+               Config, <<"guest">>, Vhost, <<"^$">>,
+               <<"^(amq\\.default|", AllowedQName/binary, ")$">>, <<"^$">>),
+        Address = rabbitmq_amqp_address:queue(AllowedQName),
+        {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+        ok = wait_for_credit(Sender),
+        Tag = <<"tag">>,
+        Msg = amqp10_msg:set_message_annotations(
+                #{<<"x-cc">> => {list, [{utf8, DeniedQName}]}},
+                amqp10_msg:new(Tag, <<"body">>, false)),
+        ok = amqp10_client:send_msg(Sender, Msg),
+        ok = wait_for_accepted(Tag),
+        ok = amqp10_client:detach_link(Sender),
+        ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost),
+        {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"check">>),
+        {ok, #{message_count := 1}} = rabbitmq_amqp_client:delete_queue(LinkPair, AllowedQName),
+        {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, DeniedQName)
+    after
+        ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost),
+        ok = end_session_sync(Session),
+        ok = close_connection_sync(Connection)
+    end.
 
 roundtrip_with_drain_classic_queue(Config) ->
     QName  = atom_to_binary(?FUNCTION_NAME),

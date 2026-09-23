@@ -2661,7 +2661,9 @@ incoming_link_transfer(
                                X, User, RoutingKeys, TopicPermCache0),
             Mc = rabbit_msg_interceptor:intercept_incoming(Mc1, MsgIcptCtx),
             QNames0 = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
-            QNames = drop_jms_local(IsJms, ContainerId, QNames0),
+            {QNames1, PermCache1} = filter_unpermitted_default_exchange_queues(
+                                      X, QNames0, User, PermCache),
+            QNames = drop_jms_local(IsJms, ContainerId, QNames1),
             rabbit_trace:tap_in(Mc, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
             Qs0 = rabbit_db_queue:get_targets(QNames),
@@ -2669,7 +2671,7 @@ incoming_link_transfer(
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of
                 {ok, QStates, Actions} ->
                     State1 = State0#state{queue_states = QStates,
-                                          permission_cache = PermCache,
+                                          permission_cache = PermCache1,
                                           topic_permission_cache = TopicPermCache},
                     %% Confirms must be registered before processing actions
                     %% because actions may contain rejections of publishes.
@@ -2732,6 +2734,19 @@ drop_jms_local(true, ContainerId, QNames) ->
         {error, not_implemented} -> QNames;
         QNames1 -> QNames1
     end.
+
+%% Default exchange: routing key is the queue name, so drop unpermitted targets silently, as if absent.
+filter_unpermitted_default_exchange_queues(
+  #exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME}}, QNames, User, PermCache0) ->
+    lists:foldr(
+      fun(QName, {Acc, Cache0}) ->
+              case is_any_resource_access_permitted(QName, User, Cache0) of
+                  {true, Cache} -> {[QName | Acc], Cache};
+                  {false, Cache} -> {Acc, Cache}
+              end
+      end, {[], PermCache0}, QNames);
+filter_unpermitted_default_exchange_queues(_, QNames, _, PermCache) ->
+    {QNames, PermCache}.
 
 lookup_target(#exchange{} = X, LinkRKey, Mc, _, _, _, PermCache) ->
     lookup_routing_key(X, LinkRKey, Mc, false, PermCache);
@@ -3014,8 +3029,10 @@ ensure_source(Source0 = #'v1_0.source'{address = Address,
                     try cow_uri:urldecode(QNameBinQuoted) of
                         QNameBin ->
                             QName = queue_resource(Vhost, QNameBin),
+                            %% Check read access before existence check (anti-enumeration, matches passive queue.declare).
+                            PermCache1 = check_resource_access(QName, read, User, PermCache),
                             ok = error_if_absent(QName),
-                            {ok, QName, Source, PermCache, TopicPermCache}
+                            {ok, QName, Source, PermCache1, TopicPermCache}
                     catch error:_ ->
                               {error, {bad_address, Address}}
                     end;
@@ -3169,12 +3186,8 @@ ensure_target(Target = #'v1_0.target'{address = Address,
         false ->
             case target_address_version(Address) of
                 2 ->
-                    case ensure_target_v2(Address, Vhost) of
-                        {ok, to, RKey, QNameBin} ->
-                            {ok, to, RKey, QNameBin, Target, PermCache0};
-                        {ok, XNameBin, RKey, QNameBin} ->
-                            {ok, Exchange, PermCache} = check_exchange(XNameBin, User,
-                                                                       Vhost, PermCache0),
+                    case ensure_target_v2(Address, Vhost, User, PermCache0) of
+                        {ok, Exchange, RKey, QNameBin, PermCache} ->
                             {ok, Exchange, RKey, QNameBin, Target, PermCache};
                         {error, _} = Err ->
                             Err
@@ -3234,20 +3247,25 @@ target_address_version(_Address) ->
 %%  /exchanges/:exchange
 %%  /queues/:queue
 %%  <null>
-ensure_target_v2({utf8, String}, Vhost) ->
+ensure_target_v2({utf8, String}, Vhost, User, PermCache0) ->
     case parse_target_v2_string(String) of
-        {ok, _XNameBin, _RKey, undefined} = Ok ->
-            Ok;
-        {ok, _XNameBin, _RKey, QNameBin} = Ok ->
-            ok = error_if_absent(queue, Vhost, QNameBin),
-            Ok;
+        {ok, XNameBin, RKey, undefined} ->
+            {ok, Exchange, PermCache} = check_exchange(XNameBin, User, Vhost, PermCache0),
+            {ok, Exchange, RKey, undefined, PermCache};
+        {ok, XNameBin, RKey, QNameBin} ->
+            {ok, Exchange, PermCache1} = check_exchange(XNameBin, User, Vhost, PermCache0),
+            %% Exchange write alone doesn't imply queue permission; also require any permission on the queue.
+            QName = queue_resource(Vhost, QNameBin),
+            PermCache = check_any_resource_access(QName, User, PermCache1),
+            ok = error_if_absent(QName),
+            {ok, Exchange, RKey, QNameBin, PermCache};
         {error, bad_address} ->
             {error, {bad_address_string, String}}
     end;
-ensure_target_v2(undefined, _) ->
+ensure_target_v2(undefined, _, _, PermCache0) ->
     %% anonymous terminus
     %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
-    {ok, to, to, undefined}.
+    {ok, to, to, undefined, PermCache0}.
 
 parse_target_v2_string(String) ->
     try parse_target_v2_string0(String)
@@ -4108,6 +4126,52 @@ check_resource_access(Resource, Perm, User, Cache) ->
                                  explanation = Msg} ->
                     protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
             end
+    end.
+
+%% Any permission on Resource, like passive declares (rabbit_channel:check_any_resource_access_permitted/3).
+-spec check_any_resource_access(rabbit_types:r(exchange | queue),
+                                rabbit_types:user(),
+                                permission_cache()) ->
+    permission_cache().
+check_any_resource_access(Resource, User, Cache) ->
+    case lists:any(fun({Res, _Perm}) -> Res =:= Resource end, Cache) of
+        true ->
+            Cache;
+        false ->
+            %% configure tried last so a refusal's error matches a regular declare's.
+            check_any_resource_access(Resource, User, [read, write, configure], Cache)
+    end.
+
+check_any_resource_access(Resource, User, [Perm], Cache) ->
+    check_resource_access(Resource, Perm, User, Cache);
+check_any_resource_access(Resource, User, [Perm | Rest], Cache) ->
+    try
+        check_resource_access(Resource, Perm, User, Cache)
+    catch exit:#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS} ->
+              check_any_resource_access(Resource, User, Rest, Cache)
+    end.
+
+%% Like check_any_resource_access/3, but returns the outcome instead of exiting the session.
+-spec is_any_resource_access_permitted(rabbit_types:r(exchange | queue),
+                                       rabbit_types:user(),
+                                       permission_cache()) ->
+    {boolean(), permission_cache()}.
+is_any_resource_access_permitted(Resource, User, Cache) ->
+    case lists:any(fun({Res, _Perm}) -> Res =:= Resource end, Cache) of
+        true ->
+            {true, Cache};
+        false ->
+            is_any_resource_access_permitted(Resource, User, [read, write, configure], Cache)
+    end.
+
+is_any_resource_access_permitted(_Resource, _User, [], Cache) ->
+    {false, Cache};
+is_any_resource_access_permitted(Resource, User, [Perm | Rest], Cache) ->
+    try check_resource_access(Resource, Perm, User, Cache) of
+        Cache1 ->
+            {true, Cache1}
+    catch exit:#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS} ->
+              is_any_resource_access_permitted(Resource, User, Rest, Cache)
     end.
 
 -spec check_write_permitted_on_topics(
