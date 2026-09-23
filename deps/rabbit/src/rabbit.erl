@@ -1385,6 +1385,32 @@ log_broker_started(Plugins) ->
         "~n  " ?BG32_START "          " ?C_END "  ~ts").
 
 print_banner() ->
+    %% Avoid printing the banner if the node is configured
+    %% to use JSON logging.
+    %%
+    %% There isn't really a meaningful JSON equivalent of the
+    %% startup banner but skipping it only has one possible downside:
+    %% it can be harder to spot the node version in some log snippets
+    %% (immediately after node startup).
+    case console_output_uses_json_formatter() of
+        true  -> ok;
+        false -> print_banner1()
+    end.
+
+console_output_uses_json_formatter() ->
+    lists:any(
+      fun(Id) ->
+              case logger:get_handler_config(Id) of
+                  {ok, #{config := #{type := Type},
+                         formatter := {rabbit_logger_json_fmt, _}}}
+                    when Type =:= standard_io orelse Type =:= standard_error ->
+                      true;
+                  _ ->
+                      false
+              end
+      end, logger:get_handler_ids()).
+
+print_banner1() ->
     Product = product_name(),
     Version = product_version(),
     LineListFormatter = fun (Placeholder, [_ | Tail] = LL) ->
