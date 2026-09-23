@@ -86,3 +86,12 @@
                      ConfPrefix ++ ".ciphers", Conf),
         lists:reverse([V || {_, V} <- Settings])
     end}.
+
+{mapping, "supported_groups.$group", "supported_groups", [{datatype, atom}]}.
+
+{partial_translation, "supported_groups",
+    fun(Conf, ConfPrefix, _AppPrefix) ->
+        Settings = cuttlefish_variable:filter_by_prefix(
+                     ConfPrefix ++ ".supported_groups", Conf),
+        lists:reverse([V || {_, V} <- Settings])
+    end}.
