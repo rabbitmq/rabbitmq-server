@@ -1204,17 +1204,8 @@ modified_quorum_queue_deferral_token_survives_in_flight_credit_req(Config) ->
     ok = amqp10_client:settle_msg(Receiver, M1b, accepted),
     ok = close(Init).
 
-<<<<<<< HEAD
 %% The deferral-tokens cap applies to the combined length across stashed
 %% `FLOW` frames, not just to one frame's own batch.
-=======
-%% Test that the deferral-tokens cap applies to the combined length of
-%% tokens accumulated across multiple stashed FLOW frames, not just to
-%% each individual FLOW frame's own batch: FLOW frames aren't subject to
-%% session incoming-window flow control, so a client could otherwise
-%% pipeline many of them while a credit request is in flight and grow
-%% the stash past the per-frame limit.
->>>>>>> 3381d72 (Cap combined AMQP 1.0 deferral tokens across stashed FLOW frames)
 modified_quorum_queue_deferral_token_too_many_across_stashed_flows(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {Connection, Session, LinkPair} = init(Config),
@@ -1227,17 +1218,10 @@ modified_quorum_queue_deferral_token_too_many_across_stashed_flows(Config) ->
     OutputHandle = element(4, Receiver),
     Tokens1 = [{utf8, integer_to_binary(N)} || N <- lists:seq(1, 200)],
     Tokens2 = [{utf8, integer_to_binary(N)} || N <- lists:seq(201, 300)],
-<<<<<<< HEAD
     %% Fire three `FLOW` frames back-to-back, no wait in between: the
     %% 2nd and 3rd (300 tokens combined) should land in the
     %% `stashed_credit_req` path while the 1st `FLOW`'s credit request
     %% is still in flight.
-=======
-    %% Fire three FLOW frames back-to-back with no wait in between, so
-    %% the 2nd and 3rd (carrying 200 and 100 tokens respectively, 300
-    %% combined) are very likely to both land in the stashed_credit_req
-    %% path while the 1st FLOW's credit request is still in flight.
->>>>>>> 3381d72 (Cap combined AMQP 1.0 deferral tokens across stashed FLOW frames)
     ok = amqp10_client_session:flow_link(
            Session, OutputHandle,
            #'v1_0.flow'{link_credit = {uint, 1}},
@@ -1265,12 +1249,8 @@ modified_quorum_queue_deferral_token_too_many_across_stashed_flows(Config) ->
     end,
     ok = close_connection_sync(Connection).
 
-<<<<<<< HEAD
 %% Asserts via `meck` that both batches land in one `assign_deferred`
 %% call, so a missed race fails the test instead of passing by accident.
-=======
-%% Meck-asserts the two batches combined into one assign_deferred call, so a lost race fails loudly instead of passing vacuously.
->>>>>>> 3381d72 (Cap combined AMQP 1.0 deferral tokens across stashed FLOW frames)
 modified_quorum_queue_deferral_token_at_limit_across_stashed_flows(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {_, Session, LinkPair} = Init = init(Config),
