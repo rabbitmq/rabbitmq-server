@@ -492,6 +492,8 @@ topic_permission_khepri_error_fails_closed1(_Config) ->
            <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>),
 
     User = #auth_user{username = <<"guest">>},
+    InternalUser = #user{username = <<"guest">>,
+                         authz_backends = [{rabbit_auth_backend_internal, none}]},
     Topic = #resource{name = <<"amq.topic">>, virtual_host = <<"/">>,
                       kind = topic},
     Context = #{routing_key => <<"secret.key">>},
@@ -499,6 +501,13 @@ topic_permission_khepri_error_fails_closed1(_Config) ->
     %% Baseline: routing key does not match "^a", so access is denied
     false = rabbit_auth_backend_internal:check_topic_access(
               User, Topic, write, Context),
+    ?assertExit(
+       #amqp_error{name = access_refused,
+                   explanation = "write access to topic 'secret.key' in "
+                                 "exchange 'amq.topic' in vhost '/' refused "
+                                 "for user 'guest'"},
+       rabbit_access_control:check_topic_access(
+         InternalUser, Topic, write, Context)),
 
     ok = unregister_topic_permission_projection(),
     false = rabbit_auth_backend_internal:check_topic_access(
@@ -516,7 +525,16 @@ topic_permission_khepri_error_fails_closed1(_Config) ->
         meck:expect(rabbit_khepri, get,
                     fun(_Path) -> {error, noproc} end),
         {error, noproc} = rabbit_auth_backend_internal:check_topic_access(
-                            User, Topic, write, Context)
+                            User, Topic, write, Context),
+        ?assertExit(
+           #amqp_error{name = access_refused,
+                       explanation = "write access to topic 'secret.key' in "
+                                     "exchange 'amq.topic' in vhost '/' refused "
+                                     "for user 'guest', backend "
+                                     "rabbit_auth_backend_internal returned an "
+                                     "error: noproc"},
+           rabbit_access_control:check_topic_access(
+             InternalUser, Topic, write, Context))
     after
         meck:unload(rabbit_khepri),
         ok = rabbit_khepri:register_projections()
