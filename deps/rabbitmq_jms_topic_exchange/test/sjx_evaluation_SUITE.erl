@@ -37,7 +37,9 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 basic_evaluate_test,
-                                arithmetic_type_mismatch_test
+                                arithmetic_type_mismatch_test,
+                                like_type_mismatch_test,
+                                between_error_propagation_test
                                ]}
     ].
 
@@ -139,3 +141,20 @@ arithmetic_type_mismatch_test(_Config) ->
     ?assertEqual(error, eval(Hs, {'>=',    {'+', {'ident', <<"amount">>}, 1}, 100})),
     ?assertEqual(error, eval(Hs, {'<>',    {'+', {'ident', <<"amount">>}, 1}, 100})),
     ?assertEqual(error, eval(Hs, {'not_in', {'+', {'ident', <<"amount">>}, 1}, [100]})).
+
+%% A LIKE/NOT LIKE left-hand side is only a binary if the message header
+%% actually is one; a numeric or boolean header must not raise `badarg`.
+like_type_mismatch_test(_Config) ->
+    Hs = [{<<"n">>, signedint, 5}, {<<"b">>, bool, true}, {<<"colour">>, longstr, <<"blue">>}],
+    ?assertEqual(true,      eval(Hs, {'like', {'ident', <<"colour">>}, <<"bl%">>, no_escape})),
+    ?assertEqual(error,     eval(Hs, {'like', {'ident', <<"n">>}, <<"5%">>, no_escape})),
+    ?assertEqual(undefined, eval(Hs, {'not_like', {'ident', <<"n">>}, <<"5%">>, no_escape})),
+    ?assertEqual(error,     eval(Hs, {'like', {'ident', <<"b">>}, regex, <<"true">>})).
+
+%% `between`/`not_between` must propagate the `error` sentinel a
+%% type-mismatched nested arithmetic operand already produces, the same
+%% as `do_bin_op/3`, rather than fall through to a raw term comparison.
+between_error_propagation_test(_Config) ->
+    Hs = [{<<"amount">>, longstr, <<"unknown">>}],
+    ?assertEqual(error,     eval(Hs, {'between',     {'+', {'ident', <<"amount">>}, 1}, 5, 10})),
+    ?assertEqual(undefined, eval(Hs, {'not_between', {'+', {'ident', <<"amount">>}, 1}, 5, 10})).

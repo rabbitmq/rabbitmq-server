@@ -99,6 +99,7 @@ do_bin_op('/' , L, R) when is_number(L), is_number(R), L == 0, R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
 
 isLike(undefined, _Patt) -> undefined;
+isLike(L, _Patt) when not is_binary(L) -> error;
 isLike(L, {regex, MP}) -> patt_match(L, MP);
 isLike(L, {Patt, Esc}) -> patt_match(L, pattern_of(Patt, Esc)).
 
@@ -117,6 +118,7 @@ val_of({'ident', Ident}, Hs) -> lookup_value(Hs, Ident);
 val_of(Value,           _Hs) -> Value.
 
 between(E, F, T) when E =:= undefined orelse F =:= undefined orelse T =:= undefined -> undefined;
+between(E, F, T) when E =:= error     orelse F =:= error     orelse T =:= error     -> error;
 between(Value, Lo, Hi) -> Lo =< Value andalso Value =< Hi.
 
 lookup_value(Table, Key) ->
