@@ -39,7 +39,8 @@ groups() ->
                                 basic_evaluate_test,
                                 arithmetic_type_mismatch_test,
                                 arithmetic_overflow_test,
-                                arithmetic_bignum_overflow_test
+                                arithmetic_bignum_overflow_test,
+                                between_error_propagation_test
                                ]}
     ].
 
@@ -162,3 +163,10 @@ nest_multiply(0, Leaf) -> Leaf;
 nest_multiply(N, Leaf) ->
     Half = nest_multiply(N - 1, Leaf),
     {'*', Half, Half}.
+
+%% `between`/`not_between` must propagate an `error` operand (e.g. from
+%% an unrecognised nested operator) the same as `do_bin_op/3`, rather
+%% than fall through to a raw term comparison.
+between_error_propagation_test(_Config) ->
+    ?assertEqual(error,     eval([], {'between',     {'unrecognised_op', 1, 2}, 5, 10})),
+    ?assertEqual(undefined, eval([], {'not_between', {'unrecognised_op', 1, 2}, 5, 10})).
