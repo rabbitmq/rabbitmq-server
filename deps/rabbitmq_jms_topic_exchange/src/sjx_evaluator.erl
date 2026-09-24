@@ -129,7 +129,11 @@ comparable(_, _) -> false.
 
 isLike(undefined, _Patt) -> undefined;
 isLike(L, _Patt) when not is_binary(L) -> error;
-isLike(L, {regex, MP}) when is_binary(MP) -> patt_match(L, MP);
+isLike(L, {regex, MP}) when is_binary(MP) ->
+  case compile_re(MP) of
+    error -> error;
+    Rx    -> patt_match(L, Rx)
+  end;
 isLike(L, {Patt, Esc}) when is_binary(Patt) -> patt_match(L, pattern_of(Patt, Esc));
 isLike(_L, _Patt) -> error.
 

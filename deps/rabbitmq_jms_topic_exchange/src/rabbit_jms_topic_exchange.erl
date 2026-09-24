@@ -187,6 +187,9 @@ get_headers(Content) ->
   end.
 
 % generate the function that checks the message against the selector
+generate_binding_fun(error) ->
+  %% No usable selector argument: match unconditionally.
+  check_fun(true);
 generate_binding_fun(ERL) ->
   case decode_term(ERL) of
     {error, _}    -> error;

@@ -47,7 +47,8 @@ groups() ->
                                 like_range_wrapped_pattern_test,
                                 between_range_form_test,
                                 arithmetic_bignum_overflow_test,
-                                arithmetic_long_wraparound_test
+                                arithmetic_long_wraparound_test,
+                                like_regex_pattern_length_cap_test
                                ]}
     ].
 
@@ -243,3 +244,11 @@ arithmetic_long_wraparound_test(_Config) ->
     ?assertEqual(-9223372036854775808, eval([], {'-', -9223372036854775808})),
     ?assertEqual(5,                    eval([], {'+', 2, 3})),
     ?assertEqual(5.5,                  eval([], {'+', 2.5, 3})).
+
+%% `validate_patterns/1`'s bind-time cap is not the only gate.
+like_regex_pattern_length_cap_test(_Config) ->
+    Oversized = binary:copy(<<"a">>, rabbit_re:max_pattern_length() + 1),
+    Hs = [{<<"p">>, longstr, Oversized}],
+    ?assertEqual(error,     eval(Hs, {'like', {'ident', <<"p">>}, regex, Oversized})),
+    ?assertEqual(undefined, eval(Hs, {'not_like', {'ident', <<"p">>}, regex, Oversized})),
+    ?assertEqual(true,      eval([{<<"p">>, longstr, <<"x">>}], {'like', {'ident', <<"p">>}, regex, <<"x">>})).
