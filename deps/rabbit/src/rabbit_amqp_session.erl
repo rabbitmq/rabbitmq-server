@@ -66,9 +66,7 @@
 %% or by remote-incoming window (i.e. session flow control).
 -define(DEFAULT_MAX_QUEUE_CREDIT, 256).
 -define(DEFAULT_MAX_INCOMING_WINDOW, 400).
-%% Maximum number of deferral tokens a single FLOW frame may request. Each
-%% token is resolved within one Ra command, so this bounds both the size of
-%% that command and the work it does.
+%% Max deferral tokens per `FLOW` frame, and combined across stashed frames.
 -define(MAX_DEFERRAL_TOKENS, 256).
 %% Maximum byte length of a single deferral token. Tokens are stored as Ra
 %% command/queue-state map keys, so an unbounded client-chosen string would
@@ -3403,13 +3401,22 @@ handle_outgoing_link_flow_control(
                               #credit_req{tokens = T} ->
                                   T
                           end,
+            %% Also cap the combined token count across stashed `FLOW` frames.
+            Tokens = PrevTokens ++ parse_deferred_tokens(FlowProps),
+            NumTokens = length(Tokens),
+            NumTokens =< ?MAX_DEFERRAL_TOKENS orelse
+                protocol_error(
+                  ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                  "rabbitmq:deferral-tokens must contain at most ~b tokens "
+                  "across FLOW frames not yet processed, got: ~b",
+                  [?MAX_DEFERRAL_TOKENS, NumTokens]),
             Link = Link0#outgoing_link{
                      stashed_credit_req = #credit_req{
                                              delivery_count = DeliveryCountRcv,
                                              credit = LinkCreditRcv,
                                              drain = Drain,
                                              echo = Echo,
-                                             tokens = PrevTokens ++ parse_deferred_tokens(FlowProps)}},
+                                             tokens = Tokens}},
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
 
