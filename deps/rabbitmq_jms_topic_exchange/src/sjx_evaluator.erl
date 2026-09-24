@@ -73,12 +73,14 @@ or3(_,     true ) -> true;
 or3(_,     _    ) -> undefined.
 
 do_una_op(_, undefined)  -> undefined;
-do_una_op('-', E) -> -E;
-do_una_op('+', E) -> +E;
+do_una_op('-', E) when is_number(E) -> -E;
+do_una_op('+', E) when is_number(E) -> +E;
 do_una_op(_,   _) -> error.
 
 do_bin_op(_, undefined, _)  -> undefined;
 do_bin_op(_, _, undefined ) -> undefined;
+do_bin_op(_, error, _)       -> error;
+do_bin_op(_, _, error)       -> error;
 do_bin_op('=' , L, R) -> L == R;
 do_bin_op('<>', L, R) -> L /= R;
 do_bin_op('>' , L, R) -> L > R;
@@ -87,13 +89,13 @@ do_bin_op('>=', L, R) -> L >= R;
 do_bin_op('<=', L, R) -> L =< R;
 do_bin_op('in', L, R) -> isIn(L, R);
 do_bin_op('not_in', L, R) -> not isIn(L, R);
-do_bin_op('+' , L, R) -> L + R;
-do_bin_op('-' , L, R) -> L - R;
-do_bin_op('*' , L, R) -> L * R;
-do_bin_op('/' , L, R) when R /= 0 -> L / R;
-do_bin_op('/' , L, R) when L > 0 andalso R == 0 -> plus_infinity;
-do_bin_op('/' , L, R) when L < 0 andalso R == 0 -> minus_infinity;
-do_bin_op('/' , L, R) when L == 0 andalso R == 0 -> nan;
+do_bin_op('+' , L, R) when is_number(L), is_number(R) -> L + R;
+do_bin_op('-' , L, R) when is_number(L), is_number(R) -> L - R;
+do_bin_op('*' , L, R) when is_number(L), is_number(R) -> L * R;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), R /= 0 -> L / R;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), L > 0, R == 0 -> plus_infinity;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), L < 0, R == 0 -> minus_infinity;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), L == 0, R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
 
 isLike(undefined, _Patt) -> undefined;

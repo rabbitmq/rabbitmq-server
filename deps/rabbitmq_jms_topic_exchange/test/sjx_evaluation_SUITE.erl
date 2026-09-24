@@ -36,7 +36,8 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-                                basic_evaluate_test
+                                basic_evaluate_test,
+                                arithmetic_type_mismatch_test
                                ]}
     ].
 
@@ -119,3 +120,22 @@ basic_evaluate_test(_Config) ->
     ].
 
 eval(Hs, S) -> evaluate(S, Hs).
+
+%% A selector with an operand of the wrong type must evaluate to `error`,
+%% not raise `badarith`/`badarg`: the type of an `ident` operand is only
+%% known once a message arrives, so this can't be rejected at bind time.
+arithmetic_type_mismatch_test(_Config) ->
+    ?assertEqual(error, evaluate({'+', <<"a">>, <<"b">>}, [])),
+    ?assertEqual(error, evaluate({'-', <<"a">>, 1}, [])),
+    ?assertEqual(error, evaluate({'*', 1, <<"a">>}, [])),
+    ?assertEqual(error, evaluate({'/', 1, <<"a">>}, [])),
+    ?assertEqual(error, evaluate({'-', <<"a">>}, [])),
+    ?assertEqual(error, evaluate({'+', <<"a">>}, [])),
+    ?assertEqual(error, evaluate({'-', true}, [])),
+
+    Hs = [{<<"amount">>, longstr, <<"unknown">>}],
+    ?assertEqual(error, eval(Hs, {'+', {'ident', <<"amount">>}, 1})),
+    ?assertEqual(error, eval(Hs, {'>',     {'+', {'ident', <<"amount">>}, 1}, 100})),
+    ?assertEqual(error, eval(Hs, {'>=',    {'+', {'ident', <<"amount">>}, 1}, 100})),
+    ?assertEqual(error, eval(Hs, {'<>',    {'+', {'ident', <<"amount">>}, 1}, 100})),
+    ?assertEqual(error, eval(Hs, {'not_in', {'+', {'ident', <<"amount">>}, 1}, [100]})).
