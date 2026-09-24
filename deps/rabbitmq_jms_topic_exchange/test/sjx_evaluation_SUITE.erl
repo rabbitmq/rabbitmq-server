@@ -46,7 +46,8 @@ groups() ->
                                 comparison_type_mismatch_test,
                                 like_range_wrapped_pattern_test,
                                 between_range_form_test,
-                                arithmetic_bignum_overflow_test
+                                arithmetic_bignum_overflow_test,
+                                arithmetic_long_wraparound_test
                                ]}
     ].
 
@@ -211,7 +212,9 @@ like_range_wrapped_pattern_test(_Config) ->
     ?assertEqual(error, eval([], {'like', <<"x">>, {range, 1, no_escape}})),
     ?assertEqual(error, eval([], {'not_like', <<"x">>, {range, 1, no_escape}})),
     ?assertEqual(error, eval([], {'like', <<"x">>, {range, regex, <<"(a)">>}})),
-    ?assertEqual(error, eval([], {'like', <<"x">>, 1, no_escape})).
+    ?assertEqual(error, eval([], {'like', <<"x">>, 1, no_escape})),
+    %% `rabbit_re:compile/2`'s byte-size cap doesn't apply to a list.
+    ?assertEqual(error, eval([], {'like', <<"x">>, regex, [<<"a">>]})).
 
 %% `between`/`not_between` must still accept the `{range, From, To}`
 %% form now that the rewrite is specific to those two operators.
@@ -219,16 +222,24 @@ between_range_form_test(_Config) ->
     ?assertEqual(true,  eval([], {'between', 5, {range, 1, 10}})),
     ?assertEqual(false, eval([], {'not_between', 5, {range, 1, 10}})).
 
-%% Repeated multiplication doubles the operand's bit size at every
-%% nesting level; within the parser's own nesting-depth cap this
-%% reaches Erlang's bignum limit and raises `system_limit`, a
-%% different exception from the `badarith` float overflow already
-%% guarded against.
+%% Repeated multiplication must stay a bounded 64-bit integer
+%% regardless of nesting depth, not grow into an ever-larger bignum.
 arithmetic_bignum_overflow_test(_Config) ->
     Leaf = list_to_integer(lists:duplicate(100, $9)),
-    ?assertEqual(error, eval([], nest_multiply(14, Leaf))).
+    Result = eval([], nest_multiply(14, Leaf)),
+    ?assert(is_integer(Result)),
+    ?assert(Result >= -9223372036854775808 andalso Result =< 9223372036854775807).
 
 nest_multiply(0, Leaf) -> Leaf;
 nest_multiply(N, Leaf) ->
     Half = nest_multiply(N - 1, Leaf),
     {'*', Half, Half}.
+
+%% Mirrors Java `long` overflow; a float operand is unaffected.
+arithmetic_long_wraparound_test(_Config) ->
+    ?assertEqual(-9223372036854775808, eval([], {'+', 9223372036854775807, 1})),
+    ?assertEqual(9223372036854775807,  eval([], {'-', -9223372036854775808, 1})),
+    ?assertEqual(1,                    eval([], {'*', 9223372036854775807, 9223372036854775807})),
+    ?assertEqual(-9223372036854775808, eval([], {'-', -9223372036854775808})),
+    ?assertEqual(5,                    eval([], {'+', 2, 3})),
+    ?assertEqual(5.5,                  eval([], {'+', 2.5, 3})).

@@ -49,7 +49,8 @@ groups() ->
           rejects_non_atom_identifiers_test,
           rejects_malformed_input_test,
           rejects_excessive_nesting_test,
-          rejects_number_too_long_test
+          rejects_number_too_long_test,
+          rejects_integer_out_of_long_range_test
       ]}
     ].
 
@@ -299,10 +300,24 @@ nest_lists(N, Inner) -> "[" ++ nest_lists(N - 1, Inner) ++ "]".
 %% An unbounded digit run reaches `list_to_integer/1`, which raises
 %% `system_limit` (not `badarg`) past a certain length, escaping
 %% `parse_term/1`'s own `try`/`catch` uncaught.
+%%
+%% A plain integer literal is bounded well before this by its `long`
+%% value range instead (`rejects_integer_out_of_long_range_test/1`),
+%% so this cap is only reachable via a float's fractional/exponent run.
 rejects_number_too_long_test(_) ->
     Digits100 = lists:duplicate(100, $9),
     Digits101 = lists:duplicate(101, $9),
-    ?assertMatch({ok, _}, sjx_parser:parse_term(Digits100 ++ ".")),
+    ?assertMatch({ok, _}, sjx_parser:parse_term("1." ++ Digits100 ++ ".")),
     ?assertMatch({error, number_too_long}, sjx_parser:parse_term(Digits101 ++ ".")),
     ?assertMatch({error, number_too_long}, sjx_parser:parse_term("1." ++ Digits101 ++ ".")),
     ?assertMatch({error, number_too_long}, sjx_parser:parse_term("1.0e" ++ Digits101 ++ ".")).
+
+%% A float literal (has a decimal point) has no `long` restriction.
+rejects_integer_out_of_long_range_test(_) ->
+    ?assertMatch({ok, 9223372036854775807}, sjx_parser:parse_term("9223372036854775807.")),
+    ?assertMatch({error, integer_out_of_range}, sjx_parser:parse_term("9223372036854775808.")),
+    ?assertMatch({ok, 9223372036854775808.0}, sjx_parser:parse_term("9223372036854775808.0.")),
+    %% `-9223372036854775808` (`Long.MIN_VALUE`) is valid even though
+    %% its unsigned digit sequence exceeds `?LONG_MAX`.
+    ?assertMatch({ok, -9223372036854775808}, sjx_parser:parse_term("-9223372036854775808.")),
+    ?assertMatch({error, integer_out_of_range}, sjx_parser:parse_term("-9223372036854775809.")).

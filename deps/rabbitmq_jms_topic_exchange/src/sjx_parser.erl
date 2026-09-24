@@ -17,6 +17,10 @@
 -define(MAX_NESTING_DEPTH, 16).
 -define(MAX_DIGITS, 100).
 
+%% JMS restricts an exact numeric literal (one with no decimal point)
+%% to the range of Java `long`.
+-define(LONG_MAX, 9223372036854775807).
+
 -define(ALLOWED_ATOMS, #{
     %% Expression tags
     ident       => true,
@@ -93,7 +97,7 @@ do_parse_term([$- | Rest0], _Depth) ->
     Rest = skip_ws(Rest0),
     case Rest of
         [C | _] when C >= $0, C =< $9 ->
-            {Num, Rest1} = parse_number(Rest),
+            {Num, Rest1} = parse_number(Rest, ?LONG_MAX + 1),
             {-Num, Rest1};
         _ ->
             throw({parse_error, unexpected_character})
@@ -221,7 +225,12 @@ parse_bare_atom(Rest, Acc) ->
 %% Numbers: integers and floats (with optional scientific notation)
 %% ---------------------------------------------------------------------------
 
-parse_number(Str) ->
+parse_number(Str) -> parse_number(Str, ?LONG_MAX).
+
+%% `MaxInt` is `?LONG_MAX + 1` when called right after a unary minus,
+%% since `-9223372036854775808` (`Long.MIN_VALUE`) is a valid literal
+%% even though its unsigned digit sequence exceeds `?LONG_MAX`.
+parse_number(Str, MaxInt) ->
     {IntDigits, Rest1} = scan_digits(Str),
     case Rest1 of
         [$., C | Rest2] when C >= $0, C =< $9 ->
@@ -229,7 +238,11 @@ parse_number(Str) ->
             FloatStr = IntDigits ++ "." ++ FracDigits,
             maybe_parse_exponent(FloatStr, Rest3);
         _ ->
-            {list_to_integer(IntDigits), Rest1}
+            Int = list_to_integer(IntDigits),
+            case Int > MaxInt of
+                true  -> throw({parse_error, integer_out_of_range});
+                false -> {Int, Rest1}
+            end
     end.
 
 maybe_parse_exponent(FloatStr, [E | Rest]) when E =:= $e; E =:= $E ->

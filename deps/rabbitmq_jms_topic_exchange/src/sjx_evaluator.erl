@@ -74,6 +74,7 @@ or3(_,     true ) -> true;
 or3(_,     _    ) -> undefined.
 
 do_una_op(_, undefined)  -> undefined;
+do_una_op('-', E) when is_integer(E) -> wrap_long(-E);
 do_una_op('-', E) when is_number(E) -> -E;
 do_una_op('+', E) when is_number(E) -> +E;
 do_una_op(_,   _) -> error.
@@ -94,10 +95,13 @@ do_bin_op('<=', L, R) when is_number(L), is_number(R) -> L =< R;
 do_bin_op('<=', _, _) -> undefined;
 do_bin_op('in', L, R) -> isIn(L, R);
 do_bin_op('not_in', L, R) -> not isIn(L, R);
+do_bin_op('+' , L, R) when is_integer(L), is_integer(R) -> wrap_long(L + R);
 do_bin_op('+' , L, R) when is_number(L), is_number(R) ->
   try L + R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('-' , L, R) when is_integer(L), is_integer(R) -> wrap_long(L - R);
 do_bin_op('-' , L, R) when is_number(L), is_number(R) ->
   try L - R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('*' , L, R) when is_integer(L), is_integer(R) -> wrap_long(L * R);
 do_bin_op('*' , L, R) when is_number(L), is_number(R) ->
   try L * R catch error:badarith -> error; error:system_limit -> error end;
 do_bin_op('/' , L, R) when is_number(L), is_number(R), R /= 0 ->
@@ -106,6 +110,15 @@ do_bin_op('/' , L, R) when is_number(L), is_number(R), L > 0, R == 0 -> plus_inf
 do_bin_op('/' , L, R) when is_number(L), is_number(R), L < 0, R == 0 -> minus_infinity;
 do_bin_op('/' , L, R) when is_number(L), is_number(R), L == 0, R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
+
+%% JMS exact-numeric arithmetic is Java `long`, which wraps on overflow
+%% instead of growing arbitrarily like an Erlang integer.
+wrap_long(N) ->
+  M = N band 16#FFFFFFFFFFFFFFFF,
+  case M > 16#7FFFFFFFFFFFFFFF of
+    true  -> M - 16#10000000000000000;
+    false -> M
+  end.
 
 %% `=`/`<>` follow the JMS restriction that only like-typed operands can
 %% be compared; anything else is not an error, just not comparable.
@@ -116,7 +129,7 @@ comparable(_, _) -> false.
 
 isLike(undefined, _Patt) -> undefined;
 isLike(L, _Patt) when not is_binary(L) -> error;
-isLike(L, {regex, MP}) -> patt_match(L, MP);
+isLike(L, {regex, MP}) when is_binary(MP) -> patt_match(L, MP);
 isLike(L, {Patt, Esc}) when is_binary(Patt) -> patt_match(L, pattern_of(Patt, Esc));
 isLike(_L, _Patt) -> error.
 
@@ -229,8 +242,10 @@ validate_patterns_list([H | T]) ->
     Error -> Error
   end.
 
-validate_pattern(regex, MP) ->
+validate_pattern(regex, MP) when is_binary(MP) ->
   compile_for_validation(MP, invalid_regex);
+validate_pattern(regex, MP) ->
+  {error, {invalid_regex, {not_a_binary_pattern, MP}}};
 validate_pattern(Patt, Esc) when is_binary(Patt) ->
   case gen_re(binary_to_list(Patt), Esc) of
     error -> {error, {invalid_like_pattern, invalid_escape}};
