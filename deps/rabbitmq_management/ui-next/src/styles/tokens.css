@@ -1,0 +1,106 @@
+:root {
+  color-scheme: light dark;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --surface-hover: #f6f8fa;
+  --border: #dcdfe4;
+  --border-strong: #c4c9d0;
+  --text: #1c2127;
+  --text-muted: #5d6874;
+  --link: #0b5cad;
+  --brand: #ff6600;
+  --brand-contrast: #ffffff;
+  --focus: #2f7de1;
+
+  --ok: #268a4c;
+  --warn: #b77800;
+  --bad: #c3322f;
+  --idle: #8a939c;
+  --info: #2f7de1;
+  --ok-bg: #e5f4ea;
+  --warn-bg: #fdf3dc;
+  --bad-bg: #fbe7e6;
+
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.06);
+  --shadow-lg: 0 8px 24px rgb(16 24 40 / 0.14);
+
+  --chart-1: #2f7de1;
+  --chart-2: #e8830c;
+  --chart-3: #7c4dcc;
+  --chart-4: #2a9d6f;
+  --chart-5: #d1435b;
+  --chart-6: #1aa3b8;
+  --chart-7: #8f7a2b;
+  --chart-8: #c75fb4;
+  --chart-grid: #e6e8ec;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #111418;
+    --surface: #1a1e24;
+    --surface-2: #22272e;
+    --surface-hover: #242a31;
+    --border: #2f363f;
+    --border-strong: #3d4550;
+    --text: #e3e6ea;
+    --text-muted: #9aa4af;
+    --link: #6cb0ff;
+    --focus: #6cb0ff;
+    --ok: #4cc27a;
+    --warn: #e0a93a;
+    --bad: #f0706b;
+    --idle: #7d8792;
+    --info: #6cb0ff;
+    --ok-bg: #16301f;
+    --warn-bg: #362a10;
+    --bad-bg: #3a1a19;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.5);
+    --chart-grid: #2a3038;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #111418;
+  --surface: #1a1e24;
+  --surface-2: #22272e;
+  --surface-hover: #242a31;
+  --border: #2f363f;
+  --border-strong: #3d4550;
+  --text: #e3e6ea;
+  --text-muted: #9aa4af;
+  --link: #6cb0ff;
+  --focus: #6cb0ff;
+  --ok: #4cc27a;
+  --warn: #e0a93a;
+  --bad: #f0706b;
+  --idle: #7d8792;
+  --info: #6cb0ff;
+  --ok-bg: #16301f;
+  --warn-bg: #362a10;
+  --bad-bg: #3a1a19;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.5);
+  --chart-grid: #2a3038;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}

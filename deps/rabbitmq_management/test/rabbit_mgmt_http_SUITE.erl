@@ -85,7 +85,8 @@ some_tests() ->
         queues_test,
         bindings_test,
         policy_test,
-        policy_permissions_test
+        policy_permissions_test,
+        next_ui_index_test
     ].
 
 definitions_group1_tests() ->
@@ -4407,6 +4408,36 @@ rates_test(Config) ->
     close_channel(Ch),
     close_connection(Conn),
     http_delete(Config, "/queues/%2F/myqueue", ?NO_CONTENT),
+    passed.
+
+next_ui_index_test(Config) ->
+    %% Without the trailing slash, the relative asset URLs in the index file
+    %% would resolve outside of next/, so the handler redirects first.
+    {ok, {{_, 301, _}, RedirectHeaders, _}} = req(Config, get_static, "next", []),
+    ?assertEqual("next/", proplists:get_value("location", RedirectHeaders)),
+
+    %% The bundle is only present when the UI has been built, so the test
+    %% provides an index file when there is none.
+    PrivDir = rpc(Config, code, priv_dir, [rabbitmq_management]),
+    IndexFile = filename:join([PrivDir, "www", "next", "index.html"]),
+    Created = case rpc(Config, filelib, is_regular, [IndexFile]) of
+                  true ->
+                      false;
+                  false ->
+                      ok = rpc(Config, filelib, ensure_dir, [IndexFile]),
+                      ok = rpc(Config, file, write_file, [IndexFile, <<"<!doctype html>">>]),
+                      true
+              end,
+    try
+        {ok, {{_, 200, _}, Headers, _}} = req(Config, get_static, "next/", []),
+        ?assertMatch("text/html" ++ _, proplists:get_value("content-type", Headers)),
+        ?assert(lists:keymember("content-security-policy", 1, Headers))
+    after
+        case Created of
+            true -> rpc(Config, file, delete, [IndexFile]);
+            false -> ok
+        end
+    end,
     passed.
 
 cli_redirect_test(Config) ->

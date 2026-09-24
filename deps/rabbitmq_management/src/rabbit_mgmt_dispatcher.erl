@@ -25,13 +25,16 @@ build_routes(Ignore) ->
     StatsRdrRte1 = build_redirect_route("/stats", Prefix ++ "/api/index.html"),
     StatsRdrRte2 = build_redirect_route("/doc/stats.html", Prefix ++ "/api/index.html"),
     MgmtRdrRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
+    NextUiIdxRte = {"/next", rabbit_mgmt_wm_static,
+                    {dir_index, ManagementApp, "www/next/index.html"}},
     LocalPaths = [{module_app(M), "www"} || M <- modules(Ignore)],
     LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
     OauthBootstrap = build_oauth_bootstrap_route(Prefix),
     OauthTokenProxy = build_oauth_token_proxy_routes(Prefix),
     % NB: order is significant in the routing list
     Routes0 = build_module_routes(Ignore) ++
-        [ApiRdrRte, CliRdrRte, MgmtRdrRte, StatsRdrRte1, StatsRdrRte2, LocalStaticRte],
+        [ApiRdrRte, CliRdrRte, MgmtRdrRte, StatsRdrRte1, StatsRdrRte2, NextUiIdxRte,
+         LocalStaticRte],
     Routes1 = maybe_add_path_prefix(Routes0, Prefix),
     % NB: ensure the root routes are first
     Routes2 = RootIdxRtes ++ OauthBootstrap ++ OauthTokenProxy ++ maybe_add_path_prefix([{"/login", rabbit_mgmt_login, []}], Prefix) ++ Routes1,

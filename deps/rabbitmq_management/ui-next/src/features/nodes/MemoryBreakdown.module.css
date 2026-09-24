@@ -1,0 +1,30 @@
+.bar {
+  display: flex;
+  height: 1.4rem;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.segment {
+  height: 100%;
+  min-width: 1px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.classic { background: var(--chart-1); }
+.quorum { background: var(--chart-3); }
+.stream { background: var(--chart-6); }
+.conn { background: var(--chart-2); }
+.table { background: var(--chart-4); }
+.proc { background: var(--chart-5); }
+.system { background: var(--chart-7); }
+.binary { background: var(--chart-8); }
+.unused { background: var(--idle); }

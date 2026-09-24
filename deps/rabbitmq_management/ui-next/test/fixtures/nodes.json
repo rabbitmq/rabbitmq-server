@@ -1,0 +1,253 @@
+[
+ {
+  "partitions": [],
+  "os_pid": "41363",
+  "fd_total": 1048576,
+  "sockets_total": 0,
+  "mem_limit": 15461882265,
+  "mem_alarm": false,
+  "disk_free_limit": 50000000,
+  "disk_free_alarm": false,
+  "proc_total": 1048576,
+  "rates_mode": "basic",
+  "uptime": 2876279,
+  "run_queue": 1,
+  "processors": 15,
+  "exchange_types": [
+   {
+    "name": "headers",
+    "description": "AMQP headers exchange, as per the AMQP specification",
+    "enabled": true
+   },
+   {
+    "name": "topic",
+    "description": "AMQP topic exchange, as per the AMQP specification",
+    "enabled": true
+   },
+   {
+    "name": "direct",
+    "description": "AMQP direct exchange, as per the AMQP specification",
+    "enabled": true
+   },
+   {
+    "name": "x-modulus-hash",
+    "description": "Modulus Hashing Exchange",
+    "enabled": true
+   },
+   {
+    "name": "x-local-random",
+    "description": "Picks one random local binding (queue) to route via (to).",
+    "enabled": true
+   },
+   {
+    "name": "fanout",
+    "description": "AMQP fanout exchange, as per the AMQP specification",
+    "enabled": true
+   }
+  ],
+  "auth_mechanisms": [
+   {
+    "name": "AMQPLAIN",
+    "description": "QPid AMQPLAIN mechanism",
+    "enabled": true
+   },
+   {
+    "name": "ANONYMOUS",
+    "description": "SASL ANONYMOUS authentication mechanism",
+    "enabled": true
+   },
+   {
+    "name": "RABBIT-CR-DEMO",
+    "description": "RabbitMQ Demo challenge-response authentication mechanism",
+    "enabled": false
+   },
+   {
+    "name": "PLAIN",
+    "description": "SASL PLAIN authentication mechanism",
+    "enabled": true
+   }
+  ],
+  "applications": [
+   {
+    "name": "rabbit",
+    "description": "RabbitMQ",
+    "version": "4.2.0+beta.4.1025.g825d3c8.dirty"
+   },
+   {
+    "name": "rabbitmq_management",
+    "description": "RabbitMQ Management Console",
+    "version": "4.2.0+beta.4.1025.g825d3c8.dirty"
+   }
+  ],
+  "contexts": [
+   {
+    "description": "RabbitMQ Management",
+    "path": "/",
+    "cowboy_opts": "[{sendfile,false}]",
+    "port": "15672"
+   }
+  ],
+  "log_files": [
+   "/var/lib/rabbitmq/log/rabbit@node-1.log",
+   "<stdout>"
+  ],
+  "db_dir": "/var/lib/rabbitmq/mnesia/rabbit@node-1",
+  "config_files": [],
+  "net_ticktime": 60,
+  "enabled_plugins": [
+   "rabbitmq_management"
+  ],
+  "mem_calculation_strategy": "rss",
+  "ra_open_file_metrics": {
+   "ra_log_wal": 0,
+   "ra_log_segment_writer": 0
+  },
+  "rabbitmq_version": "4.2.0+beta.4.1025.g825d3c8.dirty",
+  "erlang_version": "28.5",
+  "erlang_full_version": "Erlang/OTP 28 [erts-16.4] [source] [64-bit] [smp:15:15] [ds:15:15:10] [async-threads:1] [jit]",
+  "crypto_lib_version": "OpenSSL 3.6.4 25 Aug 2026",
+  "name": "rabbit@node-1",
+  "type": "disc",
+  "running": true,
+  "being_drained": false,
+  "mem_used": 113770496,
+  "mem_used_details": {
+   "rate": 16384.0
+  },
+  "fd_used": 79,
+  "fd_used_details": {
+   "rate": 0.0
+  },
+  "sockets_used": 0,
+  "sockets_used_details": {
+   "rate": 0.0
+  },
+  "proc_used": 436,
+  "proc_used_details": {
+   "rate": 0.0
+  },
+  "disk_free": 897547870208,
+  "disk_free_details": {
+   "rate": -104857.6
+  },
+  "gc_num": 1118531,
+  "gc_num_details": {
+   "rate": 460.2
+  },
+  "gc_bytes_reclaimed": 22208577888,
+  "gc_bytes_reclaimed_details": {
+   "rate": 8617470.4
+  },
+  "context_switches": 4840386,
+  "context_switches_details": {
+   "rate": 1889.0
+  },
+  "io_read_count": 0,
+  "io_read_count_details": {
+   "rate": 0.0
+  },
+  "io_read_bytes": 0,
+  "io_read_bytes_details": {
+   "rate": 0.0
+  },
+  "io_read_avg_time": 0.0,
+  "io_read_avg_time_details": {
+   "rate": 0.0
+  },
+  "io_write_count": 0,
+  "io_write_count_details": {
+   "rate": 0.0
+  },
+  "io_write_bytes": 0,
+  "io_write_bytes_details": {
+   "rate": 0.0
+  },
+  "io_write_avg_time": 0.0,
+  "io_write_avg_time_details": {
+   "rate": 0.0
+  },
+  "io_sync_count": 0,
+  "io_sync_count_details": {
+   "rate": 0.0
+  },
+  "io_sync_avg_time": 0.0,
+  "io_sync_avg_time_details": {
+   "rate": 0.0
+  },
+  "io_seek_count": 0,
+  "io_seek_count_details": {
+   "rate": 0.0
+  },
+  "io_seek_avg_time": 0.0,
+  "io_seek_avg_time_details": {
+   "rate": 0.0
+  },
+  "io_reopen_count": 0,
+  "io_reopen_count_details": {
+   "rate": 0.0
+  },
+  "mnesia_ram_tx_count": 0,
+  "mnesia_ram_tx_count_details": {
+   "rate": 0.0
+  },
+  "mnesia_disk_tx_count": 0,
+  "mnesia_disk_tx_count_details": {
+   "rate": 0.0
+  },
+  "msg_store_read_count": 0,
+  "msg_store_read_count_details": {
+   "rate": 0.0
+  },
+  "msg_store_write_count": 0,
+  "msg_store_write_count_details": {
+   "rate": 0.0
+  },
+  "queue_index_write_count": 0,
+  "queue_index_write_count_details": {
+   "rate": 0.0
+  },
+  "queue_index_read_count": 0,
+  "queue_index_read_count_details": {
+   "rate": 0.0
+  },
+  "connection_created": 3,
+  "connection_created_details": {
+   "rate": 0.0
+  },
+  "connection_closed": 2,
+  "connection_closed_details": {
+   "rate": 0.0
+  },
+  "channel_created": 4,
+  "channel_created_details": {
+   "rate": 0.0
+  },
+  "channel_closed": 2,
+  "channel_closed_details": {
+   "rate": 0.0
+  },
+  "queue_declared": 4,
+  "queue_declared_details": {
+   "rate": 0.0
+  },
+  "queue_created": 4,
+  "queue_created_details": {
+   "rate": 0.0
+  },
+  "queue_deleted": 0,
+  "queue_deleted_details": {
+   "rate": 0.0
+  },
+  "cluster_links": [],
+  "metrics_gc_queue_length": {
+   "connection_closed": 0,
+   "channel_closed": 0,
+   "consumer_deleted": 0,
+   "exchange_deleted": 0,
+   "queue_deleted": 0,
+   "vhost_deleted": 0,
+   "node_node_deleted": 0,
+   "channel_consumer_deleted": 0
+  }
+ }
+]

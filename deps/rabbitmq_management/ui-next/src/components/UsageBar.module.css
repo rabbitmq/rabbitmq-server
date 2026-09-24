@@ -1,0 +1,50 @@
+.wrap {
+  min-width: 8.5rem;
+}
+
+.track {
+  position: relative;
+  height: 1.35rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  transition: width 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}
+
+.green {
+  background: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+.yellow {
+  background: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.red {
+  background: color-mix(in srgb, var(--bad) 50%, transparent);
+}
+
+.text {
+  position: relative;
+  padding: 0 var(--space-2);
+  line-height: 1.3rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.detail {
+  font-size: 0.82em;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}

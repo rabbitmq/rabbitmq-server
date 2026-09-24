@@ -8,3 +8,6 @@ test/js/package-lock.json
 ui/node_modules
 ui/package-lock.json
 priv/www/vue/
+
+ui-next/node_modules
+priv/www/next/

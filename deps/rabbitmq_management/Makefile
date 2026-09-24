@@ -45,3 +45,16 @@ EJS_VERIFY  = scripts/verify_ejs_templates.js
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
+# The React UI in ui-next/ is built into priv/www/next/ and served at /next/.
+# It needs Node and network access for `npm ci`, so it is only part of the
+# regular build when BUILD_UI_NEXT=1, while the classic UI is the default.
+UI_NEXT_DIR = ui-next
+
+.PHONY: build-ui-next
+
+build-ui-next:
+	cd $(UI_NEXT_DIR) && npm ci && npm run build
+
+ifeq ($(BUILD_UI_NEXT),1)
+app:: build-ui-next
+endif

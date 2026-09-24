@@ -1,0 +1,318 @@
+{
+ "filtered_count": 4,
+ "item_count": 4,
+ "items": [
+  {
+   "arguments": {
+    "x-queue-type": "stream"
+   },
+   "auto_delete": false,
+   "consumers": 0,
+   "durable": true,
+   "effective_policy_definition": {},
+   "exclusive": false,
+   "first_timestamp": 1790257852538,
+   "internal": false,
+   "internal_owner": false,
+   "leader": "rabbit@node-1",
+   "members": [
+    "rabbit@node-1"
+   ],
+   "memory": 14016,
+   "message_stats": {
+    "publish": 505860,
+    "publish_details": {
+     "rate": 200.0
+    }
+   },
+   "messages": 505800,
+   "messages_details": {
+    "rate": 200.0
+   },
+   "messages_ready": 505800,
+   "messages_ready_details": {
+    "rate": 200.0
+   },
+   "messages_unacknowledged": 0,
+   "messages_unacknowledged_details": {
+    "rate": 0.0
+   },
+   "name": "orders.audit",
+   "node": "rabbit@node-1",
+   "online": [
+    "rabbit@node-1"
+   ],
+   "readers": {
+    "rabbit@node-1": 0
+   },
+   "reductions": 0,
+   "reductions_details": {
+    "rate": 0.0
+   },
+   "segments": 1,
+   "state": "running",
+   "type": "stream",
+   "vhost": "/"
+  },
+  {
+   "arguments": {
+    "x-queue-type": "classic"
+   },
+   "auto_delete": false,
+   "consumer_capacity": 0,
+   "consumer_utilisation": 0,
+   "consumers": 0,
+   "durable": true,
+   "effective_policy_definition": {
+    "dead-letter-exchange": "orders.dlx",
+    "max-length": 100000,
+    "message-ttl": 600000
+   },
+   "exclusive": false,
+   "internal": false,
+   "internal_owner": false,
+   "memory": 68584,
+   "message_bytes": 594841,
+   "message_bytes_persistent": 594841,
+   "message_bytes_ram": 7,
+   "message_bytes_ready": 594841,
+   "message_bytes_unacknowledged": 0,
+   "message_stats": {
+    "publish": 50586,
+    "publish_details": {
+     "rate": 20.0
+    }
+   },
+   "messages": 50496,
+   "messages_details": {
+    "rate": 20.0
+   },
+   "messages_persistent": 50496,
+   "messages_ram": 1,
+   "messages_ready": 50496,
+   "messages_ready_details": {
+    "rate": 20.0
+   },
+   "messages_ready_ram": 1,
+   "messages_unacknowledged": 0,
+   "messages_unacknowledged_details": {
+    "rate": 0.0
+   },
+   "messages_unacknowledged_ram": 0,
+   "name": "orders.dlq",
+   "node": "rabbit@node-1",
+   "operator_policy": "cap",
+   "policy": "dlx",
+   "reductions": 32935909,
+   "reductions_details": {
+    "rate": 13164.0
+   },
+   "state": "running",
+   "storage_version": 2,
+   "type": "classic",
+   "vhost": "/"
+  },
+  {
+   "arguments": {
+    "x-queue-type": "quorum"
+   },
+   "auto_delete": false,
+   "consumer_capacity": 0.0,
+   "consumer_utilisation": 0.0,
+   "consumers": 1,
+   "delayed_retry": "disabled",
+   "delivery_limit": 20,
+   "durable": true,
+   "effective_policy_definition": {
+    "dead-letter-exchange": "orders.dlx",
+    "max-length": 100000,
+    "message-ttl": 600000
+   },
+   "exclusive": false,
+   "internal": false,
+   "internal_owner": false,
+   "leader": "rabbit@node-1",
+   "members": [
+    "rabbit@node-1"
+   ],
+   "memory": 101732,
+   "message_bytes": 0,
+   "message_bytes_dlx": 0,
+   "message_bytes_persistent": 0,
+   "message_bytes_ram": 0,
+   "message_bytes_ready": 0,
+   "message_bytes_unacknowledged": 0,
+   "message_stats": {
+    "ack": 455274,
+    "ack_details": {
+     "rate": 180.0
+    },
+    "deliver": 455274,
+    "deliver_details": {
+     "rate": 180.0
+    },
+    "deliver_get": 455274,
+    "deliver_get_details": {
+     "rate": 180.0
+    },
+    "deliver_no_ack": 0,
+    "deliver_no_ack_details": {
+     "rate": 0.0
+    },
+    "get": 0,
+    "get_details": {
+     "rate": 0.0
+    },
+    "get_empty": 0,
+    "get_empty_details": {
+     "rate": 0.0
+    },
+    "get_no_ack": 0,
+    "get_no_ack_details": {
+     "rate": 0.0
+    },
+    "publish": 455274,
+    "publish_details": {
+     "rate": 180.0
+    },
+    "redeliver": 0,
+    "redeliver_details": {
+     "rate": 0.0
+    }
+   },
+   "messages": 0,
+   "messages_active_priorities": 0,
+   "messages_by_priority": {},
+   "messages_delayed": 0,
+   "messages_details": {
+    "rate": 0.0
+   },
+   "messages_dlx": 0,
+   "messages_persistent": 0,
+   "messages_ram": 0,
+   "messages_ready": 0,
+   "messages_ready_details": {
+    "rate": 0.0
+   },
+   "messages_ready_returned": 0,
+   "messages_unacknowledged": 0,
+   "messages_unacknowledged_details": {
+    "rate": 0.0
+   },
+   "name": "orders.intake",
+   "node": "rabbit@node-1",
+   "online": [
+    "rabbit@node-1"
+   ],
+   "open_files": {
+    "rabbit@node-1": 0
+   },
+   "operator_policy": "cap",
+   "policy": "dlx",
+   "publishers": 1,
+   "reductions": 355030740,
+   "reductions_details": {
+    "rate": 136464.8
+   },
+   "single_active_consumer_tag": "amq.ctag-5b149uq0u63fUpxGPwT3WQ",
+   "state": "running",
+   "type": "quorum",
+   "vhost": "/"
+  },
+  {
+   "arguments": {
+    "x-message-ttl": 60000,
+    "x-queue-type": "classic"
+   },
+   "auto_delete": false,
+   "consumer_capacity": 0,
+   "consumer_utilisation": 0,
+   "consumers": 0,
+   "durable": true,
+   "effective_policy_definition": {
+    "dead-letter-exchange": "orders.dlx",
+    "max-length": 100000,
+    "message-ttl": 600000
+   },
+   "exclusive": false,
+   "internal": false,
+   "internal_owner": false,
+   "memory": 21840,
+   "message_bytes": 0,
+   "message_bytes_persistent": 0,
+   "message_bytes_ram": 0,
+   "message_bytes_ready": 0,
+   "message_bytes_unacknowledged": 0,
+   "message_stats": {
+    "ack": 0,
+    "ack_details": {
+     "rate": 0.0
+    },
+    "deliver": 0,
+    "deliver_details": {
+     "rate": 0.0
+    },
+    "deliver_get": 1,
+    "deliver_get_details": {
+     "rate": 0.0
+    },
+    "deliver_no_ack": 0,
+    "deliver_no_ack_details": {
+     "rate": 0.0
+    },
+    "get": 1,
+    "get_details": {
+     "rate": 0.0
+    },
+    "get_empty": 0,
+    "get_empty_details": {
+     "rate": 0.0
+    },
+    "get_no_ack": 0,
+    "get_no_ack_details": {
+     "rate": 0.0
+    },
+    "publish": 1,
+    "publish_details": {
+     "rate": 0.0
+    },
+    "redeliver": 0,
+    "redeliver_details": {
+     "rate": 0.0
+    }
+   },
+   "messages": 0,
+   "messages_details": {
+    "rate": 0.0
+   },
+   "messages_persistent": 0,
+   "messages_ram": 0,
+   "messages_ready": 0,
+   "messages_ready_details": {
+    "rate": 0.0
+   },
+   "messages_ready_ram": 0,
+   "messages_unacknowledged": 0,
+   "messages_unacknowledged_details": {
+    "rate": 0.0
+   },
+   "messages_unacknowledged_ram": 0,
+   "name": "orders.retry",
+   "node": "rabbit@node-1",
+   "operator_policy": "cap",
+   "policy": "dlx",
+   "reductions": 15382,
+   "reductions_details": {
+    "rate": 0.0
+   },
+   "state": "running",
+   "storage_version": 2,
+   "type": "classic",
+   "vhost": "/"
+  }
+ ],
+ "page": 1,
+ "page_count": 1,
+ "page_size": 100,
+ "total_count": 4
+}

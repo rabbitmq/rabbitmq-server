@@ -1,0 +1,273 @@
+{
+ "management_version": "4.2.0+beta.4.1025.g825d3c8.dirty",
+ "rates_mode": "basic",
+ "sample_retention_policies": {
+  "global": [
+   600,
+   3600,
+   28800,
+   86400
+  ],
+  "basic": [
+   600,
+   3600
+  ],
+  "detailed": [
+   600
+  ]
+ },
+ "exchange_types": [
+  {
+   "name": "direct",
+   "description": "AMQP direct exchange, as per the AMQP specification",
+   "enabled": true
+  },
+  {
+   "name": "fanout",
+   "description": "AMQP fanout exchange, as per the AMQP specification",
+   "enabled": true
+  },
+  {
+   "name": "headers",
+   "description": "AMQP headers exchange, as per the AMQP specification",
+   "enabled": true
+  },
+  {
+   "name": "topic",
+   "description": "AMQP topic exchange, as per the AMQP specification",
+   "enabled": true
+  },
+  {
+   "name": "x-local-random",
+   "description": "Picks one random local binding (queue) to route via (to).",
+   "enabled": true
+  },
+  {
+   "name": "x-modulus-hash",
+   "description": "Modulus Hashing Exchange",
+   "enabled": true
+  }
+ ],
+ "product_version": "4.2.0+beta.4.1025.g825d3c8.dirty",
+ "product_name": "RabbitMQ",
+ "rabbitmq_version": "4.2.0+beta.4.1025.g825d3c8.dirty",
+ "cluster_name": "rabbit@node-1",
+ "cluster_tags": {},
+ "node_tags": {},
+ "erlang_version": "28.5",
+ "erlang_full_version": "Erlang/OTP 28 [erts-16.4] [source] [64-bit] [smp:15:15] [ds:15:15:10] [async-threads:1] [jit]",
+ "crypto_lib_version": "OpenSSL 3.6.4 25 Aug 2026",
+ "disable_stats": false,
+ "default_queue_type": "classic",
+ "is_op_policy_updating_enabled": true,
+ "enable_queue_totals": false,
+ "require_definition_json_extension": false,
+ "message_stats": {
+  "get": 1,
+  "deliver": 455274,
+  "confirm": 505861,
+  "ack": 455274,
+  "publish": 505861,
+  "redeliver": 0,
+  "deliver_no_ack": 0,
+  "get_empty": 0,
+  "get_no_ack": 0,
+  "drop_unroutable": 0,
+  "return_unroutable": 0,
+  "disk_reads": 0,
+  "disk_writes": 50496,
+  "deliver_get": 455275,
+  "get_empty_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 0.0
+  },
+  "deliver_get_details": {
+   "rate": 180.0,
+   "avg_rate": 178.5,
+   "avg": 449920.6923076923
+  },
+  "ack_details": {
+   "rate": 180.0,
+   "avg_rate": 178.5,
+   "avg": 449919.6923076923
+  },
+  "redeliver_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 0.0
+  },
+  "deliver_no_ack_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 0.0
+  },
+  "deliver_details": {
+   "rate": 180.0,
+   "avg_rate": 178.5,
+   "avg": 449919.6923076923
+  },
+  "get_no_ack_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 0.0
+  },
+  "get_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 1.0
+  },
+  "drop_unroutable_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 0.0
+  },
+  "return_unroutable_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 0.0
+  },
+  "confirm_details": {
+   "rate": 200.0,
+   "avg_rate": 198.33333333333334,
+   "avg": 499911.76923076925
+  },
+  "publish_details": {
+   "rate": 200.0,
+   "avg_rate": 198.33333333333334,
+   "avg": 499911.76923076925
+  },
+  "disk_writes_details": {
+   "rate": 20.0,
+   "avg_rate": 20.0,
+   "avg": 49896.0
+  },
+  "disk_reads_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 0.0
+  }
+ },
+ "churn_rates": {
+  "connection_closed": 2,
+  "connection_created": 3,
+  "channel_closed": 2,
+  "channel_created": 4,
+  "queue_created": 4,
+  "queue_deleted": 0,
+  "queue_declared": 4,
+  "queue_deleted_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 0.0
+  },
+  "queue_created_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 4.0
+  },
+  "queue_declared_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 4.0
+  },
+  "channel_closed_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 2.0
+  },
+  "channel_created_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 4.0
+  },
+  "connection_closed_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 2.0
+  },
+  "connection_created_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 3.0
+  }
+ },
+ "queue_totals": {
+  "messages": 556296,
+  "messages_ready": 556296,
+  "messages_unacknowledged": 0,
+  "messages_details": {
+   "rate": 220.0,
+   "avg_rate": 218.33333333333334,
+   "avg": 549743.6923076923
+  },
+  "messages_unacknowledged_details": {
+   "rate": 0.0,
+   "avg_rate": 0.0,
+   "avg": 0.0
+  },
+  "messages_ready_details": {
+   "rate": 220.0,
+   "avg_rate": 218.33333333333334,
+   "avg": 549743.6923076923
+  }
+ },
+ "object_totals": {
+  "exchanges": 16,
+  "queues": 4,
+  "consumers": 1,
+  "channels": 2,
+  "connections": 1
+ },
+ "statistics_db_event_queue": 0,
+ "node": "rabbit@node-1",
+ "listeners": [
+  {
+   "node": "rabbit@node-1",
+   "protocol": "amqp",
+   "ip_address": "::",
+   "port": 5672,
+   "socket_opts": {
+    "backlog": 128,
+    "nodelay": true,
+    "linger": [
+     true,
+     0
+    ],
+    "exit_on_close": false
+   },
+   "tls": false
+  },
+  {
+   "node": "rabbit@node-1",
+   "protocol": "clustering",
+   "ip_address": "::",
+   "port": 25672,
+   "socket_opts": [],
+   "tls": false
+  },
+  {
+   "node": "rabbit@node-1",
+   "protocol": "http",
+   "ip_address": "::",
+   "port": 15672,
+   "socket_opts": {
+    "cowboy_opts": {
+     "sendfile": false
+    },
+    "port": 15672
+   },
+   "tls": false
+  }
+ ],
+ "contexts": [
+  {
+   "ssl_opts": [],
+   "node": "rabbit@node-1",
+   "description": "RabbitMQ Management",
+   "path": "/",
+   "cowboy_opts": "[{sendfile,false}]",
+   "port": "15672"
+  }
+ ]
+}

@@ -1,0 +1,35 @@
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+}
+
+.field input[type='search'] {
+  width: 16rem;
+}
+
+.counts {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.paging {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.error {
+  color: var(--bad);
+  font-size: 0.9em;
+}

@@ -27,6 +27,21 @@
 init(Req0, {priv_file, _App, _Path}=Opts) ->
     Req1 = rabbit_mgmt_headers:set_common_permission_headers(Req0, ?MODULE),
     cowboy_static:init(Req1, Opts);
+%% Serves an index file for a path that must end with a slash, so that
+%% relative asset URLs in that file resolve under it.
+init(Req0, {dir_index, App, Path}) ->
+    ReqPath = cowboy_req:path(Req0),
+    case binary:last(ReqPath) of
+        $/ ->
+            init(Req0, {priv_file, App, Path});
+        _ ->
+            %% A relative location stays correct behind a proxy that
+            %% rewrites the path prefix.
+            LastSegment = lists:last(binary:split(ReqPath, <<"/">>, [global])),
+            Location = <<LastSegment/binary, "/">>,
+            Req = cowboy_req:reply(301, #{<<"location">> => Location}, Req0),
+            {ok, Req, Path}
+    end;
 init(Req0, [{App, Path}]) ->
     Req1 = rabbit_mgmt_headers:set_common_permission_headers(Req0, ?MODULE),
     do_init(Req1, App, Path);

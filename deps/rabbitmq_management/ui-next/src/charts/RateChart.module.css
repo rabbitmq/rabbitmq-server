@@ -1,0 +1,41 @@
+.wrap {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.canvas {
+  position: relative;
+  flex: 1 1 24rem;
+  min-width: 16rem;
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.25rem var(--space-2);
+  align-items: center;
+  min-width: 14rem;
+}
+
+.legend li {
+  display: contents;
+}
+
+.swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+}
+
+.label {
+  color: var(--text-muted);
+}
+
+.value {
+  font-weight: 500;
+}
