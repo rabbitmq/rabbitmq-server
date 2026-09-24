@@ -49,7 +49,9 @@ groups() ->
                                 arithmetic_bignum_overflow_test,
                                 arithmetic_long_wraparound_test,
                                 like_regex_pattern_length_cap_test,
-                                like_malformed_escape_test
+                                like_malformed_escape_test,
+                                like_wildcard_matches_newline_test,
+                                like_regex_run_error_test
                                ]}
     ].
 
@@ -191,10 +193,13 @@ lookup_value_unknown_type_test(_Config) ->
 %% exact int/float representation.
 in_type_mismatch_test(_Config) ->
     Hs = [{<<"x">>, signedint, 5}, {<<"n">>, double, 1.0}],
-    ?assertEqual(false, eval(Hs, {'in', {'ident', <<"x">>}, 5})),
+    ?assertEqual(error, eval(Hs, {'in', {'ident', <<"x">>}, 5})),
     ?assertEqual(true,  eval(Hs, {'=', {'ident', <<"n">>}, 1})),
     ?assertEqual(true,  eval(Hs, {'in', {'ident', <<"n">>}, [1, 2, 3]})),
-    ?assertEqual(false, eval(Hs, {'not_in', {'ident', <<"n">>}, [1, 2, 3]})).
+    ?assertEqual(false, eval(Hs, {'not_in', {'ident', <<"n">>}, [1, 2, 3]})),
+    %% A type-mismatched list item must not make `NOT IN` fail open.
+    ?assertEqual(undefined, eval(Hs, {'in', {'ident', <<"x">>}, [<<"a">>, <<"b">>]})),
+    ?assertEqual(undefined, eval(Hs, {'not_in', {'ident', <<"x">>}, [<<"a">>, <<"b">>]})).
 
 %% `=`/`<>` only compare like-typed operands per the JMS spec; the
 %% ordering operators and `between` only apply to numbers. Anything
@@ -260,3 +265,19 @@ like_malformed_escape_test(_Config) ->
     Hs = [{<<"colour">>, longstr, <<"blue">>}],
     ?assertEqual(error,     eval(Hs, {'like', {'ident', <<"colour">>}, <<"bl%">>, <<"ab">>})),
     ?assertEqual(undefined, eval(Hs, {'not_like', {'ident', <<"colour">>}, <<"bl%">>, <<"ab">>})).
+
+%% SQL/JMS LIKE wildcards have no concept of a line boundary, unlike
+%% PCRE `.` without `dotall`.
+like_wildcard_matches_newline_test(_Config) ->
+    Hs = [{<<"h">>, longstr, <<"a\nb">>}],
+    ?assertEqual(true,  eval(Hs, {'like', {'ident', <<"h">>}, <<"a%b">>, no_escape})),
+    ?assertEqual(false, eval(Hs, {'not_like', {'ident', <<"h">>}, <<"a%b">>, no_escape})),
+    %% A raw `regex` pattern keeps ordinary PCRE `.` semantics.
+    ?assertEqual(false, eval(Hs, {'like', {'ident', <<"h">>}, regex, <<"a.b">>})).
+
+%% `rabbit_re:run/3` can itself fail (e.g. `(*UTF)` against a subject
+%% that isn't valid UTF-8); that must not be coerced into `false`.
+like_regex_run_error_test(_Config) ->
+    Hs = [{<<"h">>, longstr, <<255, 255>>}],
+    ?assertEqual(error,     eval(Hs, {'like', {'ident', <<"h">>}, regex, <<"(*UTF)a">>})),
+    ?assertEqual(undefined, eval(Hs, {'not_like', {'ident', <<"h">>}, regex, <<"(*UTF)a">>})).

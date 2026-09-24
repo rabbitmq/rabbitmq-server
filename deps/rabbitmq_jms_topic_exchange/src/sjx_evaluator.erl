@@ -94,7 +94,7 @@ do_bin_op('>=', _, _) -> undefined;
 do_bin_op('<=', L, R) when is_number(L), is_number(R) -> L =< R;
 do_bin_op('<=', _, _) -> undefined;
 do_bin_op('in', L, R) -> isIn(L, R);
-do_bin_op('not_in', L, R) -> not isIn(L, R);
+do_bin_op('not_in', L, R) -> not3(isIn(L, R));
 do_bin_op('+' , L, R) when is_integer(L), is_integer(R) -> wrap_long(L + R);
 do_bin_op('+' , L, R) when is_number(L), is_number(R) ->
   try L + R catch error:badarith -> error; error:system_limit -> error end;
@@ -145,17 +145,14 @@ patt_match(L, MP) ->
   BS = byte_size(L),
   case rabbit_re:run(L, MP, [{capture, first}]) of
     {match, [{0, BS}]} -> true;
+    {error, _}         -> error;
     _                  -> false
   end.
 
-%% Use `==` (not pattern-match equality) so a numeric `Value` matches
-%% regardless of its exact int/float representation, consistent with
-%% `do_bin_op('=', ...)`; a non-list `List` (a malformed selector,
-%% since the AST always parses `IN (...)` as a list) is just not a
-%% match rather than a crash.
-isIn(_Value, [])          -> false;
-isIn(Value, [Item | Rest]) -> (Value == Item) orelse isIn(Value, Rest);
-isIn(_Value, _List)        -> false.
+%% Reuses `do_bin_op('=', ...)` so a type mismatch yields `undefined`, not a false "not in".
+isIn(_Value, [])           -> false;
+isIn(Value, [Item | Rest]) -> or3(do_bin_op('=', Value, Item), isIn(Value, Rest));
+isIn(_Value, _List)        -> error.
 
 val_of({'ident', Ident}, Hs) -> lookup_value(Hs, Ident);
 val_of(Value,           _Hs) -> Value.
@@ -182,7 +179,8 @@ lookup_value(Table, Key) ->
     {_, _OtherType, _Value} -> undefined
   end.
 
-pattern_of(S, Esc) -> compile_re(gen_re(binary_to_list(S), Esc)).
+%% `dotall` lets `_`/`%` span a newline, unlike a bare PCRE `.`.
+pattern_of(S, Esc) -> compile_re(gen_re(binary_to_list(S), Esc), [dotall]).
 
 gen_re(S, <<Ch>>   ) -> convert(S, [], Ch       );
 gen_re(S, no_escape) -> convert(S, [], no_escape);
@@ -214,9 +212,11 @@ escape($/)  -> "\\/";
 escape($\\) -> "\\\\";
 escape(Ch)  -> Ch.
 
-compile_re(error) -> error;
-compile_re(MatchMany) ->
-    case rabbit_re:compile(MatchMany)
+compile_re(MatchMany) -> compile_re(MatchMany, []).
+
+compile_re(error, _Opts) -> error;
+compile_re(MatchMany, Opts) ->
+    case rabbit_re:compile(MatchMany, Opts)
     of  {ok, Rx} -> Rx;
         _        -> error
     end.
@@ -251,22 +251,22 @@ validate_patterns_list([H | T]) ->
   end.
 
 validate_pattern(regex, MP) when is_binary(MP) ->
-  compile_for_validation(MP, invalid_regex);
+  compile_for_validation(MP, invalid_regex, []);
 validate_pattern(regex, MP) ->
   {error, {invalid_regex, {not_a_binary_pattern, MP}}};
 validate_pattern(Patt, Esc) when is_binary(Patt) ->
   case gen_re(binary_to_list(Patt), Esc) of
     error -> {error, {invalid_like_pattern, invalid_escape}};
-    Regex -> compile_for_validation(Regex, invalid_like_pattern)
+    Regex -> compile_for_validation(Regex, invalid_like_pattern, [dotall])
   end;
 validate_pattern(Patt, _Esc) ->
   {error, {invalid_like_pattern, {not_a_binary_pattern, Patt}}}.
 
-%% Keeps the underlying `rabbit_re:compile/1` failure reason (e.g. the
+%% Keeps the underlying `rabbit_re:compile/2` failure reason (e.g. the
 %% compact `pattern_too_long`), rather than the bare `error` atom that
-%% `compile_re/1` collapses it to on the hot match path.
-compile_for_validation(Regex, Tag) ->
-  try rabbit_re:compile(Regex) of
+%% `compile_re/2` collapses it to on the hot match path.
+compile_for_validation(Regex, Tag, Opts) ->
+  try rabbit_re:compile(Regex, Opts) of
     {ok, _}         -> ok;
     {error, Reason} -> {error, {Tag, Reason}}
   catch
