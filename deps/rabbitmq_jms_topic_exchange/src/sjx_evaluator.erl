@@ -141,9 +141,12 @@ isLike(L, {Patt, Esc}) when is_binary(Patt) ->
   end;
 isLike(_L, _Patt) -> error.
 
+%% `report_errors` turns an exceeded match_limit/match_limit_recursion
+%% into `{error, _}` instead of a plain `nomatch`, so it hits the
+%% `{error, _}` clause below rather than fail open as `false`.
 patt_match(L, MP) ->
   BS = byte_size(L),
-  case rabbit_re:run(L, MP, [{capture, first}]) of
+  case rabbit_re:run(L, MP, [report_errors, {capture, first}]) of
     {match, [{0, BS}]} -> true;
     {error, _}         -> error;
     _                  -> false

@@ -51,7 +51,8 @@ groups() ->
                                 like_regex_pattern_length_cap_test,
                                 like_malformed_escape_test,
                                 like_wildcard_matches_newline_test,
-                                like_regex_run_error_test
+                                like_regex_run_error_test,
+                                like_match_limit_test
                                ]}
     ].
 
@@ -281,3 +282,12 @@ like_regex_run_error_test(_Config) ->
     Hs = [{<<"h">>, longstr, <<255, 255>>}],
     ?assertEqual(error,     eval(Hs, {'like', {'ident', <<"h">>}, regex, <<"(*UTF)a">>})),
     ?assertEqual(undefined, eval(Hs, {'not_like', {'ident', <<"h">>}, regex, <<"(*UTF)a">>})).
+
+%% Exceeding `rabbit_re`'s match_limit/match_limit_recursion is a
+%% plain `nomatch` without `report_errors`, which must not be coerced
+%% into `false` the same way a compile or run error already isn't.
+like_match_limit_test(_Config) ->
+    Subject = <<"ab", (binary:copy(<<"a">>, 2000))/binary>>,
+    Hs = [{<<"p">>, longstr, Subject}],
+    ?assertEqual(error,     eval(Hs, {'like', {'ident', <<"p">>}, <<"%a%b%">>, no_escape})),
+    ?assertEqual(undefined, eval(Hs, {'not_like', {'ident', <<"p">>}, <<"%a%b%">>, no_escape})).
