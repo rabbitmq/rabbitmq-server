@@ -38,7 +38,8 @@ groups() ->
       {non_parallel_tests, [], [
                                 basic_evaluate_test,
                                 arithmetic_type_mismatch_test,
-                                arithmetic_overflow_test
+                                arithmetic_overflow_test,
+                                arithmetic_bignum_overflow_test
                                ]}
     ].
 
@@ -147,3 +148,17 @@ arithmetic_overflow_test(_Config) ->
     Hs = [{<<"p">>, double, 1.7e308}],
     ?assertEqual(error, eval(Hs, {'*', {'ident', <<"p">>}, 10.0})),
     ?assertEqual(error, eval(Hs, {'+', {'ident', <<"p">>}, {'ident', <<"p">>}})).
+
+%% Repeated multiplication doubles the operand's bit size at every
+%% nesting level; within the parser's own nesting-depth cap this
+%% reaches Erlang's bignum limit and raises `system_limit`, a
+%% different exception from the `badarith` float overflow already
+%% guarded against.
+arithmetic_bignum_overflow_test(_Config) ->
+    Leaf = list_to_integer(lists:duplicate(100, $9)),
+    ?assertEqual(error, eval([], nest_multiply(14, Leaf))).
+
+nest_multiply(0, Leaf) -> Leaf;
+nest_multiply(N, Leaf) ->
+    Half = nest_multiply(N - 1, Leaf),
+    {'*', Half, Half}.
