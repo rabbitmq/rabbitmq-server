@@ -39,7 +39,11 @@ groups() ->
                                 basic_evaluate_test,
                                 arithmetic_type_mismatch_test,
                                 like_type_mismatch_test,
-                                between_error_propagation_test
+                                between_error_propagation_test,
+                                arithmetic_overflow_test,
+                                lookup_value_unknown_type_test,
+                                in_type_mismatch_test,
+                                comparison_type_mismatch_test
                                ]}
     ].
 
@@ -158,3 +162,41 @@ between_error_propagation_test(_Config) ->
     Hs = [{<<"amount">>, longstr, <<"unknown">>}],
     ?assertEqual(error,     eval(Hs, {'between',     {'+', {'ident', <<"amount">>}, 1}, 5, 10})),
     ?assertEqual(undefined, eval(Hs, {'not_between', {'+', {'ident', <<"amount">>}, 1}, 5, 10})).
+
+%% Float arithmetic that would overflow to infinity raises `badarith`
+%% in Erlang; a header value large enough is entirely publisher-chosen.
+arithmetic_overflow_test(_Config) ->
+    Hs = [{<<"p">>, double, 1.7e308}],
+    ?assertEqual(error, eval(Hs, {'*', {'ident', <<"p">>}, 10.0})),
+    ?assertEqual(error, eval(Hs, {'+', {'ident', <<"p">>}, {'ident', <<"p">>}})).
+
+%% A header of an AMQP 0-9-1 field type this module doesn't model
+%% (e.g. `timestamp`, `void`) must evaluate to `undefined`, like a
+%% missing header, not raise `case_clause`.
+lookup_value_unknown_type_test(_Config) ->
+    Hs = [{<<"t">>, timestamp, 123}, {<<"v">>, void, undefined}, {<<"tbl">>, table, []}],
+    ?assertEqual(undefined, eval(Hs, {'ident', <<"t">>})),
+    ?assertEqual(undefined, eval(Hs, {'ident', <<"v">>})),
+    ?assertEqual(undefined, eval(Hs, {'ident', <<"tbl">>})).
+
+%% `IN`'s right-hand side is always parsed as a list; a non-list
+%% (a hand-crafted selector) must not raise `function_clause`. `IN`
+%% also has to agree with `=` on numeric equality regardless of the
+%% exact int/float representation.
+in_type_mismatch_test(_Config) ->
+    Hs = [{<<"x">>, signedint, 5}, {<<"n">>, double, 1.0}],
+    ?assertEqual(false, eval(Hs, {'in', {'ident', <<"x">>}, 5})),
+    ?assertEqual(true,  eval(Hs, {'=', {'ident', <<"n">>}, 1})),
+    ?assertEqual(true,  eval(Hs, {'in', {'ident', <<"n">>}, [1, 2, 3]})),
+    ?assertEqual(false, eval(Hs, {'not_in', {'ident', <<"n">>}, [1, 2, 3]})).
+
+%% `=`/`<>` only compare like-typed operands per the JMS spec; the
+%% ordering operators and `between` only apply to numbers. Anything
+%% else is `undefined`, not a raw cross-type Erlang term comparison
+%% (which never raises, but can silently produce the wrong answer).
+comparison_type_mismatch_test(_Config) ->
+    Hs = [{<<"b">>, bool, true}],
+    ?assertEqual(undefined, eval(Hs, {'<>', {'ident', <<"b">>}, 1})),
+    ?assertEqual(undefined, eval(Hs, {'=',  {'ident', <<"b">>}, 1})),
+    ?assertEqual(undefined, eval(Hs, {'>',  {'ident', <<"b">>}, 1})),
+    ?assertEqual(undefined, eval(Hs, {'between', 7, 0, {'/', -1, 0}})).
