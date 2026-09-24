@@ -51,7 +51,8 @@ evaluate( {'and', Exp1, Exp2 },            Headers ) -> and3(evaluate(Exp1, Head
 evaluate( {'or', Exp1, Exp2 },             Headers ) -> or3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
 evaluate( {'like', LHS, Patt, Esc },       Headers ) -> isLike(val_of(LHS, Headers), {Patt, Esc});
 evaluate( {'not_like', LHS, Patt, Esc },   Headers ) -> not3(isLike(val_of(LHS, Headers), {Patt, Esc}));
-evaluate( { Op, Exp, {range, From, To} },  Headers ) -> evaluate({ Op, Exp, From, To }, Headers);
+evaluate( {'between', Exp, {range, From, To}},  Hs ) -> evaluate({'between', Exp, From, To}, Hs);
+evaluate( {'not_between', Exp, {range, From, To}}, Hs ) -> evaluate({'not_between', Exp, From, To}, Hs);
 evaluate( {'between', Exp, From, To},           Hs ) -> between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs));
 evaluate( {'not_between', Exp, From, To},       Hs ) -> not3(between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs)));
 evaluate( { Op, LHS, RHS },                Headers ) -> do_bin_op(Op, evaluate(LHS, Headers), evaluate(RHS, Headers));
@@ -116,7 +117,8 @@ comparable(_, _) -> false.
 isLike(undefined, _Patt) -> undefined;
 isLike(L, _Patt) when not is_binary(L) -> error;
 isLike(L, {regex, MP}) -> patt_match(L, MP);
-isLike(L, {Patt, Esc}) -> patt_match(L, pattern_of(Patt, Esc)).
+isLike(L, {Patt, Esc}) when is_binary(Patt) -> patt_match(L, pattern_of(Patt, Esc));
+isLike(_L, _Patt) -> error.
 
 patt_match(L, MP) ->
   BS = byte_size(L),

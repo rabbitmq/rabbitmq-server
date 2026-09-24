@@ -43,7 +43,9 @@ groups() ->
                                 arithmetic_overflow_test,
                                 lookup_value_unknown_type_test,
                                 in_type_mismatch_test,
-                                comparison_type_mismatch_test
+                                comparison_type_mismatch_test,
+                                like_range_wrapped_pattern_test,
+                                between_range_form_test
                                ]}
     ].
 
@@ -200,3 +202,18 @@ comparison_type_mismatch_test(_Config) ->
     ?assertEqual(undefined, eval(Hs, {'=',  {'ident', <<"b">>}, 1})),
     ?assertEqual(undefined, eval(Hs, {'>',  {'ident', <<"b">>}, 1})),
     ?assertEqual(undefined, eval(Hs, {'between', 7, 0, {'/', -1, 0}})).
+
+%% A `{range, From, To}` third argument on `like`/`not_like` must not
+%% reach `pattern_of/2` as a non-binary pattern, nor may a non-binary
+%% `Patt` in the direct 4-tuple form reach `isLike/2`'s pattern clauses.
+like_range_wrapped_pattern_test(_Config) ->
+    ?assertEqual(error, eval([], {'like', <<"x">>, {range, 1, no_escape}})),
+    ?assertEqual(error, eval([], {'not_like', <<"x">>, {range, 1, no_escape}})),
+    ?assertEqual(error, eval([], {'like', <<"x">>, {range, regex, <<"(a)">>}})),
+    ?assertEqual(error, eval([], {'like', <<"x">>, 1, no_escape})).
+
+%% `between`/`not_between` must still accept the `{range, From, To}`
+%% form now that the rewrite is specific to those two operators.
+between_range_form_test(_Config) ->
+    ?assertEqual(true,  eval([], {'between', 5, {range, 1, 10}})),
+    ?assertEqual(false, eval([], {'not_between', 5, {range, 1, 10}})).
