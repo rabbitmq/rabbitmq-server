@@ -121,6 +121,7 @@ val_of({'ident', Ident}, Hs) -> lookup_value(Hs, Ident);
 val_of(Value,           _Hs) -> Value.
 
 between(E, F, T) when E =:= undefined orelse F =:= undefined orelse T =:= undefined -> undefined;
+between(E, F, T) when E =:= error     orelse F =:= error     orelse T =:= error     -> error;
 between(Value, Lo, Hi) -> Lo =< Value andalso Value =< Hi.
 
 lookup_value(Table, Key) ->
