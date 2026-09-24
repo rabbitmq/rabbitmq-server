@@ -141,23 +141,161 @@ Jobs and run results can be inspected via `gh` on the command line.
  
 ## Comments
 
- * Raise the bar very high for new comments: only add very important comments, both in tests and in the implementation
- * Keep comments concise and to the point
- * Add comments above the line they are referring to, not at the end of the line (an example of what's not to do: `1 + 1. %% equals 2`)
- * Make sure to use proper English grammar, in particular articles, punctuation and full stops at the end of sentences except for Markdown list items
+The default number of new comments in a change is zero.
+
+Maintainers routinely spend follow-up commits shortening or deleting comments that
+came with a contribution. A comment that has to be edited or removed later costs more
+than the missing comment would have.
+
+### When to Comment
+
+Add a comment only when a reader who knows Erlang and the module would get something
+wrong without it. In practice, that leaves a short list:
+
+ * A non-obvious reason: backwards compatibility with persisted data or older nodes, a
+   workaround for a specific Erlang/OTP version, a known deviation from a protocol spec
+ * A property that is easy to break by accident: atom table exhaustion, a timing side
+   channel, a value that clients control and therefore cannot be trusted
+ * A reference that the code cannot carry: an issue number, a commit, an RFC section
+
+Everything else goes without a comment. In particular:
+
+ * Anything the code, the function name, or the test case name already says
+ * Narration of the change: "now", "previously", "used to", "with the fix", "the
+   headline scenario". This belongs in the commit message
+ * The steps of a test: "Baseline", "Set up", "Clean up the queue", "Give it a chance
+   to happen"
+ * Erlang, OTP or Common Test basics
+ * A rule that a guard, a pattern, a type spec or a function boundary can enforce.
+   Enforce it in code instead
+ * Justification for the comment itself, or reassurance about what callers "must
+   never" do
+
+When in doubt, leave it out: a reviewer can always ask for a missing comment.
+
+### Form
+
+ * One line is the norm, two or three is the ceiling. Longer is reserved for truly
+   complex invariants, and then split into short paragraphs with a blank `%%` line
+ * Present tense, neutral tone. State the why, not the what
+ * No intensifiers ("huge", "massive", "extremely"). Name the actual condition or limit instead
+ * Use the terms the module and the protocol spec already use. Do not coin new ones
+   ("ledger", "budget", "poisoned", "hijack") or introduce new abbreviations
+ * Wrap identifiers in backticks. A function reference always includes its arity:
+   `supervisor:which_children/1`, or `handle_info/2` for a function in the same module.
+   Never a bare `which_children` or `which_children()`
+ * A comment goes on its own line above the code it refers to, never at the end of a line
+   (not `1 + 1. %% equals 2`)
+ * Use proper English grammar: articles, punctuation, and full stops at the end of sentences
+ * Do not add comments to code the change does not otherwise touch
+
+### Examples
+
+A comment that earns its place. It explains a constraint that the code cannot show:
+
+```erlang
+%% Do not change this value in place. The iteration count is not stored
+%% with the hash, so every existing PBKDF2 user would be locked out.
+%% Introduce a new module with the new value instead.
+-define(ITERATIONS, 210_000).
+```
+
+The pairs below are taken from commits that edited contributed comments.
+
+Before:
+
+```erlang
+%% parse_deferred_tokens/1 only caps each individual FLOW
+%% frame's own batch; since FLOW frames aren't subject to
+%% session incoming-window flow control, a client can
+%% pipeline many of them while a credit request is in
+%% flight and grow the stash unboundedly if the combined
+%% length isn't capped here too.
+```
+
+After:
+
+```erlang
+%% Also cap the combined token count across stashed `FLOW` frames.
+```
+
+Before:
+
+```erlang
+%% rabbitmqctl set_permissions/clear_permissions don't notify live
+%% sessions, so expire the cache on a timer instead.
+```
+
+After:
+
+```erlang
+%% A permission change does not reach a running shovel, so the cache
+%% expires on a timer.
+```
+
+Before:
+
+```erlang
+%% Marking the node as being drained is the single load-bearing step:
+%% it is what makes the rest of the cluster stop routing new work here.
+%% It must succeed for the drain to be meaningful, so a failure here
+%% is intentionally propagated. Every step that follows is
+%% housekeeping around cleaning up in-flight state; a failure in one
+%% of them (e.g. a stuck federation link, a plugin drain callback
+%% that crashes, a channel that refuses to shut down within the
+%% termination timeout) must not abort the drain and must not
+%% surface as a non-zero CLI exit code, or automation like
+%% Kubernetes preStop hooks becomes unreliable. See GH #3369.
+```
+
+After:
+
+```erlang
+%% Marking the node as drained stops the cluster routing work here, so
+%% a failure is propagated. The rest is best-effort cleanup that must
+%% not abort the drain nor fail the CLI command, or automation such as
+%% Kubernetes preStop hooks breaks. rabbitmq/rabbitmq-server#3369.
+```
+
+Before:
+
+```erlang
+  %% Get the link up and running before poking at it.
+```
+
+After:
+
+```erlang
+  %% Wait for the link to come up first.
+```
+
+Before:
+
+```erlang
+    %% Check that the content type is json
+    %% ...
+    %% Decode the JSON body
+    %% ...
+    %% Check that the settings are present
+```
+
+After: all three comments are removed.
 
 
 ## Voice
 
-## Writing Voice
-
 Write like a senior engineer who values clarity and simplicity. This applies
-to all prose: design docs, analyses, notes, and commit messages.
+to all prose: comments, commit messages, pull request descriptions, design docs and notes.
 
  * Plain and factual: state the why in one line, never narrate the what
  * Literal mechanism over metaphor: name the actual thing, not an image of it
  * Prefer the plainest word. No coined verbs, no jargon, no sophisticated synonym use for its own sake
  * No flourish, no editorializing, no imagery. Use real domain terms
+ * Claim only what has been verified: "an attempt to fix a flake" until the fix is confirmed
+ * Undersell rather than oversell: "a minor correctness fix", "one more test", never
+   "comprehensive" or "significantly improved"
+ * Write sentences a person would say out loud, contractions included. If a sentence reads
+   like a log line or a status enum, rewrite it
 
 ### Writing Style, Markdown Style
 
@@ -165,7 +303,8 @@ to all prose: design docs, analyses, notes, and commit messages.
  * Use "X and Y" in prose, not "X / Y" slash-shorthand. Exceptions: unit
    fractions (`bytes/edge`), single-concept abbreviations (`I/O`), and paths
    or code (`tests/unit/`, `m:f/a`, `queue.declare`)
- * Wrap code identifiers — types, functions, modules, file names, paths — in backticks in prose
+ * Wrap code identifiers — types, functions, modules, file names, paths — and version numbers (`4.3.5`, `27.x`) in backticks in prose
+ * Both British and American spelling are in use. Match the spelling the file already uses
  * Avoid robotic labels such as `**Thing / other:**`; write a plain sentence or a simple label
  * Match the existing conventions of the file and subdirectory you are
    editing — bullet character, heading depth, ID schemes, and table shape
@@ -187,6 +326,19 @@ to all prose: design docs, analyses, notes, and commit messages.
 
  * Never add yourself to the list of commit co-authors
  * Never mention yourself in commit messages in any way (no "Generated by", no AI tool links, etc)
+
+### Commit Messages and Pull Request Descriptions
+
+ * Terse, factual, neutral and simple. No jargon. A body is fine when it explains something the diff cannot
+ * No full stop at the end of the subject line
+ * Imperative mood, a noun phrase, or a plain declarative sentence; never past tense:
+   `Fix a flaky test`, `Stream SAC: update another test`, `` `hash_password/1` is now `hash_password/2` ``
+ * Lead with a subsystem or module label and a colon when it helps: `LDAP: handle more Active Directory username edge cases`
+ * State the how with a verb phrase: `fix a flake by allowing for more time`, not "timeout adjustment for flake mitigation"
+ * Reference issues and PRs bare, without parentheses: `References #17255`, `Fixes #11526`
+ * A body explains why in a few short paragraphs. It does not list every changed file or function
+ * The same applies to pull request descriptions: what the problem was, how it is fixed, how it was tested.
+   No headings for a small change, no summary tables, no checklists of self-evident items
 
 ### Branches
 
@@ -241,6 +393,7 @@ that only a subset of deployments are affected.
 ### Iterative Reviews
 
 After completing a task, perform up to twenty iterative reviews of your changes.
-In every iteration, look for meaningful improvements that were missed, for gaps in test coverage, and for deviations from the instructions in this file.
+In every iteration, look for meaningful improvements that were missed, for gaps in test coverage, and for deviations from the instructions in this file,
+including new comments that can be shortened or dropped.
 
 If no meaningful improvements are found for three iterations in a row, report it and stop iterating.
