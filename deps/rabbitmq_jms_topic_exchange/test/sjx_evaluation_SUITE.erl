@@ -45,7 +45,8 @@ groups() ->
                                 in_type_mismatch_test,
                                 comparison_type_mismatch_test,
                                 like_range_wrapped_pattern_test,
-                                between_range_form_test
+                                between_range_form_test,
+                                arithmetic_bignum_overflow_test
                                ]}
     ].
 
@@ -217,3 +218,17 @@ like_range_wrapped_pattern_test(_Config) ->
 between_range_form_test(_Config) ->
     ?assertEqual(true,  eval([], {'between', 5, {range, 1, 10}})),
     ?assertEqual(false, eval([], {'not_between', 5, {range, 1, 10}})).
+
+%% Repeated multiplication doubles the operand's bit size at every
+%% nesting level; within the parser's own nesting-depth cap this
+%% reaches Erlang's bignum limit and raises `system_limit`, a
+%% different exception from the `badarith` float overflow already
+%% guarded against.
+arithmetic_bignum_overflow_test(_Config) ->
+    Leaf = list_to_integer(lists:duplicate(100, $9)),
+    ?assertEqual(error, eval([], nest_multiply(14, Leaf))).
+
+nest_multiply(0, Leaf) -> Leaf;
+nest_multiply(N, Leaf) ->
+    Half = nest_multiply(N - 1, Leaf),
+    {'*', Half, Half}.
