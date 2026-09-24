@@ -366,7 +366,12 @@ policy_apply_to_name() ->
     rabbit_misc:resource_name().
 new_name() ->
     EncodedPid = encode_pid(self()),
-    EncodedKey = base64:encode(rabbit_guid:gen()),
+    %% The suffix is a delivery capability, not a consumption one:
+    %% `consume/3` checks the caller's pid regardless of it, but
+    %% `rabbit_queue_type:handle_event/3` matches deliveries on the full
+    %% name. `gen/0` advances a per-process chain reversibly, so a party
+    %% that has seen one suffix can derive the next; `gen_secure/0` can't.
+    EncodedKey = base64:encode(rabbit_guid:gen_secure()),
     <<?PREFIX, EncodedPid/binary, ".", EncodedKey/binary>>.
 
 %% This pid encoding function produces values that are of mostly fixed size
