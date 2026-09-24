@@ -1375,6 +1375,7 @@ register_projections() ->
                fun register_rabbit_global_runtime_parameters_projection/0,
                fun register_rabbit_per_vhost_runtime_parameters_projection/0,
                fun register_rabbit_user_permissions_projection/0,
+               fun register_rabbit_topic_permissions_projection/0,
                fun register_rabbit_bindings_projection/0,
                fun register_rabbit_route_by_source_key_projection/0,
                fun register_rabbit_route_by_source_projection/0,
@@ -1469,6 +1470,15 @@ register_rabbit_user_permissions_projection() ->
                     _VHost = ?KHEPRI_WILDCARD_STAR),
     KeyPos = #user_permission.user_vhost,
     register_simple_projection(Name, PathPattern, KeyPos, false).
+
+register_rabbit_topic_permissions_projection() ->
+    Name = rabbit_khepri_topic_permission,
+    PathPattern = rabbit_db_user:khepri_topic_permission_path(
+                    _UserName = ?KHEPRI_WILDCARD_STAR,
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Exchange = ?KHEPRI_WILDCARD_STAR),
+    KeyPos = #topic_permission.topic_permission_key,
+    register_simple_projection(Name, PathPattern, KeyPos, true).
 
 register_rabbit_node_metadata_projection() ->
     Name = rabbit_khepri_node_metadata,

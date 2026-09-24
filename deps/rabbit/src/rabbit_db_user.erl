@@ -42,6 +42,7 @@
 
 -define(KHEPRI_USERS_PROJECTION, rabbit_khepri_user).
 -define(KHEPRI_PERMISSIONS_PROJECTION, rabbit_khepri_user_permission).
+-define(KHEPRI_TOPIC_PERMISSIONS_PROJECTION, rabbit_khepri_topic_permission).
 
 %% -------------------------------------------------------------------
 %% create().
@@ -419,6 +420,22 @@ get_topic_permissions(Username, VHostName, ExchangeName)
   when is_binary(Username) andalso
        is_binary(VHostName) andalso
        is_binary(ExchangeName) ->
+    Key = #topic_permission_key{user_vhost = #user_vhost{username = Username,
+                                                         virtual_host = VHostName},
+                                exchange = ExchangeName},
+    try ets:lookup(?KHEPRI_TOPIC_PERMISSIONS_PROJECTION, Key) of
+        [TopicPermission] ->
+            TopicPermission;
+        [] ->
+            undefined
+    catch
+        %% Fall back to Khepri rather than return `undefined', which grants
+        %% access.
+        error:badarg ->
+            get_topic_permissions_in_khepri(Username, VHostName, ExchangeName)
+    end.
+
+get_topic_permissions_in_khepri(Username, VHostName, ExchangeName) ->
     Path = khepri_topic_permission_path(Username, VHostName, ExchangeName),
     case rabbit_khepri:get(Path) of
         {ok, TopicPermission} ->

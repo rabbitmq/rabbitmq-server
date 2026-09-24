@@ -28,6 +28,7 @@ groups() ->
        amqpl_bcc_headers,
        topic_permission_database_access,
        topic_permission_checks,
+       topic_permission_projection,
        topic_permission_khepri_error_fails_closed,
        topic_permission_khepri_error_fails_closed_prop
       ]}
@@ -429,6 +430,55 @@ topic_permission_checks1(_Config) ->
 
     ok.
 
+topic_permission_projection(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, topic_permission_projection1, [Config]).
+
+topic_permission_projection1(_Config) ->
+    clear_tables(),
+    rabbit_vhost:add(<<"/">>, <<"acting-user">>),
+    rabbit_vhost:add(<<"other-vhost">>, <<"acting-user">>),
+    rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>, <<"acting-user">>),
+
+    User = #auth_user{username = <<"guest">>},
+    Check = fun(VHost, RoutingKey) ->
+                    Topic = #resource{name = <<"amq.topic">>,
+                                      virtual_host = VHost,
+                                      kind = topic},
+                    rabbit_auth_backend_internal:check_topic_access(
+                      User, Topic, write, #{routing_key => RoutingKey})
+            end,
+
+    ok = rabbit_auth_backend_internal:set_topic_permissions(
+           <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>),
+    true = Check(<<"/">>, <<"a.b">>),
+    false = Check(<<"/">>, <<"x.y">>),
+
+    ok = rabbit_auth_backend_internal:set_topic_permissions(
+           <<"guest">>, <<"/">>, <<"amq.topic">>, "^x", "^x", <<"acting-user">>),
+    false = Check(<<"/">>, <<"a.b">>),
+    true = Check(<<"/">>, <<"x.y">>),
+
+    ok = rabbit_auth_backend_internal:clear_topic_permissions(
+           <<"guest">>, <<"/">>, <<"acting-user">>),
+    true = Check(<<"/">>, <<"a.b">>),
+    ?assertEqual(0, ets:info(rabbit_khepri_topic_permission, size)),
+
+    ok = rabbit_auth_backend_internal:set_topic_permissions(
+           <<"guest">>, <<"other-vhost">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>),
+    false = Check(<<"other-vhost">>, <<"x.y">>),
+    ok = rabbit_vhost:delete(<<"other-vhost">>, <<"acting-user">>),
+    true = Check(<<"other-vhost">>, <<"x.y">>),
+    ?assertEqual(0, ets:info(rabbit_khepri_topic_permission, size)),
+
+    ok = rabbit_auth_backend_internal:set_topic_permissions(
+           <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>),
+    false = Check(<<"/">>, <<"x.y">>),
+    ok = rabbit_auth_backend_internal:delete_user(<<"guest">>, <<"acting-user">>),
+    true = Check(<<"/">>, <<"x.y">>),
+    ?assertEqual(0, ets:info(rabbit_khepri_topic_permission, size)),
+    ok.
+
 %% Topic permission checks must fail closed on metadata store errors.
 topic_permission_khepri_error_fails_closed(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -450,6 +500,10 @@ topic_permission_khepri_error_fails_closed1(_Config) ->
     false = rabbit_auth_backend_internal:check_topic_access(
               User, Topic, write, Context),
 
+    ok = unregister_topic_permission_projection(),
+    false = rabbit_auth_backend_internal:check_topic_access(
+              User, Topic, write, Context),
+
     %% Mock rabbit_khepri:get to simulate a Khepri timeout
     ok = meck:new(rabbit_khepri, [passthrough]),
     meck:expect(rabbit_khepri, get,
@@ -464,7 +518,8 @@ topic_permission_khepri_error_fails_closed1(_Config) ->
         {error, noproc} = rabbit_auth_backend_internal:check_topic_access(
                             User, Topic, write, Context)
     after
-        meck:unload(rabbit_khepri)
+        meck:unload(rabbit_khepri),
+        ok = rabbit_khepri:register_projections()
     end,
 
     %% After unmocking, normal behavior resumes
@@ -485,12 +540,14 @@ topic_permission_khepri_error_fails_closed_prop1(_Config) ->
     rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>, <<"acting-user">>),
     ok = rabbit_auth_backend_internal:set_topic_permissions(
            <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>),
+    ok = unregister_topic_permission_projection(),
     ok = meck:new(rabbit_khepri, [passthrough]),
     try
         Property = fun() -> khepri_error_fails_closed_prop() end,
         rabbit_ct_proper_helpers:run_proper(Property, [], 100)
     after
-        meck:unload(rabbit_khepri)
+        meck:unload(rabbit_khepri),
+        ok = rabbit_khepri:register_projections()
     end,
     ok.
 
@@ -527,6 +584,10 @@ topic_routing_key() ->
                 non_empty(list(oneof([<<"a">>, <<"b">>, <<"secret">>,
                                       <<"public">>, <<"x">>]))),
                 iolist_to_binary(lists:join(<<".">>, Parts)))]).
+
+unregister_topic_permission_projection() ->
+    khepri:unregister_projections(rabbit_khepri:get_store_id(),
+                                  [rabbit_khepri_topic_permission]).
 
 clear_tables() ->
     ok = rabbit_db_vhost:clear(),
