@@ -66,7 +66,9 @@ handle_message(socket_closed, State = #state{waiting_socket_close = false}) ->
 handle_message({socket_error, _} = SocketError, State) ->
     {stop, {shutdown, SocketError}, State};
 handle_message({channel_exit, 0, Reason}, State) ->
-    {stop, {channel0_died, Reason}, State};
+    ?LOG_WARNING("Connection (~tp): closing because channel 0 died: ~tp",
+                 [self(), Reason]),
+    {stop, {shutdown, {channel0_died, Reason}}, State};
 handle_message(heartbeat_timeout, State) ->
     {stop, {shutdown, heartbeat_timeout}, State};
 %% The peer never replied to our close, matching the reason the
