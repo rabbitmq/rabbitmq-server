@@ -65,5 +65,7 @@ prop_malformed_escape_never_crashes(_Config) ->
         oneof([binary(), no_escape, regex, true, false, in]),
         begin
             Headers = [{<<"colour">>, longstr, <<"blue">>}],
-            is_boolean(sjx_evaluator:evaluate({'like', {ident, <<"colour">>}, <<"bl%">>, Escape}, Headers))
+            lists:member(
+              sjx_evaluator:evaluate({'like', {ident, <<"colour">>}, <<"bl%">>, Escape}, Headers),
+              [true, false, error, undefined])
         end).

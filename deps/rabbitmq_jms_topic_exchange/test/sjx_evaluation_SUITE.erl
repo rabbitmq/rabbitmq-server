@@ -48,7 +48,8 @@ groups() ->
                                 between_range_form_test,
                                 arithmetic_bignum_overflow_test,
                                 arithmetic_long_wraparound_test,
-                                like_regex_pattern_length_cap_test
+                                like_regex_pattern_length_cap_test,
+                                like_malformed_escape_test
                                ]}
     ].
 
@@ -252,3 +253,10 @@ like_regex_pattern_length_cap_test(_Config) ->
     ?assertEqual(error,     eval(Hs, {'like', {'ident', <<"p">>}, regex, Oversized})),
     ?assertEqual(undefined, eval(Hs, {'not_like', {'ident', <<"p">>}, regex, Oversized})),
     ?assertEqual(true,      eval([{<<"p">>, longstr, <<"x">>}], {'like', {'ident', <<"p">>}, regex, <<"x">>})).
+
+%% A malformed `Esc` must not make `pattern_of/2`'s `error` reach
+%% `patt_match/2` as if it were a compiled pattern.
+like_malformed_escape_test(_Config) ->
+    Hs = [{<<"colour">>, longstr, <<"blue">>}],
+    ?assertEqual(error,     eval(Hs, {'like', {'ident', <<"colour">>}, <<"bl%">>, <<"ab">>})),
+    ?assertEqual(undefined, eval(Hs, {'not_like', {'ident', <<"colour">>}, <<"bl%">>, <<"ab">>})).

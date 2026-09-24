@@ -134,7 +134,11 @@ isLike(L, {regex, MP}) when is_binary(MP) ->
     error -> error;
     Rx    -> patt_match(L, Rx)
   end;
-isLike(L, {Patt, Esc}) when is_binary(Patt) -> patt_match(L, pattern_of(Patt, Esc));
+isLike(L, {Patt, Esc}) when is_binary(Patt) ->
+  case pattern_of(Patt, Esc) of
+    error -> error;
+    MP    -> patt_match(L, MP)
+  end;
 isLike(_L, _Patt) -> error.
 
 patt_match(L, MP) ->
