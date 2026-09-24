@@ -220,30 +220,22 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
     DQT = rabbit_vhost:default_queue_type(VHost, rabbit_queue_type:fallback()),
     ok = check_declare_arguments(QueueName, Args, DQT),
     Type = get_queue_type(Args, DQT),
-    case rabbit_queue_type:is_enabled(Type) of
+    Q = amqqueue:new(QueueName,
+                     none,
+                     Durable,
+                     AutoDelete,
+                     Owner,
+                     Args,
+                     VHost,
+                     #{user => ActingUser},
+                     Type),
+    case is_queue_args_combination_permitted(Q) of
         true ->
-            Q = amqqueue:new(QueueName,
-                             none,
-                             Durable,
-                             AutoDelete,
-                             Owner,
-                             Args,
-                             VHost,
-                             #{user => ActingUser},
-                             Type),
-            case is_queue_args_combination_permitted(Q) of
-                true ->
-                    rabbit_queue_type:declare(Q, Node);
-                false ->
-                    Warning = rabbit_deprecated_features:get_warning(
-                                transient_nonexcl_queues),
-                    {protocol_error, internal_error, "~ts", [Warning]}
-            end;
+            rabbit_queue_type:declare(Q, Node);
         false ->
-            {protocol_error, internal_error,
-             "Cannot declare a queue '~ts' of type '~ts' on node '~ts': "
-             "the corresponding feature flag is disabled",
-             [rabbit_misc:rs(QueueName), Type, Node]}
+            Warning = rabbit_deprecated_features:get_warning(
+                        transient_nonexcl_queues),
+            {protocol_error, internal_error, "~ts", [Warning]}
     end.
 
 -spec get_queue_type(Args :: rabbit_framing:amqp_table()) -> rabbit_queue_type:queue_type().
