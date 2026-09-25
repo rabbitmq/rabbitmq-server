@@ -159,8 +159,10 @@ describe('form submission', () => {
         app.run();
 
         var prevented = false;
+        // The DOM method property normalises to GET; getAttribute must be
+        // used instead to observe the real value.
         var form = {
-            method: 'GET', // the DOM property normalises put/delete to GET; getAttribute must be used instead
+            method: 'GET',
             getAttribute: function(name) {
                 if (name === 'method') return 'delete';
                 if (name === 'action') return '#/queues';
