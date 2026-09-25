@@ -55,7 +55,10 @@ groups() ->
                                import_case20,
                                import_case21,
                                import_case22,
-                               import_case23
+                               import_case23,
+                               import_case27,
+                               import_case28,
+                               import_case29
                               ]},
 
         {boot_time_import_using_classic_source, [], [
@@ -328,6 +331,32 @@ import_case20(Config) ->
 
 import_case21(Config) -> import_invalid_file_case(Config, "failing_case21").
 
+import_case27(Config) ->
+    Msg = import_invalid_file_case_returning_message(Config, "failing_case27"),
+    ?assert(binary:match(Msg, <<"not a valid binding destination_type">>) =/= nomatch),
+    %% Must never be converted to an atom, to avoid atom table exhaustion.
+    ?assertNot(rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, atom_exists,
+                                            [<<"not_a_real_destination_type_27">>])),
+    ok.
+
+atom_exists(Bin) ->
+    try binary_to_existing_atom(Bin, utf8), true
+    catch error:badarg -> false
+    end.
+
+import_case28(Config) ->
+    Msg = import_invalid_file_case_returning_message(Config, "failing_case28"),
+    %% A destination_type with codepoints above 255 must still produce the
+    %% descriptive error, not a bare 'badarg' from a failed binary conversion.
+    ?assert(binary:match(Msg, <<"not a valid binding destination_type">>) =/= nomatch),
+    ok.
+
+import_case29(Config) ->
+    Msg = import_invalid_file_case_returning_message(Config, "failing_case29"),
+    %% The error message must be valid UTF-8, or the HTTP API JSON response crashes later.
+    ?assertNotMatch({error, _, _}, unicode:characters_to_binary(Msg)),
+    ok.
+
 import_case22(Config) ->
     import_file_case(Config, "case22"),
     Name = <<"protected">>,
@@ -576,6 +605,10 @@ import_invalid_file_case(Config, CaseName) ->
     end,
     ok.
 
+import_invalid_file_case_returning_message(Config, CaseName) ->
+    CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case_returning_message, [CasePath]).
+
 import_invalid_file_case_in_khepri(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case, [CasePath]),
@@ -650,6 +683,16 @@ run_invalid_import_case(Path) ->
        ct:pal("Expected import case ~tp to fail~n", [Path]),
        ct:fail({expected_failure, Path});
      {error, _E} -> ok
+   end.
+
+run_invalid_import_case_returning_message(Path) ->
+   {ok, Body} = file:read_file(Path),
+   ct:pal("Successfully loaded a definition file at ~tp~n", [Path]),
+   case rabbit_definitions:import_raw(Body) of
+     ok ->
+       ct:pal("Expected import case ~tp to fail~n", [Path]),
+       ct:fail({expected_failure, Path});
+     {error, Msg} -> Msg
    end.
 
 run_invalid_import_case_if_unchanged(Path) ->
