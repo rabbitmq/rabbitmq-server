@@ -28,7 +28,8 @@
          callback_mode/0,
          handle_event/4,
          code_change/4,
-         terminate/3]).
+         terminate/3,
+         format_status/1]).
 
 -type frame_type() ::  amqp | sasl.
 
@@ -204,6 +205,10 @@ terminate(_Reason, _StateName, #state{socket = Socket}) ->
 
 code_change(_Vsn, State, Data, _Extra) ->
     {ok, State, Data}.
+
+format_status(Context = #{data := #state{connection_config = Cfg} = State}) ->
+    Obfuscated = amqp10_client_connection:obfuscate_config(Cfg),
+    Context#{data => State#state{connection_config = Obfuscated}}.
 
 %%%===================================================================
 %%% Internal functions
