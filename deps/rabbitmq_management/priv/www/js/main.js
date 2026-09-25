@@ -92,7 +92,6 @@ function dispatcher_add(fun) {
 }
 
 function dispatcher() {
-    this.use('Title');
     this.setTitle('RabbitMQ: ');
     for (var i in dispatcher_modules) {
         dispatcher_modules[i](this);
@@ -100,7 +99,7 @@ function dispatcher() {
 }
 
 function start_app_login () {
-  app = new Sammy.Application(function () {
+  app = new Application(function () {
     this.get('/', function () {})
     this.get('#/', function () {})
     if (!oauth.enabled || !oauth.oauth_disable_basic_auth) {
@@ -234,27 +233,6 @@ function start_app() {
     if (app !== undefined) {
         app.unload();
     }
-    // Oh boy. Sammy uses various different methods to determine if
-    // the URL hash has changed. Unsurprisingly this is a native event
-    // in modern browsers, and falls back to an icky polling function
-    // in MSIE. But it looks like there's a bug. The polling function
-    // should get installed when the app is started. But it's guarded
-    // behind if (Sammy.HashLocationProxy._interval != null). And of
-    // course that's not specific to the application; it's pretty
-    // global. So we need to manually clear that in order for links to
-    // work in MSIE.
-    // Filed as https://github.com/quirkey/sammy/issues/171
-    //
-    // Note for when we upgrade: HashLocationProxy has become
-    // DefaultLocationProxy in later versions, but otherwise the issue
-    // remains.
-
-    // updated to the version  0.7.6 this _interval = null is fixed
-    // just leave the history here.
-    //Sammy.HashLocationProxy._interval = null;
-
-
-
     var url = this.location.toString();
     var hash = this.location.hash;
     var pathname = this.location.pathname;
@@ -276,7 +254,7 @@ function start_app() {
         this.location = url.replace(/#token_type.+/gi, return_to);
     }
 
-    app = new Sammy.Application(dispatcher);
+    app = new Application(dispatcher);
     app.run();
 }
 
