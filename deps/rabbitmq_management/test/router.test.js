@@ -48,7 +48,6 @@ function makeSandbox() {
         $: jqStub,
         jQuery: jqStub,
         console: console,
-        _listeners: listeners,
         _docHandlers: docHandlers
     };
     vm.createContext(sandbox);
