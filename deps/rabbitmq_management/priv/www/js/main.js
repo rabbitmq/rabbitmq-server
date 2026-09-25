@@ -1654,7 +1654,7 @@ function check_bad_response(req, full_page_404, on404fun) {
                 error == 'not_authorised' ||
                 error == 'not_authorized') {
             if ((req.status == 401 || req.status == 403) && oauth.enabled) {
-                initiate_logout(oauth, reason);
+                initiate_logout(oauth, fmt_escape_html(reason));
             } else if (on404fun && (typeof on404fun === 'function') && req.status == 404) {
                 on404fun(response);
             } else {
