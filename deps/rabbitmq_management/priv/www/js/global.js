@@ -693,7 +693,7 @@ var disable_stats;               // ...disable all stats, management only mode
 // Extensions write to this, the dispatcher maker reads it
 var dispatcher_modules = [];
 
-// The dispatcher needs access to the Sammy app
+// The dispatcher needs access to the router app
 var app;
 
 // Used for the new exchange form, and to display broken exchange types
