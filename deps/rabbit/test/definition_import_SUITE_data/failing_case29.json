@@ -1,0 +1,34 @@
+{
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "x_demo_29",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false
+    }
+  ],
+  "queues": [
+    {
+      "name": "q_demo_29",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false
+    }
+  ],
+  "bindings": [
+    {
+      "source": "x_demo_29",
+      "vhost": "/",
+      "destination": "q_demo_29",
+      "destination_type": "café_29",
+      "routing_key": "#"
+    }
+  ]
+}
