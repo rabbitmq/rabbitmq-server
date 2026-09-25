@@ -36,7 +36,11 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-                                basic_evaluate_test
+                                basic_evaluate_test,
+                                arithmetic_type_mismatch_test,
+                                arithmetic_overflow_test,
+                                arithmetic_bignum_overflow_test,
+                                between_error_propagation_test
                                ]}
     ].
 
@@ -119,3 +123,50 @@ basic_evaluate_test(_Config) ->
     ].
 
 eval(Hs, S) -> evaluate(S, Hs).
+
+%% A selector with an operand of the wrong type must evaluate to `error`,
+%% not raise `badarith`/`badarg`: the type of an `ident` operand is only
+%% known once a message arrives, so this can't be rejected at bind time.
+arithmetic_type_mismatch_test(_Config) ->
+    ?assertEqual(error, evaluate({'+', <<"a">>, <<"b">>}, [])),
+    ?assertEqual(error, evaluate({'-', <<"a">>, 1}, [])),
+    ?assertEqual(error, evaluate({'*', 1, <<"a">>}, [])),
+    ?assertEqual(error, evaluate({'/', 1, <<"a">>}, [])),
+    ?assertEqual(error, evaluate({'-', <<"a">>}, [])),
+    ?assertEqual(error, evaluate({'+', <<"a">>}, [])),
+    ?assertEqual(error, evaluate({'-', true}, [])),
+
+    Hs = [{<<"amount">>, longstr, <<"unknown">>}],
+    ?assertEqual(error, eval(Hs, {'+', {'ident', <<"amount">>}, 1})),
+    ?assertEqual(error, eval(Hs, {'>',     {'+', {'ident', <<"amount">>}, 1}, 100})),
+    ?assertEqual(error, eval(Hs, {'>=',    {'+', {'ident', <<"amount">>}, 1}, 100})),
+    ?assertEqual(error, eval(Hs, {'<>',    {'+', {'ident', <<"amount">>}, 1}, 100})),
+    ?assertEqual(error, eval(Hs, {'not_in', {'+', {'ident', <<"amount">>}, 1}, [100]})).
+
+%% Float arithmetic that would overflow to infinity raises `badarith`
+%% in Erlang; a header value large enough is entirely publisher-chosen.
+arithmetic_overflow_test(_Config) ->
+    Hs = [{<<"p">>, double, 1.7e308}],
+    ?assertEqual(error, eval(Hs, {'*', {'ident', <<"p">>}, 10.0})),
+    ?assertEqual(error, eval(Hs, {'+', {'ident', <<"p">>}, {'ident', <<"p">>}})).
+
+%% Repeated multiplication doubles the operand's bit size at every
+%% nesting level; within the parser's own nesting-depth cap this
+%% reaches Erlang's bignum limit and raises `system_limit`, a
+%% different exception from the `badarith` float overflow already
+%% guarded against.
+arithmetic_bignum_overflow_test(_Config) ->
+    Leaf = list_to_integer(lists:duplicate(100, $9)),
+    ?assertEqual(error, eval([], nest_multiply(14, Leaf))).
+
+nest_multiply(0, Leaf) -> Leaf;
+nest_multiply(N, Leaf) ->
+    Half = nest_multiply(N - 1, Leaf),
+    {'*', Half, Half}.
+
+%% `between`/`not_between` must propagate an `error` operand (e.g. from
+%% an unrecognised nested operator) the same as `do_bin_op/3`, rather
+%% than fall through to a raw term comparison.
+between_error_propagation_test(_Config) ->
+    ?assertEqual(error,     eval([], {'between',     {'unrecognised_op', 1, 2}, 5, 10})),
+    ?assertEqual(undefined, eval([], {'not_between', {'unrecognised_op', 1, 2}, 5, 10})).

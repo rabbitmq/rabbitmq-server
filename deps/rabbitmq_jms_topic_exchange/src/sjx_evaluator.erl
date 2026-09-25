@@ -73,12 +73,14 @@ or3(_,     true ) -> true;
 or3(_,     _    ) -> undefined.
 
 do_una_op(_, undefined)  -> undefined;
-do_una_op('-', E) -> -E;
-do_una_op('+', E) -> +E;
+do_una_op('-', E) when is_number(E) -> -E;
+do_una_op('+', E) when is_number(E) -> +E;
 do_una_op(_,   _) -> error.
 
 do_bin_op(_, undefined, _)  -> undefined;
 do_bin_op(_, _, undefined ) -> undefined;
+do_bin_op(_, error, _)       -> error;
+do_bin_op(_, _, error)       -> error;
 do_bin_op('=' , L, R) -> L == R;
 do_bin_op('<>', L, R) -> L /= R;
 do_bin_op('>' , L, R) -> L > R;
@@ -87,13 +89,17 @@ do_bin_op('>=', L, R) -> L >= R;
 do_bin_op('<=', L, R) -> L =< R;
 do_bin_op('in', L, R) -> isIn(L, R);
 do_bin_op('not_in', L, R) -> not isIn(L, R);
-do_bin_op('+' , L, R) -> L + R;
-do_bin_op('-' , L, R) -> L - R;
-do_bin_op('*' , L, R) -> L * R;
-do_bin_op('/' , L, R) when R /= 0 -> L / R;
-do_bin_op('/' , L, R) when L > 0 andalso R == 0 -> plus_infinity;
-do_bin_op('/' , L, R) when L < 0 andalso R == 0 -> minus_infinity;
-do_bin_op('/' , L, R) when L == 0 andalso R == 0 -> nan;
+do_bin_op('+' , L, R) when is_number(L), is_number(R) ->
+  try L + R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('-' , L, R) when is_number(L), is_number(R) ->
+  try L - R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('*' , L, R) when is_number(L), is_number(R) ->
+  try L * R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), R /= 0 ->
+  try L / R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), L > 0, R == 0 -> plus_infinity;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), L < 0, R == 0 -> minus_infinity;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), L == 0, R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
 
 isLike(undefined, _Patt) -> undefined;
@@ -115,6 +121,7 @@ val_of({'ident', Ident}, Hs) -> lookup_value(Hs, Ident);
 val_of(Value,           _Hs) -> Value.
 
 between(E, F, T) when E =:= undefined orelse F =:= undefined orelse T =:= undefined -> undefined;
+between(E, F, T) when E =:= error     orelse F =:= error     orelse T =:= error     -> error;
 between(Value, Lo, Hi) -> Lo =< Value andalso Value =< Hi.
 
 lookup_value(Table, Key) ->

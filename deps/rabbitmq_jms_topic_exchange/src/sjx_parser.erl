@@ -15,6 +15,7 @@
 -export([parse_term/1]).
 
 -define(MAX_NESTING_DEPTH, 16).
+-define(MAX_DIGITS, 100).
 
 -define(ALLOWED_ATOMS, #{
     %% Expression tags
@@ -243,11 +244,13 @@ maybe_parse_exponent(FloatStr, Rest) ->
     {list_to_float(FloatStr), Rest}.
 
 scan_digits(Str) ->
-    scan_digits(Str, []).
+    scan_digits(Str, [], 0).
 
-scan_digits([C | Rest], Acc) when C >= $0, C =< $9 ->
-    scan_digits(Rest, [C | Acc]);
-scan_digits(Rest, Acc) ->
+scan_digits([C | Rest], Acc, N) when C >= $0, C =< $9, N < ?MAX_DIGITS ->
+    scan_digits(Rest, [C | Acc], N + 1);
+scan_digits([C | _Rest], _Acc, N) when C >= $0, C =< $9, N >= ?MAX_DIGITS ->
+    throw({parse_error, number_too_long});
+scan_digits(Rest, Acc, _N) ->
     {lists:reverse(Acc), Rest}.
 
 %% ---------------------------------------------------------------------------
