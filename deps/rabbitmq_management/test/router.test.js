@@ -15,9 +15,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROUTER_JS_PATH = path.join(__dirname, '../priv/www/js/router.js');
 const routerSrc = fs.readFileSync(ROUTER_JS_PATH, 'utf8');
 
-// router.js references window, document and jQuery at call time (not at
-// load time), so a fresh sandbox with minimal stubs is created per test to
-// avoid state (routes, document.title) leaking between test cases.
+// router.js only declares functions at load time, so it loads once with
+// minimal stubs and is shared across tests; each test isolates itself by
+// creating its own Application instance.
 function makeSandbox() {
     var listeners = {};
     var documentStub = { title: '' };
