@@ -37,7 +37,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 basic_evaluate_test,
-                                arithmetic_type_mismatch_test
+                                arithmetic_type_mismatch_test,
+                                arithmetic_overflow_test
                                ]}
     ].
 
@@ -139,3 +140,10 @@ arithmetic_type_mismatch_test(_Config) ->
     ?assertEqual(error, eval(Hs, {'>=',    {'+', {'ident', <<"amount">>}, 1}, 100})),
     ?assertEqual(error, eval(Hs, {'<>',    {'+', {'ident', <<"amount">>}, 1}, 100})),
     ?assertEqual(error, eval(Hs, {'not_in', {'+', {'ident', <<"amount">>}, 1}, [100]})).
+
+%% Float arithmetic that would overflow to infinity raises `badarith`
+%% in Erlang; a header value large enough is entirely publisher-chosen.
+arithmetic_overflow_test(_Config) ->
+    Hs = [{<<"p">>, double, 1.7e308}],
+    ?assertEqual(error, eval(Hs, {'*', {'ident', <<"p">>}, 10.0})),
+    ?assertEqual(error, eval(Hs, {'+', {'ident', <<"p">>}, {'ident', <<"p">>}})).
