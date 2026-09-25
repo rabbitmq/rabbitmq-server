@@ -99,10 +99,6 @@ update1(_Config) ->
                                end)),
     passed.
 
-%% update/3 decides the new policy from a snapshot read before its own
-%% transaction. If a different concurrent write lands in the window
-%% between that read and the transaction, the payload_version guard must
-%% cause a retry rather than silently overwriting the concurrent write.
 update_retries_on_concurrent_change(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(
                Config, 0, ?MODULE, update_retries_on_concurrent_change1, [Config]).
@@ -113,19 +109,10 @@ update_retries_on_concurrent_change1(_Config) ->
                          rabbit_classic_queue),
     ?assertEqual({created, Queue}, rabbit_db_queue:create_or_get(Queue)),
 
-    %% Simulate a concurrent write landing in the window between
-    %% update/3's own snapshot read and its transaction: bump the
-    %% queue's version via a completely different field, from inside
-    %% the caller-supplied GetUpdatedQueueFun, exactly once.
-    %%
-    %% update_function below reapplies PrecomputedArgs -- a value
-    %% derived from Q0, the snapshot read *before* the bump -- the same
-    %% way the real rabbit_policy:get_updated_queue/2 precomputes
-    %% Decorators outside the transaction and blindly writes it back.
-    %% Without the payload_version guard forcing a retry (which
-    %% recomputes PrecomputedArgs from the now-current, post-bump
-    %% queue), this blind reapplication is exactly what would silently
-    %% clobber the concurrent write.
+    %% `GetUpdatedQueueFun` runs between the snapshot read and the transaction,
+    %% so the concurrent update is made there. Like the decorators computed by
+    %% `rabbit_policy:get_updated_queue/2`, the arguments written back by
+    %% `update_function` predate that update.
     Invocations = counters:new(1, []),
     Bumped = counters:new(1, []),
     GetUpdatedQueueFun =
@@ -154,17 +141,11 @@ update_retries_on_concurrent_change1(_Config) ->
     {[], [{_, NewQ}]} = rabbit_db_policy:update(
                            ?VHOST, fun(_X) -> no_change end, GetUpdatedQueueFun),
 
-    %% Neither the concurrent write nor this policy update was dropped.
     ?assertEqual(new_policy, amqqueue:get_policy(NewQ)),
     ?assertEqual([{<<"x-concurrent">>, long, 1}], amqqueue:get_arguments(NewQ)),
-    %% GetUpdatedQueueFun ran again for the retry: once for the attempt
-    %% that hit the version mismatch, and again for the one that saw the
-    %% bump and succeeded.
-    ?assert(counters:get(Invocations, 1) >= 2),
+    ?assertEqual(2, counters:get(Invocations, 1)),
     passed.
 
-%% Same race as update_retries_on_concurrent_change/1, on the exchange
-%% side of update/3 instead of the queue side.
 update_retries_on_concurrent_change_exchange(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(
                Config, 0, ?MODULE, update_retries_on_concurrent_change_exchange1,
@@ -205,13 +186,9 @@ update_retries_on_concurrent_change_exchange1(_Config) ->
 
     ?assertEqual(new_policy, NewX#exchange.policy),
     ?assertEqual([{<<"x-concurrent">>, long, 1}], NewX#exchange.arguments),
-    ?assert(counters:get(Invocations, 1) >= 2),
+    ?assertEqual(2, counters:get(Invocations, 1)),
     passed.
 
-%% If the queue is deleted in the window between update/3's own
-%% snapshot read and its transaction, the payload_version guard must
-%% not abort the whole update: a deletion isn't a concurrent policy
-%% change to retry against, there is simply nothing left to update.
 update_skips_concurrently_deleted_queue(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(
                Config, 0, ?MODULE, update_skips_concurrently_deleted_queue1,
@@ -235,14 +212,10 @@ update_skips_concurrently_deleted_queue1(_Config) ->
     {[], [{_, NewQ}]} = rabbit_db_policy:update(
                            ?VHOST, fun(_X) -> no_change end, GetUpdatedQueueFun),
 
-    %% The queue was dropped before the transaction could apply the
-    %% policy, so it comes back unchanged and there was no retry.
     ?assertEqual(undefined, amqqueue:get_policy(NewQ)),
     ?assertEqual(1, counters:get(Invocations, 1)),
     passed.
 
-%% Same race as update_skips_concurrently_deleted_queue/1, on the
-%% exchange side of update/3 instead of the queue side.
 update_skips_concurrently_deleted_exchange(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(
                Config, 0, ?MODULE, update_skips_concurrently_deleted_exchange1,
