@@ -20,21 +20,25 @@ const routerSrc = fs.readFileSync(ROUTER_JS_PATH, 'utf8');
 // creating its own Application instance.
 function makeSandbox() {
     var listeners = {};
+    var docHandlers = {};
     var documentStub = { title: '' };
     var windowStub = {
         location: { hash: '', toString: function() { return 'http://localhost/' + this.hash; } },
         addEventListener: function(name, fn) { listeners[name] = fn; },
         removeEventListener: function(name, fn) { if (listeners[name] === fn) delete listeners[name]; }
     };
-    // These tests call _runRoute directly rather than run(), so the stub
-    // only needs to support serializeArray/serialize plus a no-op on/off
-    // for the document-level submit delegation the router sets up.
-    var jqStub = function() {
+    // $(document) is used for submit delegation; every other call is
+    // $(form), used to read the submitted fields.
+    var jqStub = function(target) {
+        if (target === documentStub) {
+            return {
+                on: function(event, selector, fn) { docHandlers[event] = fn; },
+                off: function(event, selector, fn) { if (docHandlers[event] === fn) delete docHandlers[event]; }
+            };
+        }
         return {
-            serializeArray: function() { return []; },
-            serialize: function() { return ''; },
-            on: function() {},
-            off: function() {}
+            serializeArray: function() { return (target && target._fields) || []; },
+            serialize: function() { return (target && target._qs) || ''; }
         };
     };
 
@@ -43,7 +47,9 @@ function makeSandbox() {
         document: documentStub,
         $: jqStub,
         jQuery: jqStub,
-        console: console
+        console: console,
+        _listeners: listeners,
+        _docHandlers: docHandlers
     };
     vm.createContext(sandbox);
     vm.runInContext(routerSrc, sandbox, { filename: ROUTER_JS_PATH });
@@ -142,5 +148,35 @@ describe('use', () => {
         assert.doesNotThrow(function() {
             app.use('Title');
         });
+    });
+});
+
+describe('form submission', () => {
+    it('reads method via getAttribute and maps delete to the del route table', () => {
+        var app = new Application();
+        var seenParams = null;
+        app.del('#/queues', function() { seenParams = this.params; });
+        app.run();
+
+        var prevented = false;
+        var form = {
+            method: 'GET', // the DOM property normalises put/delete to GET; getAttribute must be used instead
+            getAttribute: function(name) {
+                if (name === 'method') return 'delete';
+                if (name === 'action') return '#/queues';
+                return null;
+            },
+            _fields: [{ name: 'name', value: 'q1' }, { name: 'tag', value: 'a' }, { name: 'tag', value: 'b' }]
+        };
+        sandbox._docHandlers.submit({ target: form, preventDefault: function() { prevented = true; } });
+
+        assert.equal(prevented, true);
+        assert.equal(seenParams.name, 'q1');
+        // seenParams.tag is an array from the vm sandbox's own realm, so it
+        // is compared by value rather than via assert.deepEqual, which
+        // treats cross-realm arrays as unequal.
+        assert.equal(Array.prototype.join.call(seenParams.tag, ','), 'a,b');
+
+        app.unload();
     });
 });
