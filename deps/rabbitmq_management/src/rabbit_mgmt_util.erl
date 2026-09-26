@@ -284,20 +284,12 @@ reply(Facts, ReqData, Context) ->
 
 reply0(Facts, ReqData, Context) ->
     ReqData1 = cowboy_req:set_resp_header(<<"cache-control">>, "no-cache", ReqData),
-    try
-        case maps:get(media_type, ReqData1, undefined) of
-            {<<"application">>, <<"bert">>, _} ->
-                {term_to_binary(Facts), ReqData1, Context};
-            _ ->
-                {rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(Facts)),
-                 ReqData1, Context}
-        end
-    catch exit:{json_encode, E} ->
-            Error = iolist_to_binary(
-                      io_lib:format("JSON encode error: ~tp", [E])),
-            Reason = iolist_to_binary(
-                       io_lib:format("While encoding: ~n~tp", [Facts])),
-            internal_server_error(Error, Reason, ReqData1, Context)
+    case maps:get(media_type, ReqData1, undefined) of
+        {<<"application">>, <<"bert">>, _} ->
+            {term_to_binary(Facts), ReqData1, Context};
+        _ ->
+            {rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(Facts)),
+             ReqData1, Context}
     end.
 
 reply_list(Facts, ReqData, Context) ->
