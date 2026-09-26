@@ -28,6 +28,7 @@ groups() ->
     [
      {tests, [], [
                   test_topic_selection,
+                  test_binding_without_selector,
                   restart_with_auto_delete_topic_exchange
                  ]}
     ].
@@ -79,6 +80,26 @@ test_topic_selection(Config) ->
     publish_two_messages(Channel, Exchange, <<"select-key">>),
     amqp_channel:wait_for_confirms(Channel, 5),
 
+    get_and_check(Channel, Q, 0, <<"true">>),
+
+    amqp_channel:call(Channel, #'exchange.delete'{exchange = Exchange}),
+    close_connection_and_channel(Connection, Channel),
+    ok.
+
+%% A binding with no compiled-selector argument must not crash the bind.
+test_binding_without_selector(Config) ->
+    {Connection, Channel} = open_connection_and_channel(Config),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_no_selector_exchange", false, false, []),
+
+    Q = declare_queue(Channel),
+    bind_queue(Channel, Q, Exchange, <<"select-key">>, []),
+
+    publish_two_messages(Channel, Exchange, <<"select-key">>),
+    amqp_channel:wait_for_confirms(Channel, 5),
+
+    get_and_check(Channel, Q, 1, <<"false">>),
     get_and_check(Channel, Q, 0, <<"true">>),
 
     amqp_channel:call(Channel, #'exchange.delete'{exchange = Exchange}),

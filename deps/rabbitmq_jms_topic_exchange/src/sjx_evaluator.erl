@@ -35,8 +35,8 @@
 -type expression() :: any().
 
 -spec evaluate(expression(), table()) ->
-          'true' | 'false' | 'error' | 'undefined' | number() |
-          [ 'true' | 'false' | 'error' | 'undefined' | number() ].
+          'true' | 'false' | 'error' | 'undefined' | number() | binary() |
+          [ 'true' | 'false' | 'error' | 'undefined' | number() | binary() ].
 
 evaluate( true,                           _Headers ) -> true;
 evaluate( false,                          _Headers ) -> false;
@@ -51,7 +51,8 @@ evaluate( {'and', Exp1, Exp2 },            Headers ) -> and3(evaluate(Exp1, Head
 evaluate( {'or', Exp1, Exp2 },             Headers ) -> or3(evaluate(Exp1, Headers), evaluate(Exp2, Headers));
 evaluate( {'like', LHS, Patt, Esc },       Headers ) -> isLike(val_of(LHS, Headers), {Patt, Esc});
 evaluate( {'not_like', LHS, Patt, Esc },   Headers ) -> not3(isLike(val_of(LHS, Headers), {Patt, Esc}));
-evaluate( { Op, Exp, {range, From, To} },  Headers ) -> evaluate({ Op, Exp, From, To }, Headers);
+evaluate( {'between', Exp, {range, From, To}},  Hs ) -> evaluate({'between', Exp, From, To}, Hs);
+evaluate( {'not_between', Exp, {range, From, To}}, Hs ) -> evaluate({'not_between', Exp, From, To}, Hs);
 evaluate( {'between', Exp, From, To},           Hs ) -> between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs));
 evaluate( {'not_between', Exp, From, To},       Hs ) -> not3(between(evaluate(Exp, Hs), evaluate(From, Hs), evaluate(To, Hs)));
 evaluate( { Op, LHS, RHS },                Headers ) -> do_bin_op(Op, evaluate(LHS, Headers), evaluate(RHS, Headers));
@@ -73,49 +74,99 @@ or3(_,     true ) -> true;
 or3(_,     _    ) -> undefined.
 
 do_una_op(_, undefined)  -> undefined;
-do_una_op('-', E) -> -E;
-do_una_op('+', E) -> +E;
+do_una_op('-', E) when is_integer(E) -> wrap_long(-E);
+do_una_op('-', E) when is_number(E) -> -E;
+do_una_op('+', E) when is_number(E) -> +E;
 do_una_op(_,   _) -> error.
 
 do_bin_op(_, undefined, _)  -> undefined;
 do_bin_op(_, _, undefined ) -> undefined;
-do_bin_op('=' , L, R) -> L == R;
-do_bin_op('<>', L, R) -> L /= R;
-do_bin_op('>' , L, R) -> L > R;
-do_bin_op('<' , L, R) -> L < R;
-do_bin_op('>=', L, R) -> L >= R;
-do_bin_op('<=', L, R) -> L =< R;
+do_bin_op(_, error, _)       -> error;
+do_bin_op(_, _, error)       -> error;
+do_bin_op('=' , L, R) -> case comparable(L, R) of true -> L == R; false -> undefined end;
+do_bin_op('<>', L, R) -> case comparable(L, R) of true -> L /= R; false -> undefined end;
+do_bin_op('>' , L, R) when is_number(L), is_number(R) -> L > R;
+do_bin_op('>' , _, _) -> undefined;
+do_bin_op('<' , L, R) when is_number(L), is_number(R) -> L < R;
+do_bin_op('<' , _, _) -> undefined;
+do_bin_op('>=', L, R) when is_number(L), is_number(R) -> L >= R;
+do_bin_op('>=', _, _) -> undefined;
+do_bin_op('<=', L, R) when is_number(L), is_number(R) -> L =< R;
+do_bin_op('<=', _, _) -> undefined;
 do_bin_op('in', L, R) -> isIn(L, R);
-do_bin_op('not_in', L, R) -> not isIn(L, R);
-do_bin_op('+' , L, R) -> L + R;
-do_bin_op('-' , L, R) -> L - R;
-do_bin_op('*' , L, R) -> L * R;
-do_bin_op('/' , L, R) when R /= 0 -> L / R;
-do_bin_op('/' , L, R) when L > 0 andalso R == 0 -> plus_infinity;
-do_bin_op('/' , L, R) when L < 0 andalso R == 0 -> minus_infinity;
-do_bin_op('/' , L, R) when L == 0 andalso R == 0 -> nan;
+do_bin_op('not_in', L, R) -> not3(isIn(L, R));
+do_bin_op('+' , L, R) when is_integer(L), is_integer(R) -> wrap_long(L + R);
+do_bin_op('+' , L, R) when is_number(L), is_number(R) ->
+  try L + R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('-' , L, R) when is_integer(L), is_integer(R) -> wrap_long(L - R);
+do_bin_op('-' , L, R) when is_number(L), is_number(R) ->
+  try L - R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('*' , L, R) when is_integer(L), is_integer(R) -> wrap_long(L * R);
+do_bin_op('*' , L, R) when is_number(L), is_number(R) ->
+  try L * R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), R /= 0 ->
+  try L / R catch error:badarith -> error; error:system_limit -> error end;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), L > 0, R == 0 -> plus_infinity;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), L < 0, R == 0 -> minus_infinity;
+do_bin_op('/' , L, R) when is_number(L), is_number(R), L == 0, R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
 
-isLike(undefined, _Patt) -> undefined;
-isLike(L, {regex, MP}) -> patt_match(L, MP);
-isLike(L, {Patt, Esc}) -> patt_match(L, pattern_of(Patt, Esc)).
+%% JMS exact-numeric arithmetic is Java `long`, which wraps on overflow
+%% instead of growing arbitrarily like an Erlang integer.
+wrap_long(N) ->
+  M = N band 16#FFFFFFFFFFFFFFFF,
+  case M > 16#7FFFFFFFFFFFFFFF of
+    true  -> M - 16#10000000000000000;
+    false -> M
+  end.
 
+%% `=`/`<>` follow the JMS restriction that only like-typed operands can
+%% be compared; anything else is not an error, just not comparable.
+comparable(L, R) when is_number(L), is_number(R) -> true;
+comparable(L, R) when is_binary(L), is_binary(R) -> true;
+comparable(L, R) when is_boolean(L), is_boolean(R) -> true;
+comparable(_, _) -> false.
+
+isLike(undefined, _Patt) -> undefined;
+isLike(L, _Patt) when not is_binary(L) -> error;
+isLike(L, {regex, MP}) when is_binary(MP) ->
+  case compile_re(MP) of
+    error -> error;
+    Rx    -> patt_match(L, Rx)
+  end;
+isLike(L, {Patt, Esc}) when is_binary(Patt) ->
+  case pattern_of(Patt, Esc) of
+    error -> error;
+    MP    -> patt_match(L, MP)
+  end;
+isLike(_L, _Patt) -> error.
+
+%% `report_errors` turns an exceeded match_limit/match_limit_recursion
+%% into `{error, _}` instead of a plain `nomatch`, so it hits the
+%% `{error, _}` clause below rather than fail open as `false`.
 patt_match(L, MP) ->
   BS = byte_size(L),
-  case rabbit_re:run(L, MP, [{capture, first}]) of
+  case rabbit_re:run(L, MP, [report_errors, {capture, first}]) of
     {match, [{0, BS}]} -> true;
+    {error, _}         -> error;
     _                  -> false
   end.
 
-isIn(_L, []   ) -> false;
-isIn( L, [L|_]) -> true;
-isIn( L, [_|R]) -> isIn(L,R).
+%% Reuses `do_bin_op('=', ...)` so a type mismatch yields `undefined`, not a false "not in".
+isIn(_Value, [])           -> false;
+isIn(Value, [Item | Rest]) -> or3(do_bin_op('=', Value, Item), isIn(Value, Rest));
+isIn(_Value, _List)        -> error.
 
 val_of({'ident', Ident}, Hs) -> lookup_value(Hs, Ident);
 val_of(Value,           _Hs) -> Value.
 
-between(E, F, T) when E =:= undefined orelse F =:= undefined orelse T =:= undefined -> undefined;
-between(Value, Lo, Hi) -> Lo =< Value andalso Value =< Hi.
+between(Value, Lo, Hi)
+  when Value =:= undefined orelse Lo =:= undefined orelse Hi =:= undefined -> undefined;
+between(Value, Lo, Hi)
+  when Value =:= error orelse Lo =:= error orelse Hi =:= error -> error;
+between(Value, Lo, Hi) when is_number(Value), is_number(Lo), is_number(Hi) ->
+  Lo =< Value andalso Value =< Hi;
+between(_Value, _Lo, _Hi) -> undefined.
 
 lookup_value(Table, Key) ->
   case lists:keyfind(Key, 1, Table) of
@@ -127,10 +178,12 @@ lookup_value(Table, Key) ->
     {_, short,     Value} -> Value;
     {_, long,      Value} -> Value;
     {_, bool,      Value} -> Value;
-    false                 -> undefined
+    false                 -> undefined;
+    {_, _OtherType, _Value} -> undefined
   end.
 
-pattern_of(S, Esc) -> compile_re(gen_re(binary_to_list(S), Esc)).
+%% `dotall` lets `_`/`%` span a newline, unlike a bare PCRE `.`.
+pattern_of(S, Esc) -> compile_re(gen_re(binary_to_list(S), Esc), [dotall]).
 
 gen_re(S, <<Ch>>   ) -> convert(S, [], Ch       );
 gen_re(S, no_escape) -> convert(S, [], no_escape);
@@ -162,9 +215,11 @@ escape($/)  -> "\\/";
 escape($\\) -> "\\\\";
 escape(Ch)  -> Ch.
 
-compile_re(error) -> error;
-compile_re(MatchMany) ->
-    case rabbit_re:compile(MatchMany)
+compile_re(MatchMany) -> compile_re(MatchMany, []).
+
+compile_re(error, _Opts) -> error;
+compile_re(MatchMany, Opts) ->
+    case rabbit_re:compile(MatchMany, Opts)
     of  {ok, Rx} -> Rx;
         _        -> error
     end.
@@ -198,21 +253,23 @@ validate_patterns_list([H | T]) ->
     Error -> Error
   end.
 
+validate_pattern(regex, MP) when is_binary(MP) ->
+  compile_for_validation(MP, invalid_regex, []);
 validate_pattern(regex, MP) ->
-  compile_for_validation(MP, invalid_regex);
+  {error, {invalid_regex, {not_a_binary_pattern, MP}}};
 validate_pattern(Patt, Esc) when is_binary(Patt) ->
   case gen_re(binary_to_list(Patt), Esc) of
     error -> {error, {invalid_like_pattern, invalid_escape}};
-    Regex -> compile_for_validation(Regex, invalid_like_pattern)
+    Regex -> compile_for_validation(Regex, invalid_like_pattern, [dotall])
   end;
 validate_pattern(Patt, _Esc) ->
   {error, {invalid_like_pattern, {not_a_binary_pattern, Patt}}}.
 
-%% Keeps the underlying `rabbit_re:compile/1` failure reason (e.g. the
+%% Keeps the underlying `rabbit_re:compile/2` failure reason (e.g. the
 %% compact `pattern_too_long`), rather than the bare `error` atom that
-%% `compile_re/1` collapses it to on the hot match path.
-compile_for_validation(Regex, Tag) ->
-  try rabbit_re:compile(Regex) of
+%% `compile_re/2` collapses it to on the hot match path.
+compile_for_validation(Regex, Tag, Opts) ->
+  try rabbit_re:compile(Regex, Opts) of
     {ok, _}         -> ok;
     {error, Reason} -> {error, {Tag, Reason}}
   catch

@@ -39,7 +39,8 @@ groups() ->
                                     validate_binding_no_selector_test,
                                     validate_binding_accepts_valid_like_pattern_test,
                                     validate_binding_rejects_oversized_like_pattern_test,
-                                    validate_binding_rejects_invalid_regex_test
+                                    validate_binding_rejects_invalid_regex_test,
+                                    validate_binding_rejects_non_binary_regex_pattern_test
                                    ]}
     ].
 
@@ -114,6 +115,12 @@ validate_binding_rejects_oversized_like_pattern_test(_Config) ->
 %% rejected at bind time.
 validate_binding_rejects_invalid_regex_test(_Config) ->
   B = selector_binding(<<"{like, {ident, <<\"prop\">>}, regex, <<\"(unclosed\">>}.">>),
+  ?assertMatch({error, {binding_invalid, _, _}},
+               validate_binding(dummy_exchange(), B)).
+
+%% `rabbit_re:compile/2`'s byte-size cap doesn't apply to a list.
+validate_binding_rejects_non_binary_regex_pattern_test(_Config) ->
+  B = selector_binding(<<"{like, {ident, <<\"prop\">>}, regex, [<<\"a\">>]}.">>),
   ?assertMatch({error, {binding_invalid, _, _}},
                validate_binding(dummy_exchange(), B)).
 
