@@ -39,8 +39,21 @@ endif
 TEST_DEPS += cth_styledout
 dep_cth_styledout = git https://github.com/rabbitmq/cth_styledout.git master
 
+CT_HOOKS += cth_fail_on_teardown_crash
+
 ifneq ($(strip $(CT_HOOKS)),)
-CT_OPTS += -ct_hooks $(CT_HOOKS)
+# `ct_run` parses `Hook1 Hook2` as `Hook1` with `Hook2` as its argument,
+# so hooks must be joined with `and`.
+CT_OPTS += -ct_hooks $(subst $(space),$(space)and$(space),$(strip $(CT_HOOKS)))
+endif
+
+ifeq ($(PROJECT),rabbit_common)
+# `rabbitmq_ct_helpers` depends on `rabbit_common`, so listing it in
+# `TEST_DEPS` would rebuild `rabbit_common` without its `-ifdef(TEST)` exports.
+CTH_FAIL_ON_TEARDOWN_CRASH_DIR = $(DEPS_DIR)/rabbitmq_ct_helpers
+test-build::
+	$(verbose) mkdir -p $(CTH_FAIL_ON_TEARDOWN_CRASH_DIR)/ebin
+	$(verbose) cd $(CTH_FAIL_ON_TEARDOWN_CRASH_DIR)/src && erlc -o ../ebin cth_fail_on_teardown_crash.erl
 endif
 
 # We fetch a SECONDARY_DIST if SECONDARY_DIST_VSN is set and
