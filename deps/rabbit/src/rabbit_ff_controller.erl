@@ -1145,6 +1145,8 @@ check_required_and_enable(
                               [FeatureName],
                               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                            true;
+                       _ when ?IS_DEPRECATION(FeatureProps) ->
+                           denial_needs_no_migration(FeatureName);
                        _ ->
                            false
                    end,
@@ -1165,13 +1167,30 @@ check_required_and_enable(
             update_feature_state_and_enable(Inventory, FeatureName);
         true ->
             ?LOG_DEBUG(
-               "Feature flags: `~s`: all nodes where the feature flag is "
-               "disabled are virgin, we can directly mark it as enabled "
-               "there",
+               "Feature flags: `~s`: it can be marked as enabled directly on "
+               "the nodes where it is disabled",
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             mark_as_enabled_on_nodes(
               NodesWhereDisabled, Inventory, FeatureName, true)
+    end.
+
+%% A deprecated feature that needs no migration before it is denied can be
+%% marked as enabled without running the `enable' callback. The local
+%% definition decides: the local node drives this sync and therefore runs the
+%% most recent version of that definition, while a node that has not been
+%% upgraded yet would refuse the denial.
+denial_needs_no_migration(FeatureName) ->
+    case rabbit_deprecated_features:usage_prevents_denial(FeatureName) of
+        true ->
+            false;
+        false ->
+            ?LOG_DEBUG(
+               "Feature flags: `~ts`: denying the deprecated feature needs no "
+               "migration; it does not have to be denied on other nodes first",
+               [FeatureName],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            true
     end.
 
 -spec update_feature_state_and_enable(Inventory, FeatureName) -> Ret when
@@ -1585,14 +1604,28 @@ list_deprecated_features_that_cant_be_denied(
                                                 is_feature_used, #{},
                                                 infinity),
                       case IsUsed of
-                          true   -> [FeatureName | Acc];
-                          false  -> Acc;
-                          _Error -> [FeatureName | Acc]
+                          false ->
+                              Acc;
+                          _ ->
+                              add_if_denial_is_prevented(FeatureName, Acc)
                       end
               end;
           (_FeatureName, false, Acc) ->
               Acc
       end, [], States).
+
+add_if_denial_is_prevented(FeatureName, Acc) ->
+    case rabbit_deprecated_features:usage_prevents_denial(FeatureName) of
+        true ->
+            [FeatureName | Acc];
+        false ->
+            ?LOG_WARNING(
+               "Feature flags: `~ts`: the deprecated feature is in use; it is "
+               "denied anyway because the denial only applies to new uses",
+               [FeatureName],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            Acc
+    end.
 
 -spec disable_permitted_deprecated_features(Inventory) -> ok when
       Inventory :: rabbit_feature_flags:cluster_inventory().
