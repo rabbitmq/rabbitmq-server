@@ -104,24 +104,19 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) 
 init(Req, Opts) ->
     case check_origin(Req) of
         ok ->
-            case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
-                undefined ->
-                    no_supported_sub_protocol(undefined, Req);
-                Protocol ->
-                    case lists:search(fun(P) -> P =:= <<"mqtt">> orelse P =:= <<"mqttv3.1">> end, Protocol) of
-                        false ->
-                            no_supported_sub_protocol(Protocol, Req);
-                        {value, MatchedProtocol} ->
-                            Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, MatchedProtocol, Req),
-                            State = #state{socket = maps:get(proxy_header, Req, undefined),
-                                           stats_timer = rabbit_event:init_stats_timer()},
-                            WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-                            MaxFrameSize = persistent_term:get(
-                                ?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED) + 4096,
-                            WsOpts = maps:merge(#{compress => true,
-                                                  max_frame_size => MaxFrameSize}, WsOpts0),
-                            {?MODULE, Req1, State, WsOpts#{data_delivery => relay}}
-                    end
+            case check_proxy_header_trusted(Req) of
+                ok ->
+                    init0(Req, Opts);
+                {error, untrusted_proxy_source} ->
+                    {PeerAddress, _} = cowboy_req:peer(Req),
+                    ?LOG_WARNING(
+                       "Web MQTT: WebSocket connection rejected, PROXY protocol "
+                       "header received from ~ts, which is not a configured "
+                       "proxy_protocol_trusted_proxies entry",
+                       [rabbit_misc:ntoa(PeerAddress)]),
+                    {ok,
+                     cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req),
+                     #state{}}
             end;
         {error, origin_not_allowed} ->
             ?LOG_WARNING("Web MQTT: WebSocket connection rejected, "
@@ -130,6 +125,27 @@ init(Req, Opts) ->
             {ok,
              cowboy_req:reply(403, #{<<"connection">> => <<"close">>}, Req),
              #state{}}
+    end.
+
+init0(Req, Opts) ->
+    case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
+        undefined ->
+            no_supported_sub_protocol(undefined, Req);
+        Protocol ->
+            case lists:search(fun(P) -> P =:= <<"mqtt">> orelse P =:= <<"mqttv3.1">> end, Protocol) of
+                false ->
+                    no_supported_sub_protocol(Protocol, Req);
+                {value, MatchedProtocol} ->
+                    Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, MatchedProtocol, Req),
+                    State = #state{socket = maps:get(proxy_header, Req, undefined),
+                                   stats_timer = rabbit_event:init_stats_timer()},
+                    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+                    MaxFrameSize = persistent_term:get(
+                        ?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED) + 4096,
+                    WsOpts = maps:merge(#{compress => true,
+                                          max_frame_size => MaxFrameSize}, WsOpts0),
+                    {?MODULE, Req1, State, WsOpts#{data_delivery => relay}}
+            end
     end.
 
 %% We cannot use a gen_server call, because the handler process is a
@@ -356,6 +372,35 @@ check_origin(Req) ->
                     case lists:member(binary_to_list(Origin), AllowedOrigins) of
                         true -> ok;
                         false -> {error, origin_not_allowed}
+                    end
+            end
+    end.
+
+%% Cowboy's `proxy_header` transport option (set from our own
+%% `proxy_protocol` config) unconditionally trusts the PROXY protocol
+%% header from whoever connected (see cowboy_clear/cowboy_tls
+%% `get_proxy_info/2`), with no equivalent of rabbit_networking's
+%% trusted-proxy allowlist. Gate on that allowlist here before `Req`'s
+%% `proxy_header` is trusted for anything (connection naming, access
+%% control).
+check_proxy_header_trusted(Req) ->
+    case maps:get(proxy_header, Req, undefined) of
+        undefined ->
+            ok;
+        _ProxyHeader ->
+            {PeerAddress, _PeerPort} = cowboy_req:peer(Req),
+            case rabbit_networking:trusted_proxies_configured() of
+                false ->
+                    %% Temporary leniency, see rabbit_networking:check_proxy_protocol_trusted_source/2.
+                    ?LOG_WARNING(
+                       "Web MQTT: accepting PROXY protocol header from ~ts "
+                       "even though proxy_protocol_trusted_proxies is not "
+                       "configured", [rabbit_misc:ntoa(PeerAddress)]),
+                    ok;
+                true ->
+                    case rabbit_networking:is_trusted_proxy_source(PeerAddress) of
+                        true -> ok;
+                        false -> {error, untrusted_proxy_source}
                     end
             end
     end.

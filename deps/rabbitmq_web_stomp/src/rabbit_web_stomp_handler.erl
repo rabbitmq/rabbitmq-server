@@ -104,34 +104,20 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) 
 init(Req0, Opts) ->
     case check_origin(Req0) of
         ok ->
-            logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
-            {PeerAddr, _PeerPort} = maps:get(peer, Req0),
-            {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
-            SockInfo = maps:get(proxy_header, Req0, undefined),
-            Req = case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req0) of
-                undefined  -> Req0;
-                Protocols ->
-                    case filter_stomp_protocols(Protocols) of
-                        [] -> Req0;
-                        [StompProtocol|_] ->
-                            cowboy_req:set_resp_header(<<"sec-websocket-protocol">>,
-                                StompProtocol, Req0)
-                    end
-            end,
-            WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-            WsOpts = maps:merge(#{compress => true,
-                                   max_frame_size => unauthenticated_frame_size()}, WsOpts0),
-            {?MODULE, Req, #state{
-                frame_type         = proplists:get_value(type, Opts, text),
-                heartbeat_sup      = KeepaliveSup,
-                heartbeat          = {none, none},
-                heartbeat_mode     = heartbeat,
-                state              = running,
-                conserve_resources = false,
-                socket             = SockInfo,
-                peername           = PeerAddr,
-                auth_hd            = cowboy_req:header(<<"authorization">>, Req)
-            }, WsOpts#{data_delivery => relay}};
+            case check_proxy_header_trusted(Req0) of
+                ok ->
+                    init0(Req0, Opts);
+                {error, untrusted_proxy_source} ->
+                    {PeerAddress, _} = cowboy_req:peer(Req0),
+                    ?LOG_WARNING(
+                       "Web STOMP: WebSocket connection rejected, PROXY protocol "
+                       "header received from ~ts, which is not a configured "
+                       "proxy_protocol_trusted_proxies entry",
+                       [rabbit_misc:ntoa(PeerAddress)]),
+                    {ok,
+                     cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req0),
+                     #state{}}
+            end;
         {error, origin_not_allowed} ->
             ?LOG_WARNING("Web STOMP: WebSocket connection rejected, "
                          "origin not in allow_origins: ~tp",
@@ -140,6 +126,36 @@ init(Req0, Opts) ->
              cowboy_req:reply(403, #{<<"connection">> => <<"close">>}, Req0),
              #state{}}
     end.
+
+init0(Req0, Opts) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
+    {PeerAddr, _PeerPort} = maps:get(peer, Req0),
+    {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
+    SockInfo = maps:get(proxy_header, Req0, undefined),
+    Req = case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req0) of
+        undefined  -> Req0;
+        Protocols ->
+            case filter_stomp_protocols(Protocols) of
+                [] -> Req0;
+                [StompProtocol|_] ->
+                    cowboy_req:set_resp_header(<<"sec-websocket-protocol">>,
+                        StompProtocol, Req0)
+            end
+    end,
+    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+    WsOpts = maps:merge(#{compress => true,
+                           max_frame_size => unauthenticated_frame_size()}, WsOpts0),
+    {?MODULE, Req, #state{
+        frame_type         = proplists:get_value(type, Opts, text),
+        heartbeat_sup      = KeepaliveSup,
+        heartbeat          = {none, none},
+        heartbeat_mode     = heartbeat,
+        state              = running,
+        conserve_resources = false,
+        socket             = SockInfo,
+        peername           = PeerAddr,
+        auth_hd            = cowboy_req:header(<<"authorization">>, Req)
+    }, WsOpts#{data_delivery => relay}}.
 
 websocket_init(State) ->
     process_flag(trap_exit, true),
@@ -384,6 +400,35 @@ check_origin(Req) ->
                     case lists:member(binary_to_list(Origin), AllowedOrigins) of
                         true -> ok;
                         false -> {error, origin_not_allowed}
+                    end
+            end
+    end.
+
+%% Cowboy's `proxy_header` transport option (set from our own
+%% `proxy_protocol` config) unconditionally trusts the PROXY protocol
+%% header from whoever connected (see cowboy_clear/cowboy_tls
+%% `get_proxy_info/2`), with no equivalent of rabbit_networking's
+%% trusted-proxy allowlist. Gate on that allowlist here before `Req`'s
+%% `proxy_header` is trusted for anything (connection naming, access
+%% control).
+check_proxy_header_trusted(Req) ->
+    case maps:get(proxy_header, Req, undefined) of
+        undefined ->
+            ok;
+        _ProxyHeader ->
+            {PeerAddress, _PeerPort} = cowboy_req:peer(Req),
+            case rabbit_networking:trusted_proxies_configured() of
+                false ->
+                    %% Temporary leniency, see rabbit_networking:check_proxy_protocol_trusted_source/2.
+                    ?LOG_WARNING(
+                       "Web STOMP: accepting PROXY protocol header from ~ts "
+                       "even though proxy_protocol_trusted_proxies is not "
+                       "configured", [rabbit_misc:ntoa(PeerAddress)]),
+                    ok;
+                true ->
+                    case rabbit_networking:is_trusted_proxy_source(PeerAddress) of
+                        true -> ok;
+                        false -> {error, untrusted_proxy_source}
                     end
             end
     end.
