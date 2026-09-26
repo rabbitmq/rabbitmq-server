@@ -805,7 +805,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     end,
     ok = peer:call(PeerPid, file, set_cwd, [SetCwdPath]),
     %% Boot RabbitMQ.
-    try peer:call(PeerPid, rabbit, boot, [], 60_000) of
+    try peer:call(PeerPid, rabbit, boot, [], 120_000) of
         ok ->
             store_peer_pid(Nodename, PeerPid),
             NodeConfig1 = rabbit_ct_helpers:set_config(
