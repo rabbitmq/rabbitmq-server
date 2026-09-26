@@ -39,19 +39,17 @@ endif
 TEST_DEPS += cth_styledout
 dep_cth_styledout = git https://github.com/rabbitmq/cth_styledout.git master
 
-# Fails the build on an end_per_testcase/end_per_group/end_per_suite crash.
 CT_HOOKS += cth_fail_on_teardown_crash
 
 ifneq ($(strip $(CT_HOOKS)),)
-# `ct_run' expects multiple hooks as `Hook1 and Hook2', not `Hook1 Hook2':
-# the latter is parsed as `Hook1' with `Hook2' as its own init argument.
+# `ct_run` parses `Hook1 Hook2` as `Hook1` with `Hook2` as its argument,
+# so hooks must be joined with `and`.
 CT_OPTS += -ct_hooks $(subst $(space),$(space)and$(space),$(strip $(CT_HOOKS)))
 endif
 
 ifeq ($(PROJECT),rabbit_common)
-# A normal TEST_DEPS entry would rebuild rabbit_common plainly (dropping
-# its -ifdef(TEST) exports), since rabbitmq_ct_helpers depends on it.
-# Compiled directly instead, just for rabbit_common.
+# `rabbitmq_ct_helpers` depends on `rabbit_common`, so listing it in
+# `TEST_DEPS` would rebuild `rabbit_common` without its `-ifdef(TEST)` exports.
 CTH_FAIL_ON_TEARDOWN_CRASH_DIR = $(DEPS_DIR)/rabbitmq_ct_helpers
 test-build::
 	$(verbose) mkdir -p $(CTH_FAIL_ON_TEARDOWN_CRASH_DIR)/ebin
