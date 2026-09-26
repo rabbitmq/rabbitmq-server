@@ -44,9 +44,8 @@
 %-doc "Filename of test spec to be executed.".
 -type test_spec() :: file:name_all().
 
-%-doc "Per-node run results, plus the test cases whose `tc_done' event
-%carried `{failed, Reason}'; unlike the per-node results, this covers cases
-%whose body passed but whose `end_per_testcase' failed.".
+%-doc "The per-node counters do not count a case whose `end_per_testcase`
+%failed, so `Failed` lists those as well.".
 -type run_result() :: {'ok', Finished :: [term()], Failed :: [term()]}.
 
 -record(state, {node_ctrl_pids=[],
@@ -612,8 +611,6 @@ master_loop(#state{node_ctrl_pids=[],
 
     ct_master_event_fork:stop(),
     ct_master_logs_fork:stop(),
-    %% Teardown failures are not reflected in the per-node counters, so
-    %% callers must also check this list.
     {ok, Finished, Failed};
 
 master_loop(State=#state{node_ctrl_pids=NodeCtrlPids,
