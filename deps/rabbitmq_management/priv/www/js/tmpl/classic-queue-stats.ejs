@@ -24,6 +24,12 @@
         <td><%= fmt_string(queue.publishers) %></td>
       </tr>
       <% } %>
+      <% if (queue.hasOwnProperty('delivery_limit')) { %>
+      <tr>
+        <th>Delivery limit <span class="help" id="queue-delivery-limit"></th>
+        <td><%= fmt_string(queue.delivery_limit) %></td>
+      </tr>
+      <% } %>
     </table>
 
     <table class="facts">
