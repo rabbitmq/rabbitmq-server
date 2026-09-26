@@ -1,3 +1,7 @@
+merge_queue:
+  status_comments: none
+  queue_controls_comment: false
+
 pull_request_rules:
   - name: Add make label if a Make file is modified
     conditions:
