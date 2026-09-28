@@ -4589,6 +4589,39 @@ aux_tick_refreshes_decorators_test(Config) ->
                  notify_decorators_effects(Effs)),
     ok.
 
+aux_eval_decorators_return_test(Config) ->
+    _ = ra_machine_ets:start_link(),
+    ok = meck:new(ra_aux, [passthrough]),
+    meck:expect(ra_aux, effective_machine_version,
+                fun (_) -> rabbit_fifo:version() end),
+    ok = meck:new(rabbit_quorum_queue, [passthrough]),
+    meck:expect(rabbit_quorum_queue, has_decorators, fun (_) -> true end),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State, _, _} = checkout(Config, ?LINE, Cid, 1,
+                             test_init(?FUNCTION_NAME)),
+    RaAux = #{machine_state => State},
+
+    {no_reply, Aux1, _, Effs1} = handle_aux(leader, cast, eval,
+                                            init_aux(?FUNCTION_NAME), RaAux),
+    ?assertMatch([{mod_call, rabbit_quorum_queue, spawn_notify_decorators,
+                   [_, consumer_state_changed, [0, true]]}],
+                 notify_decorators_effects(Effs1)),
+
+    meck:expect(rabbit_quorum_queue, has_decorators, fun (_) -> false end),
+    {no_reply, Aux2, _} = handle_aux(leader, cast, refresh_decorators,
+                                     Aux1, RaAux),
+    {no_reply, Aux3, _, Effs3} = handle_aux(leader, cast, eval, Aux2, RaAux),
+    ?assertEqual([], notify_decorators_effects(Effs3)),
+
+    meck:expect(rabbit_quorum_queue, has_decorators, fun (_) -> true end),
+    {no_reply, Aux4, _} = handle_aux(leader, cast, refresh_decorators,
+                                     Aux3, RaAux),
+    {no_reply, _, _, Effs5} = handle_aux(leader, cast, eval, Aux4, RaAux),
+    ?assertMatch([{mod_call, rabbit_quorum_queue, spawn_notify_decorators,
+                   [_, consumer_state_changed, [0, true]]}],
+                 notify_decorators_effects(Effs5)),
+    ok.
+
 notify_decorators_effects(Effects) ->
     [E || {mod_call, rabbit_quorum_queue, spawn_notify_decorators, _} = E
               <- Effects].
