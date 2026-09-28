@@ -385,13 +385,12 @@ is_compatible(Type, Durable, Exclusive, AutoDelete) ->
     {'error', Type :: atom(), Reason :: string(), Args :: term()} |
     {'error', Err :: term() }.
 declare(Q0, Node) ->
-    Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
-    Mod = amqqueue:get_type(Q),
-    case check_queue_limits(Q) of
-        ok ->
-            Mod:declare(Q, Node);
-        Error ->
-            Error
+    maybe
+        ok ?= check_queue_type_enabled(Q0),
+        Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
+        Mod = amqqueue:get_type(Q),
+        ok ?= check_queue_limits(Q),
+        Mod:declare(Q, Node)
     end.
 
 -spec delete(amqqueue:amqqueue(), boolean(),
@@ -960,6 +959,21 @@ check_queue_limits(Q) ->
     maybe
         ok ?= check_vhost_queue_limit(Q),
         ok ?= check_cluster_queue_limit(Q)
+    end.
+
+-spec check_queue_type_enabled(amqqueue:amqqueue()) ->
+          ok |
+          {protocol_error, internal_error, Reason :: string(), Args :: term()}.
+check_queue_type_enabled(Q) ->
+    Mod = amqqueue:get_type(Q),
+    case is_enabled(Mod) of
+        true ->
+            ok;
+        false ->
+            {protocol_error, internal_error,
+             "cannot declare ~ts: queue type '~ts' is not enabled "
+             "on node '~ts'",
+             [rabbit_misc:rs(amqqueue:get_name(Q)), Mod, node()]}
     end.
 
 check_vhost_queue_limit(Q) ->

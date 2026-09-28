@@ -75,6 +75,7 @@ groups() ->
         temp_destination_in_send,
         blank_destination_in_send,
         stream_filtering,
+        subscribe_stream_queue_type_disabled,
         transaction_limit,
         global_counters
     ],
@@ -1460,6 +1461,31 @@ stream_filtering(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Channel,
                                              #'queue.delete'{queue = Stream}),
     ok.
+
+subscribe_stream_queue_type_disabled(Config) ->
+    Client = ?config(stomp_client, Config),
+    Queue = atom_to_binary(?FUNCTION_NAME),
+    Enabled = rabbit_ct_broker_helpers:rpc(
+                Config, 0, application, get_env,
+                [rabbit, stream_queues_enabled, true]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, stream_queues_enabled, false]),
+    try
+        rabbit_stomp_client:send(
+          Client, 'SUBSCRIBE',
+          [{<<"destination">>, <<"/queue/", Queue/binary>>},
+           {<<"id">>, <<"0">>},
+           {<<"x-queue-type">>, <<"stream">>}]),
+        {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+        <<"internal_error">> = maps:get(<<"message">>, Hdrs),
+        QName = rabbit_misc:r(?config(rmq_vhost, Config), queue, Queue),
+        {error, not_found} = lookup_queue(QName, Config)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, set_env,
+               [rabbit, stream_queues_enabled, Enabled])
+    end.
 
 stomp_receive_messages(Client, Version) ->
     stomp_receive_messages(Client, [], Version).

@@ -2128,6 +2128,8 @@ create_queue(Amqqueue, _State = #state{authz_ctx = AuthzCtx,
                 {existing, Q} when ?is_amqqueue(Q) ->
                     rabbit_core_metrics:queue_created(QName),
                     {ok, Q};
+                {protocol_error, ErrorType, Reason, ReasonArgs} ->
+                    rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs);
                 Other ->
                     log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
                     {error, queue_declare}
