@@ -2530,13 +2530,10 @@ notify_decorators(QName, F, A) ->
 
 -spec has_decorators(rabbit_amqqueue:name()) -> boolean().
 has_decorators(QName) ->
-    try rabbit_amqqueue:lookup(QName) of
+    case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
             rabbit_queue_decorator:select(amqqueue:get_decorators(Q)) =/= [];
         {error, not_found} ->
-            false
-    catch
-        _:_ ->
             false
     end.
 
