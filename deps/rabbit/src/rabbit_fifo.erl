@@ -3977,8 +3977,8 @@ has_decorators(QName, unknown) ->
 has_decorators(_QName, HasDecs) ->
     HasDecs.
 
-decorators_effects(false, _MacState, LastDec, Effects) ->
-    {LastDec, Effects};
+decorators_effects(false, _MacState, _LastDec, Effects) ->
+    {undefined, Effects};
 decorators_effects(true, #?STATE{cfg = #cfg{resource = QName}} = MacState,
                    LastDec, Effects) ->
     case query_notify_decorators_info(MacState) of
