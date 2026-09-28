@@ -164,6 +164,7 @@ all_tests() ->
      relaxed_argument_equivalence_checks_on_qq_redeclare,
      consume_invalid_arg_1,
      consume_invalid_arg_2,
+     decorator_registered_at_runtime_is_notified,
      consume_invalid_consumer_timeout_negative,
      consume_invalid_consumer_timeout_wrong_type,
      start_queue,
@@ -648,6 +649,40 @@ consume_invalid_arg_2(Config) ->
                                      no_ack = false,
                                      consumer_tag = <<"ctag">>},
                               self())).
+
+decorator_registered_at_runtime_is_notified(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    QName = rabbit_misc:r(<<"/">>, queue, Q),
+    ?assertNot(rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_quorum_queue,
+                                            has_decorators, [QName])),
+    ok = rabbit_ct_broker_helpers:rpc(Config, Server, dummy_queue_decorator,
+                                      register, [QName, self()]),
+    try
+        ?awaitMatch(true,
+                    rabbit_ct_broker_helpers:rpc(Config, Server,
+                                                 rabbit_quorum_queue,
+                                                 has_decorators, [QName]),
+                    5000),
+        ?assert(publish_until_decorator_notified(Ch, Q, QName, 50))
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, Server, dummy_queue_decorator,
+                                          unregister, [])
+    end.
+
+publish_until_decorator_notified(_Ch, _Q, _QName, 0) ->
+    false;
+publish_until_decorator_notified(Ch, Q, QName, N) ->
+    publish(Ch, Q),
+    receive
+        {dummy_queue_decorator, QName, _, _} ->
+            true
+    after 100 ->
+            publish_until_decorator_notified(Ch, Q, QName, N - 1)
+    end.
 
 consume_invalid_consumer_timeout_negative(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
