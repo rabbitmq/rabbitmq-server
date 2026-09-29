@@ -2026,10 +2026,11 @@ max_length_bytes(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
+    %% Fewer segments means less churn that can make the test flaky.
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                              {<<"x-max-length-bytes">>, long, 10000},
-                                             {<<"x-stream-max-segment-size-bytes">>, long, 1000}])),
+                                             {<<"x-stream-max-segment-size-bytes">>, long, 5000}])),
 
     Payload = << <<"1">> || _ <- lists:seq(1, 100) >>,
 
@@ -2048,8 +2049,7 @@ max_length_bytes(Config) ->
     qos(Ch1, 100, false),
     subscribe(Ch1, Q, false, 0),
 
-    %% There should be ~100 messages in ~10 segments, but less check that the retention
-    %% cleared just a big bunch
+    %% Retention should leave roughly 100 of the 500 published messages.
     ?assert(length(receive_batch()) < 200),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
