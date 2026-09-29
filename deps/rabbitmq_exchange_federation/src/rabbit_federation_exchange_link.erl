@@ -623,7 +623,7 @@ reuse_command_channel(MainCh, #upstream{name = UName}, DownXName) ->
                                 [UName, rabbit_misc:rs(DownXName)]),
     {ok, MainCh}.
 
-open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXName, S0) ->
+open_command_channel(Conn, #upstream{name = UName}, _UParams, DownXName, _S0) ->
     ?LOG_DEBUG("Will open a command channel to upstream '~ts' for downstream federated ~ts",
                                 [UName, rabbit_misc:rs(DownXName)]),
     case amqp_connection:open_channel(Conn) of
@@ -631,10 +631,13 @@ open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXNam
             erlang:monitor(process, CCh),
             {ok, CCh};
         E ->
+            %% `amqp_connection:open_channel/1` can return the bare atom
+            %% `closing` rather than `{error, _}`
+            %%
+            %% Exit early so that `start_conn_ch/5` handles it
+            %% instead of failing with a badmatch ok `{ok, _}`.
             rabbit_federation_link_util:ensure_connection_closed(Conn, connection_close_timeout()),
-            _ = rabbit_federation_link_util:connection_error(command_channel, E,
-                                                             Upstream, UParams, DownXName, S0),
-            E
+            exit(E)
     end.
 
 consume_from_upstream_queue(
