@@ -51,14 +51,27 @@ handle_metadata(Req0, State) ->
         {ok, _Secret, MetadataURL, HttpOpts, DiscoveryOpts} ->
             case http_get(MetadataURL, HttpOpts) of
                 {ok, 200, _Headers, Body} ->
-                    Metadata = rabbit_json:decode(Body),
-                    case validate_metadata(Metadata, MetadataURL, DiscoveryOpts) of
-                        ok ->
-                            Rewritten = rewrite_token_endpoint(Metadata,
-                                proxy_token_url(Req0, Id)),
-                            {ok, reply_json(200, Rewritten, Req0), State};
+                    case rabbit_json:try_decode(Body) of
+                        {ok, Metadata} when is_map(Metadata) ->
+                            case validate_metadata(Metadata, MetadataURL,
+                                                   DiscoveryOpts) of
+                                ok ->
+                                    Rewritten = rewrite_token_endpoint(Metadata,
+                                        proxy_token_url(Req0, Id)),
+                                    {ok, reply_json(200, Rewritten, Req0), State};
+                                {error, Reason} ->
+                                    ?LOG_ERROR("OAuth 2 token proxy rejected the "
+                                               "discovery document at ~ts: ~tp",
+                                               [MetadataURL, Reason]),
+                                    {ok, cowboy_req:reply(502, Req0), State}
+                            end;
+                        {ok, _NotAMap} ->
+                            ?LOG_ERROR("OAuth 2 token proxy could not parse the "
+                                       "discovery document at ~ts: not a JSON object",
+                                       [MetadataURL]),
+                            {ok, cowboy_req:reply(502, Req0), State};
                         {error, Reason} ->
-                            ?LOG_ERROR("OAuth 2 token proxy rejected the "
+                            ?LOG_ERROR("OAuth 2 token proxy could not parse the "
                                        "discovery document at ~ts: ~tp",
                                        [MetadataURL, Reason]),
                             {ok, cowboy_req:reply(502, Req0), State}
