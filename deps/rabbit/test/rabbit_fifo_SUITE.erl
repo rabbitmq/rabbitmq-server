@@ -1072,6 +1072,16 @@ duplicate_enqueue_test(Config) ->
     ?ASSERT_NO_EFF({log_ext, [_], _, _}, Effects3),
     ok.
 
+unregistered_enqueuer_gets_eol_test(Config) ->
+    {_, Effects0} = enq(Config, 1, 1, first, test_init(test)),
+    ?ASSERT_NO_EFF({send_msg, _, eol, ra_event}, Effects0),
+
+    {State1, Effects1} = enq(Config, 1, 296, first, test_init(test)),
+    ?ASSERT_EFF({send_msg, P, eol, ra_event}, P == self(), Effects1),
+    {_, Effects2} = enq(Config, 2, 297, second, State1),
+    ?ASSERT_NO_EFF({send_msg, _, eol, ra_event}, Effects2),
+    ok.
+
 return_test(Config) ->
     Cid = {<<"cid">>, self()},
     Cid2 = {<<"cid2">>, self()},
