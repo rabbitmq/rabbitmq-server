@@ -100,8 +100,10 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config2,
                                 rabbit_ct_client_helpers:setup_steps()).
 
-end_per_testcase(deliver_with_not_found_for_another_queue = Testcase, Config) ->
-    catch rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [rabbit_classic_queue]),
+end_per_testcase(Testcase, Config)
+  when Testcase =:= publish_to_deleted_and_live_queue orelse
+       Testcase =:= deliver_with_not_found_for_another_queue ->
+    catch rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, []),
     finish_testcase(Testcase, Config);
 end_per_testcase(Testcase, Config) ->
     finish_testcase(Testcase, Config).
@@ -253,22 +255,30 @@ publish_to_deleted_and_live_queue(Config) ->
      || Q <- [QNameBin, LiveQNameBin]],
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
+    [DeletedTarget] = rabbit_ct_broker_helpers:rpc(
+                        Config, 0, rabbit_db_queue, get_targets,
+                        [[rabbit_misc:r(<<"/">>, queue, QNameBin)]]),
     delete_and_await_not_found(Config, Ch, QNameBin),
+    rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, new, [rabbit_db_queue, [no_link, passthrough]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, expect,
+           [rabbit_db_queue, get_targets,
+            fun(QNames) -> meck:passthrough([QNames]) ++ [DeletedTarget] end]),
 
     ConnRef = erlang:monitor(process, Conn),
     ok = amqp_channel:cast(Ch, #'basic.publish'{exchange = XNameBin},
                            #amqp_msg{payload = <<"msg">>}),
-    ok = receive
-             #'basic.ack'{}  -> ok;
-             #'basic.nack'{} -> fail
-         after ?TIMEOUT ->
-                   exit(confirm_timeout)
-         end,
     receive
+        #'basic.ack'{} ->
+            ok;
+        #'basic.nack'{} ->
+            ct:fail(nacked);
         {'DOWN', ConnRef, process, _, Reason} ->
-            ct:fail({unexpected_connection_closure, Reason})
-    after 500 ->
-              ok
+            ct:fail({connection_closed, Reason})
+    after ?TIMEOUT ->
+              ct:fail(confirm_timeout)
     end,
     erlang:demonitor(ConnRef, [flush]),
 
