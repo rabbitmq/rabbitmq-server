@@ -689,20 +689,14 @@ deliver(Qs, Message, Options, State) ->
         %% A queue was deleted before it could be delivered to.
         %% See rabbitmq/rabbitmq-server#17645 for one such example.
         %%
-        %% `deliver0/4' builds queue state for all the target queues via `get_ctx_with/3'
-        %% before calling `deliver/3', so the retry is duplicate-safe
-        %% as long as that condition holds.
-        exit:{not_found, #resource{kind = queue} = QName} = Reason ->
-            case without_queue(QName, Qs) of
-                Qs ->
-                    {error, Reason};
-                Qs1 ->
-                    case deliver(Qs1, Message, Options, State) of
-                        {ok, State1, Actions} ->
-                            {ok, State1, deleted_queue_actions(QName, Options) ++ Actions};
-                        Err ->
-                            Err
-                    end
+        %% Only `get_ctx_with/3' raises this, before `deliver0/4' calls any
+        %% queue type's `deliver/3', so the retry cannot duplicate a delivery.
+        exit:{target_queue_not_found, QName} ->
+            case deliver(without_queue(QName, Qs), Message, Options, State) of
+                {ok, State1, Actions} ->
+                    {ok, State1, deleted_queue_actions(QName, Options) ++ Actions};
+                Err ->
+                    Err
             end;
         exit:Reason ->
             {error, Reason}
@@ -885,6 +879,8 @@ get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState) ->
                 #ctx{module = Mod,
                      state = QState}
             else
+                {error, not_found} ->
+                    exit({target_queue_not_found, Ref});
                 {error, Reason} ->
                     exit({Reason, Ref})
             end;
