@@ -5323,6 +5323,11 @@ queue_ttl(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
 
+    %% test nodes have not been up for the default minimum uptime
+    _ = rabbit_ct_broker_helpers:rpc_all(
+          Config, application, set_env,
+          [rabbit, quorum_queue_expiry_deletion_min_node_uptime, 0]),
+
     %% Set policy to 10 seconds.
     PolicyName = <<"my-queue-ttl-policy">>,
     ok = rabbit_ct_broker_helpers:set_policy(
@@ -5346,7 +5351,10 @@ queue_ttl(Config) ->
                                       auto_delete = false,
                                       arguments = QArgs}),
        5_000),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName).
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
+    _ = rabbit_ct_broker_helpers:rpc_all(
+          Config, application, unset_env,
+          [rabbit, quorum_queue_expiry_deletion_min_node_uptime]).
 
 consumer_priorities(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
