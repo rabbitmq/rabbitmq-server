@@ -702,7 +702,7 @@ without_queue(QName, Qs) ->
                  end, Qs).
 
 deleted_queue_actions(QName, #{correlation := Corr}) ->
-    [{rejected, QName, down, [Corr]}];
+    [{settled, QName, [Corr]}];
 deleted_queue_actions(_QName, _Options) ->
     [].
 
