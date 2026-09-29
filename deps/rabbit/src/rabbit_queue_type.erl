@@ -684,9 +684,38 @@ deliver(Qs, Message, Options, State) ->
     try
         deliver0(Qs, Message, Options, State)
     catch
+        %% A queue was deleted before it could be delivered to.
+        %% See rabbitmq/rabbitmq-server#17645 for one such example.
+        %%
+        %% `deliver0/4' builds queue state for all the target queues via `get_ctx_with/3'
+        %% before calling `deliver/3', so the retry is duplicate-safe
+        %% as long as that condition holds.
+        exit:{not_found, #resource{kind = queue} = QName} = Reason ->
+            case without_queue(QName, Qs) of
+                Qs ->
+                    {error, Reason};
+                Qs1 ->
+                    case deliver(Qs1, Message, Options, State) of
+                        {ok, State1, Actions} ->
+                            {ok, State1, deleted_queue_actions(QName, Options) ++ Actions};
+                        Err ->
+                            Err
+                    end
+            end;
         exit:Reason ->
             {error, Reason}
     end.
+
+without_queue(QName, Qs) ->
+    lists:filter(fun(Elem) ->
+                         {Q, _BKeys} = queue_binding_keys(Elem),
+                         amqqueue:get_name(Q) =/= QName
+                 end, Qs).
+
+deleted_queue_actions(QName, #{correlation := Corr}) ->
+    [{rejected, QName, down, [Corr]}];
+deleted_queue_actions(_QName, _Options) ->
+    [].
 
 deliver0(Qs, Message0, Options, stateless) ->
     ByTypeAndBindingKeys =
@@ -1077,7 +1106,7 @@ queue_vm_ets() ->
                 end,
                 {[], []}, rabbit_registry:lookup_all(queue)).
 
-table_lookup(Tbl, Key, Default) 
+table_lookup(Tbl, Key, Default)
   when is_list(Tbl) andalso
        is_binary(Key) ->
     case rabbit_misc:table_lookup(Tbl, Key) of
