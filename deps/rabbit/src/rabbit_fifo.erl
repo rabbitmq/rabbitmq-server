@@ -2275,18 +2275,10 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
     case maps:get(From, Enqueuers0, undefined) of
         undefined ->
             State1 = State0#?STATE{enqueuers = Enqueuers0#{From => #enqueuer{}}},
-            {Res, State, Effects1} = maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo,
-                                                   RawMsg, MsgSize, Effects0,
-                                                   State1),
-            Effects = [{monitor, process, From} | Effects1],
-            case Res of
-                out_of_sequence ->
-                    %% The sender's session predates a forced delete and re-declaration
-                    %% of this queue. rabbitmq/rabbitmq-server#17640.
-                    {Res, State, [{send_msg, From, eol, ra_event} | Effects]};
-                _ ->
-                    {Res, State, Effects}
-            end;
+            {Res, State, Effects} = maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo,
+                                                  RawMsg, MsgSize, Effects0,
+                                                  State1),
+            {Res, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
             % TODO: it is not good to query the `mc' container inside the
@@ -4806,3 +4798,4 @@ update_consumer_status(up, #consumer{status = {_, Status},
     C#consumer{status = Status};
 update_consumer_status(Target, #consumer{} = C) ->
     C#consumer{status = Target}.
+
