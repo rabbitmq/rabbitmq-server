@@ -17,7 +17,9 @@ suite() ->
 all() ->
     [pre_auth_frame_within_limit,
      pre_auth_frame_exceeding_limit_closes_connection,
-     post_auth_frame_within_full_limit].
+     post_auth_frame_within_full_limit,
+     post_auth_frame_spanning_messages_exceeding_limit_closes_connection,
+     send_body_larger_than_max_message_size_is_rejected].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -96,6 +98,57 @@ post_auth_frame_within_full_limit(Config) ->
     {<<"MESSAGE">>, _, Body} = raw_recv(WS),
     {close, _} = rfc6455_client:close(WS),
     ok.
+
+post_auth_frame_spanning_messages_exceeding_limit_closes_connection(Config) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0,
+      application, set_env,
+      [rabbitmq_stomp, max_frame_size, 8192]),
+    WS = open_ws(Config),
+    ok = raw_send(WS, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
+    {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+    ok = rfc6455_client:send(WS, <<"SEND\ndestination:/topic/max-frame-test\n\n">>),
+    Chunk = binary:copy(<<"A">>, 4096),
+    [ok = rfc6455_client:send(WS, Chunk) || _ <- lists:seq(1, 4)],
+    {close, _} = rfc6455_client:recv(WS, 5000),
+    ok.
+
+send_body_larger_than_max_message_size_is_rejected(Config) ->
+    Original = rabbit_ct_broker_helpers:rpc(
+                 Config, 0, persistent_term, get, [max_message_size]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, persistent_term, put, [max_message_size, 1024]),
+    try
+        Dst = "/topic/max-message-size-test-" ++
+            stomp:list_to_hex(binary_to_list(crypto:strong_rand_bytes(8))),
+
+        WS1 = open_ws(Config),
+        ok = raw_send(WS1, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
+        {<<"CONNECTED">>, _, <<>>} = raw_recv(WS1),
+        ok = raw_send(WS1, "SUBSCRIBE", [{"destination", Dst}, {"id", "s0"}]),
+
+        WS = open_ws(Config),
+        ok = raw_send(WS, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
+        {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+        LargeBody = list_to_binary(lists:duplicate(2000, $A)),
+        LargeBodySize = integer_to_list(byte_size(LargeBody)),
+        ok = raw_send(WS, "SEND",
+                      [{"destination", Dst}, {"content-length", LargeBodySize}],
+                      LargeBody),
+        {close, _} = rfc6455_client:recv(WS, 5000),
+
+        SmallBody = list_to_binary(lists:duplicate(100, $A)),
+        SmallBodySize = integer_to_list(byte_size(SmallBody)),
+        ok = raw_send(WS1, "SEND",
+                      [{"destination", Dst}, {"content-length", SmallBodySize}],
+                      SmallBody),
+        {<<"MESSAGE">>, _, SmallBody} = raw_recv(WS1),
+        {close, _} = rfc6455_client:close(WS1),
+        ok
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, persistent_term, put, [max_message_size, Original])
+    end.
 
 %%
 %% Helpers
