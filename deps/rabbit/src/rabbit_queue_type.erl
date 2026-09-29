@@ -108,6 +108,7 @@
     %% fully to the queue
     {settled, queue_name(), [correlation()]} |
     {rejected, queue_name(), reject_reason(), [correlation()]} |
+    {queue_deleted, queue_name()} |
     {deliver, rabbit_types:ctag(), boolean(), [rabbit_amqqueue:qmsg()]} |
     {block | unblock, QueueName :: term()} |
     credit_reply_action().
@@ -148,6 +149,7 @@
                          user := rabbit_types:username()}.
 
 -type delivery_options() :: #{correlation => correlation(),
+                              report_deleted_queues => boolean(),
                               atom() => term()}.
 
 -type settle_op() :: complete |
@@ -712,6 +714,8 @@ without_queue(QName, Qs) ->
                          amqqueue:get_name(Q) =/= QName
                  end, Qs).
 
+deleted_queue_actions(QName, #{report_deleted_queues := true}) ->
+    [{queue_deleted, QName}];
 deleted_queue_actions(QName, #{correlation := Corr}) ->
     [{settled, QName, [Corr]}];
 deleted_queue_actions(_QName, _Options) ->
