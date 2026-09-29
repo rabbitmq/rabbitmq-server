@@ -30,6 +30,7 @@ groups() ->
               quorum_unaffected_after_vhost_failure,
               forget_cluster_node,
               force_delete_if_no_consensus,
+              publish_after_force_delete_of_single_member,
               takeover_on_failure,
               takeover_on_shutdown
             ]}
@@ -59,7 +60,8 @@ end_per_group(_, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     case rabbit_ct_helpers:is_mixed_versions() andalso
-         Testcase == quorum_unaffected_after_vhost_failure of
+         (Testcase == quorum_unaffected_after_vhost_failure orelse
+          Testcase == publish_after_force_delete_of_single_member) of
         true ->
             {skip, "test case not mixed versions compatible"};
         false ->
@@ -142,7 +144,75 @@ force_delete_if_no_consensus(Config) ->
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(BCh2, #'queue.delete'{queue = QName})),
     ok = rabbit_ct_broker_helpers:restart_node(Config, C),
+
+    %% Older nodes do not send `eol` to an unknown enqueuer.
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            ok;
+        false ->
+            ?assertMatch(#'queue.declare_ok'{},
+                         amqp_channel:call(
+                           BCh2, #'queue.declare'{queue = QName,
+                                                  arguments = Args,
+                                                  durable = true})),
+            amqp_channel:cast(ACh, #'basic.publish'{routing_key = QName},
+                              #amqp_msg{payload = <<"after re-declare">>}),
+            ?assertEqual(true, amqp_channel:wait_for_confirms(ACh, 30))
+    end,
     ok.
+
+publish_after_force_delete_of_single_member(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QName = ?config(queue_name, Config),
+    HName = <<QName/binary, "_untouched">>,
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-quorum-initial-group-size">>, long, 1}],
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Declare = fun(Q) ->
+                      #'queue.declare_ok'{} =
+                          amqp_channel:call(Ch, #'queue.declare'{queue = Q,
+                                                                 arguments = Args,
+                                                                 durable = true})
+              end,
+    Declare(HName),
+    Declare(QName),
+
+    {PubConn, PubCh} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
+    Publisher = spawn_link(fun() -> publish_every(100, PubCh, [HName, QName]) end),
+    ?awaitMatch(N when N >= 10, ready_messages(Config, QName), 30_000),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, Server, sys, suspend,
+                                      [whereis_on(Config, Server, ra_name(QName))]),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    Declare(QName),
+    HCount = ?awaitMatch(N when N > 0, ready_messages(Config, HName), 30_000),
+
+    ?awaitMatch(N when N > 0, ready_messages(Config, QName), 30_000),
+    ?awaitMatch(N when N >= HCount + 300, ready_messages(Config, HName), 60_000, 1000),
+
+    unlink(Publisher),
+    exit(Publisher, kill),
+    rabbit_ct_client_helpers:close_connection_and_channel(PubConn, PubCh).
+
+publish_every(Interval, Ch, QNames) ->
+    [amqp_channel:cast(Ch, #'basic.publish'{routing_key = Q}, #amqp_msg{payload = <<"m">>})
+     || Q <- QNames],
+    timer:sleep(Interval),
+    publish_every(Interval, Ch, QNames).
+
+ready_messages(Config, QName) ->
+    Resource = rabbit_misc:r(<<"/">>, queue, QName),
+    try
+        {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                               [Resource], 10_000),
+        {ok, Ready, _} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, stat,
+                                                      [Q], 10_000),
+        Ready
+    catch _:_ -> 0
+    end.
+
+whereis_on(Config, Node, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, erlang, whereis, [Name]).
 
 takeover_on_failure(Config) ->
     takeover_on(Config, kill_node).
