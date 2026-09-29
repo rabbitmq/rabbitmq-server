@@ -78,33 +78,37 @@ init_per_testcase(Testcase, Config)
         Testcase).
 
 end_per_testcase(policy_resets_to_default = Testcase, Config) ->
-    Conn = ?config(conn, Config),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     XOverflow = ?config(overflow, Config),
     QueueName = <<"policy_resets_to_default", "_", XOverflow/binary>>,
     amqp_channel:call(Ch, #'queue.delete'{queue = QueueName}),
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+
+    Conn = ?config(conn, Config),
 
     rabbit_ct_client_helpers:close_connection(Conn),
 
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(confirms_rejects_conflict = Testcase, Config) ->
-    {ok, Ch} = amqp_connection:open_channel(?config(conn, Config)),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     XOverflow = ?config(overflow, Config),
     QueueName = <<"confirms_rejects_conflict", "_", XOverflow/binary>>,
     amqp_channel:call(Ch, #'queue.delete'{queue = QueueName}),
     end_per_testcase0(Testcase, Config);
 end_per_testcase(dead_queue_rejects = Testcase, Config) ->
-    {ok, Ch} = amqp_connection:open_channel(?config(conn, Config)),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"dead_queue_rejects">>}),
     end_per_testcase0(Testcase, Config);
 end_per_testcase(mixed_dead_alive_queues_reject = Testcase, Config) ->
-    {ok, Ch} = amqp_connection:open_channel(?config(conn, Config)),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_reject_dead">>}),
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_reject_alive">>}),
     amqp_channel:call(Ch, #'exchange.delete'{exchange = <<"mixed_dead_alive_queues_reject">>}),
     end_per_testcase0(Testcase, Config).
 
 end_per_testcase0(Testcase, Config) ->
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
+
     Conn = ?config(conn, Config),
     Conn1 = ?config(conn1, Config),
 
