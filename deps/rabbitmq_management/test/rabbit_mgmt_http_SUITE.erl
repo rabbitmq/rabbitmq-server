@@ -84,6 +84,7 @@ some_tests() ->
         exchanges_test,
         queues_test,
         bindings_test,
+        bindings_post_malformed_body_test,
         policy_test,
         policy_permissions_test
     ].
@@ -1793,6 +1794,22 @@ bindings_post_test(Config) ->
     http_delete(Config, URI, {group, '2xx'}),
     http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
+    passed.
+
+bindings_post_malformed_body_test(Config) ->
+    Path = "/bindings/%2F/e/myexchange/q/myqueue",
+    Headers = [auth_header("guest", "guest")],
+    Rejected =
+        fun(Body, Reason) ->
+                {ok, {{_, 400, _}, _, ResBody}} =
+                    req(Config, 0, post, Path, Headers, Body),
+                ?assertEqual(Reason, maps:get(reason, decode_body(ResBody)))
+        end,
+    Rejected("Not JSON at all", <<"not_json">>),
+    Rejected("[1, 2, 3]", <<"not_json">>),
+    Rejected("\"doubly encoded\"",
+             <<"invalid payload: the request body JSON-decoded to a string. "
+               "Is the input doubly-JSON-encoded?">>),
     passed.
 
 bindings_null_routing_key_test(Config) ->

@@ -71,38 +71,11 @@ to_json(ReqData, {Mode, Context}) ->
 accept_content(ReqData0, {_Mode, Context}) ->
     case rabbit_mgmt_util:read_complete_body_with_limit(ReqData0, ?HTTP_BODY_SIZE_LIMIT) of
         {ok, Body, ReqData} ->
-            Source = rabbit_mgmt_util:id(source, ReqData),
-            Dest = rabbit_mgmt_util:id(destination, ReqData),
-            DestType = rabbit_mgmt_util:id(dtype, ReqData),
-            VHost = rabbit_mgmt_util:vhost(ReqData),
-            {ok, Props} = rabbit_mgmt_util:decode(Body),
-            MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
-                             exchange -> 'exchange.bind';
-                             queue    -> 'queue.bind'
-                         end,
-            {Key, Args} = key_args(DestType, Props),
-            case rabbit_mgmt_util:direct_request(
-                MethodName,
-                fun rabbit_mgmt_format:format_accept_content/1,
-                [{queue, Dest},
-                 {exchange, Source},
-                 {destination, Dest},
-                 {source, Source},
-                 {routing_key, Key},
-                 {arguments, Args}],
-                "Binding error: ~ts", ReqData, Context) of
-                {stop, _, _} = Res ->
-                    Res;
-                {true, ReqData, Context2} ->
-                    From = binary_to_list(cowboy_req:path(ReqData)),
-                    Prefix = rabbit_mgmt_util:get_path_prefix(),
-                    BindingProps = rabbit_mgmt_format:pack_binding_props(Key, Args),
-                    UrlWithBindings = rabbit_mgmt_format:url("/api/bindings/~ts/e/~ts/~ts/~ts/~ts",
-                        [VHost, Source, DestType,
-                            Dest, BindingProps]),
-                    To = Prefix ++ binary_to_list(UrlWithBindings),
-                    Loc = rabbit_web_dispatch_util:relativise(From, To),
-                    {{true, Loc}, ReqData, Context2}
+            case rabbit_mgmt_util:decode(Body) of
+                {error, Reason} ->
+                    rabbit_mgmt_util:bad_request(Reason, ReqData, Context);
+                {ok, Props} ->
+                    create_binding(Props, ReqData, Context)
             end;
         {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
             ?LOG_WARNING("HTTP API: binding creation request exceeded maximum allowed payload size (limit: ~tp bytes, payload size: ~tp bytes)", [LimitApplied, BytesRead]),
@@ -121,6 +94,40 @@ basic(ReqData) ->
 
 augmented(ReqData, Context) ->
     rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context).
+
+create_binding(Props, ReqData, Context) ->
+    Source = rabbit_mgmt_util:id(source, ReqData),
+    Dest = rabbit_mgmt_util:id(destination, ReqData),
+    DestType = rabbit_mgmt_util:id(dtype, ReqData),
+    VHost = rabbit_mgmt_util:vhost(ReqData),
+    MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
+                     exchange -> 'exchange.bind';
+                     queue    -> 'queue.bind'
+                 end,
+    {Key, Args} = key_args(DestType, Props),
+    case rabbit_mgmt_util:direct_request(
+           MethodName,
+           fun rabbit_mgmt_format:format_accept_content/1,
+           [{queue, Dest},
+            {exchange, Source},
+            {destination, Dest},
+            {source, Source},
+            {routing_key, Key},
+            {arguments, Args}],
+           "Binding error: ~ts", ReqData, Context) of
+        {stop, _, _} = Res ->
+            Res;
+        {true, ReqData1, Context2} ->
+            From = binary_to_list(cowboy_req:path(ReqData1)),
+            Prefix = rabbit_mgmt_util:get_path_prefix(),
+            BindingProps = rabbit_mgmt_format:pack_binding_props(Key, Args),
+            UrlWithBindings = rabbit_mgmt_format:url("/api/bindings/~ts/e/~ts/~ts/~ts/~ts",
+                                                     [VHost, Source, DestType,
+                                                      Dest, BindingProps]),
+            To = Prefix ++ binary_to_list(UrlWithBindings),
+            Loc = rabbit_web_dispatch_util:relativise(From, To),
+            {{true, Loc}, ReqData1, Context2}
+    end.
 
 key_args(<<"q">>, Props) ->
     #'queue.bind'{routing_key = K, arguments = A} =
