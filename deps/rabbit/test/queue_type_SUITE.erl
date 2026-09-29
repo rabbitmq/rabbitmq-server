@@ -24,7 +24,7 @@ all_tests() ->
     [
      smoke,
      ack_after_queue_delete,
-     deliver_to_deleted_queue
+     publish_to_deleted_and_live_queue
     ].
 
 groups() ->
@@ -235,43 +235,51 @@ ack_after_queue_delete(Config) ->
     flush(),
     ok.
 
-deliver_to_deleted_queue(Config) ->
+publish_to_deleted_and_live_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
     QNameBin = ?config(queue_name, Config),
     LiveQNameBin = ?config(alt_queue_name, Config),
-    QName = rabbit_misc:r(<<"/">>, queue, QNameBin),
-    LiveQName = rabbit_misc:r(<<"/">>, queue, LiveQNameBin),
+    XNameBin = QNameBin,
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                Ch, #'exchange.declare'{exchange = XNameBin,
+                                                        type = <<"fanout">>}),
     [?assertEqual({'queue.declare_ok', Q, 0, 0},
                   declare(Ch, Q, [{<<"x-queue-type">>, longstr,
                                    ?config(queue_type, Config)}]))
      || Q <- [QNameBin, LiveQNameBin]],
-    [Target, LiveTarget] = rabbit_ct_broker_helpers:rpc(
-                             Config, 0, rabbit_db_queue, get_targets,
-                             [[QName, LiveQName]]),
+    [#'queue.bind_ok'{} = amqp_channel:call(
+                            Ch, #'queue.bind'{queue = Q, exchange = XNameBin})
+     || Q <- [QNameBin, LiveQNameBin]],
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
     delete_and_await_not_found(Config, Ch, QNameBin),
 
-    ?assertMatch({ok, _, [{rejected, QName, down, [1]}]},
-                 rabbit_ct_broker_helpers:rpc(
-                   Config, 0, ?MODULE, deliver_to_targets,
-                   [[Target], #{correlation => 1}])),
-    ?assertMatch({ok, _, []},
-                 rabbit_ct_broker_helpers:rpc(
-                   Config, 0, ?MODULE, deliver_to_targets, [[Target], #{}])),
+    ConnRef = erlang:monitor(process, Conn),
+    ok = amqp_channel:cast(Ch, #'basic.publish'{exchange = XNameBin},
+                           #amqp_msg{payload = <<"msg">>}),
+    ok = receive
+             #'basic.ack'{}  -> ok;
+             #'basic.nack'{} -> fail
+         after ?TIMEOUT ->
+                   exit(confirm_timeout)
+         end,
+    receive
+        {'DOWN', ConnRef, process, _, Reason} ->
+            ct:fail({unexpected_connection_closure, Reason})
+    after 500 ->
+              ok
+    end,
+    erlang:demonitor(ConnRef, [flush]),
 
-    {ok, _, Actions} = rabbit_ct_broker_helpers:rpc(
-                         Config, 0, ?MODULE, deliver_to_targets,
-                         [[Target, LiveTarget], #{correlation => 2}]),
-    ?assertEqual([{rejected, QName, down, [2]}],
-                 [A || {rejected, _, _, _} = A <- Actions]),
-    rabbit_ct_helpers:await_condition(
-      fun() ->
-              case amqp_channel:call(Ch, #'basic.get'{queue = LiveQNameBin,
-                                                      no_ack = true}) of
-                  {#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}} -> true;
-                  #'basic.get_empty'{} -> false
-              end
-      end, ?TIMEOUT),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = LiveQNameBin,
+                                                    no_ack = true})),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = LiveQNameBin,
+                                                    no_ack = true})),
+    #'exchange.delete_ok'{} = amqp_channel:call(
+                               Ch, #'exchange.delete'{exchange = XNameBin}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 deliver_to_two_deleted_queues(Config) ->
@@ -287,7 +295,7 @@ deliver_to_two_deleted_queues(Config) ->
     {ok, _, Actions} = rabbit_ct_broker_helpers:rpc(
                          Config, 0, ?MODULE, deliver_to_targets,
                          [Targets, #{correlation => 1}]),
-    ?assertEqual(lists:sort([{rejected, QName, down, [1]} || QName <- QNames]),
+    ?assertEqual(lists:sort([{settled, QName, [1]} || QName <- QNames]),
                  lists:sort(Actions)),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
