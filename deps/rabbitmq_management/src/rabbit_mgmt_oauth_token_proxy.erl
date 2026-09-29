@@ -51,8 +51,22 @@ handle_metadata(Req0, State) ->
         {ok, _Secret, MetadataURL, HttpOpts} ->
             case http_get(MetadataURL, HttpOpts) of
                 {ok, 200, _Headers, Body} ->
-                    Rewritten = rewrite_token_endpoint(Body, proxy_token_url(Req0, Id)),
-                    {ok, reply_json(200, Rewritten, Req0), State};
+                    case rabbit_json:try_decode(Body) of
+                        {ok, Metadata} when is_map(Metadata) ->
+                            Rewritten = rewrite_token_endpoint(Body,
+                                proxy_token_url(Req0, Id)),
+                            {ok, reply_json(200, Rewritten, Req0), State};
+                        {ok, _NotAMap} ->
+                            ?LOG_ERROR("OAuth 2 token proxy could not parse the "
+                                       "discovery document at ~ts: not a JSON object",
+                                       [MetadataURL]),
+                            {ok, cowboy_req:reply(502, Req0), State};
+                        {error, Reason} ->
+                            ?LOG_ERROR("OAuth 2 token proxy could not parse the "
+                                       "discovery document at ~ts: ~tp",
+                                       [MetadataURL, Reason]),
+                            {ok, cowboy_req:reply(502, Req0), State}
+                    end;
                 Other ->
                     ?LOG_ERROR("OAuth 2 token proxy could not fetch ~ts: ~tp",
                                [MetadataURL, Other]),
