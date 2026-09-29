@@ -13,6 +13,7 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 -export([parse_default_user/2]).
+-export([max_body_length/0]).
 -export([connection_info_local/1,
          emit_connection_info_local/3,
          emit_connection_info_all/4,
@@ -84,10 +85,15 @@ parse_configuration() ->
                                      implicit_connect = ImplicitConnect,
                                      max_headers = application:get_env(rabbitmq_stomp, max_headers, ?DEFAULT_CONFIGURATION#stomp_configuration.max_headers),
                                      max_header_length = application:get_env(rabbitmq_stomp, max_header_length, ?DEFAULT_CONFIGURATION#stomp_configuration.max_header_length),
-                                     max_body_length = application:get_env(rabbitmq_stomp, max_body_length, ?DEFAULT_CONFIGURATION#stomp_configuration.max_body_length)},
+                                     max_body_length = max_body_length()},
 
     report_configuration(Conf),
     Conf.
+
+max_body_length() ->
+    Configured = application:get_env(rabbitmq_stomp, max_body_length,
+                                     ?DEFAULT_CONFIGURATION#stomp_configuration.max_body_length),
+    min(Configured, persistent_term:get(max_message_size)).
 
 parse_default_user([], Configuration) ->
     Configuration;

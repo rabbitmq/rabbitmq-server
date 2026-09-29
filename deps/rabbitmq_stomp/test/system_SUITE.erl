@@ -41,6 +41,8 @@
 -define(UNSUBSCRIBE_STREAM_DESTINATION, <<"/amq/queue/TestUnsubscribeStream">>).
 -define(MULTIACK_DESTINATION_A, <<"/amq/queue/TestMultiAckQueueA">>).
 -define(MULTIACK_DESTINATION_B, <<"/amq/queue/TestMultiAckQueueB">>).
+-define(MAX_MSG_SIZE_QUEUE, <<"TestMaxMessageSizeQueue">>).
+-define(MAX_MSG_SIZE_DESTINATION, <<"/amq/queue/TestMaxMessageSizeQueue">>).
 
 all() ->
     [{group, version_to_group_name(V)} || V <- ?SUPPORTED_VERSIONS] ++
@@ -70,6 +72,7 @@ groups() ->
         ack_auto_delivery_errors,
         reused_subscription_id_keeps_ack_mode,
         send,
+        send_body_larger_than_max_message_size_is_rejected,
         delete_queue_subscribe,
         temp_destination_queue,
         temp_destination_in_send,
@@ -1216,6 +1219,45 @@ send(Config) ->
 
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
     ok.
+
+send_body_larger_than_max_message_size_is_rejected(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = ?MAX_MSG_SIZE_QUEUE,
+                                                    durable     = true,
+                                                    auto_delete = true}),
+    Original = rabbit_ct_broker_helpers:rpc(
+                 Config, 0, persistent_term, get, [max_message_size]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, persistent_term, put, [max_message_size, 1024]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, stop, [rabbitmq_stomp]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, start, [rabbitmq_stomp]),
+    try
+        {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+        LargeBody = binary:copy(<<"A">>, 2000),
+        rabbit_stomp_client:send(
+          Client, 'SEND', [{<<"destination">>, ?MAX_MSG_SIZE_DESTINATION}], [LargeBody]),
+        {Sock, _} = Client,
+        ?assertEqual({error, closed}, gen_tcp:recv(Sock, 0, 5000)),
+
+        {ok, Client1} = rabbit_stomp_client:connect(Version, StompPort),
+        rabbit_stomp_client:send(
+          Client1, 'SUBSCRIBE', [{<<"destination">>, ?MAX_MSG_SIZE_DESTINATION},
+                                 {<<"receipt">>, <<"max-message-size-sub">>}]),
+        {ok, Client2, _, _} = stomp_receive(Client1, 'RECEIPT'),
+        SmallBody = binary:copy(<<"A">>, 100),
+        rabbit_stomp_client:send(
+          Client2, 'SEND', [{<<"destination">>, ?MAX_MSG_SIZE_DESTINATION}], [SmallBody]),
+        {ok, _Client3, _, [SmallBody]} = stomp_receive(Client2, 'MESSAGE'),
+        ok
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, stop, [rabbitmq_stomp]),
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, persistent_term, put, [max_message_size, Original]),
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, start, [rabbitmq_stomp])
+    end.
 
 delete_queue_subscribe(Config) ->
     Channel = ?config(amqp_channel, Config),
