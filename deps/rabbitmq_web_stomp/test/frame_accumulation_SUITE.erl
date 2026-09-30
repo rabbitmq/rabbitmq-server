@@ -65,7 +65,7 @@ unauth_frame_split_within_budget(Config) ->
 %% once the buffered total exceeds the budget.
 unauth_incomplete_frame_exceeds_budget(Config) ->
     WS = open_ws(Config),
-    Header = <<"SEND\ndestination:/queue/poc\ncontent-length:100000000\n\n">>,
+    Header = <<"SEND\ndestination:/queue/poc\ncontent-length:1000000\n\n">>,
     ok = rfc6455_client:send(WS, Header),
     Chunk = binary:copy(<<"A">>, ?CHUNK),
     ok = rfc6455_client:send(WS, Chunk),
