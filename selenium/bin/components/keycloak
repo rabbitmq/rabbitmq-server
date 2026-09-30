@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-KEYCLOAK_DOCKER_IMAGE=${KEYCLOAK_DOCKER_IMAGE:-quay.io/keycloak/keycloak:20.0}
+KEYCLOAK_DOCKER_IMAGE=${KEYCLOAK_DOCKER_IMAGE:-quay.io/keycloak/keycloak:26.7}
 
 ensure_keycloak() {
   if docker ps | grep keycloak &> /dev/null; then
@@ -40,8 +40,8 @@ start_keycloak() {
     --net ${DOCKER_NETWORK} \
 		--publish 8081:8080 \
     --publish 8443:8443 \
-		--env KEYCLOAK_ADMIN=admin \
-		--env KEYCLOAK_ADMIN_PASSWORD=admin \
+		--env KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+		--env KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
     --env QUARKUS_HTTP_ACCESS_LOG_ENABLED=true \
 		-v ${MOUNT_KEYCLOAK_CONF_DIR}:/opt/keycloak/data/import/ \
 		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm --log-level=INFO \

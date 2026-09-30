@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-KEYCLOAK_DOCKER_IMAGE=${KEYCLOAK_DOCKER_IMAGE:-quay.io/keycloak/keycloak:20.0}
+KEYCLOAK_DOCKER_IMAGE=${KEYCLOAK_DOCKER_IMAGE:-quay.io/keycloak/keycloak:26.7}
 
 init_devkeycloak() {
   DEVKEYCLOAK_CONFIG_PATH=${DEVKEYCLOAK_CONFIG_PATH:-multi-oauth/devkeycloak}
@@ -40,13 +40,13 @@ start_devkeycloak() {
     --net ${DOCKER_NETWORK} \
 		--publish 8082:8080 \
     --publish 8442:8442 \
-		--env KEYCLOAK_ADMIN=admin \
-		--env KEYCLOAK_ADMIN_PASSWORD=admin \
+		--env KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+		--env KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
 		--mount type=bind,source=${MOUNT_DEVKEYCLOAK_CONF_DIR},target=/opt/keycloak/data/import/ \
 		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm \
     --https-certificate-file=/opt/keycloak/data/import/server_devkeycloak_certificate.pem \
     --https-certificate-key-file=/opt/keycloak/data/import/server_devkeycloak_key.pem \
-    --hostname=devkeycloak --hostname-admin=devkeycloak --https-port=8442
+    --hostname=https://devkeycloak:8442 --hostname-admin=https://devkeycloak:8442 --https-port=8442
 
   wait_for_oidc_endpoint devkeycloak $DEVKEYCLOAK_URL $MOUNT_DEVKEYCLOAK_CONF_DIR/ca_devkeycloak_certificate.pem
   end "devkeycloak is ready"
