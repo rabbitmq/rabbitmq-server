@@ -41,6 +41,7 @@ all() ->
      {group, cluster_size_3_parallel_3},
      {group, cluster_size_3_parallel_4},
      {group, cluster_size_3_parallel_5},
+     {group, cluster_size_3_max_length_bytes},
      {group, cluster_size_3_initial_offset},
      {group, unclustered_size_3_1},
      {group, unclustered_size_3_2},
@@ -56,7 +57,7 @@ groups() ->
        format]},
      {single_node_parallel_1, [parallel], all_tests_1()},
      {single_node_parallel_2, [parallel], all_tests_2()},
-     {single_node_parallel_3, [parallel], all_tests_3()},
+     {single_node_parallel_3, [parallel], all_tests_3() ++ [max_length_bytes]},
      {single_node_parallel_4, [parallel], all_tests_4()},
      {cluster_size_2, [], [recover]},
      {cluster_size_2_parallel_1, [parallel], all_tests_1()},
@@ -99,6 +100,7 @@ groups() ->
      {cluster_size_3_parallel_3, [parallel], all_tests_2()},
      {cluster_size_3_parallel_4, [parallel], all_tests_3()},
      {cluster_size_3_parallel_5, [parallel], all_tests_4()},
+     {cluster_size_3_max_length_bytes, [], [max_length_bytes]},
      {cluster_size_3_initial_offset, [shuffle], [initial_offset,
                                                  initial_offset_zero]},
      {unclustered_size_3_1, [], [add_replica]},
@@ -151,7 +153,6 @@ all_tests_3() ->
      consume_cancel_should_create_events,
      receive_basic_cancel_on_queue_deletion,
      keep_consuming_on_leader_restart,
-     max_length_bytes,
      max_age,
      invalid_policy,
      max_age_policy
@@ -229,6 +230,7 @@ init_per_group1(Group, Config) ->
                       cluster_size_3_parallel_3 -> 3;
                       cluster_size_3_parallel_4 -> 3;
                       cluster_size_3_parallel_5 -> 3;
+                      cluster_size_3_max_length_bytes -> 3;
                       cluster_size_3_initial_offset -> 3;
                       cluster_size_3_1 -> 3;
                       cluster_size_3_2 -> 3;
@@ -271,7 +273,16 @@ init_per_group1(Group, Config) ->
                                                                              quorum_queue_non_voters
                                                                             ]}]})
                end,
-    Ret = rabbit_ct_helpers:run_steps(Config1c,
+    Config1d = case Group of
+                   cluster_size_3_max_length_bytes ->
+                       %% In `max_length_bytes/1`, retention can delete a segment before
+                       %% the replica reader sends it. The replica exits and is restarted.
+                       rabbit_ct_helpers:set_config(
+                         Config1c, {ignored_crashes, ["accept_chunk_out_of_order"]});
+                   _ ->
+                       Config1c
+               end,
+    Ret = rabbit_ct_helpers:run_steps(Config1d,
                                       [fun merge_app_env/1 ] ++
                                       rabbit_ct_broker_helpers:setup_steps()),
     case Ret of
@@ -2041,6 +2052,9 @@ max_length_bytes(Config) ->
     publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 100)]),
     publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 100)]),
     ensure_retention_applied(Config, Server),
+    ?awaitMatch([Offset] when is_integer(Offset),
+                lists:usort(member_offsets(Config, Server, Q)),
+                30_000),
 
     %% We don't yet have reliable metrics, as the committed offset doesn't work
     %% as a counter once we start applying retention policies.
@@ -3119,6 +3133,11 @@ rebalance(Config) ->
                               end, Summary)
                 end, 30000),
     ok.
+
+member_offsets(Config, Server, Q) ->
+    Status = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue, status,
+                                          [<<"/">>, Q]),
+    [proplists:get_value(offset, Member) || Member <- Status].
 
 committed_chunk_id(Config) ->
     %% committed_offset value changed between versions in queue_info
