@@ -2273,6 +2273,8 @@ handle_queue_actions(Actions, State) ->
               S#state{outgoing_pending = queue:in(Action, Pending)};
           ({queue_down, QName}, #state{stashed_down = L} = S) ->
               S#state{stashed_down = [QName | L]};
+          ({queue_deleted, QName}, #state{stashed_eol = L} = S) ->
+              S#state{stashed_eol = [QName | L]};
           (_Action, S) ->
               %% Ignore 'block' and 'unblock' queue actions since we rely on our
               %% own mechanism to detect if a client sends to fast into a link:
@@ -2563,7 +2565,8 @@ incoming_link_transfer(
             Mc = rabbit_msg_interceptor:intercept_incoming(Mc1, MsgIcptCtx),
             QNames = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc, QNames, ConnName, ChannelNum, Username, Trace),
-            Opts = #{correlation => {HandleInt, DeliveryId}},
+            Opts = #{correlation => {HandleInt, DeliveryId},
+                     report_deleted_queues => true},
             Qs0 = rabbit_db_queue:get_targets(QNames),
             Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of

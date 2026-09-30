@@ -23,12 +23,14 @@ all() ->
 all_tests() ->
     [
      smoke,
-     ack_after_queue_delete
+     ack_after_queue_delete,
+     publish_to_deleted_and_live_queue
     ].
 
 groups() ->
     [
-     {classic, [], all_tests()},
+     {classic, [], all_tests() ++ [deliver_to_two_deleted_queues,
+                                   deliver_does_not_retry_after_dispatch]},
      {quorum, [], all_tests()},
      {stream, [],
       [
@@ -98,7 +100,15 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config2,
                                 rabbit_ct_client_helpers:setup_steps()).
 
+end_per_testcase(Testcase, Config)
+  when Testcase =:= publish_to_deleted_and_live_queue orelse
+       Testcase =:= deliver_does_not_retry_after_dispatch ->
+    catch rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, []),
+    finish_testcase(Testcase, Config);
 end_per_testcase(Testcase, Config) ->
+    finish_testcase(Testcase, Config).
+
+finish_testcase(Testcase, Config) ->
     catch delete_queues(),
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
@@ -226,6 +236,124 @@ ack_after_queue_delete(Config) ->
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
     flush(),
     ok.
+
+publish_to_deleted_and_live_queue(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
+    QNameBin = ?config(queue_name, Config),
+    LiveQNameBin = ?config(alt_queue_name, Config),
+    XNameBin = QNameBin,
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                Ch, #'exchange.declare'{exchange = XNameBin,
+                                                        type = <<"fanout">>}),
+    [?assertEqual({'queue.declare_ok', Q, 0, 0},
+                  declare(Ch, Q, [{<<"x-queue-type">>, longstr,
+                                   ?config(queue_type, Config)}]))
+     || Q <- [QNameBin, LiveQNameBin]],
+    [#'queue.bind_ok'{} = amqp_channel:call(
+                            Ch, #'queue.bind'{queue = Q, exchange = XNameBin})
+     || Q <- [QNameBin, LiveQNameBin]],
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    [DeletedTarget] = rabbit_ct_broker_helpers:rpc(
+                        Config, 0, rabbit_db_queue, get_targets,
+                        [[rabbit_misc:r(<<"/">>, queue, QNameBin)]]),
+    delete_and_await_not_found(Config, Ch, QNameBin),
+    rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, new, [rabbit_db_queue, [no_link, passthrough]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, expect,
+           [rabbit_db_queue, get_targets,
+            fun(QNames) -> meck:passthrough([QNames]) ++ [DeletedTarget] end]),
+
+    ConnRef = erlang:monitor(process, Conn),
+    ok = amqp_channel:cast(Ch, #'basic.publish'{exchange = XNameBin},
+                           #amqp_msg{payload = <<"msg">>}),
+    receive
+        #'basic.ack'{} ->
+            ok;
+        #'basic.nack'{} ->
+            ct:fail(nacked);
+        {'DOWN', ConnRef, process, _, Reason} ->
+            ct:fail({connection_closed, Reason})
+    after ?TIMEOUT ->
+              ct:fail(confirm_timeout)
+    end,
+    erlang:demonitor(ConnRef, [flush]),
+
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = LiveQNameBin,
+                                                    no_ack = true})),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = LiveQNameBin,
+                                                    no_ack = true})),
+    #'exchange.delete_ok'{} = amqp_channel:call(
+                               Ch, #'exchange.delete'{exchange = XNameBin}),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+deliver_to_two_deleted_queues(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
+    QNameBins = [?config(queue_name, Config), ?config(alt_queue_name, Config)],
+    QNames = [rabbit_misc:r(<<"/">>, queue, Q) || Q <- QNameBins],
+    [#'queue.declare_ok'{} = declare(Ch, Q, []) || Q <- QNameBins],
+    Targets = rabbit_ct_broker_helpers:rpc(
+                Config, 0, rabbit_db_queue, get_targets, [QNames]),
+    [delete_and_await_not_found(Config, Ch, Q) || Q <- QNameBins],
+
+    {ok, _, Actions} = rabbit_ct_broker_helpers:rpc(
+                         Config, 0, ?MODULE, deliver_to_targets,
+                         [Targets, #{correlation => 1}]),
+    ?assertEqual(lists:sort([{settled, QName, [1]} || QName <- QNames]),
+                 lists:sort(Actions)),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+deliver_does_not_retry_after_dispatch(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
+    CQ = ?config(queue_name, Config),
+    QQ = ?config(alt_queue_name, Config),
+    #'queue.declare_ok'{} = declare(Ch, CQ, []),
+    #'queue.declare_ok'{} = declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    QQName = rabbit_misc:r(<<"/">>, queue, QQ),
+    Targets = rabbit_ct_broker_helpers:rpc(
+                Config, 0, rabbit_db_queue, get_targets,
+                [[rabbit_misc:r(<<"/">>, queue, CQ), QQName]]),
+    rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, new, [rabbit_quorum_queue, [no_link, passthrough]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, expect,
+           [rabbit_quorum_queue, deliver, 3, meck:raise(exit, {not_found, QQName})]),
+
+    ?assertEqual({error, {not_found, QQName}},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, deliver_to_targets, [Targets, #{}])),
+    rabbit_ct_helpers:await_condition(
+      fun() -> message_count(Ch, CQ) > 0 end, ?TIMEOUT),
+    rabbit_ct_helpers:consistently(?_assertEqual(1, message_count(Ch, CQ))),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+message_count(Ch, QNameBin) ->
+    #'queue.declare_ok'{message_count = N} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = QNameBin, passive = true}),
+    N.
+
+delete_and_await_not_found(Config, Ch, QNameBin) ->
+    #'queue.delete_ok'{} = delete(Ch, QNameBin),
+    QName = rabbit_misc:r(<<"/">>, queue, QNameBin),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              {error, not_found} =:= rabbit_ct_broker_helpers:rpc(
+                                       Config, 0, rabbit_amqqueue, lookup, [QName])
+      end, ?TIMEOUT).
+
+deliver_to_targets(Targets, Options) ->
+    XName = rabbit_misc:r(<<"/">>, exchange, <<>>),
+    Content = rabbit_basic:build_content(#'P_basic'{}, <<"msg">>),
+    {ok, Msg} = mc_amqpl:message(XName, <<>>, Content),
+    rabbit_queue_type:deliver(Targets, Msg, Options, rabbit_queue_type:init()).
 
 stream(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

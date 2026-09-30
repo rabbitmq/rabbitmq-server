@@ -108,6 +108,7 @@
     %% fully to the queue
     {settled, queue_name(), [correlation()]} |
     {rejected, queue_name(), reject_reason(), [correlation()]} |
+    {queue_deleted, queue_name()} |
     {deliver, rabbit_types:ctag(), boolean(), [rabbit_amqqueue:qmsg()]} |
     {block | unblock, QueueName :: term()} |
     credit_reply_action().
@@ -148,6 +149,7 @@
                          user := rabbit_types:username()}.
 
 -type delivery_options() :: #{correlation => correlation(),
+                              report_deleted_queues => boolean(),
                               atom() => term()}.
 
 -type settle_op() :: complete |
@@ -673,9 +675,34 @@ deliver(Qs, Message, Options, State) ->
     try
         deliver0(Qs, Message, Options, State)
     catch
+        %% A queue was deleted before it could be delivered to.
+        %% See rabbitmq/rabbitmq-server#17645 for one such example.
+        %%
+        %% Only `get_ctx_with/3' raises this, before `deliver0/4' calls any
+        %% queue type's `deliver/3', so the retry cannot duplicate a delivery.
+        exit:{target_queue_not_found, QName} ->
+            case deliver(without_queue(QName, Qs), Message, Options, State) of
+                {ok, State1, Actions} ->
+                    {ok, State1, deleted_queue_actions(QName, Options) ++ Actions};
+                Err ->
+                    Err
+            end;
         exit:Reason ->
             {error, Reason}
     end.
+
+without_queue(QName, Qs) ->
+    lists:filter(fun(Elem) ->
+                         {Q, _BKeys} = queue_binding_keys(Elem),
+                         amqqueue:get_name(Q) =/= QName
+                 end, Qs).
+
+deleted_queue_actions(QName, #{report_deleted_queues := true}) ->
+    [{queue_deleted, QName}];
+deleted_queue_actions(QName, #{correlation := Corr}) ->
+    [{settled, QName, [Corr]}];
+deleted_queue_actions(_QName, _Options) ->
+    [].
 
 deliver0(Qs, Message0, Options, stateless) ->
     ByTypeAndBindingKeys =
@@ -825,6 +852,8 @@ get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState) ->
                 #ctx{module = Mod,
                      state = QState}
             else
+                {error, not_found} ->
+                    exit({target_queue_not_found, Ref});
                 {error, Reason} ->
                     exit({Reason, Ref})
             end;
@@ -1050,7 +1079,7 @@ queue_vm_ets() ->
                 end,
                 {[], []}, rabbit_registry:lookup_all(queue)).
 
-table_lookup(Tbl, Key, Default) 
+table_lookup(Tbl, Key, Default)
   when is_list(Tbl) andalso
        is_binary(Key) ->
     case rabbit_misc:table_lookup(Tbl, Key) of
