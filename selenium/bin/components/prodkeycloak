@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-KEYCLOAK_DOCKER_IMAGE=${KEYCLOAK_DOCKER_IMAGE:-quay.io/keycloak/keycloak:20.0}
+KEYCLOAK_DOCKER_IMAGE=${KEYCLOAK_DOCKER_IMAGE:-quay.io/keycloak/keycloak:26.7}
 
 ensure_prodkeycloak() {
   if docker ps | grep prodkeycloak &> /dev/null; then
@@ -39,13 +39,13 @@ start_prodkeycloak() {
     --net ${DOCKER_NETWORK} \
 		--publish 8081:8080 \
     --publish 8443:8443 \
-		--env KEYCLOAK_ADMIN=admin \
-		--env KEYCLOAK_ADMIN_PASSWORD=admin \
+		--env KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+		--env KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
 		--mount type=bind,source=${MOUNT_PRODKEYCLOAK_CONF_DIR},target=/opt/keycloak/data/import/ \
 		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm \
     --https-certificate-file=/opt/keycloak/data/import/server_prodkeycloak_certificate.pem \
     --https-certificate-key-file=/opt/keycloak/data/import/server_prodkeycloak_key.pem \
-    --hostname=prodkeycloak --hostname-admin=prodkeycloak --https-port=8443
+    --hostname=https://prodkeycloak:8443 --hostname-admin=https://prodkeycloak:8443 --https-port=8443
 
   wait_for_oidc_endpoint prodkeycloak $PRODKEYCLOAK_URL $MOUNT_PRODKEYCLOAK_CONF_DIR/ca_prodkeycloak_certificate.pem
   end "prodkeycloak is ready"
