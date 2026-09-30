@@ -34,9 +34,9 @@ jobs:
             project_version: 4.4.0
           - branch: v4.3.x
             project_version: 4.3.0
-          # Add OTP 28 combinations
+          # Add OTP 28/29 combinations
           - branch: main
-            otp_version: '28'
+            otp_version: '29'
             project_version: 5.0.0
           - branch: v4.4.x
             otp_version: '28'
@@ -97,9 +97,9 @@ jobs:
           - v4.2.x
           - v4.1.x
         include:
-          # Add OTP 28 combinations
+          # Add OTP 28/29 combinations
           - branch: main
-            otp_version: '28'
+            otp_version: '29'
           - branch: v4.4.x
             otp_version: '28'
 
