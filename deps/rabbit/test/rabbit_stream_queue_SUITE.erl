@@ -41,11 +41,7 @@ all() ->
      {group, cluster_size_3_parallel_3},
      {group, cluster_size_3_parallel_4},
      {group, cluster_size_3_parallel_5},
-<<<<<<< HEAD
-=======
      {group, cluster_size_3_max_length_bytes},
-     {group, cluster_size_3_initial_offset},
->>>>>>> 152e759 (Avoid a very frequent flake)
      {group, unclustered_size_3_1},
      {group, unclustered_size_3_2},
      {group, unclustered_size_3_3},
@@ -103,12 +99,7 @@ groups() ->
      {cluster_size_3_parallel_3, [parallel], all_tests_2()},
      {cluster_size_3_parallel_4, [parallel], all_tests_3()},
      {cluster_size_3_parallel_5, [parallel], all_tests_4()},
-<<<<<<< HEAD
-=======
      {cluster_size_3_max_length_bytes, [], [max_length_bytes]},
-     {cluster_size_3_initial_offset, [shuffle], [initial_offset,
-                                                 initial_offset_zero]},
->>>>>>> 152e759 (Avoid a very frequent flake)
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
      {unclustered_size_3_3, [], [grow_coordinator_cluster]},
@@ -221,11 +212,7 @@ init_per_group1(Group, Config) ->
                       cluster_size_3_parallel_3 -> 3;
                       cluster_size_3_parallel_4 -> 3;
                       cluster_size_3_parallel_5 -> 3;
-<<<<<<< HEAD
-=======
                       cluster_size_3_max_length_bytes -> 3;
-                      cluster_size_3_initial_offset -> 3;
->>>>>>> 152e759 (Avoid a very frequent flake)
                       cluster_size_3_1 -> 3;
                       cluster_size_3_2 -> 3;
                       cluster_size_3_3 -> 3;
@@ -253,7 +240,6 @@ init_per_group1(Group, Config) ->
                    _ ->
                        Config1
                end,
-<<<<<<< HEAD
     Config1c = rabbit_ct_helpers:merge_app_env(
                  Config1b, {rabbit, [{forced_feature_flags_on_init, [
                                                                      restart_streams,
@@ -263,22 +249,6 @@ init_per_group1(Group, Config) ->
                                                                      message_containers,
                                                                      quorum_queue_non_voters
                                                                     ]}]}),
-    Ret = rabbit_ct_helpers:run_steps(Config1c,
-=======
-    Config1c = case Group of
-                   cluster_size_3_initial_offset ->
-                       Config1b;
-                   _ ->
-                       rabbit_ct_helpers:merge_app_env(
-                         Config1b, {rabbit, [{forced_feature_flags_on_init, [
-                                                                             restart_streams,
-                                                                             stream_sac_coordinator_unblock_group,
-                                                                             stream_update_config_command,
-                                                                             stream_filtering,
-                                                                             message_containers,
-                                                                             quorum_queue_non_voters
-                                                                            ]}]})
-               end,
     Config1d = case Group of
                    cluster_size_3_max_length_bytes ->
                        %% In `max_length_bytes/1`, retention can delete a segment before
@@ -289,7 +259,6 @@ init_per_group1(Group, Config) ->
                        Config1c
                end,
     Ret = rabbit_ct_helpers:run_steps(Config1d,
->>>>>>> 152e759 (Avoid a very frequent flake)
                                       [fun merge_app_env/1 ] ++
                                       rabbit_ct_broker_helpers:setup_steps()),
     case Ret of
