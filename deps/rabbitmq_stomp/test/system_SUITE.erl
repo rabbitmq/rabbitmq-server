@@ -46,7 +46,8 @@
 
 all() ->
     [{group, version_to_group_name(V)} || V <- ?SUPPORTED_VERSIONS] ++
-    [{group, unsubscribe_authz}].
+    [{group, unsubscribe_authz},
+     {group, default_queue_type}].
 
 groups() ->
     Tests = [
@@ -85,9 +86,19 @@ groups() ->
     AuthzTests = [durable_unsubscribe_ignores_frame_queue_name,
                   durable_unsubscribe_requires_configure_permission],
 
+    DQTTests = [queue_send_uses_vhost_default_queue_type,
+                vhost_default_queue_type_overrides_node_wide_one,
+                x_queue_type_header_overrides_vhost_default_queue_type,
+                transient_subscription_is_classic_with_quorum_default,
+                durable_subscription_uses_vhost_default_queue_type,
+                redeclare_with_same_arguments_succeeds,
+                redeclare_after_vhost_default_queue_type_change_is_rejected,
+                redeclare_queue_without_stored_queue_type],
+
     [{version_to_group_name(V), [sequence], Tests}
      || V <- ?SUPPORTED_VERSIONS] ++
-    [{unsubscribe_authz, [], AuthzTests}].
+    [{unsubscribe_authz, [], AuthzTests},
+     {default_queue_type, [], DQTTests}].
 
 version_to_group_name(V) ->
     list_to_atom(re:replace("version_" ++ V,
@@ -106,7 +117,9 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(unsubscribe_authz, Config) ->
+init_per_group(Group, Config)
+  when Group =:= unsubscribe_authz;
+       Group =:= default_queue_type ->
     rabbit_ct_helpers:set_config(
       Config, [{version, lists:last(?SUPPORTED_VERSIONS)}]);
 init_per_group(Group, Config) ->
@@ -1519,6 +1532,135 @@ stomp_receive_messages(Client, Acc, Version) ->
       error:{badmatch, {error, timeout}} ->
             {Client, Acc}
     end.
+
+queue_send_uses_vhost_default_queue_type(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"quorum">>,
+      fun(Client, VHost) ->
+              {ok, _, _, _} = dqt_send(Client, 'RECEIPT'),
+              ?assertEqual([rabbit_quorum_queue], queue_types(Config, VHost))
+      end).
+
+vhost_default_queue_type_overrides_node_wide_one(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, default_queue_type, rabbit_quorum_queue]),
+    try
+        with_dqt_vhost(
+          Config, ?FUNCTION_NAME, <<"classic">>,
+          fun(Client, VHost) ->
+                  {ok, _, _, _} = dqt_send(Client, 'RECEIPT'),
+                  ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
+          end)
+    after
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0, application, unset_env, [rabbit, default_queue_type])
+    end.
+
+x_queue_type_header_overrides_vhost_default_queue_type(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"quorum">>,
+      fun(Client, VHost) ->
+              {ok, _, _, _} = dqt_subscribe(
+                                Client, [{<<"destination">>, <<"/queue/dqt-q">>},
+                                         {<<"x-queue-type">>, <<"classic">>}]),
+              ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
+      end).
+
+transient_subscription_is_classic_with_quorum_default(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"quorum">>,
+      fun(Client, VHost) ->
+              {ok, _, _, _} = dqt_subscribe(
+                                Client, [{<<"destination">>, <<"/topic/dqt-t">>}]),
+              ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
+      end).
+
+durable_subscription_uses_vhost_default_queue_type(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"quorum">>,
+      fun(Client, VHost) ->
+              Headers = [{<<"destination">>, <<"/topic/dqt-t">>},
+                         {<<"id">>, <<"dqt-sub">>},
+                         {<<"durable">>, <<"true">>},
+                         {<<"auto-delete">>, <<"false">>}],
+              {ok, _, _, _} = dqt_subscribe(Client, Headers),
+              {ok, _, _, _} = dqt_subscribe(
+                                connect_to_vhost(Config, VHost), Headers),
+              ?assertEqual([rabbit_quorum_queue], queue_types(Config, VHost))
+      end).
+
+redeclare_with_same_arguments_succeeds(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"quorum">>,
+      fun(Client, VHost) ->
+              {ok, _, _, _} = dqt_send(Client, 'RECEIPT'),
+              {ok, _, _, _} = dqt_send(connect_to_vhost(Config, VHost), 'RECEIPT'),
+              ?assertEqual([rabbit_quorum_queue], queue_types(Config, VHost))
+      end).
+
+redeclare_after_vhost_default_queue_type_change_is_rejected(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              {ok, _, _, _} = dqt_send(Client, 'RECEIPT'),
+              ok = rabbit_ct_broker_helpers:update_vhost_metadata(
+                     Config, VHost, #{default_queue_type => <<"quorum">>}),
+              {ok, _, _, Body} = dqt_send(connect_to_vhost(Config, VHost), 'ERROR'),
+              ?assertMatch({match, _},
+                           re:run(iolist_to_binary(lists:reverse(Body)),
+                                  "inequivalent arg 'x-queue-type'")),
+              ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
+      end).
+
+redeclare_queue_without_stored_queue_type(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              {new, _} = rabbit_ct_broker_helpers:rpc(
+                           Config, 0, rabbit_amqqueue, declare,
+                           [rabbit_misc:r(VHost, queue, <<"dqt-q">>),
+                            true, false, [], none, <<"acting-user">>]),
+              {ok, _, _, _} = dqt_send(Client, 'RECEIPT'),
+              ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
+      end).
+
+with_dqt_vhost(Config, TestCase, DefaultQueueType, Fun) ->
+    VHost = atom_to_binary(TestCase),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_vhost, add,
+           [VHost, #{default_queue_type => DefaultQueueType}, <<"acting-user">>]),
+    ok = rabbit_ct_broker_helpers:set_permissions(
+           Config, <<"guest">>, VHost, <<".*">>, <<".*">>, <<".*">>),
+    try
+        Fun(connect_to_vhost(Config, VHost), VHost)
+    after
+        rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+    end.
+
+connect_to_vhost(Config, VHost) ->
+    StompPort = rabbit_ct_broker_helpers:get_node_config(
+                  Config, 0, tcp_port_stomp),
+    {ok, Client} = rabbit_stomp_client:connect(
+                     ?config(version, Config), "guest", "guest", StompPort,
+                     [{<<"host">>, VHost}]),
+    Client.
+
+dqt_send(Client, ExpectedCommand) ->
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, <<"/queue/dqt-q">>},
+                       {<<"receipt">>, <<"r">>}], ["hello"]),
+    stomp_receive(Client, ExpectedCommand).
+
+dqt_subscribe(Client, Headers) ->
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"receipt">>, <<"r">>} | Headers]),
+    stomp_receive(Client, 'RECEIPT').
+
+queue_types(Config, VHost) ->
+    [rabbit_ct_broker_helpers:rpc(Config, 0, amqqueue, get_type, [Q])
+     || Q <- rabbit_ct_broker_helpers:rpc(
+               Config, 0, rabbit_amqqueue, list, [VHost])].
 
 stomp_receive(Client, Command) ->
     {#stomp_frame{command     = Command,
