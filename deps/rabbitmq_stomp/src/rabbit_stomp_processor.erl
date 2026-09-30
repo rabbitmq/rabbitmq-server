@@ -2055,13 +2055,18 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #state{user = #user{username = U
                  false -> [{auto_delete, true}, {exclusive, true} | Params0];
                  true  -> Params0
              end,
-    Args = proplists:get_value(arguments, Params, []),
+    Durable = proplists:get_value(durable, Params, false),
+    AutoDelete = proplists:get_value(auto_delete, Params, false),
+    Exclusive = proplists:get_value(exclusive, Params, false),
+    Args = rabbit_amqqueue:augment_declare_args(
+             VHost, Durable, Exclusive, AutoDelete,
+             proplists:get_value(arguments, Params, [])),
 
     amqqueue:new(QName,
                  none,
-                 proplists:get_value(durable, Params, false),
-                 proplists:get_value(auto_delete, Params, false),
-                 case proplists:get_value(exclusive, Params, false) of
+                 Durable,
+                 AutoDelete,
+                 case Exclusive of
                      false -> none;
                      true -> self()
                  end,
@@ -2107,6 +2112,22 @@ consume_queue(QRes, Spec0, State = #state{user = #user{username = Username} = Us
               end
       end).
 
+assert_equivalent_if_exists(Amqqueue) ->
+    case rabbit_amqqueue:with(
+           amqqueue:get_name(Amqqueue),
+           fun(Q) ->
+                   rabbit_amqqueue:assert_equivalence(
+                     Q,
+                     amqqueue:is_durable(Amqqueue),
+                     amqqueue:is_auto_delete(Amqqueue),
+                     amqqueue:get_arguments(Amqqueue),
+                     amqqueue:get_exclusive_owner(Amqqueue))
+           end) of
+        ok -> ok;
+        {error, not_found} -> ok;
+        {error, {absent, Q, Reason}} -> rabbit_amqqueue:absent(Q, Reason)
+    end.
+
 create_queue(Amqqueue, _State = #state{authz_ctx = AuthzCtx,
                                        user = User,
                                        cfg = #cfg{vhost = VHost}}) ->
@@ -2116,6 +2137,7 @@ create_queue(Amqqueue, _State = #state{authz_ctx = AuthzCtx,
     ok = check_resource_access(User, QName, configure, AuthzCtx),
     ok = check_dead_letter_exchange_access(
            QName, amqqueue:get_arguments(Amqqueue), User, AuthzCtx),
+    ok = assert_equivalent_if_exists(Amqqueue),
 
     case rabbit_vhost_limit:is_over_queue_limit(VHost) of
         false ->
