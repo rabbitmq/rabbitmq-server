@@ -28,12 +28,12 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "27.3"
+        - "29.0"
         browser:
         - chrome
         include:
-        - erlang_version: "27.3"
-          elixir_version: 1.18
+        - erlang_version: "29.0"
+          elixir_version: "1.20"
     env:
       SELENIUM_DIR: selenium
       DOCKER_NETWORK: rabbitmq_net
@@ -53,7 +53,7 @@ jobs:
     - name: Build & Load RabbitMQ OCI
       run: |
         make package-generic-unix
-        make docker-image
+        make docker-image OTP_VERSION=${{ matrix.erlang_version }}
 
     - name: Configure Docker Network
       run: |
