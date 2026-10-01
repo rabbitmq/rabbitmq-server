@@ -41,6 +41,7 @@ all: dist
 dist:
 	cp -f $(GENERIC_UNIX_ARCHIVE) package-generic-unix.tar.xz
 	docker build --pull \
+	  $(if $(OTP_VERSION),--build-arg OTP_VERSION=$(OTP_VERSION)) \
 	  --build-arg RABBITMQ_VERSION=$(VERSION) \
 	  --tag $(REPO):$(IMAGE_TAG_1) \
 	  .
