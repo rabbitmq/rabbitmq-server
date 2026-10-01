@@ -296,9 +296,6 @@ nest_tuples(N, Inner) -> "{" ++ nest_tuples(N - 1, Inner) ++ "}".
 nest_lists(0, Inner) -> Inner;
 nest_lists(N, Inner) -> "[" ++ nest_lists(N - 1, Inner) ++ "]".
 
-%% An unbounded digit run reaches `list_to_integer/1`, which raises
-%% `system_limit` (not `badarg`) past a certain length, escaping
-%% `parse_term/1`'s own `try`/`catch` uncaught.
 rejects_number_too_long_test(_) ->
     Digits100 = lists:duplicate(100, $9),
     Digits101 = lists:duplicate(101, $9),
