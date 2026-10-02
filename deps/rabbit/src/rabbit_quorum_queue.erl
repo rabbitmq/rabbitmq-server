@@ -69,7 +69,8 @@
          wal_force_roll_over/1]).
 -export([notify_decorators/1,
          notify_decorators/3,
-         spawn_notify_decorators/3]).
+         spawn_notify_decorators/3,
+         has_decorators/1]).
 
 -export([is_enabled/0,
          is_compatible/3,
@@ -2525,6 +2526,18 @@ notify_decorators(QName, F, A) ->
             ok;
         {error, not_found} ->
             ok
+    end.
+
+-spec has_decorators(rabbit_amqqueue:name()) -> boolean().
+has_decorators(QName) ->
+    try rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            rabbit_queue_decorator:select(amqqueue:get_decorators(Q)) =/= [];
+        {error, not_found} ->
+            false
+    catch
+        _:_ ->
+            false
     end.
 
 %% `ra_server_proc:force_shrink_members_to_current_member/1` typespec does

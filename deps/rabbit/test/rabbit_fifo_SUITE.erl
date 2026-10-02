@@ -3107,7 +3107,8 @@ update_config_max_length_test(Config) ->
     %% dropped message
     {State, ok, Effects} = apply(meta(Config, ?LINE),
                                  rabbit_fifo:make_update_config(Conf), State1),
-    ?assertMatch([{mod_call, rabbit_global_counters, messages_dead_lettered,
+    ?assertMatch([{aux, refresh_decorators},
+                  {mod_call, rabbit_global_counters, messages_dead_lettered,
                    [maxlen, rabbit_quorum_queue,disabled, 98]}], Effects),
     ?assertMatch(#{config := #{max_length := 2},
                    num_ready_messages := 2}, rabbit_fifo:overview(State)),
@@ -4533,6 +4534,64 @@ aux_test(_) ->
     {no_reply, _Aux, _, []} = handle_aux(leader, cast, tick, Aux, State0),
     meck:unload(),
     ok.
+
+aux_eval_decorators_test(Config) ->
+    _ = ra_machine_ets:start_link(),
+    ok = meck:new(ra_aux, [passthrough]),
+    meck:expect(ra_aux, effective_machine_version,
+                fun (_) -> rabbit_fifo:version() end),
+    ok = meck:new(rabbit_quorum_queue, [passthrough]),
+    meck:expect(rabbit_quorum_queue, has_decorators, fun (_) -> false end),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State, _, _} = checkout(Config, ?LINE, Cid, 1,
+                             test_init(?FUNCTION_NAME)),
+    RaAux = #{machine_state => State},
+    Aux0 = init_aux(?FUNCTION_NAME),
+
+    {no_reply, Aux1, _, Effs1} = handle_aux(leader, cast, eval, Aux0, RaAux),
+    {no_reply, Aux2, _, Effs2} = handle_aux(leader, cast, eval, Aux1, RaAux),
+    ?assertEqual([], notify_decorators_effects(Effs1 ++ Effs2)),
+    ?assertEqual(1, meck:num_calls(rabbit_quorum_queue, has_decorators, '_')),
+
+    meck:expect(rabbit_quorum_queue, has_decorators, fun (_) -> true end),
+    {no_reply, Aux3, _} = handle_aux(follower, cast, refresh_decorators,
+                                     Aux2, RaAux),
+    {no_reply, Aux4, _, Effs4} = handle_aux(leader, cast, eval, Aux3, RaAux),
+    ?assertMatch([{mod_call, rabbit_quorum_queue, spawn_notify_decorators,
+                   [_, consumer_state_changed, [0, true]]}],
+                 notify_decorators_effects(Effs4)),
+    {no_reply, _, _, Effs5} = handle_aux(leader, cast, eval, Aux4, RaAux),
+    ?assertEqual([], notify_decorators_effects(Effs5)),
+    ?assertEqual(2, meck:num_calls(rabbit_quorum_queue, has_decorators, '_')),
+    ok.
+
+aux_tick_refreshes_decorators_test(Config) ->
+    _ = ra_machine_ets:start_link(),
+    ok = meck:new(ra_aux, [passthrough]),
+    meck:expect(ra_aux, effective_machine_version,
+                fun (_) -> rabbit_fifo:version() end),
+    meck:expect(ra_aux, members_info, fun (_) -> #{} end),
+    ok = meck:new(rabbit_quorum_queue, [passthrough]),
+    meck:expect(rabbit_quorum_queue, has_decorators, fun (_) -> false end),
+    meck:expect(rabbit_quorum_queue, handle_tick, fun (_, _, _) -> self() end),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State, _, _} = checkout(Config, ?LINE, Cid, 1,
+                             test_init(?FUNCTION_NAME)),
+    RaAux = #{machine_state => State},
+    [{aux, TickCmd}] = rabbit_fifo:tick(0, State),
+
+    {no_reply, Aux1, _, _} = handle_aux(leader, cast, eval,
+                                        init_aux(?FUNCTION_NAME), RaAux),
+    meck:expect(rabbit_quorum_queue, has_decorators, fun (_) -> true end),
+    {no_reply, Aux2, _, _} = handle_aux(leader, cast, TickCmd, Aux1, RaAux),
+    {no_reply, _, _, Effs} = handle_aux(leader, cast, eval, Aux2, RaAux),
+    ?assertMatch([{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _}],
+                 notify_decorators_effects(Effs)),
+    ok.
+
+notify_decorators_effects(Effects) ->
+    [E || {mod_call, rabbit_quorum_queue, spawn_notify_decorators, _} = E
+              <- Effects].
 
 %% covers upgrades from aux states as old as 3.13, e.g. 3.13 -> 4.2 -> 4.3
 aux_upgrade_from_v1_test(_) ->
