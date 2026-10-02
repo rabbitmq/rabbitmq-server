@@ -9,7 +9,7 @@
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
 
--export([analyze_frame/2, init/0, process/2]).
+-export([analyze_frame/2, init/0, process/2, process/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -33,7 +33,8 @@
 -type state() ::
         'method' |
         {'content_header', method(), class_id()} |
-        {'content_body',   method(), body_size(), content()}.
+        {'content_body',   method(), body_size(), content()} |
+        {'content_body_over_limit', method(), body_size()}.
 
 -spec analyze_frame(frame_type(), binary()) ->
           frame() | 'heartbeat' | 'error'.
@@ -43,6 +44,12 @@
           {ok, state()} |
           {ok, method(), state()} |
           {ok, method(), content(), state()} |
+          {error, rabbit_types:amqp_error()}.
+-spec process(frame(), state(), body_size()) ->
+          {ok, state()} |
+          {ok, method(), state()} |
+          {ok, method(), content(), state()} |
+          {too_large, method(), body_size(), state()} |
           {error, rabbit_types:amqp_error()}.
 
 %%--------------------------------------------------------------------
@@ -119,7 +126,32 @@ process({content_body, _FragmentBin},
               rabbit_misc:method_record_type(Method))};
 process(_Frame, {content_body, Method, _RemainingSize, _Content}) ->
     unexpected_frame("expected content body, "
+                     "got non content body frame instead", [], Method);
+process({content_body, FragmentBin},
+        {content_body_over_limit, Method, RemainingSize})
+  when byte_size(FragmentBin) =< RemainingSize ->
+    case RemainingSize - byte_size(FragmentBin) of
+        0  -> {ok, method};
+        Sz -> {ok, {content_body_over_limit, Method, Sz}}
+    end;
+process({content_body, _FragmentBin},
+        {content_body_over_limit, Method, _RemainingSize}) ->
+    {error, rabbit_misc:amqp_error(
+              frame_error,
+              "content body frame exceeds remaining content size",
+              [],
+              rabbit_misc:method_record_type(Method))};
+process(_Frame, {content_body_over_limit, Method, _RemainingSize}) ->
+    unexpected_frame("expected content body, "
                      "got non content body frame instead", [], Method).
+
+process({content_header, ClassId, 0, BodySize, _PropertiesBin},
+        {content_header, Method, ClassId}, MaxBodySize)
+  when BodySize > MaxBodySize andalso BodySize =< ?MAX_MSG_SIZE ->
+    {too_large, Method, BodySize,
+     {content_body_over_limit, Method, BodySize}};
+process(Frame, State, _MaxBodySize) ->
+    process(Frame, State).
 
 %%--------------------------------------------------------------------
 

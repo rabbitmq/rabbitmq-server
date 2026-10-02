@@ -49,7 +49,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/10, start_link/11, flush/1, shutdown/1]).
--export([send_command/2]).
+-export([send_command/2, message_too_large/4]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          emit_info_all/4, info_local/1]).
 -export([refresh_config_local/0]).
@@ -283,6 +283,12 @@ shutdown(Pid) ->
 
 send_command(Pid, Msg) ->
     gen_server2:cast(Pid,  {command, Msg}).
+
+-spec message_too_large(pid(), rabbit_framing:amqp_method_record(),
+                        non_neg_integer(), pos_integer()) -> 'ok'.
+
+message_too_large(Pid, Method, Size, MaxMessageSize) ->
+    gen_server2:cast(Pid, {message_too_large, Method, Size, MaxMessageSize}).
 
 -spec list() -> [pid()].
 
@@ -591,6 +597,15 @@ handle_cast({method, Method, Content, Flow},
         _:Reason:Stacktrace ->
             {stop, {Reason, Stacktrace}, State}
     end;
+
+handle_cast({message_too_large, _Method, _Size, _MaxMessageSize},
+            State = #ch{cfg = #conf{state = closing}}) ->
+    noreply(State);
+handle_cast({message_too_large, Method, Size, MaxMessageSize}, State) ->
+    rabbit_global_counters:messages_received(amqp091, 1),
+    Error = message_too_large_error(Size, MaxMessageSize),
+    MethodName = rabbit_misc:method_record_type(Method),
+    handle_exception(Error#amqp_error{method = MethodName}, State);
 
 handle_cast(ready_for_close,
             State = #ch{cfg = #conf{state = closing,
@@ -1007,15 +1022,18 @@ check_msg_size(Content, GCThreshold) ->
         true ->
             rabbit_msg_size_metrics:observe(amqp091, Size);
         false ->
-            Fmt = case MaxMessageSize of
-                      ?MAX_MSG_SIZE ->
-                          "message size ~B is larger than max size ~B";
-                      _ ->
-                          "message size ~B is larger than configured max size ~B"
-                  end,
-            rabbit_misc:precondition_failed(
-              Fmt, [Size, MaxMessageSize])
+            rabbit_misc:protocol_error(
+              message_too_large_error(Size, MaxMessageSize))
     end.
+
+message_too_large_error(Size, MaxMessageSize) ->
+    Fmt = case MaxMessageSize of
+              ?MAX_MSG_SIZE ->
+                  "message size ~B is larger than max size ~B";
+              _ ->
+                  "message size ~B is larger than configured max size ~B"
+          end,
+    rabbit_misc:amqp_error(precondition_failed, Fmt, [Size, MaxMessageSize], none).
 
 qbin_to_resource(QueueNameBin, VHostPath) ->
     name_to_resource(queue, QueueNameBin, VHostPath).
