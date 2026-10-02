@@ -1156,7 +1156,9 @@ i(client_properties, #v1{connection = #v1_connection{properties = Props}}) ->
         undefined ->
             [];
         {map, Fields} ->
-            [mc_amqpl:to_091(Key, TypeVal) || {{symbol, Key}, TypeVal} <- Fields]
+            [mc_amqpl:to_091(Key, TypeVal)
+             || {{symbol, Key}, TypeVal} <- Fields,
+                mc_amqpl:is_representable(Key, TypeVal)]
     end;
 i(channels, #v1{tracked_channels = Channels}) ->
     maps:size(Channels);
