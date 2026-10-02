@@ -1108,7 +1108,8 @@ process_frame(Frame, Channel, State) ->
         {error, Error} ->
             handle_exception(State, Channel, Error);
         {ok, {ChPid, AState}, State1} ->
-            case rabbit_command_assembler:process(Frame, AState) of
+            MaxMessageSize = persistent_term:get(max_message_size),
+            case rabbit_command_assembler:process(Frame, AState, MaxMessageSize) of
                 {ok, NewAState} ->
                     put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State1);
@@ -1120,6 +1121,11 @@ process_frame(Frame, Channel, State) ->
                     rabbit_channel_common:do_flow(ChPid, Method, Content),
                     put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, control_throttle(State1));
+                {too_large, Method, BodySize, NewAState} ->
+                    rabbit_channel:message_too_large(ChPid, Method, BodySize,
+                                                     MaxMessageSize),
+                    put(ChKey, {ChPid, NewAState}),
+                    post_process_frame(Frame, ChPid, State1);
                 {error, Reason} ->
                     handle_exception(State1, Channel, Reason)
             end
