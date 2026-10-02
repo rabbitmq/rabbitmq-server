@@ -27,7 +27,9 @@
          message/4,
          from_basic_message/1,
          to_091/2,
-         from_091/2
+         from_091/2,
+         is_convertible/1,
+         is_representable/2
         ]).
 
 -import(rabbit_misc,
@@ -42,6 +44,14 @@
         is_record(S, 'v1_0.data') orelse
         is_record(S, 'v1_0.amqp_sequence') orelse
         is_record(S, 'v1_0.amqp_value')).
+
+%% AMQP 1.0 types with no AMQP 0-9-1 equivalent.
+-define(IS_UNCONVERTIBLE(V),
+        (is_tuple(V) andalso tuple_size(V) >= 1 andalso
+         (element(1, V) =:= as_is orelse
+          element(1, V) =:= char orelse
+          element(1, V) =:= uuid orelse
+          element(1, V) =:= described))).
 
 -opaque state() :: #content{}.
 
@@ -132,11 +142,11 @@ convert_from(mc_amqp, Sections, _Env) ->
                   _ -> undefined
               end,
     Priority = case H of
-                   #'v1_0.header'{priority = {_, P}} -> P;
+                   #'v1_0.header'{priority = {ubyte, P}} -> P;
                    _ -> undefined
                end,
     Expiration = case H of
-                     #'v1_0.header'{ttl = {_, T}} ->
+                     #'v1_0.header'{ttl = {uint, T}} ->
                          integer_to_binary(T);
                      _ ->
                          undefined
@@ -148,7 +158,7 @@ convert_from(mc_amqp, Sections, _Env) ->
                    Type0
            end,
 
-    Headers0 = lists:filtermap(fun({_K, {as_is, _, _}}) ->
+    Headers0 = lists:filtermap(fun({_K, V}) when ?IS_UNCONVERTIBLE(V) ->
                                        false;
                                   ({{utf8, K}, V})
                                     when ?IS_SHORTSTR_LEN(K) ->
@@ -157,13 +167,14 @@ convert_from(mc_amqp, Sections, _Env) ->
                                        false
                                end, AP),
     %% Add remaining x- message annotations as headers
-    XHeaders = lists:filtermap(fun({{symbol, <<"x-cc">>}, V}) ->
+    XHeaders = lists:filtermap(fun({{symbol, <<"x-cc">>}, V})
+                                    when not ?IS_UNCONVERTIBLE(V) ->
                                        {true, to_091(<<"CC">>, V)};
                                   ({{symbol, <<"x-opt-rabbitmq-received-time">>}, {timestamp, Ts}}) ->
                                        {true, {<<"timestamp_in_ms">>, long, Ts}};
                                   ({{symbol, <<"x-opt-deaths">>}, V}) ->
                                        convert_from_amqp_deaths(V);
-                                  ({_K, {as_is, _, _}}) ->
+                                  ({_K, V}) when ?IS_UNCONVERTIBLE(V) ->
                                        false;
                                   ({{symbol, <<"x-", _/binary>> = K}, V})
                                     when ?IS_SHORTSTR_LEN(K) ->
@@ -210,9 +221,9 @@ convert_from(mc_amqp, Sections, _Env) ->
                     app_id = unwrap_shortstr(GroupId),
                     priority = Priority,
                     correlation_id = CorrId091,
-                    content_type = unwrap(ContentType),
-                    content_encoding = unwrap(ContentEncoding),
-                    timestamp = unwrap(Timestamp)
+                    content_type = unwrap_shortstr(ContentType),
+                    content_encoding = unwrap_shortstr(ContentEncoding),
+                    timestamp = unwrap_timestamp(Timestamp)
                    },
     #content{class_id = ?CLASS_ID,
              properties = BP,
@@ -693,7 +704,7 @@ amqp10_map_get(K, Tuples) ->
         false ->
             undefined;
         {_, V}  ->
-            unwrap(V)
+            unwrap_shortstr(V)
     end.
 
 symbol(T) -> {symbol, T}.
@@ -703,14 +714,42 @@ unwrap(undefined) ->
 unwrap({timestamp, V}) ->
     V div 1000;
 unwrap({_Type, V}) ->
-    V.
+    V;
+unwrap(_Other) ->
+    undefined.
 
-unwrap_shortstr({utf8, V})
-  when is_binary(V) andalso
+unwrap_timestamp({timestamp, V}) ->
+    V div 1000;
+unwrap_timestamp(_Other) ->
+    undefined.
+
+unwrap_shortstr({Type, V})
+  when (Type =:= utf8 orelse Type =:= symbol) andalso
+       is_binary(V) andalso
        ?IS_SHORTSTR_LEN(V) ->
     V;
 unwrap_shortstr(_) ->
     undefined.
+
+is_convertible(V) ->
+    not ?IS_UNCONVERTIBLE(V).
+
+is_representable(Key, Value) ->
+    is_binary(Key) andalso ?IS_SHORTSTR_LEN(Key) andalso is_convertible_deep(Value).
+
+is_convertible_deep(V) when ?IS_UNCONVERTIBLE(V) ->
+    false;
+is_convertible_deep({map, M}) ->
+    lists:all(fun({K, V}) ->
+                      map_key_binary(K) =/= undefined andalso
+                      is_convertible_deep(V)
+              end, M);
+is_convertible_deep({list, L}) ->
+    lists:all(fun is_convertible_deep/1, L);
+is_convertible_deep({array, _T, L}) ->
+    lists:all(fun is_convertible_deep/1, L);
+is_convertible_deep(_) ->
+    true.
 
 to_091(Key, {utf8, V}) -> {Key, longstr, V};
 to_091(Key, {symbol, V}) -> {Key, longstr, V};
@@ -734,27 +773,43 @@ to_091(Key, null) -> {Key, void, undefined};
 to_091(Key, {list, L}) ->
     to_091_array(Key, L);
 to_091(Key, {map, M}) ->
-    T = lists:filtermap(fun({K, V}) when element(1, K) =:= as_is orelse
-                                         element(1, V) =:= as_is ->
-                                false;
-                           ({K, V}) ->
-                                {true, to_091(unwrap(K), V)}
-                        end, M),
-    {Key, table, T};
+    {Key, table, to_091_map_fields(M)};
 to_091(Key, {array, _T, L}) ->
     to_091_array(Key, L).
 
 to_091_array(Key, L) ->
-    A = lists:filtermap(fun({as_is, _, _}) ->
-                                false;
-                           (V) ->
-                                {true, to_091(V)}
-                        end, L),
-    {Key, array, A}.
+    {Key, array, to_091_array_elements(L)}.
+
+to_091_array_elements(L) ->
+    lists:filtermap(fun(V) when ?IS_UNCONVERTIBLE(V) ->
+                             false;
+                        (V) ->
+                             {true, to_091(V)}
+                     end, L).
+
+to_091_map_fields(M) ->
+    lists:filtermap(fun({_K, V}) when ?IS_UNCONVERTIBLE(V) ->
+                             false;
+                        ({K, V}) ->
+                             case map_key_binary(K) of
+                                 K1 when is_binary(K1) ->
+                                     {true, to_091(K1, V)};
+                                 undefined ->
+                                     false
+                             end
+                     end, M).
+
+map_key_binary({Type, K1})
+  when (Type =:= utf8 orelse Type =:= symbol),
+       is_binary(K1), ?IS_SHORTSTR_LEN(K1) ->
+    K1;
+map_key_binary(_) ->
+    undefined.
 
 to_091({utf8, V}) -> {longstr, V};
 to_091({symbol, V}) -> {longstr, V};
 to_091({long, V}) -> {long, V};
+to_091({ulong, V}) -> {long, V}; %% TODO: we could try to constrain this
 to_091({byte, V}) -> {byte, V};
 to_091({ubyte, V}) -> {unsignedbyte, V};
 to_091({short, V}) -> {short, V};
@@ -771,9 +826,11 @@ to_091(false) -> {bool, false};
 to_091(undefined) -> {void, undefined};
 to_091(null) -> {void, undefined};
 to_091({list, L}) ->
-    {array, [to_091(V) || V <- L]};
+    {array, to_091_array_elements(L)};
 to_091({map, M}) ->
-    {table, [to_091(unwrap(K), V) || {K, V} <- M]}.
+    {table, to_091_map_fields(M)};
+to_091({array, _T, L}) ->
+    {array, to_091_array_elements(L)}.
 
 message_id({uuid, UUID}, _HKey, H0) ->
     {H0, mc_util:uuid_to_urn_string(UUID)};
@@ -789,6 +846,8 @@ message_id({utf8, S}, HKey, H0) ->
             {[{HKey, longstr, S} | H0], undefined}
     end;
 message_id(undefined, _HKey, H) ->
+    {H, undefined};
+message_id(_Other, _HKey, H) ->
     {H, undefined}.
 
 essential_properties(#content{} = C) ->

@@ -17,7 +17,13 @@
 -export([check_routing_arg/5,
          check_alternate_exchange/4,
          check_dead_letter_exchange/4,
-         handle_http_req/8]).
+         handle_http_req/8,
+         args_amqp_to_amqpl/1,
+         decode_queue/1,
+         decode_exchange/1,
+         decode_binding/1,
+         parse_uri/1,
+         decode_binding_path_segment/1]).
 -endif.
 
 -type permission_caches() :: {rabbit_amqp_session:permission_cache(),
@@ -395,8 +401,8 @@ handle_http_req(<<"GET">>,
                            {queue, DstQ};
                        _ ->
                            throw(<<"400">>,
-                                 "missing 'dste' or 'dstq' in query: ~tp",
-                                 [QueryMap])
+                                 "missing 'dste' or 'dstq' in query: ~tP",
+                                 [QueryMap, 10])
                    end,
     SrcXName = exchange_resource(Vhost, SrcXNameBin),
     DstName = rabbit_misc:r(Vhost, DstKind, DstNameBin),
@@ -432,7 +438,7 @@ decode_queue({map, KVList}) ->
              ({{utf8, <<"arguments">>}, Args}, Acc) ->
                   Acc#{arguments => args_amqp_to_amqpl(Args)};
              (Prop, _Acc) ->
-                  throw(<<"400">>, "bad queue property ~tp", [Prop])
+                  throw(<<"400">>, "bad queue property ~tP", [Prop, 10])
           end, #{}, KVList),
     Defaults = #{durable => true,
                  exclusive => false,
@@ -504,7 +510,7 @@ decode_exchange({map, KVList}) ->
              ({{utf8, <<"arguments">>}, Args}, Acc) ->
                   Acc#{arguments => args_amqp_to_amqpl(Args)};
              (Prop, _Acc) ->
-                  throw(<<"400">>, "bad exchange property ~tp", [Prop])
+                  throw(<<"400">>, "bad exchange property ~tP", [Prop, 10])
           end, #{}, KVList),
     Defaults = #{durable => true,
                  auto_delete => false,
@@ -526,7 +532,7 @@ decode_binding({map, KVList}) ->
          ({{utf8, <<"arguments">>}, Args}, Acc) ->
               Acc#{arguments => args_amqp_to_amqpl(Args)};
          (Field, _Acc) ->
-              throw(<<"400">>, "bad binding field ~tp", [Field])
+              throw(<<"400">>, "bad binding field ~tP", [Field, 10])
       end, #{}, KVList).
 
 encode_bindings(Bindings) ->
@@ -556,13 +562,19 @@ encode_bindings(Bindings) ->
 
 args_amqp_to_amqpl({map, KVList}) ->
     lists:map(fun({{T, Key}, TypeVal})
-                    when T =:= utf8 orelse
-                         T =:= symbol ->
-                      mc_amqpl:to_091(Key, TypeVal);
+                    when (T =:= utf8 orelse T =:= symbol) ->
+                      case mc_amqpl:is_representable(Key, TypeVal) of
+                          true ->
+                              mc_amqpl:to_091(Key, TypeVal);
+                          false ->
+                              throw(<<"400">>,
+                                    "unsupported argument name or value ~tP",
+                                    [{{T, Key}, TypeVal}, 10])
+                      end;
                  (Arg) ->
                       throw(<<"400">>,
-                            "unsupported argument ~tp",
-                            [Arg])
+                            "unsupported argument ~tP",
+                            [Arg, 10])
               end, KVList).
 
 args_amqpl_to_amqp(Args) ->
@@ -589,8 +601,8 @@ parse_uri(Uri) ->
                                        maps:from_list(QueryList);
                                    {error, Atom, Term} ->
                                        throw(<<"400">>,
-                                             "failed to dissect query '~ts': ~s ~tp",
-                                             [Query, Atom, Term])
+                                             "failed to dissect query '~ts': ~s ~tP",
+                                             [truncate_for_error(Query), Atom, Term, 10])
                                end;
                            error ->
                                #{}
@@ -598,8 +610,8 @@ parse_uri(Uri) ->
             {Segments, QueryMap};
         {error, Atom, Term} ->
             throw(<<"400">>,
-                  "failed to normalize URI '~ts': ~s ~tp",
-                  [Uri, Atom, Term])
+                  "failed to normalize URI '~ts': ~s ~tP",
+                  [truncate_for_error(Uri), Atom, Term, 10])
     end.
 
 compose_binding_uri(Src, DstKind, Dst, Key, Args) ->
@@ -636,7 +648,8 @@ decode_binding_path_segment(Segment) ->
             DstKind = destination_char_to_kind(DstKindChar),
             {Src, DstKind, Dst, Key, ArgsHash};
         nomatch ->
-            throw(<<"400">>, "bad binding path segment '~s'", [Segment])
+            throw(<<"400">>, "bad binding path segment '~s'",
+                  [truncate_for_error(Segment)])
     end.
 
 destination_kind_to_char(exchange) -> $e;
@@ -775,3 +788,8 @@ throw(StatusCode, Format, Data) ->
     Reason0 = lists:flatten(io_lib:format(Format, Data)),
     Reason = unicode:characters_to_binary(Reason0),
     throw({?MODULE, StatusCode, Reason}).
+
+truncate_for_error(Bin) when byte_size(Bin) > 200 ->
+    <<(binary:part(Bin, 0, 200))/binary, "...">>;
+truncate_for_error(Bin) ->
+    Bin.
