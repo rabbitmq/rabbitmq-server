@@ -18,7 +18,8 @@ groups() ->
     [
      {tests, [parallel], [
                           coerce_vhost,
-                          mqtt_amqp_topic_translation
+                          mqtt_amqp_topic_translation,
+                          multi_level_wildcard_expansions
                          ]
      }
     ].
@@ -57,3 +58,16 @@ mqtt_amqp_topic_translation(_) ->
     ?assertEqual(T2_As_Mqtt, rabbit_mqtt_util:amqp_to_mqtt(T2_As_Amqp)),
 
     ok = application:unset_env(rabbitmq_mqtt, sparkplug).
+
+multi_level_wildcard_expansions(_) ->
+    ?assertEqual(none, rabbit_mqtt_util:multi_level_wildcard_expansions(<<"allowed.x">>)),
+    ?assertEqual(none, rabbit_mqtt_util:multi_level_wildcard_expansions(<<"allowed.*">>)),
+    ?assertEqual(none, rabbit_mqtt_util:multi_level_wildcard_expansions(<<"allowed.a#">>)),
+    ?assertEqual({<<"x">>, <<"x.x.x.x.x.x.x.x">>},
+                 rabbit_mqtt_util:multi_level_wildcard_expansions(<<"#">>)),
+    ?assertEqual({<<"allowed.x">>, <<"allowed.x.x.x.x.x.x.x.x">>},
+                 rabbit_mqtt_util:multi_level_wildcard_expansions(<<"allowed.#">>)),
+    ?assertEqual({<<"allowed.x.y">>, <<"allowed.x.x.x.x.x.x.x.x.y">>},
+                 rabbit_mqtt_util:multi_level_wildcard_expansions(<<"allowed.#.y">>)),
+    ?assertEqual({<<"a.x.b.*.x">>, <<"a.x.x.x.x.x.x.x.x.b.*.x.x.x.x.x.x.x.x">>},
+                 rabbit_mqtt_util:multi_level_wildcard_expansions(<<"a.#.b.*.#">>)).

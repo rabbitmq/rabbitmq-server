@@ -107,6 +107,7 @@ sub_groups() ->
        session_resume_revokes_qos0_subscription_on_topic_permission_change,
        session_resume_by_different_user_does_not_inherit_subscription,
        session_resume_rejects_connect_when_any_subscription_loses_topic_access,
+       session_resume_checks_multi_level_wildcard_subscription,
        will_queue_create_permission_queue_read,
        will_queue_create_permission_exchange_write,
        will_queue_publish_permission_exchange_write,
@@ -116,6 +117,7 @@ sub_groups() ->
        publish_permission,
        publish_permission_will_message,
        topic_read_permission,
+       topic_read_permission_multi_level_wildcard,
        topic_write_permission,
        topic_write_permission_variable_expansion,
        topic_write_permission_client_id_regex_not_injected,
@@ -524,7 +526,9 @@ end_per_testcase(T, Config)
   when T == session_resume_revokes_subscription_on_topic_permission_change;
        T == session_resume_revokes_qos0_subscription_on_topic_permission_change;
        T == session_resume_by_different_user_does_not_inherit_subscription;
-       T == session_resume_rejects_connect_when_any_subscription_loses_topic_access ->
+       T == session_resume_rejects_connect_when_any_subscription_loses_topic_access;
+       T == session_resume_checks_multi_level_wildcard_subscription;
+       T == topic_read_permission_multi_level_wildcard ->
     %% Best-effort: a failed assertion above skips the test's own cleanup.
     catch set_topic_permissions(".*", ".*", Config),
     catch rabbit_ct_broker_helpers:rabbitmqctl(
@@ -992,6 +996,36 @@ session_resume_rejects_connect_when_any_subscription_loses_topic_access(Config) 
     {ok, _} = emqtt:connect(C3),
     ok = emqtt:disconnect(C3).
 
+session_resume_checks_multi_level_wildcard_subscription(Config) ->
+    User = ?config(mqtt_user, Config),
+    Vhost = ?config(mqtt_vhost, Config),
+    set_full_permissions(Config, User, Vhost),
+    set_topic_permissions(".*", ".*", Config),
+    Opts = [{host, "localhost"},
+            {port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)},
+            {proto_ver, ?config(mqtt_version, Config)},
+            {clientid, User},
+            {username, User},
+            {password, ?config(mqtt_password, Config)}],
+    {ok, C1} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
+    {ok, _} = emqtt:connect(C1),
+    ?assertMatch({ok, _Properties, [1]},
+                 emqtt:subscribe(C1, <<"allowed/#">>, qos1)),
+    ok = emqtt:disconnect(C1),
+
+    set_topic_permissions(".*", "^allowed\\.[^.]+$", Config),
+
+    {ok, C2} = emqtt:start_link(non_clean_sess_opts() ++ Opts),
+    unlink(C2),
+    process_flag(trap_exit, true),
+    ExpectedError = expected_topic_access_error(Config),
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C2)),
+
+    set_topic_permissions(".*", ".*", Config),
+    {ok, C3} = emqtt:start_link([{clean_start, true} | Opts]),
+    {ok, _} = emqtt:connect(C3),
+    ok = emqtt:disconnect(C3).
+
 expected_topic_access_error(Config) ->
     case ?config(mqtt_version, Config) of
         v4 -> unauthorized_client;
@@ -1288,6 +1322,39 @@ topic_read_permission(Config) ->
                fun () -> stop end}
              ]),
     ok.
+
+topic_read_permission_multi_level_wildcard(Config) ->
+    set_permissions(".*", ".*", ".*", Config),
+    Cases = [{"^allowed\\.[^.]+$", <<"allowed/#">>, refused},
+             {"^allowed\\.[^.]+$", <<"allowed/+">>, granted},
+             {"^allowed\\.[^.]+$", <<"allowed/x">>, granted},
+             {"^allowed\\.[^.]+$", <<"allowed/x/y">>, refused},
+             {"^allowed\\.[^.]+\\.[^.]+$", <<"allowed/#/x">>, refused},
+             {"^a\\.[^.]+\\.[^.]+$", <<"a/b/#">>, refused},
+             {"^allowed(\\.[^.]+){1,4}$", <<"allowed/#">>, refused},
+             {"^allowed(\\.[^.]+){1,4}$", <<"allowed/+/+">>, granted},
+             {"^sensors\\.#$", <<"sensors/#">>, granted},
+             {"^allowed\\..*", <<"allowed/#">>, granted},
+             {".*", <<"allowed/#">>, granted},
+             {"^{username}\\.[^.]+$", <<"mqtt-user/#">>, refused},
+             {"^{username}\\..*", <<"mqtt-user/#">>, granted}],
+    process_flag(trap_exit, true),
+    lists:foreach(
+      fun({ReadRegex, Filter, Expected}) ->
+              set_topic_permissions(".*", ReadRegex, Config),
+              C = open_mqtt_connection(Config),
+              case Expected of
+                  granted ->
+                      ?assertMatch({ok, _, [0]}, emqtt:subscribe(C, Filter),
+                                   {ReadRegex, Filter}),
+                      ok = emqtt:disconnect(C);
+                  refused ->
+                      ReasonCode = suback_error_code(?RC_NOT_AUTHORIZED, Config),
+                      ?assertMatch({ok, _, [ReasonCode]}, emqtt:subscribe(C, Filter),
+                                   {ReadRegex, Filter}),
+                      ok = assert_connection_closed(C)
+              end
+      end, Cases).
 
 topic_write_permission(Config) ->
     set_permissions(".*", ".*", ".*", Config),

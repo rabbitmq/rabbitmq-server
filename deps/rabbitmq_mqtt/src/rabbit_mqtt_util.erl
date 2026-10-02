@@ -21,6 +21,7 @@
          init_sparkplug/0,
          mqtt_to_amqp/1,
          amqp_to_mqtt/1,
+         multi_level_wildcard_expansions/1,
          truncate_binary/2
         ]).
 
@@ -101,6 +102,33 @@ amqp_to_mqtt(Topic) ->
             end
     end.
 
+%% The code below may seem completely ridiculous. Here's what's going on.
+%%
+%% A topic permission regex treats `#` a plain character. To find out whether
+%% it allows any number of levels, `#` is replaced with one level and with
+%% eight (the maximum considered to be practical).
+%%
+%% A regex that allows one level but not eight has a depth limit, and a `#`
+%% subscription would reach past it, so that subscription is refused.
+-spec multi_level_wildcard_expansions(topic()) ->
+    none | {OneLevel :: topic(), EightLevels :: topic()}.
+multi_level_wildcard_expansions(AmqpKey) ->
+    Levels = binary:split(AmqpKey, <<".">>, [global]),
+    case lists:member(<<"#">>, Levels) of
+        false ->
+            none;
+        true ->
+            {expand_multi_level_wildcards(Levels, <<"x">>),
+             expand_multi_level_wildcards(Levels, <<"x.x.x.x.x.x.x.x">>)}
+    end.
+
+expand_multi_level_wildcards(Levels, Expansion) ->
+    iolist_to_binary(
+      lists:join(<<".">>, [case L of
+                               <<"#">> -> Expansion;
+                               _ -> L
+                           end || L <- Levels])).
+
 cached(CacheName, Fun, Arg) ->
     Cache = case get(CacheName) of
                 undefined ->
@@ -179,5 +207,3 @@ truncate_binary(Bin, Size)
 truncate_binary(Bin, Size)
   when is_binary(Bin) ->
     binary:part(Bin, 0, Size).
-
-

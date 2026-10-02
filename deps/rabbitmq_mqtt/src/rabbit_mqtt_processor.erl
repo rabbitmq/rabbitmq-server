@@ -2405,15 +2405,40 @@ check_topic_access(
                                           <<"client_id">> => ClientId}},
             try rabbit_access_control:check_topic_access(User, Resource, Access, Context) of
                 ok ->
-                    CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
-                    put(topic_permission_cache, [Key | CacheTail]),
-                    ok
+                    case Access =/= read orelse
+                         is_multi_level_wildcard_permitted(User, Resource, Context) of
+                        true ->
+                            CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
+                            put(topic_permission_cache, [Key | CacheTail]),
+                            ok;
+                        false ->
+                            ?LOG_ERROR("MQTT topic access refused: read access to topic "
+                                       "filter '~ts' refused for user '~ts'",
+                                       [Topic, Username]),
+                            {error, access_refused}
+                    end
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
                     ?LOG_ERROR("MQTT topic access refused: ~ts", [Msg]),
                     {error, access_refused}
             end
+    end.
+
+is_multi_level_wildcard_permitted(User, Resource, #{routing_key := RoutingKey} = Context) ->
+    case rabbit_mqtt_util:multi_level_wildcard_expansions(RoutingKey) of
+        none ->
+            true;
+        {OneLevel, EightLevels} ->
+            not is_topic_read_permitted(User, Resource, Context#{routing_key := OneLevel}) orelse
+            is_topic_read_permitted(User, Resource, Context#{routing_key := EightLevels})
+    end.
+
+is_topic_read_permitted(User, Resource, Context) ->
+    try rabbit_access_control:check_topic_access(User, Resource, read, Context) of
+        ok -> true
+    catch
+        exit:#amqp_error{name = access_refused} -> false
     end.
 
 -spec drop_qos0_message(state()) ->
