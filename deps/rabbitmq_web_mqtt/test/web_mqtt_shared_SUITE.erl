@@ -55,6 +55,7 @@ will_with_disconnect(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 will_without_disconnect(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 decode_basic_properties(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 quorum_queue_rejects(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+clean_session_with_classic_queues_disabled(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 events(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 internal_event_handler(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 non_clean_sess_reconnect_qos1(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).

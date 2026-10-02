@@ -97,6 +97,7 @@ cluster_size_1_tests() ->
      ,will_without_disconnect
      ,decode_basic_properties
      ,quorum_queue_rejects
+     ,clean_session_with_classic_queues_disabled
      ,events
      ,internal_event_handler
      ,non_clean_sess_reconnect_qos1
@@ -367,6 +368,25 @@ decode_basic_properties(Config) ->
     ok = emqtt:disconnect(C2),
     unset_durable_queue_type(Config),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+clean_session_with_classic_queues_disabled(Config) ->
+    ok = rpc(Config, application, set_env, [rabbit, classic_queues_enabled, false]),
+    try
+        Topic = atom_to_binary(?FUNCTION_NAME),
+        Qos1 = connect(<<Topic/binary, "-qos1">>, Config),
+        unlink(Qos1),
+        %% Web MQTT can close the connection before the queued SUBACK is sent.
+        try ?assertMatch({ok, _, [128]}, emqtt:subscribe(Qos1, Topic, qos1))
+        catch exit:{{shutdown, {websocket_down, _}}, _} -> ok
+        end,
+        Qos0 = connect(<<Topic/binary, "-qos0">>, Config),
+        {ok, _, [0]} = emqtt:subscribe(Qos0, Topic, qos0),
+        ok = emqtt:publish(Qos0, Topic, <<"m">>),
+        ok = expect_publishes(Qos0, Topic, [<<"m">>]),
+        ok = emqtt:disconnect(Qos0)
+    after
+        ok = rpc(Config, application, unset_env, [rabbit, classic_queues_enabled])
+    end.
 
 quorum_queue_rejects(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),

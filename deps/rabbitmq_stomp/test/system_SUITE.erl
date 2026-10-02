@@ -80,6 +80,12 @@ groups() ->
         blank_destination_in_send,
         stream_filtering,
         subscribe_stream_queue_type_disabled,
+        subscribe_stream_queue_type_disabled_utf8_name,
+        error_frame_for_refused_binding,
+        subscribe_existing_stream_queue_type_disabled,
+        send_existing_classic_queue_classic_disabled,
+        temp_queue_refused_when_classic_disabled,
+        transient_subscription_refused_when_classic_disabled,
         transaction_limit,
         global_counters
     ],
@@ -94,7 +100,8 @@ groups() ->
                 durable_subscription_uses_vhost_default_queue_type,
                 redeclare_with_same_arguments_succeeds,
                 redeclare_after_vhost_default_queue_type_change_is_rejected,
-                redeclare_queue_without_stored_queue_type],
+                redeclare_queue_without_stored_queue_type,
+                temp_queue_is_classic_with_quorum_default],
 
     [{version_to_group_name(V), [sequence], Tests}
      || V <- ?SUPPORTED_VERSIONS] ++
@@ -1542,6 +1549,164 @@ subscribe_stream_queue_type_disabled(Config) ->
                [rabbit, stream_queues_enabled, Enabled])
     end.
 
+subscribe_stream_queue_type_disabled_utf8_name(Config) ->
+    Client = ?config(stomp_client, Config),
+    Queue = <<"日本"/utf8>>,
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, stream_queues_enabled, false]),
+    try
+        rabbit_stomp_client:send(
+          Client, 'SUBSCRIBE',
+          [{<<"destination">>, <<"/queue/", Queue/binary>>},
+           {<<"id">>, <<"0">>},
+           {<<"x-queue-type">>, <<"stream">>}]),
+        {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+        <<"internal_error">> = maps:get(<<"message">>, Hdrs),
+        ?assertNotEqual(nomatch, binary:match(iolist_to_binary(lists:reverse(Body)), Queue))
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, unset_env,
+               [rabbit, stream_queues_enabled])
+    end.
+
+error_frame_for_refused_binding(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Exchange = atom_to_binary(?FUNCTION_NAME),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Channel, #'exchange.declare'{exchange = Exchange,
+                                                       type = <<"x-local-random">>}),
+    try
+        rabbit_stomp_client:send(
+          Client, 'SUBSCRIBE',
+          [{<<"destination">>, <<"/exchange/", Exchange/binary, "/key">>},
+           {<<"id">>, <<"0">>}]),
+        {ok, _, _Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+        ?assertNotEqual(nomatch,
+                        binary:match(iolist_to_binary(lists:reverse(Body)),
+                                     <<"Non empty binding 'key' key not permitted">>))
+    after
+        #'exchange.delete_ok'{} =
+            amqp_channel:call(Channel, #'exchange.delete'{exchange = Exchange})
+    end.
+
+subscribe_existing_stream_queue_type_disabled(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Queue = atom_to_binary(?FUNCTION_NAME),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel,
+                          #'queue.declare'{queue = Queue,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, stream_queues_enabled, false]),
+    try
+        rabbit_stomp_client:send(
+          Client, 'SUBSCRIBE',
+          [{<<"destination">>, <<"/queue/", Queue/binary>>},
+           {<<"id">>, <<"0">>},
+           {<<"ack">>, <<"client">>},
+           {<<"prefetch-count">>, <<"10">>},
+           {<<"x-queue-type">>, <<"stream">>},
+           {<<"receipt">>, <<"r1">>}]),
+        {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'RECEIPT'),
+        <<"r1">> = maps:get(<<"receipt-id">>, Hdrs)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, unset_env,
+               [rabbit, stream_queues_enabled]),
+        #'queue.delete_ok'{} =
+            amqp_channel:call(Channel, #'queue.delete'{queue = Queue})
+    end.
+
+send_existing_classic_queue_classic_disabled(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Queue = atom_to_binary(?FUNCTION_NAME),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel,
+                          #'queue.declare'{queue = Queue,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]}),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, classic_queues_enabled, false]),
+    try
+        rabbit_stomp_client:send(
+          Client, 'SEND',
+          [{<<"destination">>, <<"/queue/", Queue/binary>>},
+           {<<"receipt">>, <<"r1">>}],
+          ["hello"]),
+        {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'RECEIPT'),
+        <<"r1">> = maps:get(<<"receipt-id">>, Hdrs),
+        ?awaitMatch(#'basic.get_ok'{},
+                    element(1, amqp_channel:call(Channel,
+                                                 #'basic.get'{queue = Queue,
+                                                              no_ack = true})),
+                    10000)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, unset_env,
+               [rabbit, classic_queues_enabled]),
+        #'queue.delete_ok'{} =
+            amqp_channel:call(Channel, #'queue.delete'{queue = Queue})
+    end.
+
+temp_queue_refused_when_classic_disabled(Config) ->
+    Client = ?config(stomp_client, Config),
+    QueuesBefore = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, count, []),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, classic_queues_enabled, false]),
+    try
+        rabbit_stomp_client:send(
+          Client, 'SEND',
+          [{<<"destination">>, <<"/topic/temp_queue_refused_when_classic_disabled">>},
+           {<<"reply-to">>, <<"/temp-queue/r">>}],
+          ["hello"]),
+        {ok, _Client1, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+        ?assertEqual(<<"internal_error">>, maps:get(<<"message">>, Hdrs)),
+        ?assertNotEqual(nomatch,
+                        binary:match(iolist_to_binary(lists:reverse(Body)),
+                                     <<"queue type 'classic' is not enabled">>)),
+        ?assertEqual(QueuesBefore,
+                     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, count, []))
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, unset_env,
+               [rabbit, classic_queues_enabled])
+    end.
+
+transient_subscription_refused_when_classic_disabled(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    QueuesBefore = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, count, []),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, classic_queues_enabled, false]),
+    try
+        [begin
+             {ok, Client} = rabbit_stomp_client:connect(?config(version, Config), Port),
+             rabbit_stomp_client:send(
+               Client, 'SUBSCRIBE',
+               [{<<"destination">>, Destination}, {<<"id">>, <<"0">>}]),
+             {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+             ?assertEqual({Destination, <<"internal_error">>},
+                          {Destination, maps:get(<<"message">>, Hdrs)}),
+             ?assertNotEqual(nomatch,
+                             binary:match(iolist_to_binary(lists:reverse(Body)),
+                                          <<"queue type 'classic' is not enabled">>))
+         end || Destination <- [<<"/topic/transient">>, <<"/exchange/amq.fanout">>]],
+        ?assertEqual(QueuesBefore,
+                     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, count, []))
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, unset_env,
+               [rabbit, classic_queues_enabled])
+    end.
+
 stomp_receive_messages(Client, Version) ->
     stomp_receive_messages(Client, [], Version).
 
@@ -1590,6 +1755,21 @@ x_queue_type_header_overrides_vhost_default_queue_type(Config) ->
               {ok, _, _, _} = dqt_subscribe(
                                 Client, [{<<"destination">>, <<"/queue/dqt-q">>},
                                          {<<"x-queue-type">>, <<"classic">>}]),
+              ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
+      end).
+
+temp_queue_is_classic_with_quorum_default(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"quorum">>,
+      fun(Client, VHost) ->
+              rabbit_stomp_client:send(
+                Client, 'SEND',
+                [{<<"destination">>, <<"/topic/dqt-reply">>},
+                 {<<"reply-to">>, <<"/temp-queue/r">>}],
+                ["request"]),
+              rabbit_stomp_client:send(
+                Client, 'BEGIN', [{<<"transaction">>, <<"t">>}, {<<"receipt">>, <<"r">>}]),
+              stomp_receive_receipt(Client, <<"r">>),
               ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
       end).
 
