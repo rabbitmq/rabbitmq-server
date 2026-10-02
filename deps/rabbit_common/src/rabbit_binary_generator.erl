@@ -17,6 +17,7 @@
 -export([check_empty_frame_size/0]).
 -export([ensure_content_encoded/1, clear_encoded_content/1]).
 -export([map_exception/2]).
+-export([create_frame/3]).
 
 %%----------------------------------------------------------------------------
 
@@ -30,6 +31,7 @@
          non_neg_integer()) ->
             [frame()].
 -spec build_heartbeat_frame() -> frame().
+-spec create_frame(1..8, rabbit_types:channel_number(), iodata()) -> iolist().
 -spec generate_table(rabbit_framing:amqp_table()) -> binary().
 -spec check_empty_frame_size() -> 'ok'.
 -spec ensure_content_encoded
