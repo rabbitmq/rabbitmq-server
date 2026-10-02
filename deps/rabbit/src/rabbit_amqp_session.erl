@@ -3883,9 +3883,11 @@ declare_queue(QNameBin,
             link_error(?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
                        Reason,
                        ReasonArgs);
+        {protocol_error, _ErrorType, Reason, ReasonArgs} ->
+            link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, Reason, ReasonArgs);
         Other ->
             link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                       "Failed to declare ~s: ~p",
+                       "Failed to declare ~ts: ~tp",
                        [rabbit_misc:rs(QName), Other])
     end,
     {ok, PermCache}.
