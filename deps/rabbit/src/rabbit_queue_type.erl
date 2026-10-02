@@ -387,12 +387,18 @@ is_compatible(Type, Durable, Exclusive, AutoDelete) ->
     {'error', Type :: atom(), Reason :: string(), Args :: term()} |
     {'error', Err :: term() }.
 declare(Q0, Node) ->
-    maybe
-        ok ?= check_queue_type_enabled(Q0),
-        Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
-        Mod = amqqueue:get_type(Q),
-        ok ?= check_queue_limits(Q),
-        Mod:declare(Q, Node)
+    Mod = amqqueue:get_type(Q0),
+    case is_enabled(Mod) of
+        true ->
+            Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
+            maybe
+                ok ?= check_queue_limits(Q),
+                Mod:declare(Q, Node)
+            end;
+        false ->
+            %% Not `Mod:declare/2`, which would recreate a queue deleted
+            %% after the existence check.
+            existing_or_disabled(Q0, Mod)
     end.
 
 -spec delete(amqqueue:amqqueue(), boolean(),
@@ -990,19 +996,21 @@ check_queue_limits(Q) ->
         ok ?= check_cluster_queue_limit(Q)
     end.
 
--spec check_queue_type_enabled(amqqueue:amqqueue()) ->
-          ok |
+-spec existing_or_disabled(amqqueue:amqqueue(), queue_type()) ->
+          {existing, amqqueue:amqqueue()} |
           {protocol_error, internal_error, Reason :: string(), Args :: term()}.
-check_queue_type_enabled(Q) ->
-    Mod = amqqueue:get_type(Q),
-    case is_enabled(Mod) of
-        true ->
-            ok;
-        false ->
+existing_or_disabled(Q, Mod) ->
+    QName = amqqueue:get_name(Q),
+    %% For a client-supplied reply-to name, `lookup/1` builds a record without
+    %% asking the owner, so check `exists/1` first.
+    case rabbit_amqqueue:exists(QName) andalso rabbit_amqqueue:lookup(QName) of
+        {ok, ExistingQ} ->
+            {existing, ExistingQ};
+        _ ->
             {protocol_error, internal_error,
              "cannot declare ~ts: queue type '~ts' is not enabled "
              "on node '~ts'",
-             [rabbit_misc:rs(amqqueue:get_name(Q)), Mod, node()]}
+             [rabbit_misc:rs(QName), short_alias_of(Mod), node()]}
     end.
 
 check_vhost_queue_limit(Q) ->
