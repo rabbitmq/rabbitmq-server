@@ -2382,7 +2382,19 @@ check_resource_access(User, Resource, Perm, Context) ->
             end
     end.
 
-check_topic_access(
+check_topic_access(Topic, Access, State) ->
+    case Access =:= read andalso
+         binary:match(Topic, <<"#">>) =/= nomatch andalso
+         not rabbit_mqtt_util:env(allow_multi_segment_subscription_wildcard) of
+        true ->
+            ?LOG_ERROR("MQTT topic access refused: multi-segment wildcard in "
+                       "topic filter '~ts' is not allowed", [Topic]),
+            {error, access_refused};
+        false ->
+            check_topic_permission(Topic, Access, State)
+    end.
+
+check_topic_permission(
   Topic, Access,
   #state{auth_state = #auth_state{user = User = #user{username = Username}},
          cfg = #cfg{client_id = ClientId,

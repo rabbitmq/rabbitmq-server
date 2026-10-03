@@ -6,6 +6,7 @@
    mqtt.max_session_expiry_interval_seconds = 86400
    mqtt.prefetch         = 10
    mqtt.sparkplug      = true
+   mqtt.allow_multi_segment_subscription_wildcard = false
    mqtt.listeners.ssl    = none
 ## Default MQTT with TLS port is 8883
 #  mqtt.listeners.ssl.default = 8883
@@ -24,6 +25,7 @@
         {max_session_expiry_interval_seconds,86400},
         {prefetch,10},
         {sparkplug,true},
+        {allow_multi_segment_subscription_wildcard,false},
         {ssl_listeners,[]},
         {tcp_listeners,[1883]},
         {tcp_listen_options,[{backlog,128},{nodelay,true}]},
