@@ -103,7 +103,7 @@
 -type msg_id() :: undefined | non_neg_integer() | {Priority :: non_neg_integer(), undefined | non_neg_integer()}.
 -type ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}.
--type absent_reason() :: 'nodedown' | 'crashed' | stopped | timeout.
+-type absent_reason() :: 'nodedown' | 'crashed' | 'stopped' | 'timeout' | 'blocked'.
 -type queue_not_found() :: not_found.
 -type queue_absent() :: {'absent', amqqueue:amqqueue(), absent_reason()}.
 -type not_found_or_absent() :: queue_not_found() | queue_absent().
@@ -606,6 +606,10 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
         {ok, Q} when ?amqqueue_state_is(Q, stopped) ->
             %% The queue was stopped
             E({absent, Q, stopped});
+        %% The queue is being deleted with an if-unused/if-empty precondition
+        %% and is temporarily blocked to fail operations against it.
+        {ok, Q} when ?amqqueue_state_is(Q, blocked) ->
+            E({absent, Q, blocked});
         %% The queue process has crashed with unknown error
         {ok, Q} when ?amqqueue_state_is(Q, crashed) ->
             E({absent, Q, crashed});
@@ -702,6 +706,11 @@ priv_absent(QueueName, _QPid, _IsDurable, crashed) ->
     rabbit_misc:protocol_error(
       not_found,
       "~ts has crashed and failed to restart", [rabbit_misc:rs(QueueName)]);
+
+priv_absent(QueueName, _QPid, _IsDurable, blocked) ->
+    rabbit_misc:protocol_error(
+      resource_locked,
+      "~ts is currently being deleted", [rabbit_misc:rs(QueueName)]);
 
 priv_absent(QueueName, _QPid, _IsDurable, timeout) ->
     rabbit_misc:protocol_error(
