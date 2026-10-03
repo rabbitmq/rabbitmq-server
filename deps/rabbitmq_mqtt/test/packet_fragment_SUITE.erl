@@ -23,7 +23,10 @@ groups() ->
        fragmented_connect,
        fragmented_publish,
        fragment_carrying_next_packet,
-       fragmentation_is_transparent
+       fragmentation_is_transparent,
+       maximum_subscription_identifier_is_accepted,
+       oversized_subscription_identifier_is_rejected,
+       five_byte_subscription_identifier_is_rejected
       ]}
     ].
 
@@ -87,6 +90,21 @@ fragmentation_is_transparent(_Config) ->
                       {Name, FragSize})
      end || {Name, Stream} <- Streams, FragSize <- FragSizes],
     ok.
+
+maximum_subscription_identifier_is_accepted(_Config) ->
+    {ok, Packet, <<>>, _} = rabbit_mqtt_packet:parse(subscribe_packet(<<16#FF, 16#FF, 16#FF, 16#7F>>), 5),
+    #mqtt_packet{variable = #mqtt_packet_subscribe{props = Props}} = Packet,
+    ?assertEqual(?VARIABLE_BYTE_INTEGER_MAX, maps:get('Subscription-Identifier', Props)).
+
+%% 16#10000000
+oversized_subscription_identifier_is_rejected(_Config) ->
+    ?assertThrow(malformed_variable_byte_integer,
+                 rabbit_mqtt_packet:parse(subscribe_packet(<<16#80, 16#80, 16#80, 16#80, 16#01>>), 5)).
+
+%% 2^35 - 1, the largest value a 5-byte encoding can carry
+five_byte_subscription_identifier_is_rejected(_Config) ->
+    ?assertThrow(malformed_variable_byte_integer,
+                 rabbit_mqtt_packet:parse(subscribe_packet(<<16#FF, 16#FF, 16#FF, 16#FF, 16#7F>>), 5)).
 
 %%%%%%%%%%%%%%%
 %%% Helpers %%%
@@ -160,6 +178,11 @@ publish_packet(PayloadSize) ->
     Body = <<(byte_size(Topic)):16, Topic/binary,
              (binary:copy(<<"x">>, PayloadSize))/binary>>,
     <<?PUBLISH:4, 0:4, (remaining_length(byte_size(Body)))/binary, Body/binary>>.
+
+subscribe_packet(SubscriptionId) ->
+    Props = <<16#0B, SubscriptionId/binary>>,
+    Body = <<1:16, (byte_size(Props)), Props/binary, 1:16, "a", 0>>,
+    <<?SUBSCRIBE:4, 2:4, (byte_size(Body)), Body/binary>>.
 
 pingreq_packet() ->
     <<?PINGREQ:4, 0:4, 0>>.
