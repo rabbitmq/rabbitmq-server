@@ -194,9 +194,9 @@ function load_init_data_and_ui(user) {
 
   var res = invokeLoginProcessors({user: user, settings: window.app_settings});
   if (res.ok === false) {
-    clear_auth();
     var errMsg = res.error || 'Failed to establish session with server';
     invokeInitFailedProcessors(errMsg);
+    clear_auth();
     if (oauth.enabled) {
       renderWarningMessageInLoginStatus(oauth, errMsg);
     } else {
@@ -209,8 +209,8 @@ function load_init_data_and_ui(user) {
     load_ui(user);
   } catch (err) {
     console.error("Application initialization failed:", err);
-    clear_auth();
     invokeInitFailedProcessors(err);
+    clear_auth();
     replace_content('login-status', '<p>Application initialization failed</p>');
     return false;
   }
@@ -1667,7 +1667,7 @@ function sync_req(type, params0, path_template, options) {
     }
 }
 function initiate_logout(oauth, error = "") {
-    invokeLogoutProcessors();
+    invokeLogoutProcessors({involuntary: true});
     renderWarningMessageInLoginStatus(oauth, error);
 }
 /**
