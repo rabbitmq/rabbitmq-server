@@ -1702,7 +1702,7 @@ send_error_frame(Message, ExtraHeaders, Detail, State) ->
                     <<"content-type">> => <<"text/plain">>,
                     <<"version">> => iolist_to_binary(string:join(?SUPPORTED_VERSIONS, ","))},
     Headers = maps:merge(BaseHeaders, maps:from_list(ExtraHeaders)),
-    send_frame('ERROR', Headers, iolist_to_binary(Detail), State).
+    send_frame('ERROR', Headers, unicode:characters_to_binary(Detail), State).
 
 send_error(Message, Detail, State) ->
     send_error_frame(Message, [], Detail, State).
@@ -1741,11 +1741,17 @@ create_queue(_State = #state{authz_ctx = AuthzCtx,
         false ->
             rabbit_core_metrics:queue_declared(QName),
 
-            case rabbit_amqqueue:declare(QName, _Durable = false, _AutoDelete = true,
-                                         [], self(), Username) of
+            Durable = false,
+            AutoDelete = true,
+            Args = rabbit_amqqueue:augment_declare_args(
+                     VHost, Durable, _Exclusive = true, AutoDelete, []),
+            case rabbit_amqqueue:declare(QName, Durable, AutoDelete,
+                                         Args, self(), Username) of
                 {new, Q} when ?is_amqqueue(Q) ->
                     rabbit_core_metrics:queue_created(QName),
                     {ok, Q};
+                {protocol_error, ErrorType, Reason, ReasonArgs} ->
+                    rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs);
                 Other ->
                     log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
                     {error, queue_declare}
@@ -2150,6 +2156,8 @@ create_queue(Amqqueue, _State = #state{authz_ctx = AuthzCtx,
                 {existing, Q} when ?is_amqqueue(Q) ->
                     rabbit_core_metrics:queue_created(QName),
                     {ok, Q};
+                {protocol_error, ErrorType, Reason, ReasonArgs} ->
+                    rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs);
                 Other ->
                     log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
                     {error, queue_declare}
