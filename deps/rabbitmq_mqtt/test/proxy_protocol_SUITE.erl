@@ -44,9 +44,11 @@ init_per_suite(Config) ->
         {start_rmq_with_plugins_disabled, true}
     ]),
     MqttConfig = mqtt_config(),
+    RabbitConfig = {rabbit, [{proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]}]},
     Config2 = rabbit_ct_helpers:run_setup_steps(
                 Config1,
-                [ fun(Conf) -> merge_app_env(MqttConfig, Conf) end ] ++
+                [ fun(Conf) -> merge_app_env(MqttConfig, Conf) end,
+                  fun(Conf) -> merge_app_env(RabbitConfig, Conf) end ] ++
                     rabbit_ct_broker_helpers:setup_steps() ++
                     rabbit_ct_client_helpers:setup_steps()),
     util:enable_plugin(Config2, rabbitmq_mqtt),

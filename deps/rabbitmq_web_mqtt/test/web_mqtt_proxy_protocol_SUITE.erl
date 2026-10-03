@@ -29,7 +29,9 @@ groups() ->
         proxy_protocol_v1,
         proxy_protocol_v2_local,
         loopback_user_via_non_loopback_proxy_is_rejected,
-        loopback_user_via_local_proxy_is_accepted
+        loopback_user_via_local_proxy_is_accepted,
+        proxy_protocol_v1_untrusted_source_rejected,
+        proxy_protocol_v1_unconfigured_trusted_proxies_is_accepted
     ],
     [{https_tests, [], Tests},
      {http_tests, [], Tests}].
@@ -62,6 +64,9 @@ init_per_group(Group, Config) ->
 
 configure_proxy_protocol(Config) ->
     rabbit_ws_test_util:update_app_env(Config, proxy_protocol, true),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]]),
     Config.
 
 %% Keep guest unrestricted by default so the other tests pass; the
@@ -120,6 +125,55 @@ proxy_protocol_v2_local(Config) ->
       Config, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>),
     {close, _} = rfc6455_client:close(WS),
     ok.
+
+%% The test peer always connects from loopback, which is normally in
+%% proxy_protocol_trusted_proxies; temporarily pointing the allowlist
+%% elsewhere simulates the PROXY header arriving from a peer that isn't a
+%% trusted proxy, which must be rejected outright rather than trusting the
+%% header's claimed source.
+proxy_protocol_v1_untrusted_source_rejected(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, proxy_protocol_trusted_proxies, ["10.0.0.0/8"]]),
+    try
+        PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
+        Protocol = ?config(protocol, Config),
+        WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
+            undefined, ["mqtt"], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        %% rfc6455_client doesn't distinguish response status codes: it
+        %% reports any complete HTTP response header block as `open`, so
+        %% the rejection must be asserted from the response line itself.
+        {ok, [{http_response, Http}]} = rfc6455_client:open(WS),
+        match = re:run(Http, "^HTTP/1\\.1 400 ", [{capture, none}])
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, set_env,
+               [rabbit, proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]])
+    end.
+
+%% Unconfigured proxy_protocol_trusted_proxies must still accept the PROXY
+%% header (with a warning), not reject it, to avoid breaking deployments
+%% upgrading from before this allowlist existed.
+proxy_protocol_v1_unconfigured_trusted_proxies_is_accepted(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, proxy_protocol_trusted_proxies, []]),
+    try
+        PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
+        Protocol = ?config(protocol, Config),
+        WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
+            undefined, ["mqtt"], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        {ok, _} = rfc6455_client:open(WS),
+        rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
+        {binary, _P} = rfc6455_client:recv(WS),
+        await_connection_name_match(
+          Config, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>),
+        {close, _} = rfc6455_client:close(WS)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, application, set_env,
+               [rabbit, proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]])
+    end.
 
 %% A loopback-only user must be evaluated against the PROXY source, not the
 %% immediate peer (the proxy connection itself).
