@@ -71,6 +71,7 @@ groups() ->
                                             delete_member,
                                             delete_member_not_a_member,
                                             delete_member_member_already_deleted,
+                                            long_name_member_management,
                                             node_removal_is_quorum_critical]
                        ++ memory_tests()},
                       {cluster_size_3, [], [
@@ -3942,6 +3943,51 @@ delete_member_member_already_deleted(Config) ->
                           [<<"/">>, QQ, Server2])),
     queue_utils:assert_number_of_replicas(
       Config, Server, <<"/">>, QQ, 1),
+    ok.
+
+%% A combined name (virtual host plus queue name) over 255 bytes does not fit
+%% in an atom, so the Ra cluster name is generated at declaration time rather
+%% than derived from the queue name.
+long_name_member_management(Config) ->
+    Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers,
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = binary:copy(<<"q">>, 255),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 1}])),
+    ?assertMatch({error, {too_long, _}},
+                 rabbit_queue_type_util:qname_to_internal_name(
+                   rabbit_misc:r(<<"/">>, queue, QQ))),
+    queue_utils:assert_number_of_replicas(Config, Server, <<"/">>, QQ, 1),
+
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_amqqueue,
+                                           lookup, [QQ, <<"/">>]),
+    {RaName, _} = amqqueue:get_pid(Q),
+    [Member] = rabbit_queue_type:get_nodes(Q),
+    [NonMember] = Servers -- [Member],
+
+    %% rabbitmq-queues grow
+    ?assertMatch([{_, {ok, 2}}],
+                 rpc:call(Server, rabbit_quorum_queue, grow,
+                          [NonMember, <<"/">>, QQ, all])),
+    queue_utils:assert_number_of_replicas(Config, Server, <<"/">>, QQ, 2),
+    ?awaitMatch(true,
+                rpc:call(Server, rabbit_queue_type_ra, all_members_stable,
+                         [RaName, Servers]),
+                ?DEFAULT_AWAIT),
+
+    %% rabbitmq-diagnostics observer
+    ?awaitMatch({[_ | _], undefined},
+                rpc:call(Server, rabbit_observer_cli_quorum_queues, sheet_body,
+                         [undefined]),
+                ?DEFAULT_AWAIT),
+
+    %% rabbitmq-queues shrink
+    ?assertMatch([{_, {ok, 1}}],
+                 rpc:call(Server, rabbit_queue_type_ra, delete_members,
+                          [<<"/">>, QQ, NonMember, all])),
+    queue_utils:assert_number_of_replicas(Config, Server, <<"/">>, QQ, 1),
     ok.
 
 delete_member_during_node_down(Config) ->
