@@ -276,6 +276,19 @@ module.exports = {
       }
     }
   },
+  getUserSessions: (url, authorization, username) => {
+    log("Getting sessions for user " + username + " ...")
+    const req = new XMLHttpRequest()
+    req.open('GET', url + "/api/sessions/user/" + encodeURIComponent(username), false)
+    req.setRequestHeader("Authorization", authorization)
+    req.send()
+    if (req.status == 200) {
+      return JSON.parse(req.responseText)
+    } else {
+      error("status:" + req.status + " : " + req.responseText)
+      throw new Error(req.responseText)
+    }
+  },
   deleteUserSessions: (url, authorization, username) => {
     return new Promise((resolve, reject) => {
       log("Deleting all sessions for user " + username)

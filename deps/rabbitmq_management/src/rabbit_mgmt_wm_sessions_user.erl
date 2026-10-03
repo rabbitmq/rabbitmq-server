@@ -26,7 +26,7 @@ is_authorized(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Username = cowboy_req:binding(username, ReqData),
-    case parse_pagination_params(ReqData) of
+    case rabbit_mgmt_wm_sessions:parse_pagination_params(ReqData) of
         {ok, Page, PageSize} ->
             Result = rabbit_mgmt_sessions:list_sessions(Page, PageSize, Username),
             rabbit_mgmt_util:reply(Result, ReqData, Context);
@@ -45,24 +45,8 @@ delete_resource(ReqData, Context) ->
                 ok ->
                     {true, ReqData, Context};
                 {error, not_found} ->
-                    {false, ReqData, Context};
+                    rabbit_mgmt_util:not_found(session_not_found, ReqData, Context);
                 {error, forbidden} ->
                     rabbit_web_dispatch_access_control:halt_response(403, forbidden, <<"session_belongs_to_another_user">>, ReqData, Context)
             end
-    end.
-
-%% Internal
-
-parse_pagination_params(ReqData) ->
-    QS = cowboy_req:match_qs([{page, [], <<"1">>}, {page_size, [], <<"100">>}], ReqData),
-    try
-        Page = binary_to_integer(maps:get(page, QS)),
-        PageSize = binary_to_integer(maps:get(page_size, QS)),
-        if Page >= 1 andalso PageSize >= 1 andalso PageSize =< 500 ->
-                {ok, Page, PageSize};
-           true ->
-                {error, <<"Invalid page or page_size parameter: page and page_size must be positive integers with page_size <= 500">>}
-        end
-    catch error:badarg ->
-        {error, <<"Invalid page or page_size parameter: non-integer value provided">>}
     end.

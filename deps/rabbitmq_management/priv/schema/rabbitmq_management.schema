@@ -370,21 +370,14 @@ end}.
 ]}.
 
 {mapping, "management.sessions.max_concurrent", "rabbitmq_management.sessions_max_concurrent", [
-    {datatype, {integer, non_negative}}
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
 ]}.
 
 {mapping, "management.sessions.heartbeat_interval", "rabbitmq_management.sessions_heartbeat_interval", [
-    {datatype, integer}
+    {datatype, integer},
+    {validators, ["sessions_heartbeat_interval"]}
 ]}.
-
-{translation, "rabbitmq_management.sessions_heartbeat_interval",
-fun(Conf) ->
-    case cuttlefish:conf_get("management.sessions.heartbeat_interval", Conf, undefined) of
-        undefined                -> 30;
-        Val when is_integer(Val) -> erlang:max(30, Val);
-        _                        -> cuttlefish:invalid("management.sessions.heartbeat_interval must be an integer >= 30")
-    end
-end}.
 
 %%
 %% Inter-node query result caching
@@ -743,6 +736,9 @@ fun(Conf) ->
      {detailed, TranslatePolicy(Detailed)}]
 end}.
 
+
+{validator, "sessions_heartbeat_interval", "number should be greater or equal to 30",
+fun(Int) when is_integer(Int) -> Int >= 30; (_) -> false end}.
 
 {validator, "is_dir", "is not directory",
 fun(File) ->
