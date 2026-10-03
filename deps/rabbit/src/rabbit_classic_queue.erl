@@ -282,7 +282,8 @@ format_policy_fields(Q, Ctx) ->
         true ->
             [{policy, i(policy, Q)},
              {operator_policy, i(operator_policy, Q)},
-             {effective_policy_definition, i(effective_policy_definition, Q)}];
+             {effective_policy_definition, i(effective_policy_definition, Q)},
+             {delivery_limit, i(delivery_limit, Q)}];
         false ->
             []
     end.
@@ -567,6 +568,16 @@ i(effective_policy_definition, Q) ->
         undefined -> #{};
         Def       -> Def
     end;
+i(delivery_limit, Q) ->
+    %% Mirrors rabbit_quorum_queue's own delivery_limit info item, using
+    %% the same -1-means-unlimited convention as the queue argument and
+    %% policy key, since unlike quorum queues, classic queues have no
+    %% non-negative default to fall back to.
+    case rabbit_queue_type_util:args_policy_lookup(
+           <<"delivery-limit">>, fun rabbit_queue_type_util:resolve_delivery_limit/2, Q) of
+        undefined -> -1;
+        Limit     -> Limit
+    end;
 i(type, _) ->
     classic.
 
@@ -639,11 +650,22 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
     [Q || {_, {new, Q}} <- Results].
 
 capabilities() ->
-    #{unsupported_policies => [%% Stream policies
+    #{%% rabbit_queue_type:is_policy_applicable/2 rejects a whole policy
+      %% document if any key in it is in this list, even keys that are
+      %% supported. This means a document combining a key here with e.g.
+      %% max-length, applied to both classic and quorum queues, silently
+      %% activates the max-length part for classic queues too the moment
+      %% a key is removed from this list, on any node running this code
+      %% mid-upgrade. This is intentional: the newly-applied keys behave
+      %% the same way an operator declaring them for the first time would
+      %% expect, and no wire-incompatible state is introduced, so no
+      %% feature flag is needed. It is a real, silent behaviour change
+      %% for affected policies, worth calling out in release notes.
+      unsupported_policies => [%% Stream policies
                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
                                <<"initial-cluster-size">>,
                                %% Quorum policies
-                               <<"delivery-limit">>, <<"dead-letter-strategy">>,
+                               <<"dead-letter-strategy">>,
                                <<"max-in-memory-length">>, <<"max-in-memory-bytes">>, <<"target-group-size">>,
                                %% JMS policies
                                <<"selector-fields">>,
@@ -653,7 +675,8 @@ capabilities() ->
                           <<"x-max-length-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-queue-version">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-queue-master-locator">>, <<"x-queue-leader-locator">>],
+                          <<"x-queue-master-locator">>, <<"x-queue-leader-locator">>,
+                          <<"x-delivery-limit">>],
       consumer_arguments => [<<"x-priority">>],
       server_named => true,
       rebalance_module => undefined,

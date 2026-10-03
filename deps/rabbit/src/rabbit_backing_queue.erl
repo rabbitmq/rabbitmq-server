@@ -165,6 +165,16 @@
 %% and were pending acknowledgement.
 -callback requeue([ack()], boolean(), state()) -> {msg_ids(), state()}.
 
+%% Record a failed delivery for each of the given messages, regardless
+%% of whether the failure is later going to result in a requeue or a
+%% dead-letter. Returns the resulting per-message failure count, for
+%% the caller to compare against a configured delivery limit. This
+%% counter is independent of the delivery-count tracked for requeue/3
+%% and ackfold/5, which only increments on some failure kinds and
+%% exists to populate the AMQP 1.0 delivery-count annotation.
+-callback record_delivery_failure([ack()], state()) ->
+    {#{ack() => pos_integer()}, state()}.
+
 %% Fold over messages by ack tag. The supplied function is called with
 %% each message, its ack tag, and an accumulator.
 -callback ackfold(msg_fun(A), A, state(), [ack()], boolean()) -> {A, state()}.
