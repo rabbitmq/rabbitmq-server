@@ -10,18 +10,25 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -export([all/0, groups/0]).
 -export([init_per_suite/1, end_per_suite/1,
          init_per_group/2, end_per_group/2,
          init_per_testcase/2, end_per_testcase/2]).
--export([direct_connection_registered/1]).
+-export([direct_connection_registered/1,
+         blocked_by_a_remote_node_alarm/1,
+         a_remote_alertee_is_not_told_about_a_peer_alarm/1]).
+%% invoked on a broker node
+-export([await_connection_blocked/1, record_conserve/3]).
 
 all() ->
     [{group, tests}].
 
 groups() ->
-    [{tests, [], [direct_connection_registered]}].
+    [{tests, [], [direct_connection_registered,
+                  blocked_by_a_remote_node_alarm,
+                  a_remote_alertee_is_not_told_about_a_peer_alarm]}].
 
 %% -------------------------------------------------------------------
 
@@ -40,7 +47,15 @@ end_per_group(_, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
-    Config1 = rabbit_ct_helpers:set_config(Config, [{rmq_nodename_suffix, Testcase}]),
+    NodesCount = case Testcase of
+                     %% Need a second node to raise the alarm on.
+                     blocked_by_a_remote_node_alarm -> 2;
+                     a_remote_alertee_is_not_told_about_a_peer_alarm -> 2;
+                     _                              -> 1
+                 end,
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodename_suffix, Testcase},
+                         {rmq_nodes_count, NodesCount}]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
@@ -79,3 +94,106 @@ direct_connection_registered(Config) ->
     ?assertEqual([], FinalLocal),
     ?assertEqual([], FinalList),
     ok.
+
+%% A resource alarm blocks publishers cluster-wide, because maybe_alert/5 calls
+%% alert_local/3 unconditionally. But rabbit_alarm:internal_register/3 replays
+%% only this node's alarms to a newly registered alertee, so a connection
+%% opened while a *different* node is alarmed has to be seeded from the
+%% cluster-wide set that register/2 returns, as rabbit_reader does.
+blocked_by_a_remote_node_alarm(Config) ->
+    Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    %% A real watermark alarm rather than rabbit_ct_broker_helpers:set_alarm/3,
+    %% which embeds its Node argument in the alarm key: given an index rather
+    %% than a node name, maybe_alert/5 finds node() =/= Node and skips
+    %% alert_remote/3, so the alarm never leaves the node it was set on.
+    OrigLimit = rabbit_ct_broker_helpers:rpc(
+                  Config, 1, vm_memory_monitor,
+                  get_vm_memory_high_watermark, []),
+    try
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 1, vm_memory_monitor,
+               set_vm_memory_high_watermark, [0]),
+        %% Wait for node 1's alarm to reach node 0, which happens through
+        %% rabbit_alarm:remote_conserve_resources/3.
+        ?awaitMatch([_ | _],
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, 0, rabbit_alarm, get_alarms, []),
+                    30_000),
+        %% Run this on the broker node. rabbit_alarm replays a peer node's
+        %% alarms only to an alertee on its own node, because a remote one is
+        %% reached only for this node's own alarms and so could never be
+        %% unblocked again. amqp_connection:start/1 runs the connection process
+        %% wherever it is called, and a direct connection opened from the CT
+        %% node would therefore register a remote pid.
+        case rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, await_connection_blocked, [Node0]) of
+            ok ->
+                ok;
+            {error, not_blocked} ->
+                ct:fail(not_blocked_by_remote_node_alarm)
+        end
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 1, vm_memory_monitor,
+               set_vm_memory_high_watermark, [OrigLimit])
+    end.
+
+%% rabbit_alarm replays the cluster-wide alarm set only to an alertee on its own
+%% node. A remote one is reached solely through alert_remote/3, which runs for
+%% this node's own alarms, so replaying a peer node's alarm to it would set a
+%% block that no clear could ever lift. This pins that exclusion: without it the
+%% wedge is silent and permanent.
+a_remote_alertee_is_not_told_about_a_peer_alarm(Config) ->
+    OrigLimit = rabbit_ct_broker_helpers:rpc(
+                  Config, 1, vm_memory_monitor,
+                  get_vm_memory_high_watermark, []),
+    try
+        Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+        ok = rabbit_ct_broker_helpers:add_code_path_to_node(Node0, ?MODULE),
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 1, vm_memory_monitor,
+               set_vm_memory_high_watermark, [0]),
+        ?awaitMatch([_ | _],
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, 0, rabbit_alarm, get_alarms, []),
+                    30_000),
+        %% self() lives on the CT node, so it is remote to node 0. Registering
+        %% returns the cluster-wide set either way; what must not happen is a
+        %% replayed conserve_resources for node 1's alarm.
+        Sources = rabbit_ct_broker_helpers:rpc(
+                    Config, 0, rabbit_alarm, register,
+                    [self(), {?MODULE, record_conserve, [self()]}]),
+        ?assertMatch([_ | _], Sources),
+        receive
+            {conserve, _Source, true} ->
+                ct:fail(remote_alertee_was_told_to_conserve)
+        after 5_000 ->
+                  ok
+        end
+    after
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 1, vm_memory_monitor,
+               set_vm_memory_high_watermark, [OrigLimit])
+    end.
+
+%% invoked on a broker node
+record_conserve(Target, Source, {_, Conserve, _}) ->
+    Target ! {conserve, Source, Conserve},
+    ok.
+
+await_connection_blocked(Node) ->
+    Params = #amqp_params_direct{node         = Node,
+                                 virtual_host = <<"/">>,
+                                 username     = <<"guest">>,
+                                 password     = <<"guest">>},
+    {ok, Conn} = amqp_connection:start(Params),
+    try
+        amqp_connection:register_blocked_handler(Conn, self()),
+        receive
+            #'connection.blocked'{} -> ok
+        after 10_000 ->
+                  {error, not_blocked}
+        end
+    after
+        ok = amqp_connection:close(Conn)
+    end.

@@ -175,7 +175,7 @@ init([]) ->
 
 handle_call({register, Pid, AlertMFA}, State = #alarms{alarmed_nodes = AN}) ->
     {ok, lists:usort(lists:append([V || {_, V} <- dict:to_list(AN)])),
-     internal_register(Pid, AlertMFA, State)};
+     internal_register(Pid, AlertMFA, State, client_replay(Pid, State))};
 
 handle_call(get_alarms, State) ->
     {ok, compute_alarms(State), State};
@@ -296,15 +296,44 @@ alert(Alertees, Source, Alert, NodeComparator) ->
                       end
               end, ok, Alertees).
 
+internal_register(Pid, AlertMFA, State) ->
+    internal_register(Pid, AlertMFA, State, local_replay(State)).
+
 internal_register(Pid, {M, F, A} = AlertMFA,
-                  State = #alarms{alertees = Alertees}) ->
+                  State = #alarms{alertees = Alertees}, Replay) ->
     _MRef = erlang:monitor(process, Pid),
-    _ = case dict:find(node(), State#alarms.alarmed_nodes) of
-        {ok, Sources} -> [apply(M, F, A ++ [Pid, R, {true, true, node()}]) || R <- Sources];
-        error          -> ok
-    end,
+    _ = [apply(M, F, A ++ [Pid, Source, {true, true, Node}])
+         || {Node, Sources} <- Replay, Source <- Sources],
     NewAlertees = dict:store(Pid, AlertMFA, Alertees),
     State#alarms{alertees = NewAlertees}.
+
+%% Alarms to replay to a peer node's alarm process, which registers through
+%% handle_event/2 to learn about this node's alarms only. Replaying another
+%% node's alarms to it would make it report them as ours.
+local_replay(#alarms{alarmed_nodes = AN}) ->
+    case dict:find(node(), AN) of
+        {ok, Sources} -> [{node(), Sources}];
+        error         -> []
+    end.
+
+%% Alarms to replay to a client registering through register/2. A resource
+%% alarm blocks publishers cluster-wide, because maybe_alert/5 calls
+%% alert_local/3 for every alarm regardless of which node raised it. Replaying
+%% only this node's alarms would leave a connection that was opened during an
+%% alarm on a peer node publishing at full rate until the next alarm change.
+%%
+%% Replaying from inside this process is what keeps the replay ordered against
+%% an alarm that clears while the caller is still registering. A caller that
+%% replayed register/2's return value itself could have that clear overtaken by
+%% its own stale set, leaving the connection blocked with no alarm anywhere.
+%%
+%% A remote alertee is the exception: alert/4 only ever reaches it through
+%% alert_remote/3, which runs solely for this node's own alarms, so a peer
+%% node's alarm replayed to it would never be cleared.
+client_replay(Pid, State) when node(Pid) =:= node() ->
+    dict:to_list(State#alarms.alarmed_nodes);
+client_replay(_Pid, State) ->
+    local_replay(State).
 
 handle_set_resource_alarm(Source, Node, State) ->
     ?LOG_WARNING(
