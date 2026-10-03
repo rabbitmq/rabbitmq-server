@@ -116,6 +116,7 @@ sub_groups() ->
        publish_permission,
        publish_permission_will_message,
        topic_read_permission,
+       multi_segment_subscription_wildcard_disallowed,
        topic_write_permission,
        topic_write_permission_variable_expansion,
        topic_write_permission_client_id_regex_not_injected,
@@ -1288,6 +1289,26 @@ topic_read_permission(Config) ->
                fun () -> stop end}
              ]),
     ok.
+
+multi_segment_subscription_wildcard_disallowed(Config) ->
+    set_permissions(".*", ".*", ".*", Config),
+    set_topic_permissions(".*", ".*", Config),
+    ok = rpc(Config, 0, application, set_env,
+             [rabbitmq_mqtt, allow_multi_segment_subscription_wildcard, false]),
+    try
+        C1 = open_mqtt_connection(Config),
+        ?assertMatch({ok, _, [0]}, emqtt:subscribe(C1, <<"a/+/c">>)),
+        process_flag(trap_exit, true),
+        ReasonCode = suback_error_code(?RC_NOT_AUTHORIZED, Config),
+        ?assertMatch({ok, _, [ReasonCode]}, emqtt:subscribe(C1, <<"a/#">>)),
+        ok = assert_connection_closed(C1)
+    after
+        ok = rpc(Config, 0, application, set_env,
+                 [rabbitmq_mqtt, allow_multi_segment_subscription_wildcard, true])
+    end,
+    C2 = open_mqtt_connection(Config),
+    ?assertMatch({ok, _, [0]}, emqtt:subscribe(C2, <<"a/#">>)),
+    ok = emqtt:disconnect(C2).
 
 topic_write_permission(Config) ->
     set_permissions(".*", ".*", ".*", Config),

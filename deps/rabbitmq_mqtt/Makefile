@@ -29,6 +29,7 @@ define PROJECT_ENV
 	                         ]},
 	    {proxy_protocol, false},
 	    {sparkplug, false},
+	    {allow_multi_segment_subscription_wildcard, true},
 	    {mailbox_soft_limit, 200},
 	    {max_packet_size_unauthenticated, 65536},
 	    %% 256 MB is upper limit defined by MQTT spec

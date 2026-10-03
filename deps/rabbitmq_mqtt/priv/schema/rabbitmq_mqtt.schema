@@ -89,6 +89,10 @@ end}.
 {mapping, "mqtt.sparkplug", "rabbitmq_mqtt.sparkplug",
     [{datatype, boolean}]}.
 
+{mapping, "mqtt.allow_multi_segment_subscription_wildcard",
+    "rabbitmq_mqtt.allow_multi_segment_subscription_wildcard",
+    [{datatype, boolean}]}.
+
 {mapping, "mqtt.retained_message_store", "rabbitmq_mqtt.retained_message_store",
     [{datatype, atom}]}.
 
