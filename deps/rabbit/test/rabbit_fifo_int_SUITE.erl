@@ -586,7 +586,7 @@ discard(Config) ->
              initial_member => [],
              initial_machine_version => rabbit_fifo:version(),
              machine => {module, rabbit_fifo,
-                         #{queue_resource => discard,
+                         #{queue_resource => ClusterName,
                            dead_letter_handler =>
                            {at_most_once, {?MODULE, dead_letter_handler, [self()]}}}}},
     _ = rabbit_quorum_queue:start_server(Conf),
