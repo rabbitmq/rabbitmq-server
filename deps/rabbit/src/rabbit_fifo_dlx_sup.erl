@@ -24,6 +24,7 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
+    rabbit_fifo_dlx_worker:init_ets(),
     SupFlags = #{strategy => simple_one_for_one,
                  intensity => 100,
                  period => 1},
