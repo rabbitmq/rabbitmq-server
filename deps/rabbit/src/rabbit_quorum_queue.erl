@@ -174,6 +174,7 @@
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
+-define(EXPIRY_DELETION_MIN_NODE_UPTIME_MINUTES, 5).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 %% setting a low default here to allow quorum queues to better chose themselves
@@ -671,8 +672,56 @@ rpc_delete_metrics(QName) ->
 spawn_deleter(QName) ->
     spawn(fun () ->
                   {ok, Q} = rabbit_amqqueue:lookup(QName),
-                  delete(Q, false, false, <<"expired">>)
+                  case check_expiry_deletion_preconditions(Q) of
+                      ok ->
+                          delete(Q, false, false, <<"expired">>);
+                      {error, Reason} ->
+                          ?LOG_WARNING(
+                             "Skipping deletion of expired ~ts: ~ts",
+                             [rabbit_misc:rs(QName), Reason])
+                  end
           end).
+
+check_expiry_deletion_preconditions(Q) ->
+    Nodes = get_nodes(Q),
+    case rabbit_nodes:filter_unreachable(Nodes) of
+        [] ->
+            check_expiry_deletion_maintenance_status(Nodes);
+        Unreachable ->
+            {error, rabbit_misc:format("member node(s) ~p are unreachable",
+                                        [Unreachable])}
+    end.
+
+check_expiry_deletion_maintenance_status(Nodes) ->
+    case Nodes -- rabbit_maintenance:filter_out_drained_nodes_consistent_read(Nodes) of
+        [] ->
+            check_expiry_deletion_min_node_uptime(Nodes);
+        Draining ->
+            {error, rabbit_misc:format("member node(s) ~p are in maintenance mode",
+                                        [Draining])}
+    end.
+
+check_expiry_deletion_min_node_uptime(Nodes) ->
+    MinUptimeMinutes = application:get_env(
+                          rabbit, quorum_queue_expiry_deletion_min_node_uptime,
+                          ?EXPIRY_DELETION_MIN_NODE_UPTIME_MINUTES),
+    MinUptimeMs = MinUptimeMinutes * 60_000,
+    Rets = erpc:multicall(Nodes, erlang, statistics, [wall_clock], ?RPC_TIMEOUT),
+    TooYoung = [Node || {Node, Ret} <- lists:zip(Nodes, Rets),
+                        not is_node_uptime_sufficient(Ret, MinUptimeMs)],
+    case TooYoung of
+        [] ->
+            ok;
+        _ ->
+            {error, rabbit_misc:format(
+                       "member node(s) ~p have not been up for at least "
+                       "~b minute(s)", [TooYoung, MinUptimeMinutes])}
+    end.
+
+is_node_uptime_sufficient({ok, {UptimeMs, _}}, MinUptimeMs) ->
+    UptimeMs >= MinUptimeMs;
+is_node_uptime_sufficient(_ErrorRet, _MinUptimeMs) ->
+    false.
 
 spawn_notify_decorators(QName, startup = Fun, Args) ->
     spawn(fun() ->
