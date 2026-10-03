@@ -11,8 +11,7 @@ SYS_PREFIX=
 
 CLEAN_BOOT_FILE=start_clean
 SASL_BOOT_FILE=start_sasl
-BOOT_MODULE="rabbit"
 
-if test -z "$CONF_ENV_FILE" && test -z "$RABBITMQ_CONF_ENV_FILE"; then
-    CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
+if test -z "$RABBITMQ_CONF_ENV_FILE"; then
+    RABBITMQ_CONF_ENV_FILE=${SYS_PREFIX}/etc/rabbitmq/rabbitmq-env.conf
 fi
