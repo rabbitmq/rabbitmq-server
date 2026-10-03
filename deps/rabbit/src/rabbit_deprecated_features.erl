@@ -96,6 +96,13 @@
 %% a cluster-wide sync of the feature flags states. Again, the underlying
 %% feature flag won't be enabled if the feature is used.
 %%
+%% A deprecated feature can set the `usage_prevents_denial' property to
+%% `false' to opt out of that behavior. The callback still runs and its result
+%% is still reported by the CLI, but the feature being in use no longer
+%% prevents the underlying feature flag from being enabled. This is meant for
+%% deprecated features that need no migration because denying them only
+%% rejects new uses.
+%%
 %% Note that this callback is only used when in `permitted_by_default' or
 %% `denied_by_default': remember that `disconnected' and `removed' are the
 %% same as a required feature flag.
@@ -116,6 +123,7 @@
 
 -export([is_permitted/1,
          get_phase/1,
+         usage_prevents_denial/1,
          get_warning/1]).
 -export([extend_properties/2,
          should_be_permitted/2,
@@ -165,6 +173,7 @@
                            messages => #{when_permitted => string(),
                                          when_denied => string(),
                                          when_removed => string()},
+                           usage_prevents_denial => boolean(),
                            callbacks =>
                            #{callback_name() =>
                              rabbit_feature_flags:callback_fun_name()}}.
@@ -183,6 +192,14 @@
 %% use a denied deprecated feature is being made. It is logged as an error or
 %% displayed to the user by the CLI or in the management UI for instance.</li>
 %% </ul></li>
+%% <li>`usage_prevents_denial': whether the deprecated feature being in use
+%% prevents it from being denied. It defaults to `true' and is only consulted
+%% when an {@type is_feature_used_callback()} callback is declared.
+%%
+%% Set it to `false' when denying the deprecated feature needs no migration
+%% because the denial only applies to new uses. The `is_feature_used' callback
+%% is still called and its result is still reported by the CLI, but a
+%% deprecated feature in use no longer prevents RabbitMQ from starting.</li>
 %% </ul>
 %%
 %% Other properties are the same as {@link
@@ -198,6 +215,7 @@
         messages := #{when_permitted => string(),
                       when_denied => string(),
                       when_removed => string()},
+        usage_prevents_denial => boolean(),
         provided_by := atom()}.
 %% The deprecated feature properties, once expanded by this module when
 %% feature flags are discovered.
@@ -622,16 +640,48 @@ enable_underlying_feature_flag_cb(
     IsUsed = is_deprecated_feature_in_use(Args),
     case IsUsed of
         true ->
-            ?LOG_ERROR(
-               "Deprecated features: `~ts`: can't deny deprecated "
-               "feature because it is actively used",
-               [FeatureName],
-               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            {error,
-             {failed_to_deny_deprecated_features, [FeatureName]}};
+            case usage_prevents_denial(FeatureName) of
+                true ->
+                    ?LOG_ERROR(
+                       "Deprecated features: `~ts`: can't deny deprecated "
+                       "feature because it is actively used",
+                       [FeatureName],
+                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                    {error,
+                     {failed_to_deny_deprecated_features, [FeatureName]}};
+                false ->
+                    ?LOG_WARNING(
+                       "Deprecated features: `~ts`: the deprecated feature is "
+                       "in use; it is denied anyway because the denial only "
+                       "applies to new uses",
+                       [FeatureName],
+                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                    ok
+            end;
         _ ->
             ok
     end.
+
+-spec usage_prevents_denial(FeatureName | FeatureProps) -> Prevents when
+      FeatureName :: rabbit_feature_flags:feature_name(),
+      FeatureProps :: feature_props_extended(),
+      Prevents :: boolean().
+%% @doc Indicates if the deprecated feature being in use prevents it from
+%% being denied.
+%%
+%% @param FeatureName The name of the deprecated feature.
+%% @param FeatureProps The properties of the deprecated feature.
+%% @returns true if the deprecated feature can only be denied while it is
+%% unused, false if the denial applies to new uses only.
+
+usage_prevents_denial(FeatureName) when is_atom(FeatureName) ->
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
+        undefined    -> true;
+        FeatureProps -> usage_prevents_denial(FeatureProps)
+    end;
+usage_prevents_denial(FeatureProps) when is_map(FeatureProps) ->
+    ?assert(?IS_DEPRECATION(FeatureProps)),
+    maps:get(usage_prevents_denial, FeatureProps, true).
 
 is_deprecated_feature_in_use(
   #{feature_props := #{callbacks := Callbacks}} = Args1) ->
