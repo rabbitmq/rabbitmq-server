@@ -389,7 +389,7 @@ parse_prop(<<PropId, _Rest/binary>>, Type, _Props) ->
 parse_variable_byte_integer(Bin) ->
     parse_variable_byte_integer(Bin, 1, 0).
 
-parse_variable_byte_integer(<<1:1, _Len:7, _Rest/binary>>, Multiplier, _Value)
+parse_variable_byte_integer(<<_:8, _Rest/binary>>, Multiplier, _Value)
   when Multiplier > ?MAX_MULTIPLIER ->
     throw(malformed_variable_byte_integer);
 parse_variable_byte_integer(<<1:1, Len:7, Rest/binary>>, Multiplier, Value) ->
