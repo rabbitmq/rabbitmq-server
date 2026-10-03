@@ -51,9 +51,6 @@ init_per_suite(Config0) ->
                Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
-    %% If node 1 runs 4.x, this is the new no-op plugin.
-    %% If node 1 runs 3.x, this is the old real plugin.
-    ok = rabbit_ct_broker_helpers:enable_plugin(Config, ?OLD, rabbitmq_amqp1_0),
     Config.
 
 end_per_suite(Config) ->
