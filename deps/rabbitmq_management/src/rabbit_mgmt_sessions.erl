@@ -9,7 +9,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([create_session/2, touch/2, delete_session/1, delete_session/2,
+-export([create_session/2, touch/2, delete_session/2,
          list_sessions/3, terminate_sessions/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -18,22 +18,16 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("khepri/include/khepri.hrl").
 
--record(session, {
-    created_at :: integer(),
-    expires_at :: integer(),
-    metadata   :: #{binary() => binary()}
-}).
-
 -record(state, {
     timer :: reference() | undefined
 }).
 
 -define(SWEEP_INTERVAL, 5000).
 
--define(KHEPRI_USER_SESSIONS_PATTERN(Username), [rabbitmq, users, Username, sessions, ?KHEPRI_WILDCARD_STAR]).
--define(KHEPRI_SESSION_PATH(Username, SessionId), [rabbitmq, users, Username, sessions, SessionId]).
--define(KHEPRI_ALL_SESSIONS_PATTERN, [rabbitmq, users, ?KHEPRI_WILDCARD_STAR, sessions, ?KHEPRI_WILDCARD_STAR]).
--define(KHEPRI_SESSION_ID_PATTERN(SessionId), [rabbitmq, users, ?KHEPRI_WILDCARD_STAR, sessions, SessionId]).
+-define(KHEPRI_USER_SESSIONS_PATTERN(Username), [rabbitmq, mgmt_sessions, Username, ?KHEPRI_WILDCARD_STAR]).
+-define(KHEPRI_SESSION_PATH(Username, SessionId), [rabbitmq, mgmt_sessions, Username, SessionId]).
+-define(KHEPRI_ALL_SESSIONS_PATTERN, [rabbitmq, mgmt_sessions, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR]).
+-define(KHEPRI_SESSION_ID_PATTERN(SessionId), [rabbitmq, mgmt_sessions, ?KHEPRI_WILDCARD_STAR, SessionId]).
 
 %%====================================================================
 %% API
@@ -43,15 +37,15 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 create_session(Username, Metadata) ->
-    SessionId = list_to_binary(rabbit_guid:to_string(rabbit_guid:gen())),
+    SessionId = binary:encode_hex(crypto:strong_rand_bytes(16), lowercase),
     Now = os:system_time(millisecond),
     SessionTimeoutMs = session_timeout_ms(),
     HeartbeatTimeoutMs = heartbeat_timeout_ms(),
     ExpiresAt = calculate_expires_at(Now, Now, SessionTimeoutMs, HeartbeatTimeoutMs),
-    Session = #session{
-        created_at = Now,
-        expires_at = ExpiresAt,
-        metadata = Metadata
+    Session = #{
+        created_at => Now,
+        expires_at => ExpiresAt,
+        metadata => Metadata
     },
     Settings = rabbit_mgmt_features:get_sessions_settings(),
     MaxConcurrent = proplists:get_value(max_concurrent, Settings, 1),
@@ -64,10 +58,11 @@ create_session(Username, Metadata) ->
             _       -> #{}
         end,
         ActiveSessions = maps:fold(fun(_P, S, Acc) ->
-            if is_record(S, session) andalso S#session.expires_at > Now ->
-                   [S | Acc];
-               true ->
-                   Acc
+            case is_active(S, Now) of
+                true ->
+                    [S | Acc];
+                false ->
+                    Acc
             end
         end, [], Map),
         if length(ActiveSessions) >= MaxConcurrent ->
@@ -81,10 +76,10 @@ create_session(Username, Metadata) ->
     end),
     case TxRes of
         {ok, SessionId} ->
-            ?LOG_DEBUG("Created session ~s for user ~s", [SessionId, Username]),
+            ?LOG_DEBUG("Created session ~ts for user ~ts", [SessionId, Username]),
             {ok, SessionId};
         {error, limit_reached} ->
-            ?LOG_DEBUG("Failed to create session for user ~s: concurrent session limit reached", [Username]),
+            ?LOG_DEBUG("Failed to create session for user ~ts: concurrent session limit reached", [Username]),
             {error, limit_reached};
         {error, Reason} ->
             {error, Reason}
@@ -102,24 +97,26 @@ touch(SessionId, Username) ->
 
     rabbit_khepri:transaction(fun() ->
         case khepri_tx:get(SessionPath) of
-            {ok, Session} when is_record(Session, session) ->
-                if Session#session.expires_at > Now ->
-                    NewExpiresAt = calculate_expires_at(
-                        Session#session.created_at, Now, SessionTimeoutMs, HeartbeatTimeoutMs),
-                    NewSession = Session#session{expires_at = NewExpiresAt},
-                    khepri_tx:put(SessionPath, NewSession);
-                   true ->
-                    {error, not_found}
+            {ok, Session} when is_map(Session) ->
+                case is_active(Session, Now) of
+                    true ->
+                        NewExpiresAt = calculate_expires_at(
+                            maps:get(created_at, Session, Now), Now, SessionTimeoutMs, HeartbeatTimeoutMs),
+                        NewSession = Session#{expires_at => NewExpiresAt},
+                        khepri_tx:put(SessionPath, NewSession);
+                    false ->
+                        {error, not_found}
                 end;
             _ ->
                 PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
                 case khepri_tx:get_many(PathPattern) of
                     {ok, Map} when map_size(Map) > 0 ->
                         ActiveOther = maps:fold(fun(_P, S, Acc) ->
-                            if is_record(S, session) andalso S#session.expires_at > Now ->
-                                   true;
-                               true ->
-                                   Acc
+                            case is_active(S, Now) of
+                                true ->
+                                    true;
+                                false ->
+                                    Acc
                             end
                         end, false, Map),
                         if ActiveOther ->
@@ -133,20 +130,13 @@ touch(SessionId, Username) ->
         end
     end).
 
-delete_session(undefined) ->
-    {error, not_found};
-delete_session(SessionId) ->
-    delete_session(SessionId, undefined).
-
 delete_session(undefined, _Username) ->
     {error, not_found};
 delete_session(SessionId, undefined) ->
     PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
     case rabbit_khepri:get_many(PathPattern) of
         {ok, Map} when map_size(Map) > 0 ->
-            lists:foreach(fun(Path) ->
-                _ = rabbit_khepri:delete(Path)
-            end, maps:keys(Map)),
+            lists:foreach(fun delete_session_node/1, maps:keys(Map)),
             ok;
         _ ->
             {error, not_found}
@@ -154,9 +144,8 @@ delete_session(SessionId, undefined) ->
 delete_session(SessionId, Username) ->
     SessionPath = ?KHEPRI_SESSION_PATH(Username, SessionId),
     case rabbit_khepri:get(SessionPath) of
-        {ok, Session} when is_record(Session, session) ->
-            _ = rabbit_khepri:delete(SessionPath),
-            ok;
+        {ok, Session} when is_map(Session) ->
+            delete_session_node(SessionPath);
         _ ->
             PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
             case rabbit_khepri:get_many(PathPattern) of
@@ -176,17 +165,18 @@ list_sessions(Page, PageSize, UsernameFilter) ->
     FilteredSessions = case rabbit_khepri:get_many(PathPattern) of
         {ok, Map} ->
             maps:fold(fun(Path, S, Acc) ->
-                if is_record(S, session) andalso S#session.expires_at > Now ->
-                       [rabbitmq, users, Username, sessions, SessionId] = Path,
-                       [{Username, SessionId, S} | Acc];
-                   true ->
-                       Acc
+                case is_active(S, Now) of
+                    true ->
+                        [rabbitmq, mgmt_sessions, Username, SessionId] = Path,
+                        [{Username, SessionId, S} | Acc];
+                    false ->
+                        Acc
                 end
             end, [], Map);
         _ ->
             []
     end,
-    Sorted = lists:sort(fun({_U1, _Id1, S1}, {_U2, _Id2, S2}) -> S1#session.created_at >= S2#session.created_at end, FilteredSessions),
+    Sorted = lists:sort(fun({_U1, _Id1, S1}, {_U2, _Id2, S2}) -> created_at(S1) >= created_at(S2) end, FilteredSessions),
     FilteredCount = length(Sorted),
     TotalCount = case UsernameFilter of
         undefined -> FilteredCount;
@@ -194,10 +184,11 @@ list_sessions(Page, PageSize, UsernameFilter) ->
             case rabbit_khepri:get_many(?KHEPRI_ALL_SESSIONS_PATTERN) of
                 {ok, AllMap} ->
                     maps:fold(fun(_P, S, Acc) ->
-                        if is_record(S, session) andalso S#session.expires_at > Now ->
-                               Acc + 1;
-                           true ->
-                               Acc
+                        case is_active(S, Now) of
+                            true ->
+                                Acc + 1;
+                            false ->
+                                Acc
                         end
                     end, 0, AllMap);
                 _ -> FilteredCount
@@ -223,9 +214,8 @@ list_sessions(Page, PageSize, UsernameFilter) ->
 terminate_sessions(undefined) ->
     ok;
 terminate_sessions(Username) ->
-    _ = rabbit_khepri:delete_many(?KHEPRI_USER_SESSIONS_PATTERN(Username)),
-    _ = rabbit_khepri:delete([rabbitmq, users, Username, sessions]),
-    ?LOG_DEBUG("Terminated all sessions for user ~s", [Username]),
+    _ = rabbit_khepri:delete([rabbitmq, mgmt_sessions, Username]),
+    ?LOG_DEBUG("Terminated all sessions for user ~ts", [Username]),
     ok.
 
 %%====================================================================
@@ -233,12 +223,17 @@ terminate_sessions(Username) ->
 %%====================================================================
 
 init([]) ->
+    process_flag(trap_exit, true),
+    ok = gen_event:add_handler(rabbit_event, rabbit_mgmt_sessions_handler, []),
     Timer = erlang:send_after(?SWEEP_INTERVAL, self(), sweep_expired_sessions),
     {ok, #state{timer = Timer}}.
 
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
 
+handle_cast({user_deleted, Username}, State) ->
+    ok = terminate_sessions(Username),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -259,6 +254,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, State) ->
+    _ = gen_event:delete_handler(rabbit_event, rabbit_mgmt_sessions_handler, []),
     if State#state.timer =/= undefined ->
         _ = erlang:cancel_timer(State#state.timer),
         ok;
@@ -279,24 +275,53 @@ sweep_expired_sessions_in_khepri() ->
     case rabbit_khepri:get_many(PathPattern) of
         {ok, Map} when map_size(Map) > 0 ->
             ExpiredPaths = maps:fold(fun(Path, S, Acc) ->
-                if is_record(S, session) andalso Now > S#session.expires_at ->
-                       [Path | Acc];
-                   true ->
-                       Acc
+                case is_expired(S, Now) of
+                    true ->
+                        [Path | Acc];
+                    false ->
+                        Acc
                 end
             end, [], Map),
             case ExpiredPaths of
                 [] ->
                     0;
                 _ ->
-                    lists:foreach(fun(Path) ->
-                        _ = rabbit_khepri:delete(Path)
-                    end, ExpiredPaths),
+                    lists:foreach(fun delete_session_node/1, ExpiredPaths),
                     length(ExpiredPaths)
             end;
         _ ->
             0
     end.
+
+delete_session_node([rabbitmq, mgmt_sessions, Username, _SessionId] = Path) ->
+    UserPath = [rabbitmq, mgmt_sessions, Username],
+    UserSessionsPath = ?KHEPRI_USER_SESSIONS_PATTERN(Username),
+    Ret = rabbit_khepri:transaction(fun() ->
+        _ = khepri_tx:delete(Path),
+        case khepri_tx:get_many(UserSessionsPath) of
+            {ok, Remaining} when map_size(Remaining) =:= 0 ->
+                khepri_tx:delete(UserPath);
+            _ ->
+                ok
+        end
+    end),
+    case Ret of
+        {error, Reason} ->
+            ?LOG_WARNING("Failed to delete session ~ts of user ~ts: ~tp",
+                         [lists:last(Path), Username, Reason]);
+        _ ->
+            ok
+    end,
+    ok.
+
+is_active(S, Now) ->
+    is_map(S) andalso maps:get(expires_at, S, 0) > Now.
+
+is_expired(S, Now) ->
+    is_map(S) andalso Now > maps:get(expires_at, S, 0).
+
+created_at(S) ->
+    maps:get(created_at, S, 0).
 
 calculate_expires_at(CreatedAt, Now, SessionTimeoutMs, HeartbeatTimeoutMs) ->
     min(CreatedAt + SessionTimeoutMs, Now + HeartbeatTimeoutMs).
@@ -313,7 +338,7 @@ session_to_map(Username, SessionId, S) ->
     #{
         id => SessionId,
         username => Username,
-        created_at => S#session.created_at,
-        expires_at => S#session.expires_at,
-        metadata => S#session.metadata
+        created_at => created_at(S),
+        expires_at => maps:get(expires_at, S, 0),
+        metadata => maps:get(metadata, S, #{})
     }.

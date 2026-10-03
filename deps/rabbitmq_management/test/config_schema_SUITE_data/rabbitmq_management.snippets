@@ -909,6 +909,17 @@
                           }
                          ]}
   ], [rabbitmq_management]
- }
+ },
+
+ {sessions,
+  "management.sessions.enabled = true
+   management.sessions.max_concurrent = 3
+   management.sessions.heartbeat_interval = 60",
+  [{rabbitmq_management,[
+                         {sessions_enabled, true},
+                         {sessions_max_concurrent, 3},
+                         {sessions_heartbeat_interval, 60}
+                        ]}],
+  [rabbitmq_management]}
 
 ].

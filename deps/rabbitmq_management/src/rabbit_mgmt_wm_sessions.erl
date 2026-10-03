@@ -8,7 +8,7 @@
 
 -export([init/2, content_types_provided/2, allowed_methods/2,
          is_authorized/2, delete_resource/2]).
--export([to_json/2]).
+-export([to_json/2, parse_pagination_params/1]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
@@ -43,7 +43,7 @@ delete_resource(ReqData, Context) ->
         ok ->
             {true, ReqData, Context};
         {error, not_found} ->
-            {false, ReqData, Context};
+            rabbit_mgmt_util:not_found(session_not_found, ReqData, Context);
         {error, forbidden} ->
             rabbit_web_dispatch_access_control:halt_response(403, forbidden, <<"session_belongs_to_another_user">>, ReqData, Context)
     end.

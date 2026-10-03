@@ -82,6 +82,9 @@ init_settings_test(Config) ->
 
     ?assertMatch(#{<<"product_info">> := _}, Settings),
     ?assertMatch(#{<<"definitions">> := _}, Settings),
+    ?assertMatch(#{<<"sessions">> := #{<<"enabled">> := false,
+                                       <<"max_concurrent">> := 1,
+                                       <<"heartbeat_interval">> := 30}}, Settings),
 
     %% test_user has no permissions on any virtual host, so the list is empty.
     Vhosts = maps:get(<<"vhosts">>, JsonBody),

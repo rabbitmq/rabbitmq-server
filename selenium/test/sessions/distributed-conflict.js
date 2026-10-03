@@ -21,6 +21,9 @@ describe('Distributed Conflict Resolution', function () {
 
   before(async function () { 
     this.timeout(120000)
+    if (!hasProfile('sessions')) {
+      return this.skip()
+    }
     isOAuth = hasProfile('oauth2')
 
     // Initialize two separate browser instances
