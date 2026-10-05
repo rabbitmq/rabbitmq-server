@@ -530,15 +530,9 @@ resolve_scope_var(Elem, Token, Vhost, Syntax) ->
 escape_regex_metacharacters(Str) ->
     binary_to_list(rabbit_re:escape(iolist_to_binary(Str))).
 
--spec tags_from(decoded_jwt_token()) -> list(atom()).
+-spec tags_from(decoded_jwt_token()) -> list(binary()).
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
+    %% Binaries, so that token contents never create atoms.
     TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
-    lists:usort(lists:filtermap(fun safe_to_atom/1, TagScopes)).
-
-safe_to_atom(Bin) ->
-    try
-        {true, rabbit_data_coercion:to_existing_atom(Bin)}
-    catch
-        error:badarg -> false
-    end.
+    lists:usort(TagScopes).
