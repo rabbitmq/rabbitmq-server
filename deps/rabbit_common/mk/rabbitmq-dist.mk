@@ -223,7 +223,7 @@ install-cli-scripts: | $(CLI_SCRIPTS_DIR)
 	$(call maybe_flock,$(CLI_SCRIPTS_LOCK), \
 		cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/)
 
-install-cli-escripts: | $(CLI_ESCRIPTS_DIR)
+install-cli-escripts: deps | $(CLI_ESCRIPTS_DIR)
 	$(gen_verbose) $(call maybe_flock,$(CLI_ESCRIPTS_LOCK), \
 		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
 			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
