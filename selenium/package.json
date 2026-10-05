@@ -15,8 +15,13 @@
     "proxy-agent": "6.5.0"
   },
   "dependencies": {
+<<<<<<< HEAD
     "amqplib": "2.0.1",
     "ejs": "^6.0.1",
+=======
+    "amqplib": "2.2.0",
+    "ejs": "^7.0.1",
+>>>>>>> 3b3d653 (Bump ejs from 6.0.1 to 7.0.1 in /selenium)
     "express": "^5.1.0",
     "geckodriver": "^6.0.2",
     "http-proxy": "^1.18.1",
