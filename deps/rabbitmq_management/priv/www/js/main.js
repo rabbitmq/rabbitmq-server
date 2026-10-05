@@ -31,6 +31,11 @@ $(document).ready(function() {
   } else {
     if (oauth.enabled) {
       startWithOAuthLogin(oauth);
+      var logout_error = get_local_pref('oauth-logout-error');
+      if (logout_error) {
+        clear_pref('oauth-logout-error');
+        renderWarningMessageInLoginStatus(oauth, logout_error);
+      }
     } else {
       startWithLoginPage();
       }
@@ -187,6 +192,13 @@ function login(username, password) {
   return load_init_data_and_ui(user);
 }
 
+function oauth_logout_after_failure(message) {
+  if (oauth.enabled && oauth.sp_initiated) {
+    store_pref('oauth-logout-error', message);
+    oauth_initiateLogout();
+  }
+}
+
 function load_init_data_and_ui(user) {
   if (!load_init_data()) {
     return false;
@@ -198,7 +210,8 @@ function load_init_data_and_ui(user) {
     invokeInitFailedProcessors(errMsg);
     clear_auth();
     if (oauth.enabled) {
-      renderWarningMessageInLoginStatus(oauth, errMsg);
+      renderWarningMessageInLoginStatus(oauth, fmt_escape_html(errMsg));
+      oauth_logout_after_failure(fmt_escape_html(errMsg));
     } else {
       replace_content('login-status', '<p>' + fmt_escape_html(errMsg) + '</p>');
     }
@@ -212,6 +225,7 @@ function load_init_data_and_ui(user) {
     invokeInitFailedProcessors(err);
     clear_auth();
     replace_content('login-status', '<p>Application initialization failed</p>');
+    oauth_logout_after_failure('Application initialization failed');
     return false;
   }
   invokeInitProcessors({user: user, settings: window.app_settings});
