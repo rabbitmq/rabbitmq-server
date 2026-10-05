@@ -51,6 +51,7 @@ create_session(Username, Metadata) ->
     MaxConcurrent = proplists:get_value(max_concurrent, Settings, 1),
     UserSessionsPath = ?KHEPRI_USER_SESSIONS_PATTERN(Username),
     SessionPath = ?KHEPRI_SESSION_PATH(Username, SessionId),
+    UserPath = rabbit_db_user:khepri_user_path(Username),
 
     TxRes = rabbit_khepri:transaction(fun() ->
         Map = case khepri_tx:get_many(UserSessionsPath) of
@@ -68,7 +69,11 @@ create_session(Username, Metadata) ->
         if length(ActiveSessions) >= MaxConcurrent ->
             {error, limit_reached};
            true ->
-            case khepri_tx:put(SessionPath, Session) of
+            PutOptions = case khepri_tx:exists(UserPath) of
+                true  -> #{keep_while => #{UserPath => #if_node_exists{exists = true}}};
+                false -> #{}
+            end,
+            case khepri_tx:put(SessionPath, Session, PutOptions) of
                 ok               -> {ok, SessionId};
                 {error, _} = Err -> Err
             end
@@ -136,7 +141,7 @@ delete_session(SessionId, undefined) ->
     PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
     case rabbit_khepri:get_many(PathPattern) of
         {ok, Map} when map_size(Map) > 0 ->
-            lists:foreach(fun delete_session_node/1, maps:keys(Map)),
+            lists:foreach(fun rabbit_khepri:delete/1, maps:keys(Map)),
             ok;
         _ ->
             {error, not_found}
@@ -145,7 +150,8 @@ delete_session(SessionId, Username) ->
     SessionPath = ?KHEPRI_SESSION_PATH(Username, SessionId),
     case rabbit_khepri:get(SessionPath) of
         {ok, Session} when is_map(Session) ->
-            delete_session_node(SessionPath);
+            _ = rabbit_khepri:delete(SessionPath),
+            ok;
         _ ->
             PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
             case rabbit_khepri:get_many(PathPattern) of
@@ -223,17 +229,12 @@ terminate_sessions(Username) ->
 %%====================================================================
 
 init([]) ->
-    process_flag(trap_exit, true),
-    ok = gen_event:add_handler(rabbit_event, rabbit_mgmt_sessions_handler, []),
     Timer = erlang:send_after(?SWEEP_INTERVAL, self(), sweep_expired_sessions),
     {ok, #state{timer = Timer}}.
 
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
 
-handle_cast({user_deleted, Username}, State) ->
-    ok = terminate_sessions(Username),
-    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -254,7 +255,6 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, State) ->
-    _ = gen_event:delete_handler(rabbit_event, rabbit_mgmt_sessions_handler, []),
     if State#state.timer =/= undefined ->
         _ = erlang:cancel_timer(State#state.timer),
         ok;
@@ -286,33 +286,12 @@ sweep_expired_sessions_in_khepri() ->
                 [] ->
                     0;
                 _ ->
-                    lists:foreach(fun delete_session_node/1, ExpiredPaths),
+                    lists:foreach(fun rabbit_khepri:delete/1, ExpiredPaths),
                     length(ExpiredPaths)
             end;
         _ ->
             0
     end.
-
-delete_session_node([rabbitmq, mgmt_sessions, Username, _SessionId] = Path) ->
-    UserPath = [rabbitmq, mgmt_sessions, Username],
-    UserSessionsPath = ?KHEPRI_USER_SESSIONS_PATTERN(Username),
-    Ret = rabbit_khepri:transaction(fun() ->
-        _ = khepri_tx:delete(Path),
-        case khepri_tx:get_many(UserSessionsPath) of
-            {ok, Remaining} when map_size(Remaining) =:= 0 ->
-                khepri_tx:delete(UserPath);
-            _ ->
-                ok
-        end
-    end),
-    case Ret of
-        {error, Reason} ->
-            ?LOG_WARNING("Failed to delete session ~ts of user ~ts: ~tp",
-                         [lists:last(Path), Username, Reason]);
-        _ ->
-            ok
-    end,
-    ok.
 
 is_active(S, Now) ->
     is_map(S) andalso maps:get(expires_at, S, 0) > Now.

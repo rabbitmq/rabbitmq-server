@@ -38,7 +38,9 @@ all() ->
         distributed_session_counting_test,
         session_expiry_test,
         auto_resume_orphaned_session_test,
-        delete_user_sessions_test
+        delete_user_sessions_test,
+        session_removed_with_internal_user_test,
+        session_for_user_without_internal_record_test
     ].
 
 init_per_suite(Config) ->
@@ -303,6 +305,38 @@ session_metadata(Config, SessionId) ->
     SessionsRes = http_get(Config, "/sessions", "test_admin", "test_admin", ?OK),
     [Session] = [S || S <- maps:get('items', SessionsRes), maps:get('id', S) == SessionId],
     maps:get('metadata', Session).
+
+session_removed_with_internal_user_test(Config) ->
+    N1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    N2 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    {ok, {{_, 201, _}, _, BodyJSON}} = req_node(Config, N1, post, "/session", "test_user_b", "test_user_b", #{}),
+    SessionId = maps:get('session_id', decode_body(BodyJSON)),
+    Path = ?KHEPRI_USER_SESSIONS_PATH(<<"test_user_b">>) ++ [SessionId],
+    ?assertMatch({ok, _}, rpc(Config, N1, rabbit_khepri, get, [Path])),
+
+    true = rpc(Config, N2, rabbit_db_user, delete, [<<"test_user_b">>]),
+
+    ?awaitMatch({error, {khepri, node_not_found, _}}, rpc(Config, N1, rabbit_khepri, get, [Path]), 30000),
+    passed.
+
+session_for_user_without_internal_record_test(Config) ->
+    N1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Username = <<"external_user">>,
+    {ok, SessionId} = rpc(Config, N1, rabbit_mgmt_sessions, create_session, [Username, #{}]),
+    Path = ?KHEPRI_USER_SESSIONS_PATH(Username) ++ [SessionId],
+    ?assertMatch({ok, _}, rpc(Config, N1, rabbit_khepri, get, [Path])),
+    ?assertMatch({error, {khepri, node_not_found, _}},
+                 rpc(Config, N1, rabbit_khepri, get, [[rabbitmq, users, Username]])),
+
+    %% the session does not prevent creating an internal user with the same name
+    ok = rpc(Config, N1, rabbit_auth_backend_internal, add_user, [Username, <<"pw">>, <<"guest">>]),
+    ok = rpc(Config, N1, rabbit_auth_backend_internal, delete_user, [Username, <<"guest">>]),
+
+    ok = rpc(Config, N1, rabbit_mgmt_sessions, delete_session, [SessionId, Username]),
+    ?awaitMatch({error, {khepri, node_not_found, _}},
+                rpc(Config, N1, rabbit_khepri, get, [?KHEPRI_USER_SESSIONS_PATH(Username)]),
+                30000),
+    passed.
 
 delete_user_sessions_test(Config) ->
     N1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
