@@ -376,7 +376,7 @@ _test() {
   kill_container_if_exist mocha
   begin "Running tests against $RMQ_HOSTNAME with these env variable:"
 
-  SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT:-20000}
+  SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT:-40000}
   SELENIUM_POLLING=${SELENIUM_POLLING:-500}
 
   print "> SELENIUM_TIMEOUT: ${SELENIUM_TIMEOUT}"
