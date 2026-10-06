@@ -491,10 +491,24 @@ module.exports = class BasePage {
 
   async click (locator) {
     if (this.interactionDelay) await this.driver.sleep(this.interactionDelay)
-    return this.retryOnStale(async () => {
-      const element = await this.waitForDisplayed(locator)
-      return element.click()
-    })
+    let attempts = 3
+    let lastError
+    do {
+      try {
+        return await this.retryOnStale(async () => {
+          const element = await this.waitForDisplayed(locator)
+          return element.click()
+        })
+      } catch (error) {
+        if (error.name && error.name.includes('ElementClickInterceptedError')) {
+          lastError = error
+          if (attempts > 1) await this.driver.sleep(this.polling)
+        } else {
+          throw error
+        }
+      }
+    } while (--attempts > 0)
+    throw lastError
   }
 
   async submit (locator) {
