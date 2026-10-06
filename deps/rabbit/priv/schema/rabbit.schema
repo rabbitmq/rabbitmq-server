@@ -1589,6 +1589,16 @@ end}.
     {datatype, {integer, positive}}
 ]}.
 
+%% What an AMQP 0-9-1 channel does when a quorum queue consumer times out:
+%% send a basic.cancel to a client that supports consumer_cancel_notify
+%% (notify_consumer) or always close the channel (close_channel).
+%%
+%% {consumer_timeout_response, notify_consumer},
+
+{mapping, "consumer_timeout_response", "rabbit.consumer_timeout_response", [
+    {datatype, {enum, [notify_consumer, close_channel]}}
+]}.
+
 %% Product name & version overrides.
 
 {mapping, "product.name", "rabbit.product_name", [

@@ -1060,6 +1060,13 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {rabbit_consumer_timeout_response,
+   "consumer_timeout_response = close_channel",
+   [{rabbit, [
+      {consumer_timeout_response, close_channel}
+     ]}],
+   []},
+
   {rabbit_msg_store_shutdown_timeout,
    "message_store_shutdown_timeout = 600000",
    [{rabbit, [
