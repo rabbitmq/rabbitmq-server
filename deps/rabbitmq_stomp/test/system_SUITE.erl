@@ -2013,7 +2013,7 @@ failed_subscription_deletes_only_its_own_queue(Config) ->
               after
                   ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [rabbit_stream_queue])
               end,
-              [Existing | _] = Names(),
+              ?assert(lists:member(Existing, Names())),
               [delete_queue_if_present(rabbit_misc:r(VHost, queue, N), Config)
                || N <- Names(), N =/= Existing],
 
