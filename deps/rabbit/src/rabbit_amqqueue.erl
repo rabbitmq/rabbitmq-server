@@ -646,8 +646,32 @@ retry_wait(Q, F, E, RetriesLeft) ->
         false ->
             ok % Expected result
     end,
-    timer:sleep(30),
-    with(Name, F, E, RetriesLeft - 1).
+    case can_pid_be_alive(Q) of
+        true ->
+            timer:sleep(30),
+            with(Name, F, E, RetriesLeft - 1);
+        false ->
+            E({absent, Q, timeout})
+    end.
+
+-spec can_pid_be_alive(amqqueue:amqqueue()) -> boolean().
+%% Determines whether a CQ's stored pid can be from another
+%% incarnation (run) of this node or remote.
+%%
+%% This allows us to avoid waiting for the pid to respond
+%% without reducing timeouts.
+can_pid_be_alive(Q) when ?amqqueue_is_classic(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    Node = node(QPid),
+    case Node =:= node() of
+        true ->
+            rabbit_pid_codec:is_pid_from_this_node_incarnation(QPid);
+        false ->
+            Members = rabbit_nodes:list_members(),
+            Members =:= [] orelse lists:member(Node, Members)
+    end;
+can_pid_be_alive(_Q) ->
+    true.
 
 -spec with(name(), qfun(A)) ->
           A | rabbit_types:error(not_found_or_absent()).
