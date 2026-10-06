@@ -9,6 +9,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(nowarn_export_all).
 -compile(export_all).
@@ -43,7 +44,16 @@ groups() ->
     %% Classic queues and stream queues do not support consumer timeouts.
     AllTests = [consumer_timeout_with_basic_cancel_capability,
                 consumer_timeout_no_basic_cancel_capability,
-                consumer_timeout_basic_get],
+                consumer_timeout_basic_get,
+                consumer_cancel_ok_after_timeout_removes_consumer,
+                consumer_removed_when_cancel_ok_never_arrives,
+                erlang_client_answers_cancel_only_for_known_consumers,
+                consumer_cancel_ok_after_queue_delete,
+                unsolicited_cancel_ok_keeps_active_consumer,
+                consumer_timeout_late_ack_after_cancel_ok,
+                consumer_timeout_erlang_client_answers_with_cancel_ok,
+                server_advertises_accept_consumer_cancel_ok,
+                consumer_timeout_response_close_channel],
 
     AllTestsParallel = [
        {quorum_queue, [], AllTests}
@@ -284,6 +294,189 @@ consumer_timeout_no_basic_cancel_capability(Config) ->
               ok
     end.
 
+%% A client that answers the server's `basic.cancel` with `basic.cancel_ok`
+%% has its consumer removed from the queue, the channel and the metrics.
+consumer_cancel_ok_after_timeout_removes_consumer(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ok = amqp_channel:set_server_properties(Ch, []),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    publish_and_confirm(Ch, QName, [<<"m1">>]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    _ = receive_delivery(<<"ctag">>, false),
+    await_basic_cancel(<<"ctag">>),
+    ?assertEqual(1, channel_consumer_count(Config)),
+    ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+    ?awaitMatch(#{consumers := 0,
+                  quorum_queue_consumers := 0,
+                  consumer_metrics := []},
+                consumer_state(Config, QName), 5000),
+    ?assertEqual(0, channel_consumer_count(Config)),
+    ?assert(is_process_alive(Ch)),
+    ?assert(is_process_alive(Conn)),
+    amqp_connection:close(Conn).
+
+consumer_removed_when_cancel_ok_never_arrives(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ok = amqp_channel:set_server_properties(Ch, []),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    publish_and_confirm(Ch, QName, [<<"m1">>]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    _ = receive_delivery(<<"ctag">>, false),
+    await_basic_cancel(<<"ctag">>),
+    timer:sleep(3000),
+    ?assertMatch(#{quorum_queue_consumers := 1}, consumer_state(Config, QName)),
+    ?assertEqual(1, channel_consumer_count(Config)),
+    ?awaitMatch(#{consumers := 0,
+                  quorum_queue_consumers := 0,
+                  consumer_metrics := []},
+                consumer_state(Config, QName), ?RECEIVE_TIMEOUT),
+    ?assertEqual(0, channel_consumer_count(Config)),
+    ?assert(is_process_alive(Ch)),
+    amqp_connection:close(Conn).
+
+erlang_client_answers_cancel_only_for_known_consumers(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    _ = erlang:trace(Ch, true, ['receive']),
+    try
+        inject_server_cancel(Ch, <<"unknown">>),
+        await_basic_cancel(<<"unknown">>),
+        ?assertNot(client_sent_cancel_ok(Ch, <<"unknown">>, 1000)),
+        inject_server_cancel(Ch, <<"ctag">>),
+        await_basic_cancel(<<"ctag">>),
+        ?assert(client_sent_cancel_ok(Ch, <<"ctag">>, ?RECEIVE_TIMEOUT))
+    after
+        _ = erlang:trace(Ch, false, ['receive'])
+    end,
+    ?assert(is_process_alive(Ch)),
+    amqp_connection:close(Conn).
+
+%% The Erlang client answers the server's `basic.cancel` on its own.
+consumer_timeout_erlang_client_answers_with_cancel_ok(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    publish_and_confirm(Ch, QName, [<<"m1">>]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    _ = receive_delivery(<<"ctag">>, false),
+    await_basic_cancel(<<"ctag">>),
+    ?awaitMatch(#{consumers := 0,
+                  quorum_queue_consumers := 0,
+                  consumer_metrics := []},
+                consumer_state(Config, QName), ?RECEIVE_TIMEOUT),
+    ?assert(is_process_alive(Ch)),
+    amqp_connection:close(Conn).
+
+unsolicited_cancel_ok_keeps_active_consumer(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+    #'basic.qos_ok'{} = amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 10}),
+    ?assertEqual(1, channel_consumer_count(Config)),
+    ?assertMatch(#{quorum_queue_consumers := 1}, consumer_state(Config, QName)),
+    ?assert(is_process_alive(Ch)),
+    amqp_connection:close(Conn).
+
+%% A `basic.cancel_ok` for a consumer the channel has already removed is ignored.
+consumer_cancel_ok_after_queue_delete(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete'{queue = QName}),
+    await_basic_cancel(<<"ctag">>),
+    ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+    timer:sleep(1000),
+    ?assert(is_process_alive(Ch)),
+    ?assert(is_process_alive(Conn)),
+    amqp_connection:close(Conn).
+
+%% The returned message is not delivered again to the cancelled consumer
+%% after a late `basic.ack` for the timed-out delivery.
+consumer_timeout_late_ack_after_cancel_ok(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    publish_and_confirm(Ch, QName, [<<"m1">>]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    DTag = receive_delivery(<<"ctag">>, false),
+    await_basic_cancel(<<"ctag">>),
+    ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+    ?awaitMatch(#{quorum_queue_consumers := 0}, consumer_state(Config, QName),
+                ?RECEIVE_TIMEOUT),
+    ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    receive
+        {#'basic.deliver'{}, _} ->
+            exit(delivery_to_cancelled_consumer)
+    after 1000 ->
+              ok
+    end,
+    ?assert(is_process_alive(Ch)),
+    amqp_connection:close(Conn).
+
+%% With `consumer_timeout_response` set to `close_channel`, the channel is closed
+%% even for a client that supports `consumer_cancel_notify`.
+consumer_timeout_response_close_channel(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, consumer_timeout_response, close_channel]),
+    try
+        Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+        {ok, Ch} = amqp_connection:open_channel(Conn),
+        QName = ?config(queue_name, Config),
+        declare_queue(Ch, Config, QName),
+        publish_and_confirm(Ch, QName, [<<"m1">>]),
+        wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+        erlang:monitor(process, Ch),
+        subscribe(Ch, QName, false, <<"ctag">>),
+        _ = receive_delivery(<<"ctag">>, false),
+        receive
+            {'DOWN', _, process, Ch, {shutdown, {server_initiated_close, 406, _}}} ->
+                ok;
+            #'basic.cancel'{} ->
+                exit(unexpected_basic_cancel)
+        after ?RECEIVE_TIMEOUT ->
+                  exit(channel_close_expected)
+        end,
+        ?awaitMatch(#{consumers := 0,
+                      quorum_queue_consumers := 0,
+                      consumer_metrics := []},
+                    consumer_state(Config, QName), ?RECEIVE_TIMEOUT),
+        ?assert(is_process_alive(Conn)),
+        amqp_connection:close(Conn)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                          [rabbit, consumer_timeout_response])
+    end.
+
+server_advertises_accept_consumer_cancel_ok(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {server_properties, Props} = lists:keyfind(server_properties, 1,
+                                               amqp_connection:info(Conn, [server_properties])),
+    {<<"capabilities">>, table, Capabilities} = lists:keyfind(<<"capabilities">>, 1, Props),
+    ?assertEqual({<<"accept_consumer_cancel_ok">>, bool, true},
+                 lists:keyfind(<<"accept_consumer_cancel_ok">>, 1, Capabilities)),
+    amqp_connection:close(Conn).
+
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Test helpers
 %%%%%%%%%%%%%%%%%%%%%%%%
@@ -300,6 +493,63 @@ declare_queue(Ch, Config, QName) ->
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
                                                                    arguments = Args ++ ?config(queue_arguments, Config),
                                                                    durable = Durable}).
+publish_and_confirm(Ch, QName, Payloads) ->
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    publish(Ch, QName, Payloads),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30).
+
+receive_delivery(CTag, Redelivered) ->
+    receive
+        {#'basic.deliver'{delivery_tag = DTag,
+                          consumer_tag = CTag,
+                          redelivered = Redelivered}, _} ->
+            DTag
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit({deliver_timeout, CTag, Redelivered})
+    end.
+
+await_basic_cancel(CTag) ->
+    receive
+        #'basic.cancel'{consumer_tag = CTag} ->
+            ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(basic_cancel_expected)
+    end.
+
+inject_server_cancel(Ch, CTag) ->
+    gen_server:cast(Ch, {method, #'basic.cancel'{consumer_tag = CTag, nowait = true},
+                         none, noflow}).
+
+client_sent_cancel_ok(Ch, CTag, Timeout) ->
+    receive
+        {trace, Ch, 'receive',
+         {'$gen_cast', {cast, #'basic.cancel_ok'{consumer_tag = CTag}, _, _, _}}} ->
+            true
+    after Timeout ->
+              false
+    end.
+
+channel_consumer_count(Config) ->
+    lists:sum([proplists:get_value(consumer_count, Info)
+               || Info <- rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel,
+                                                       info_all, [[consumer_count]])]).
+
+consumer_state(Config, QName) ->
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QRes]),
+    [{consumers, Consumers}] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                                            info, [Q, [consumers]]),
+    {ok, #{machine := #{num_consumers := NumQQConsumers}}, _} =
+        ra:member_overview(amqqueue:get_pid(Q)),
+    Metrics = [E || E <- rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list,
+                                                      [consumer_created]),
+                    element(1, element(1, E)) =:= QRes],
+    #{consumers => Consumers,
+      quorum_queue_consumers => NumQQConsumers,
+      consumer_metrics => Metrics}.
+
 publish(Ch, QName, Payloads) ->
     [amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload})
      || Payload <- Payloads].
