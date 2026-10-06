@@ -904,6 +904,17 @@
 ##
 # consumer_timeout = 900000
 
+## How consumer delivery acknowledgement timeouts should be handled.
+##
+## `notify_consumer` (the default) sends a `basic.cancel` to clients
+## that support the `consumer_cancel_notify` capability
+## and only closes the channel for clients that do not.
+##
+## `close_channel`, as the name suggests, always closes the channel,
+## which is the pre-`4.3.0` behavior.
+##
+# consumer_timeout_response = notify_consumer
+
 #
 # Advanced Erlang Networking/Clustering Options
 #
