@@ -26,7 +26,10 @@ all() ->
      safe_decoder_handles_long_node_names,
      pid_from_name_no_atoms_for_crafted_input,
      pid_from_name_rejects_malformed_node_name,
-     pid_from_name_happy_path
+     pid_from_name_happy_path,
+     pid_from_this_node_incarnation,
+     pid_from_another_node_incarnation,
+     pid_from_another_node
     ].
 
 init_per_suite(Config) -> Config.
@@ -132,6 +135,23 @@ pid_from_name_happy_path(_) ->
     Candidate = node(),
     {ok, Pid} = rabbit_volatile_queue:pid_from_name(QName, #{Hash => Candidate}),
     ?assertEqual(Candidate, node(Pid)).
+
+pid_from_this_node_incarnation(_) ->
+    {DeadPid, MRef} = spawn_monitor(fun() -> ok end),
+    receive {'DOWN', MRef, process, DeadPid, _} -> ok end,
+    ?assert(rabbit_pid_codec:is_pid_from_this_node_incarnation(self())),
+    ?assert(rabbit_pid_codec:is_pid_from_this_node_incarnation(DeadPid)).
+
+pid_from_another_node_incarnation(_) ->
+    #{creation := Creation} = Parts = rabbit_pid_codec:decompose(self()),
+    Pid = rabbit_pid_codec:recompose(Parts#{creation := Creation + 1}),
+    ?assertEqual(node(), node(Pid)),
+    ?assertNot(rabbit_pid_codec:is_pid_from_this_node_incarnation(Pid)).
+
+pid_from_another_node(_) ->
+    Parts = rabbit_pid_codec:decompose(self()),
+    Pid = rabbit_pid_codec:recompose(Parts#{node := 'rabbit@another-host'}),
+    ?assertNot(rabbit_pid_codec:is_pid_from_this_node_incarnation(Pid)).
 
 %%% Helpers
 

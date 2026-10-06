@@ -10,7 +10,8 @@
 -export([decompose/1,
          decompose_from_binary/1,
          recompose/1,
-         recompose_to_binary/1]).
+         recompose_to_binary/1,
+         is_pid_from_this_node_incarnation/1]).
 
 -define(NEW_PID_EXT, 88).
 -define(ATOM_UTF8_EXT, 118).
@@ -79,3 +80,8 @@ recompose_to_binary(#{node := Node,
 recompose(Map) ->
     Bin = recompose_to_binary(Map),
     binary_to_term(Bin).
+
+-spec is_pid_from_this_node_incarnation(pid()) -> boolean().
+is_pid_from_this_node_incarnation(Pid) ->
+    #{creation := Creation} = decompose(Pid),
+    node(Pid) =:= node() andalso Creation =:= erlang:system_info(creation).
