@@ -328,16 +328,22 @@ build_params(EndPoint, Headers) ->
     rabbit_misc:plmerge(default_params(EndPoint), Params).
 
 build_param(?HEADER_PERSISTENT, Val) ->
-    {durable, string_to_boolean(Val)};
+    {durable, durable_param(?HEADER_PERSISTENT, Val)};
 
 build_param(?HEADER_DURABLE, Val) ->
-    {durable, string_to_boolean(Val)};
+    {durable, durable_param(?HEADER_DURABLE, Val)};
 
 build_param(?HEADER_AUTO_DELETE, Val) ->
     {auto_delete, string_to_boolean(Val)};
 
 build_param(?HEADER_EXCLUSIVE, Val) ->
     {exclusive, string_to_boolean(Val)}.
+
+durable_param(Header, Val) ->
+    case string_to_boolean(Val) of
+        undefined -> {invalid, Header};
+        Bool      -> Bool
+    end.
 
 default_params({queue, _}) ->
     [{durable, true}];
@@ -346,7 +352,7 @@ default_params({exchange, _}) ->
     [{exclusive, true}, {auto_delete, true}];
 
 default_params({topic, _}) ->
-    [{exclusive, false}, {auto_delete, true}];
+    [{auto_delete, true}];
 
 default_params(_) ->
     [{durable, false}].

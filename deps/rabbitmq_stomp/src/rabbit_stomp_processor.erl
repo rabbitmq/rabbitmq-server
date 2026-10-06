@@ -36,7 +36,6 @@
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_headers.hrl").
--include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
@@ -1729,39 +1728,14 @@ maybe_apply_default_topic_exchange(Exchange, _DefaultTopicExchange) ->
     %% message headers
     Exchange.
 
-create_queue(_State = #state{authz_ctx = AuthzCtx,
-                             user = #user{username = Username} = User,
-                             cfg = #cfg{vhost = VHost}}) ->
+create_queue(State = #state{cfg = #cfg{vhost = VHost}}) ->
     QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "stomp.gen"),
-    QName = rabbit_misc:r(VHost, queue, QNameBin),
-
-    %% configure access to queue required for queue.declare
-    ok = check_resource_access(User, QName, configure, AuthzCtx),
-    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-        false ->
-            rabbit_core_metrics:queue_declared(QName),
-
-            Durable = false,
-            AutoDelete = true,
-            Args = rabbit_amqqueue:augment_declare_args(
-                     VHost, Durable, _Exclusive = true, AutoDelete, []),
-            case rabbit_amqqueue:declare(QName, Durable, AutoDelete,
-                                         Args, self(), Username) of
-                {new, Q} when ?is_amqqueue(Q) ->
-                    rabbit_core_metrics:queue_created(QName),
-                    {ok, Q};
-                {protocol_error, ErrorType, Reason, ReasonArgs} ->
-                    rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs);
-                Other ->
-                    log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
-                    {error, queue_declare}
-            end;
-        {true, Limit} ->
-            log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
-                      rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
-                      none),
-            {error, queue_limit_exceeded}
-    end.
+    create_queue(#{name => rabbit_misc:r(VHost, queue, QNameBin),
+                   durable => false,
+                   auto_delete => true,
+                   exclusive => true,
+                   arguments => []},
+                 State).
 
 delete_queue(QRes, Username) ->
     case rabbit_amqqueue:with(
@@ -1976,13 +1950,11 @@ parse_endpoint0(Type,     Rest) ->
 
 util_ensure_endpoint(source, {exchange, {Name, _}}, Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
     ensure_exchange_exists(VHost, Name, Params),
-    Amqqueue = new_amqqueue(undefined, exchange, Params, State),
-    {ok, Queue} = create_queue(Amqqueue, State),
+    {ok, Queue} = create_queue(queue_declaration(undefined, exchange, Params, State), State),
     {ok, amqqueue:get_name(Queue), State};
 
 util_ensure_endpoint(source, {topic, _}, Params, State) ->
-    Amqqueue = new_amqqueue(undefined, topic, Params, State),
-    {ok, Queue} = create_queue(Amqqueue, State),
+    {ok, Queue} = create_queue(queue_declaration(undefined, topic, Params, State), State),
     {ok, amqqueue:get_name(Queue), State};
 
 util_ensure_endpoint(_Dir, {queue, undefined}, _Params, State) ->
@@ -1994,8 +1966,9 @@ util_ensure_endpoint(_, {queue, Name}, Params, State=#state{route_state = Routin
     QueueNameBin = Name,
     RState1 = case sets:is_element(QueueNameBin, RoutingState) of
                   true -> RoutingState;
-                  _    -> Amqqueue = new_amqqueue(QueueNameBin, queue, Params1, State),
-                          {ok, Queue} = create_queue(Amqqueue, State),
+                  _    -> {ok, Queue} = create_queue(
+                                          queue_declaration(QueueNameBin, queue, Params1, State),
+                                          State),
                           #resource{name = QNameBin} = amqqueue:get_name(Queue),
                           sets:add_element(QNameBin, RoutingState)
               end,
@@ -2045,9 +2018,8 @@ check_exchange(ExchangeName, true) ->
     _ = rabbit_exchange:lookup_or_die(ExchangeName),
     ok.
 
-new_amqqueue(QNameBin0, Type, Params0, _State = #state{user = #user{username = Username},
-                                                       cfg = #cfg{vhost = VHost}}) ->
-    QNameBin = case  {Type, proplists:get_value(subscription_queue_name_gen, Params0)} of
+queue_declaration(QNameBin0, Type, Params, _State = #state{cfg = #cfg{vhost = VHost}}) ->
+    QNameBin = case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
                    {topic, SQNG} when is_function(SQNG) ->
                        SQNG();
                    {exchange, SQNG} when is_function(SQNG) ->
@@ -2055,31 +2027,27 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #state{user = #user{username = U
                    _ ->
                        QNameBin0
                end,
-    QName = rabbit_misc:r(VHost, queue, QNameBin),
-    %% defaults
-    Params = case proplists:get_value(durable, Params0, false) of
-                 false -> [{auto_delete, true}, {exclusive, true} | Params0];
-                 true  -> Params0
-             end,
-    Durable = proplists:get_value(durable, Params, false),
-    AutoDelete = proplists:get_value(auto_delete, Params, false),
-    Exclusive = proplists:get_value(exclusive, Params, false),
-    Args = rabbit_amqqueue:augment_declare_args(
-             VHost, Durable, Exclusive, AutoDelete,
-             proplists:get_value(arguments, Params, [])),
+    Durable = case proplists:get_value(durable, Params, false) of
+                  {invalid, Header} ->
+                      rabbit_misc:protocol_error(
+                        precondition_failed, "invalid value for header '~ts'", [Header]);
+                  D ->
+                      D
+              end,
+    Exclusive = flag_param(exclusive, Params, not Durable),
+    #{name => rabbit_misc:r(VHost, queue, QNameBin),
+      durable => Durable andalso not Exclusive,
+      auto_delete => flag_param(auto_delete, Params, not Durable),
+      exclusive => Exclusive,
+      arguments => proplists:get_value(arguments, Params, [])}.
 
-    amqqueue:new(QName,
-                 none,
-                 Durable,
-                 AutoDelete,
-                 case Exclusive of
-                     false -> none;
-                     true -> self()
-                 end,
-                 Args,
-                 VHost,
-                 #{user => Username},
-                 rabbit_amqqueue:get_queue_type(Args)).
+%% A malformed `auto-delete` or `exclusive` value is `undefined` and overrides
+%% the destination default with the durability default, as on `v4.3.x`.
+flag_param(Key, Params, Default) ->
+    case proplists:get_value(Key, Params) of
+        undefined -> Default;
+        Value     -> Value
+    end.
 
 
 to_url([])  -> <<>>;
@@ -2118,55 +2086,51 @@ consume_queue(QRes, Spec0, State = #state{user = #user{username = Username} = Us
               end
       end).
 
-assert_equivalent_if_exists(Amqqueue) ->
-    case rabbit_amqqueue:with(
-           amqqueue:get_name(Amqqueue),
-           fun(Q) ->
-                   rabbit_amqqueue:assert_equivalence(
-                     Q,
-                     amqqueue:is_durable(Amqqueue),
-                     amqqueue:is_auto_delete(Amqqueue),
-                     amqqueue:get_arguments(Amqqueue),
-                     amqqueue:get_exclusive_owner(Amqqueue))
-           end) of
-        ok -> ok;
-        {error, not_found} -> ok;
-        {error, {absent, Q, Reason}} -> rabbit_amqqueue:absent(Q, Reason)
-    end.
-
-create_queue(Amqqueue, _State = #state{authz_ctx = AuthzCtx,
-                                       user = User,
-                                       cfg = #cfg{vhost = VHost}}) ->
-    QName = amqqueue:get_name(Amqqueue),
-
-    %% configure access to queue required for queue.declare
+create_queue(#{name := QName,
+               durable := Durable,
+               auto_delete := AutoDelete,
+               exclusive := Exclusive,
+               arguments := Args0},
+             _State = #state{authz_ctx = AuthzCtx,
+                             user = #user{username = Username} = User,
+                             cfg = #cfg{vhost = VHost}}) ->
+    Owner = case Exclusive of
+                true  -> self();
+                false -> none
+            end,
+    Args = rabbit_amqqueue:augment_declare_args(VHost, Durable, Exclusive,
+                                                AutoDelete, Args0),
     ok = check_resource_access(User, QName, configure, AuthzCtx),
-    ok = check_dead_letter_exchange_access(
-           QName, amqqueue:get_arguments(Amqqueue), User, AuthzCtx),
-    ok = assert_equivalent_if_exists(Amqqueue),
-
-    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-        false ->
-            rabbit_core_metrics:queue_declared(QName),
-
-            case rabbit_queue_type:declare(Amqqueue, node()) of
-                {new, Q} when ?is_amqqueue(Q) ->
+    rabbit_core_metrics:queue_declared(QName),
+    Existing = fun(Q) ->
+                       ok = rabbit_amqqueue:assert_equivalence(
+                              Q, Durable, AutoDelete, Args, Owner),
+                       {ok, Q}
+               end,
+    case rabbit_amqqueue:with(QName, Existing) of
+        {ok, Q} ->
+            {ok, Q};
+        {error, not_found} ->
+            ok = check_dead_letter_exchange_access(QName, Args, User, AuthzCtx),
+            case rabbit_amqqueue:declare(QName, Durable, AutoDelete, Args,
+                                         Owner, Username) of
+                {new, Q} ->
                     rabbit_core_metrics:queue_created(QName),
                     {ok, Q};
-                {existing, Q} when ?is_amqqueue(Q) ->
-                    rabbit_core_metrics:queue_created(QName),
-                    {ok, Q};
+                {existing, Q} ->
+                    Existing(Q);
+                {absent, Q, Reason} ->
+                    rabbit_amqqueue:absent(Q, Reason);
+                {error, queue_limit_exceeded, Reason, ReasonArgs} ->
+                    rabbit_misc:precondition_failed(Reason, ReasonArgs);
                 {protocol_error, ErrorType, Reason, ReasonArgs} ->
                     rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs);
                 Other ->
-                    log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
-                    {error, queue_declare}
+                    rabbit_misc:protocol_error(internal_error, "failed to declare ~ts: ~tp",
+                                               [rabbit_misc:rs(QName), Other])
             end;
-        {true, Limit} ->
-            log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
-                      rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
-                      none),
-            {error, queue_limit_exceeded}
+        {error, {absent, Q, Reason}} ->
+            rabbit_amqqueue:absent(Q, Reason)
     end.
 
 routing_init_state() -> sets:new([{version, 2}]).
