@@ -379,7 +379,6 @@ consumer_timeout_erlang_client_answers_with_cancel_ok(Config) ->
     ?assert(is_process_alive(Ch)),
     amqp_connection:close(Conn).
 
-%% A `basic.cancel_ok` for a consumer the channel has already removed is ignored.
 unsolicited_cancel_ok_keeps_active_consumer(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -393,6 +392,7 @@ unsolicited_cancel_ok_keeps_active_consumer(Config) ->
     ?assert(is_process_alive(Ch)),
     amqp_connection:close(Conn).
 
+%% A `basic.cancel_ok` for a consumer the channel has already removed is ignored.
 consumer_cancel_ok_after_queue_delete(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
     {ok, Ch} = amqp_connection:open_channel(Conn),
