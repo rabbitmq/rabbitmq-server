@@ -46,6 +46,8 @@ groups() ->
                 consumer_timeout_no_basic_cancel_capability,
                 consumer_timeout_basic_get,
                 consumer_cancel_ok_after_timeout_removes_consumer,
+                consumer_removed_when_cancel_ok_never_arrives,
+                erlang_client_answers_cancel_only_for_known_consumers,
                 consumer_cancel_ok_after_queue_delete,
                 consumer_timeout_late_ack_after_cancel_ok,
                 consumer_timeout_erlang_client_answers_with_cancel_ok,
@@ -296,22 +298,66 @@ consumer_timeout_no_basic_cancel_capability(Config) ->
 consumer_cancel_ok_after_timeout_removes_consumer(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
     {ok, Ch} = amqp_connection:open_channel(Conn),
+    ok = amqp_channel:set_server_properties(Ch, []),
     QName = ?config(queue_name, Config),
     declare_queue(Ch, Config, QName),
     publish_and_confirm(Ch, QName, [<<"m1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    erlang:monitor(process, Ch),
     subscribe(Ch, QName, false, <<"ctag">>),
     _ = receive_delivery(<<"ctag">>, false),
     await_basic_cancel(<<"ctag">>),
+    ?assertEqual(1, channel_consumer_count(Config)),
     ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+    ?awaitMatch(#{consumers := 0,
+                  quorum_queue_consumers := 0,
+                  consumer_metrics := []},
+                consumer_state(Config, QName), 5000),
+    ?assertEqual(0, channel_consumer_count(Config)),
+    ?assert(is_process_alive(Ch)),
+    ?assert(is_process_alive(Conn)),
+    amqp_connection:close(Conn).
+
+consumer_removed_when_cancel_ok_never_arrives(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ok = amqp_channel:set_server_properties(Ch, []),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    publish_and_confirm(Ch, QName, [<<"m1">>]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    _ = receive_delivery(<<"ctag">>, false),
+    await_basic_cancel(<<"ctag">>),
+    timer:sleep(3000),
+    ?assertMatch(#{quorum_queue_consumers := 1}, consumer_state(Config, QName)),
+    ?assertEqual(1, channel_consumer_count(Config)),
     ?awaitMatch(#{consumers := 0,
                   quorum_queue_consumers := 0,
                   consumer_metrics := []},
                 consumer_state(Config, QName), ?RECEIVE_TIMEOUT),
     ?assertEqual(0, channel_consumer_count(Config)),
     ?assert(is_process_alive(Ch)),
-    ?assert(is_process_alive(Conn)),
+    amqp_connection:close(Conn).
+
+erlang_client_answers_cancel_only_for_known_consumers(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    _ = erlang:trace(Ch, true, ['receive']),
+    try
+        inject_server_cancel(Ch, <<"unknown">>),
+        await_basic_cancel(<<"unknown">>),
+        ?assertNot(client_sent_cancel_ok(Ch, <<"unknown">>, 1000)),
+        inject_server_cancel(Ch, <<"ctag">>),
+        await_basic_cancel(<<"ctag">>),
+        ?assert(client_sent_cancel_ok(Ch, <<"ctag">>, ?RECEIVE_TIMEOUT))
+    after
+        _ = erlang:trace(Ch, false, ['receive'])
+    end,
+    ?assert(is_process_alive(Ch)),
     amqp_connection:close(Conn).
 
 %% The Erlang client answers the server's `basic.cancel` on its own.
@@ -456,6 +502,19 @@ await_basic_cancel(CTag) ->
     after ?RECEIVE_TIMEOUT ->
               flush(1),
               exit(basic_cancel_expected)
+    end.
+
+inject_server_cancel(Ch, CTag) ->
+    gen_server:cast(Ch, {method, #'basic.cancel'{consumer_tag = CTag, nowait = true},
+                         none, noflow}).
+
+client_sent_cancel_ok(Ch, CTag, Timeout) ->
+    receive
+        {trace, Ch, 'receive',
+         {'$gen_cast', {cast, #'basic.cancel_ok'{consumer_tag = CTag}, _, _, _}}} ->
+            true
+    after Timeout ->
+              false
     end.
 
 channel_consumer_count(Config) ->
