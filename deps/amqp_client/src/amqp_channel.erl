@@ -683,7 +683,7 @@ pre_do(#'channel.close'{reply_code = Code, reply_text = Text}, none,
 pre_do(#'basic.consume'{consumer_tag = Tag, nowait = NoWait} = Method, none,
        Sender, State) ->
     ok = call_to_consumer(Method, Sender, State),
-    case NoWait of
+    case NoWait andalso Tag =/= <<>> of
         true  -> add_consumer_tag(Tag, State);
         false -> State
     end;
