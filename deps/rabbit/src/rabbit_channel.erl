@@ -1473,8 +1473,12 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
     OkMsg = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
     cancel_consumer(ConsumerTag, NoWait, OkMsg, State);
 
-handle_method(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, _, State) ->
+handle_method(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, _,
+              State = #ch{pending_consumer_cancels = Pending})
+  when is_map_key(ConsumerTag, Pending) ->
     cancel_consumer(ConsumerTag, true, undefined, State);
+handle_method(#'basic.cancel_ok'{}, _, State) ->
+    {noreply, State};
 handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
     rabbit_misc:protocol_error(not_implemented,
                                "prefetch_size!=0 (~w)", [Size]);
@@ -2848,8 +2852,8 @@ handle_consumer_delivery_timeout(CTag, MsgId, QName, State) ->
         true ->
             notify_consumer_of_cancelation_after_delivery_timeout(CTag, State);
         false ->
-            %% The node is configured to use the pre-4.2 behavior
-            %% or this client does not advetise support for `consumer_cancel_notify`.
+            %% The node is configured to use the pre-4.3 behavior
+            %% or this client does not advertise support for `consumer_cancel_notify`.
             {_, State1} = handle_consumer_timed_out(CTag, MsgId, QName, State),
             State1
     end.
