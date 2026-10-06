@@ -85,6 +85,7 @@ define PROJECT_ENV
 	    %% 30 minutes
 	    {consumer_timeout, 1800000},
 	    {consumer_disconnected_timeout, 60000},
+	    {consumer_timeout_response, notify_consumer},
 
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},

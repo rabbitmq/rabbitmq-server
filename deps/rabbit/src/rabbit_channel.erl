@@ -169,7 +169,9 @@
              interceptor_state,
              queue_states,
              tick_timer,
-             publishing_mode = false :: boolean()
+             publishing_mode = false :: boolean(),
+             %% for clients that do not respond to a `basic.cancel` with a `basic.cancel_ok`
+             pending_consumer_cancels = #{} :: #{rabbit_types:ctag() => reference()}
             }).
 
 -define(QUEUE, lqueue).
@@ -182,6 +184,8 @@
 -define(MAX_CHANNEL_TX_MESSAGES, 10_000).
 
 -define(REFRESH_TIMEOUT, 15000).
+
+-define(CONSUMER_CANCEL_OK_TIMEOUT, 10_000).
 
 -define(STATISTICS_KEYS,
         [reductions,
@@ -715,6 +719,15 @@ handle_info({{Ref, Node}, LateAnswer},
                  [Channel, LateAnswer, Node]),
     noreply(State);
 
+handle_info({timeout, TRef, {consumer_cancel_ok_timeout, CTag}},
+            #ch{pending_consumer_cancels = Pending} = State) ->
+    case Pending of
+        #{CTag := TRef} ->
+            {noreply, State1} = cancel_consumer(CTag, true, undefined, State),
+            noreply(State1);
+        _ ->
+            noreply(State)
+    end;
 handle_info(tick, #ch{} = State0) ->
     case get(permission_cache_can_expire) of
       true  ->
@@ -1460,8 +1473,12 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
     OkMsg = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
     cancel_consumer(ConsumerTag, NoWait, OkMsg, State);
 
-handle_method(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, _, State) ->
-    cancel_consumer(ConsumerTag, false, undefined, State);
+handle_method(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, _,
+              State = #ch{pending_consumer_cancels = Pending})
+  when is_map_key(ConsumerTag, Pending) ->
+    cancel_consumer(ConsumerTag, true, undefined, State);
+handle_method(#'basic.cancel_ok'{}, _, State) ->
+    {noreply, State};
 handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
     rabbit_misc:protocol_error(not_implemented,
                                "prefetch_size!=0 (~w)", [Size]);
@@ -1784,7 +1801,7 @@ handle_consuming_queue_down_or_eol(QName,
 
 cancel_consumer(CTag, QName, #ch{cfg = #conf{},
                                  consumer_mapping = CMap} = State) ->
-    case server_consumer_cancel_supported(State) of
+    case client_supports_consumer_cancel_notify(State) of
         true ->
             ok = send(#'basic.cancel'{consumer_tag = CTag,
                                       nowait = true}, State);
@@ -1794,9 +1811,10 @@ cancel_consumer(CTag, QName, #ch{cfg = #conf{},
     rabbit_event:notify(consumer_deleted, [{consumer_tag, CTag},
                                            {channel, self()},
                                            {queue, QName}]),
-    State#ch{consumer_mapping = maps:remove(CTag, CMap)}.
+    clear_pending_consumer_cancel(
+      CTag, State#ch{consumer_mapping = maps:remove(CTag, CMap)}).
 
-server_consumer_cancel_supported(#ch{cfg = #conf{capabilities = Capabilities}}) ->
+client_supports_consumer_cancel_notify(#ch{cfg = #conf{capabilities = Capabilities}}) ->
     {bool, true} == rabbit_misc:table_lookup(Capabilities,
                                              <<"consumer_cancel_notify">>).
 
@@ -1827,7 +1845,7 @@ cancel_consumer_recheck(CTag, Q,
                             queue_consumers = QCons,
                             queue_states = QStates0} = State) ->
     QName = amqqueue:get_name(Q),
-    case server_consumer_cancel_supported(State) of
+    case client_supports_consumer_cancel_notify(State) of
         true ->
             ok = send(#'basic.cancel'{consumer_tag = CTag,
                                       nowait = true}, State);
@@ -1861,9 +1879,10 @@ cancel_consumer_recheck(CTag, Q,
     rabbit_event:notify(consumer_deleted, [{consumer_tag, CTag},
                                            {channel, self()},
                                            {queue, QName}]),
-    State#ch{consumer_mapping = maps:remove(CTag, CMap),
-             queue_consumers = QCons1,
-             queue_states = QStates1}.
+    clear_pending_consumer_cancel(
+      CTag, State#ch{consumer_mapping = maps:remove(CTag, CMap),
+                     queue_consumers = QCons1,
+                     queue_states = QStates1}).
 
 binding_action_with_checks(
   Action, SourceNameBin0, DestinationType, DestinationNameBin0,
@@ -2823,22 +2842,56 @@ get_operation_timeout_and_deadline() ->
     Deadline =  now_millis() + Timeout,
     {Timeout, Deadline}.
 
-handle_consumer_timed_out(Timeout, ConsumerTag, MsgId, QName,
+consumer_timeout_response() ->
+    application:get_env(rabbit, consumer_timeout_response, notify_consumer).
+
+handle_consumer_delivery_timeout(CTag, MsgId, QName, State) ->
+    case consumer_timeout_response() =:= notify_consumer andalso
+         client_supports_consumer_cancel_notify(State) andalso
+         is_map_key(CTag, State#ch.consumer_mapping) of
+        true ->
+            notify_consumer_of_cancelation_after_delivery_timeout(CTag, State);
+        false ->
+            %% The node is configured to use the pre-4.3 behavior
+            %% or this client does not advertise support for `consumer_cancel_notify`.
+            {_, State1} = handle_consumer_timed_out(CTag, MsgId, QName, State),
+            State1
+    end.
+
+notify_consumer_of_cancelation_after_delivery_timeout(
+  CTag, #ch{pending_consumer_cancels = Pending} = State)
+  when is_map_key(CTag, Pending) ->
+    State;
+notify_consumer_of_cancelation_after_delivery_timeout(
+  CTag, #ch{pending_consumer_cancels = Pending} = State) ->
+    ok = send(#'basic.cancel'{consumer_tag = CTag, nowait = true}, State),
+    TRef = erlang:start_timer(?CONSUMER_CANCEL_OK_TIMEOUT, self(),
+                              {consumer_cancel_ok_timeout, CTag}),
+    State#ch{pending_consumer_cancels = Pending#{CTag => TRef}}.
+
+clear_pending_consumer_cancel(CTag, #ch{pending_consumer_cancels = Pending} = State) ->
+    case maps:take(CTag, Pending) of
+        {TRef, Pending1} ->
+            _ = erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+            State#ch{pending_consumer_cancels = Pending1};
+        error ->
+            State
+    end.
+
+handle_consumer_timed_out(ConsumerTag, MsgId, QName,
                           #ch{cfg = #conf{channel = Channel}} = State) ->
     ?LOG_WARNING("Consumer '~ts' on channel ~w and ~ts has timed out "
                  "waiting for a consumer acknowledgement of a delivery with
-                 message id of ~b. Timeout used: ~tp ms. "
+                 message id of ~b. "
                  "This timeout value can be configured, see consumers doc guide to learn more",
                  [ConsumerTag,
                   Channel,
                   rabbit_misc:rs(QName),
-                  MsgId,
-                  Timeout]),
+                  MsgId]),
     Ex = rabbit_misc:amqp_error(precondition_failed,
                                 "delivery acknowledgement on channel ~w timed out. "
-                                "Timeout value used: ~tp ms. "
                                 "This timeout value can be configured, see consumers doc guide to learn more",
-                                [Channel, Timeout], none),
+                                [Channel], none),
     handle_exception(Ex, State).
 
 handle_queue_actions(Actions, State) ->
@@ -2859,18 +2912,7 @@ handle_queue_actions(Actions, State) ->
               S = S0#ch{unconfirmed = U},
               record_rejects(Rej, S);
          ({released, QRef, CTag, MsgSeqNos, timeout}, S0) ->
-              case server_consumer_cancel_supported(S0) andalso
-                   is_map_key(CTag, S0#ch.consumer_mapping) of
-                  true ->
-                      ok = send(#'basic.cancel'{consumer_tag = CTag,
-                                                nowait = true}, S0),
-                      S0;
-                  false ->
-                      %% fallback
-                      {_, S} = handle_consumer_timed_out(-1, CTag, hd(MsgSeqNos),
-                                                         QRef, S0),
-                      S
-              end;
+              handle_consumer_delivery_timeout(CTag, hd(MsgSeqNos), QRef, S0);
          ({deliver, CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(CTag, AckRequired, Msgs, S0);
          ({queue_down, QRef}, S0) ->
@@ -2920,11 +2962,12 @@ unsupported_single_active_consumer_error(Q) ->
       [rabbit_misc:rs(amqqueue:get_name(Q)),
        rabbit_queue_type:short_alias_of(amqqueue:get_type(Q))]).
 
-cancel_consumer(ConsumerTag, NoWait, OkMsg,
-                #ch{cfg = #conf{user = #user{username = Username}},
-                    consumer_mapping = ConsumerMapping,
-                    queue_consumers = QCons,
-                    queue_states = QueueStates0} = State) ->
+cancel_consumer(ConsumerTag, NoWait, OkMsg, State0) ->
+    #ch{cfg = #conf{user = #user{username = Username}},
+        consumer_mapping = ConsumerMapping,
+        queue_consumers = QCons,
+        queue_states = QueueStates0} = State =
+        clear_pending_consumer_cancel(ConsumerTag, State0),
     case maps:find(ConsumerTag, ConsumerMapping) of
         error ->
             %% Spec requires we ignore this situation.
