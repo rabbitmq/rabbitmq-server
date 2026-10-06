@@ -282,9 +282,15 @@ handle_command({open_channel, ProposedNumber, Consumer}, _From,
                State = #state{channels_manager = ChMgr,
                               module = Mod,
                               module_state = MState}) ->
-    {reply, amqp_channels_manager:open_channel(ChMgr, ProposedNumber, Consumer,
+    Reply = amqp_channels_manager:open_channel(ChMgr, ProposedNumber, Consumer,
                                                Mod:open_channel_args(MState)),
-     State};
+    case Reply of
+        {ok, Ch} ->
+            amqp_channel:set_server_properties(Ch, State#state.server_properties);
+        _ ->
+            ok
+    end,
+    {reply, Reply, State};
 handle_command({close, #'connection.close'{} = Close, Timeout}, From, State) ->
     app_initiated_close(Close, From, Timeout, State);
 handle_command({update_secret, #'connection.update_secret'{} = Method}, _From,

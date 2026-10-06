@@ -1461,7 +1461,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
     cancel_consumer(ConsumerTag, NoWait, OkMsg, State);
 
 handle_method(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, _, State) ->
-    cancel_consumer(ConsumerTag, false, undefined, State);
+    cancel_consumer(ConsumerTag, true, undefined, State);
 handle_method(#'basic.qos'{prefetch_size = Size}, _, _State) when Size /= 0 ->
     rabbit_misc:protocol_error(not_implemented,
                                "prefetch_size!=0 (~w)", [Size]);
@@ -2823,6 +2823,9 @@ get_operation_timeout_and_deadline() ->
     Deadline =  now_millis() + Timeout,
     {Timeout, Deadline}.
 
+consumer_timeout_response() ->
+    application:get_env(rabbit, consumer_timeout_response, notify_consumer).
+
 handle_consumer_timed_out(Timeout, ConsumerTag, MsgId, QName,
                           #ch{cfg = #conf{channel = Channel}} = State) ->
     ?LOG_WARNING("Consumer '~ts' on channel ~w and ~ts has timed out "
@@ -2859,14 +2862,15 @@ handle_queue_actions(Actions, State) ->
               S = S0#ch{unconfirmed = U},
               record_rejects(Rej, S);
          ({released, QRef, CTag, MsgSeqNos, timeout}, S0) ->
-              case server_consumer_cancel_supported(S0) andalso
+              case consumer_timeout_response() =:= notify_consumer andalso
+                   server_consumer_cancel_supported(S0) andalso
                    is_map_key(CTag, S0#ch.consumer_mapping) of
                   true ->
                       ok = send(#'basic.cancel'{consumer_tag = CTag,
                                                 nowait = true}, S0),
                       S0;
                   false ->
-                      %% fallback
+                      %% close_channel, or a client without consumer_cancel_notify
                       {_, S} = handle_consumer_timed_out(-1, CTag, hd(MsgSeqNos),
                                                          QRef, S0),
                       S
