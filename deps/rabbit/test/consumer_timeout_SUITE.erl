@@ -49,6 +49,7 @@ groups() ->
                 consumer_removed_when_cancel_ok_never_arrives,
                 erlang_client_answers_cancel_only_for_known_consumers,
                 consumer_cancel_ok_after_queue_delete,
+                unsolicited_cancel_ok_keeps_active_consumer,
                 consumer_timeout_late_ack_after_cancel_ok,
                 consumer_timeout_erlang_client_answers_with_cancel_ok,
                 server_advertises_accept_consumer_cancel_ok,
@@ -379,6 +380,19 @@ consumer_timeout_erlang_client_answers_with_cancel_ok(Config) ->
     amqp_connection:close(Conn).
 
 %% A `basic.cancel_ok` for a consumer the channel has already removed is ignored.
+unsolicited_cancel_ok_keeps_active_consumer(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    subscribe(Ch, QName, false, <<"ctag">>),
+    ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+    #'basic.qos_ok'{} = amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 10}),
+    ?assertEqual(1, channel_consumer_count(Config)),
+    ?assertMatch(#{quorum_queue_consumers := 1}, consumer_state(Config, QName)),
+    ?assert(is_process_alive(Ch)),
+    amqp_connection:close(Conn).
+
 consumer_cancel_ok_after_queue_delete(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
     {ok, Ch} = amqp_connection:open_channel(Conn),
