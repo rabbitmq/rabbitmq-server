@@ -1697,12 +1697,22 @@ function check_bad_response(req, full_page_404, on404fun) {
                     seconds = (new Date().getTime() - last_page_out_of_range_error.getTime())/1000;
             if (seconds > 3) {
                  Sammy.log('server reports page is out of range, redirecting to page 1');
-                 var contexts = ["queues", "exchanges", "connections", "channels"];
+                 var contexts = {
+                     "queues": "queues",
+                     "exchanges": "exchanges",
+                     "connections": "connections",
+                     "channels": "channels",
+                     "users": "users",
+                     "stream/connections": "streamConnections"
+                 };
                  var matches = /api\/(.*)\?/.exec(req.responseURL);
                  if (matches != null && matches.length > 1) {
-                     contexts.forEach(function(item) {
-                         if (matches[1].indexOf(item) == 0) {update_pages(item, 1)};
+                     var path = Object.keys(contexts).find(function(prefix) {
+                         return matches[1].indexOf(prefix) == 0;
                      });
+                     if (path !== undefined) {
+                         update_pages(contexts[path], 1);
+                     }
                  } else update_pages(current_template, 1);
 
                  last_page_out_of_range_error = new Date();
