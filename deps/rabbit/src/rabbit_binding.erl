@@ -10,7 +10,7 @@
 -include("amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--export([exists/1, add/2, add/3, remove/2, remove/3]).
+-export([exists/1, add/2, add/3, add_if_absent/3, remove/2, remove/3]).
 -export([list/1, list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2, list_for_source_and_destination/3,
          list_explicit/0]).
@@ -111,6 +111,26 @@ add(Binding0, InnerFun, ActingUser) ->
                    info(Binding) ++ [{user_who_performed_action, ActingUser}]);
         Err ->
             Err
+    end.
+
+-spec add_if_absent(rabbit_types:binding(), inner_fun(), rabbit_types:username()) ->
+    {added | existing, rabbit_types:binding()} | bind_errors() |
+    rabbit_types:error({'binding_invalid', string(), [any()]}) |
+    rabbit_types:error(rabbit_types:amqp_error()) |
+    rabbit_khepri:timeout_error().
+
+add_if_absent(Binding0, InnerFun, ActingUser) ->
+    Binding = sort_args(Binding0),
+    case
+        rabbit_db_binding:create_if_absent(Binding, binding_checks(Binding, InnerFun))
+    of
+        {added, _} = Added ->
+            ok = rabbit_event:notify(
+                   binding_created,
+                   info(Binding) ++ [{user_who_performed_action, ActingUser}]),
+            Added;
+        Other ->
+            Other
     end.
 
 binding_type(Src, Dst) ->

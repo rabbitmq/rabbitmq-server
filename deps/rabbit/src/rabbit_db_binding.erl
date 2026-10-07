@@ -14,6 +14,7 @@
 
 -export([exists/1,
          create/2,
+         create_if_absent/2,
          delete/2,
          get_all/0,
          get_all/1,
@@ -120,8 +121,28 @@ not_found({[], []}, SrcName, DstName) ->
 %%
 %% @private
 
-create(#binding{source = SrcName,
-                destination = DstName} = Binding, ChecksFun) ->
+create(Binding, ChecksFun) ->
+    case create_if_absent(Binding, ChecksFun) of
+        {Tag, _} when Tag =:= added; Tag =:= existing ->
+            ok;
+        {error, _} = Err ->
+            Err
+    end.
+
+-spec create_if_absent(Binding, ChecksFun) -> Ret when
+      Binding :: rabbit_types:binding(),
+      Src :: rabbit_types:binding_source(),
+      Dst :: rabbit_types:binding_destination(),
+      ChecksFun :: fun((Src, Dst) -> ok | {error, ChecksErrReason}),
+      ChecksErrReason :: any(),
+      Ret :: {added, Binding} |
+             {existing, Binding} |
+             {error, ChecksErrReason} |
+             rabbit_khepri:timeout_error().
+%% @private
+
+create_if_absent(#binding{source = SrcName,
+                          destination = DstName} = Binding, ChecksFun) ->
     case {lookup_resource(SrcName), lookup_resource(DstName)} of
         {[Src], [Dst]} ->
             case ChecksFun(Src, Dst) of
@@ -162,11 +183,12 @@ create(#binding{source = SrcName,
                                end, rw),
                     case Serial of
                         already_exists ->
-                            ok;
+                            {existing, Binding};
                         {error, _} = Error ->
                             Error;
                         _ ->
-                            rabbit_exchange:callback(Src, add_binding, Serial, [Src, Binding])
+                            ok = rabbit_exchange:callback(Src, add_binding, Serial, [Src, Binding]),
+                            {added, Binding}
                     end;
                 {error, _} = Err ->
                     Err
