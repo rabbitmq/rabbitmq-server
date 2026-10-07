@@ -34,6 +34,7 @@
          publisher_deleted/1,
          consumer_created/1,
          consumer_deleted/1,
+         consumers_deleted/2,
          messages_dead_lettered/4,
          messages_dead_lettered_confirmed/3
        ]).
@@ -262,6 +263,9 @@ consumer_created(Protocol) ->
 
 consumer_deleted(Protocol) ->
     counters:sub(fetch(Protocol), ?CONSUMERS, 1).
+
+consumers_deleted(Protocol, N) when is_integer(N) ->
+    counters:sub(fetch(Protocol), ?CONSUMERS, N).
 
 messages_dead_lettered(Reason, QueueType, DeadLetterStrategy, Num) ->
     Index = case Reason of

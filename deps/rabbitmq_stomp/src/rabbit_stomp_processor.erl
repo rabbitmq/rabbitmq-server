@@ -119,7 +119,8 @@
          deleted_queues = sets:new([{version, 2}]) :: sets:set(rabbit_amqqueue:name()),
          delivery_tag = 0  :: non_neg_integer(),
          msg_seq_no = 1    :: pos_integer(),
-         publisher = false :: boolean()
+         publisher = false :: boolean(),
+         closed = false    :: boolean()
         }).
 
 -type process_frame_result() ::
@@ -196,8 +197,25 @@ process_frame(Frame = #stomp_frame{command = Command}, State) ->
     command({Command, Frame}, State).
 
 -spec flush_and_die(#state{}) -> #state{}.
-flush_and_die(State) ->
-    close_connection(State).
+flush_and_die(State = #state{closed = true}) ->
+    State;
+flush_and_die(State = #state{cfg = #cfg{proto_ver = undefined}}) ->
+    finish_flush_and_die(State);
+flush_and_die(State = #state{publisher = IsPublisher,
+                             subscriptions = Subs,
+                             cfg = #cfg{proto_ver = ProtoVer}}) ->
+    case IsPublisher of
+        true ->
+            ok = rabbit_global_counters:publisher_deleted(ProtoVer);
+        _ -> ok
+    end,
+    ok = rabbit_global_counters:consumers_deleted(ProtoVer, maps:size(Subs)),
+    finish_flush_and_die(State).
+
+-spec finish_flush_and_die(#state{}) -> #state{}.
+finish_flush_and_die(State = #state{queue_states = QStates}) ->
+    ok = rabbit_queue_type:close(QStates),
+    State#state{closed = true}.
 
 -spec info(Key, State) -> Result
               when
@@ -529,7 +547,7 @@ validate_frame(_Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 
 handle_frame('DISCONNECT', _Frame, State) ->
-    {stop, normal, close_connection(State)};
+    {stop, normal, State};
 
 handle_frame('SUBSCRIBE', Frame, State) ->
     with_destination('SUBSCRIBE', Frame, State, fun do_subscribe/4);
@@ -686,15 +704,10 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                              end)
                    end) of
                 {ok, QueueStates} ->
-                    rabbit_global_counters:consumer_deleted(
-                      State#state.cfg#cfg.proto_ver),
                     {ok, _, NewState} = tidy_canceled_subscription(ConsumerTag, Subscription,
                                                                    Frame, State#state{queue_states = QueueStates}),
                     {ok, NewState};
                 {error, not_found} ->
-                    rabbit_global_counters:consumer_deleted(
-                      State#state.cfg#cfg.proto_ver),
-
                     {ok, _, NewState} = tidy_canceled_subscription(ConsumerTag, Subscription,
                                                                    Frame, State),
                     {ok, NewState}
@@ -721,7 +734,9 @@ tidy_canceled_subscription(ConsumerTag,
 tidy_canceled_subscription_state(ConsumerTag,
                                  _Subscription = #subscription{queue_name = QName},
                                  State = #state{subscriptions = Subs,
-                                                     queue_consumers = QCons}) ->
+                                                     queue_consumers = QCons,
+                                                     cfg = #cfg{proto_ver = ProtoVer}}) ->
+    rabbit_global_counters:consumer_deleted(ProtoVer),
     Subs1 = maps:remove(ConsumerTag, Subs),
     QCons1 =
         case maps:find(QName, QCons) of
@@ -859,7 +874,7 @@ do_subscribe(Destination, DestHdr, Frame,
             Detail = "A subscription identified by '~ts' already exists.",
             _ = error(Message, Detail, [ConsumerTag], State0),
             _ = send_error(Message, Detail, [ConsumerTag], State0),
-            {stop, error_close, close_connection(State0)};
+            {stop, error_close, State0};
         false ->
             case ensure_endpoint(source, Destination, Frame, State0) of
                 {ok, QueueName, State, Created} ->
@@ -1397,14 +1412,6 @@ maybe_notify_sent(undefined) ->
 maybe_notify_sent({_, QPid, _}) ->
     ok = rabbit_amqqueue:notify_sent(QPid, self()).
 
-close_connection(State = #state{publisher = IsPublisher,
-                                cfg = #cfg{proto_ver = ProtoVer}}) ->
-    case IsPublisher andalso ProtoVer =/= undefined of
-        true  -> rabbit_global_counters:publisher_deleted(ProtoVer);
-        false -> ok
-    end,
-    State.
-
 %%----------------------------------------------------------------------------
 %% Reply-To
 %%----------------------------------------------------------------------------
@@ -1685,12 +1692,12 @@ ok(Command, Headers, BodyFragments, State) ->
 amqp_death(ErrorName, Explanation, State) when is_atom(ErrorName) ->
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, error_close, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
+    {stop, error_close, send_error(atom_to_list(ErrorName), ErrorDesc, State)};
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = rabbit_framing_amqp_0_9_1:amqp_exception(ReplyCode),
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, error_close, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
+    {stop, error_close, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).

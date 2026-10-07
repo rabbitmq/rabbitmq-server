@@ -501,9 +501,9 @@ stop(State) ->
 
 stop(State = #state{proc_state = ProcState}, CloseCode, Error0) ->
     maybe_emit_stats(State),
-    _ = rabbit_stomp_processor:flush_and_die(ProcState),
+    ProcState1 = rabbit_stomp_processor:flush_and_die(ProcState),
     Error1 = rabbit_data_coercion:to_binary(Error0),
-    {[{close, CloseCode, Error1}], State}.
+    {[{close, CloseCode, Error1}], State#state{proc_state = ProcState1}}.
 
 %%----------------------------------------------------------------------------
 

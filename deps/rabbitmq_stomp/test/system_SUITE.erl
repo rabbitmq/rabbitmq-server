@@ -87,7 +87,9 @@ groups() ->
         blank_destination_in_send,
         stream_filtering,
         transaction_limit,
-        global_counters
+        global_counters,
+        global_counters_after_close,
+        stream_readers_closed_with_connection
     ],
 
     AuthzTests = [durable_unsubscribe_ignores_frame_queue_name,
@@ -340,6 +342,74 @@ global_counters(Config) ->
       5_000),
 
     ok.
+
+global_counters_after_close(Config) ->
+    Version = ?config(version, Config),
+    ProtoVer = stomp_proto_ver(Version),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Channel = ?config(amqp_channel, Config),
+    Queue = <<"global-counters-after-close">>,
+    Dest = iolist_to_binary(["/topic/counters-after-close-", Version]),
+    C0 = get_global_counters(Config, ProtoVer),
+    Unchanged = fun() ->
+                        C = get_global_counters(Config, ProtoVer),
+                        maps:get(publishers, C) =:= maps:get(publishers, C0) andalso
+                        maps:get(consumers, C) =:= maps:get(consumers, C0)
+                end,
+
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue = Queue, durable = true}),
+    {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+    rabbit_stomp_client:send(Client, 'SEND', [{<<"destination">>, Dest}], ["hello"]),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, Dest}, {<<"id">>, <<"t">>}]),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, <<"/amq/queue/", Queue/binary>>},
+                            {<<"id">>, <<"q">>}, {<<"receipt">>, <<"r">>}]),
+    Client1 = stomp_receive_receipt(Client, <<"r">>),
+    #'queue.delete_ok'{} = amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
+    {ok, Client2, _, _} = stomp_receive(Client1, 'ERROR'),
+    rabbit_stomp_client:disconnect(Client2),
+    rabbit_ct_helpers:await_condition(Unchanged, 5_000),
+
+    {ok, Client3} = rabbit_stomp_client:connect(Version, StompPort),
+    rabbit_stomp_client:send(Client3, 'SEND', [{<<"destination">>, Dest}], ["hello"]),
+    rabbit_stomp_client:send(
+      Client3, 'SEND', [{<<"destination">>, <<"/exchange/counters-after-close-missing">>}],
+      ["hello"]),
+    {ok, _, _, _} = stomp_receive(Client3, 'ERROR'),
+    rabbit_ct_helpers:await_condition(Unchanged, 5_000),
+    ok.
+
+stream_readers_closed_with_connection(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Channel = ?config(amqp_channel, Config),
+    Stream = iolist_to_binary(["stream-readers-closed-", Version]),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{
+                                      queue = Stream, durable = true,
+                                      arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
+    Readers0 = stream_readers(Config),
+    {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, <<"/amq/queue/", Stream/binary>>},
+                            {<<"id">>, <<"s">>}, {<<"ack">>, <<"client">>},
+                            {<<"prefetch-count">>, <<"10">>},
+                            {<<"x-stream-offset">>, <<"first">>},
+                            {<<"receipt">>, <<"r">>}]),
+    Client1 = stomp_receive_receipt(Client, <<"r">>),
+    rabbit_ct_helpers:await_condition(fun() -> stream_readers(Config) > Readers0 end, 5_000),
+    rabbit_stomp_client:disconnect(Client1),
+    rabbit_ct_helpers:await_condition(fun() -> stream_readers(Config) =:= Readers0 end, 5_000),
+    #'queue.delete_ok'{} = amqp_channel:call(Channel, #'queue.delete'{queue = Stream}),
+    ok.
+
+stream_readers(Config) ->
+    lists:sum([maps:get(readers, M)
+               || M <- maps:values(rabbit_ct_broker_helpers:rpc(
+                                     Config, 0, osiris_counters, overview, [])),
+                  is_map_key(readers, M)]).
 
 get_global_counters(Config, ProtoVer) ->
     maps:get(#{protocol => ProtoVer},

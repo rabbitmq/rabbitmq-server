@@ -30,6 +30,7 @@ groups() ->
         connection_with_protocols,
         pubsub,
         disconnect,
+        disconnect_releases_counters,
         credential_expires,
         http_auth
     ],
@@ -156,6 +157,29 @@ disconnect(Config) ->
     ok = raw_send(WS, "DISCONNECT", []),
     {close, {1000, _}} = rfc6455_client:recv(WS),
 
+    ok.
+
+disconnect_releases_counters(Config) ->
+    Counters = fun() ->
+                       C = maps:get(#{protocol => 'STOMP 1.0'},
+                                    rabbit_ct_broker_helpers:rpc(
+                                      Config, 0, rabbit_global_counters, overview, [])),
+                       {maps:get(publishers, C), maps:get(consumers, C)}
+               end,
+    Before = Counters(),
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
+    {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+    Dst = "/topic/test-" ++ stomp:list_to_hex(binary_to_list(crypto:strong_rand_bytes(8))),
+    ok = raw_send(WS, "SUBSCRIBE", [{"destination", Dst}, {"id", "s0"}]),
+    ok = raw_send(WS, "SEND", [{"destination", Dst}], <<"a">>),
+    {<<"MESSAGE">>, _, <<"a">>} = raw_recv(WS),
+    ok = raw_send(WS, "DISCONNECT", []),
+    {close, {1000, _}} = rfc6455_client:recv(WS),
+    rabbit_ct_helpers:await_condition(fun() -> Counters() =:= Before end, 5_000),
     ok.
 
 credential_expires(Config) ->
