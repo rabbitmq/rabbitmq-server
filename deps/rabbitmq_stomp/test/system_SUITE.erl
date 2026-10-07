@@ -41,6 +41,7 @@
 -define(UNSUBSCRIBE_STREAM_DESTINATION, <<"/amq/queue/TestUnsubscribeStream">>).
 -define(MULTIACK_DESTINATION_A, <<"/amq/queue/TestMultiAckQueueA">>).
 -define(MULTIACK_DESTINATION_B, <<"/amq/queue/TestMultiAckQueueB">>).
+-define(BIND_FAIL_QUEUE, <<"TestSubscribeBindFailQueue">>).
 -define(MAX_MSG_SIZE_QUEUE, <<"TestMaxMessageSizeQueue">>).
 -define(MAX_MSG_SIZE_DESTINATION, <<"/amq/queue/TestMaxMessageSizeQueue">>).
 
@@ -58,6 +59,7 @@ groups() ->
         declare_without_dlx,
         redeclare_existing_queue_with_restricted_dlx,
         subscribe_error,
+        subscribe_binding_failure_keeps_queue_messages,
         subscribe,
         subscribe_with_x_priority,
         unsubscribe_ack,
@@ -259,7 +261,7 @@ end_per_testcase0(_, Config) ->
 cleanup_per_testcase0(_, Config) ->
     _ = [delete_test_queue(Q, Config)
          || Q <- [?UNSUBSCRIBE_QUEUE, ?UNSUBSCRIBE_QUEUE_QQ, ?UNSUBSCRIBE_STREAM,
-                  ?MULTIACK_QUEUE_A, ?MULTIACK_QUEUE_B]],
+                  ?MULTIACK_QUEUE_A, ?MULTIACK_QUEUE_B, ?BIND_FAIL_QUEUE]],
     Config.
 
 delete_test_queue(Queue, Config) ->
@@ -415,6 +417,40 @@ subscribe_error(Config) ->
       Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION}]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
     <<"not_found">> = maps:get(<<"message">>, Hdrs),
+    ok.
+
+subscribe_binding_failure_keeps_queue_messages(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue   = ?BIND_FAIL_QUEUE,
+                                                    durable = true}),
+    [amqp_channel:cast(Channel,
+                       #'basic.publish'{exchange    = <<>>,
+                                        routing_key = ?BIND_FAIL_QUEUE},
+                       #amqp_msg{payload = <<"msg">>})
+     || _ <- lists:seq(1, 10)],
+    ?awaitMatch(#'queue.declare_ok'{message_count = 10},
+                amqp_channel:call(Channel, #'queue.declare'{queue   = ?BIND_FAIL_QUEUE,
+                                                            durable = true}),
+                30_000),
+
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE',
+      [{<<"destination">>, <<"/exchange/missing-x/key">>},
+       {<<"id">>, <<"bind-fail">>},
+       {<<"x-queue-name">>, ?BIND_FAIL_QUEUE},
+       {<<"durable">>, <<"true">>},
+       {<<"auto-delete">>, <<"false">>},
+       {<<"exclusive">>, <<"false">>},
+       {<<"ack">>, <<"auto">>}]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+    <<"not_found">> = maps:get(<<"message">>, Hdrs),
+
+    {ok, Channel1} = amqp_connection:open_channel(?config(amqp_connection, Config)),
+    ?assertMatch(#'queue.declare_ok'{message_count = 10},
+                 amqp_channel:call(Channel1, #'queue.declare'{queue   = ?BIND_FAIL_QUEUE,
+                                                              durable = true})),
     ok.
 
 subscribe(Config) ->
