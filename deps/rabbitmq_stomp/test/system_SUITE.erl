@@ -105,7 +105,10 @@ groups() ->
                 queue_limit_applies_to_new_queues_only,
                 existing_queue_of_disabled_type_is_usable,
                 temp_queue_is_classic_with_quorum_default,
-                temp_queue_refused_at_queue_limit],
+                temp_queue_refused_at_queue_limit,
+                declare_with_invalid_arguments,
+                declare_matches_amqp_0_9_1,
+                failed_subscription_deletes_only_its_own_queue],
 
     [{version_to_group_name(V), [sequence], Tests}
      || V <- ?SUPPORTED_VERSIONS] ++
@@ -1648,6 +1651,352 @@ stream_filtering(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Channel,
                                              #'queue.delete'{queue = Stream}),
     ok.
+
+declare_with_invalid_arguments(Config) ->
+    Invalid = [{'SUBSCRIBE', <<"x-expires">>, <<"-1">>},
+               {'SUBSCRIBE', <<"x-expires">>, <<"0">>},
+               {'SUBSCRIBE', <<"x-expires">>, <<"999999999999999">>},
+               {'SUBSCRIBE', <<"x-message-ttl">>, <<"-1">>},
+               {'SUBSCRIBE', <<"x-max-length">>, <<"-1">>},
+               {'SUBSCRIBE', <<"x-max-length-bytes">>, <<"-1">>},
+               {'SUBSCRIBE', <<"x-max-priority">>, <<"1000">>},
+               {'SEND', <<"x-expires">>, <<"-1">>}],
+    VHost = ?config(rmq_vhost, Config),
+    InvalidQName = rabbit_misc:r(VHost, queue, <<"declare_with_invalid_arguments">>),
+    QName = rabbit_misc:r(VHost, queue, <<"declare_with_valid_arguments">>),
+    try
+        [begin
+             Client = declare_attempt(Config, <<"/">>, Command,
+                                      [{<<"destination">>,
+                                        <<"/queue/declare_with_invalid_arguments">>},
+                                       {Key, Value}]),
+             {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+             ?assertEqual({Command, Key, <<"precondition_failed">>},
+                          {Command, Key, maps:get(<<"message">>, Hdrs)}),
+             ?assertEqual({error, not_found}, lookup_queue(InvalidQName, Config))
+         end || {Command, Key, Value} <- Invalid],
+
+        Client = declare_attempt(Config, <<"/">>, 'SUBSCRIBE',
+                                 [{<<"destination">>, <<"/queue/declare_with_valid_arguments">>},
+                                  {<<"x-expires">>, <<"60000">>}]),
+        stomp_receive_receipt(Client, <<"r0">>),
+        {ok, Q} = lookup_queue(QName, Config),
+        ?assertEqual({long, 60000},
+                     rabbit_misc:table_lookup(amqqueue:get_arguments(Q), <<"x-expires">>)),
+        rabbit_stomp_client:disconnect(Client)
+    after
+        delete_queue_if_present(InvalidQName, Config),
+        delete_queue_if_present(QName, Config)
+    end.
+
+declare_matches_amqp_0_9_1(Config) ->
+    with_dqt_vhost(Config, ?FUNCTION_NAME, <<"quorum">>,
+                   fun(Client, VHost) -> declare_matches_amqp_0_9_1(Config, Client, VHost) end).
+
+declare_matches_amqp_0_9_1(Config, ReplyToClient, VHost) ->
+    Channel = ?config(amqp_channel, Config),
+    Before = [amqqueue:get_name(Q) || Q <- list_queues(Config, <<"/">>)],
+    Existing = [<<"declare_matches_amqp_0_9_1.qq">>, <<"declare_matches_amqp_0_9_1.sq">>,
+                <<"declare_matches_amqp_0_9_1.empty">>],
+    [#'queue.declare_ok'{} =
+         amqp_channel:call(Channel,
+                           #'queue.declare'{queue = Q,
+                                            durable = true,
+                                            arguments = [{<<"x-queue-type">>, longstr, T}]})
+     || {Q, T} <- lists:zip(Existing, [<<"quorum">>, <<"stream">>, <<>>])],
+    Stream = [{<<"prefetch-count">>, <<"10">>}, {<<"ack">>, <<"client">>}],
+    Quorum = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    Cases =
+        [{<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t1">>}],
+          #'queue.declare'{exclusive = true, auto_delete = true}},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t2">>},
+                                 {<<"x-queue-type">>, <<"stream">>},
+                                 {<<"auto-delete">>, <<"false">>} | Stream],
+          #'queue.declare'{durable = true,
+                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t3">>},
+                                 {<<"x-queue-type">>, <<"stream">>} | Stream],
+          <<"precondition_failed">>},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t4">>},
+                                 {<<"x-queue-type">>, <<"quorum">>}],
+          <<"precondition_failed">>},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t5">>},
+                                 {<<"durable">>, <<"true">>},
+                                 {<<"auto-delete">>, <<"false">>},
+                                 {<<"x-queue-type">>, <<"quorum">>}],
+          #'queue.declare'{durable = true, arguments = Quorum}},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/exchange/amq.fanout">>}],
+          #'queue.declare'{exclusive = true, auto_delete = true}},
+         {<<"/">>, 'SEND', [{<<"destination">>, <<"/queue/q1">>}],
+          #'queue.declare'{durable = true}},
+         {<<"/">>, 'SEND', [{<<"destination">>, <<"/queue/q2">>},
+                            {<<"x-queue-type">>, <<"quorum">>}],
+          #'queue.declare'{durable = true, arguments = Quorum}},
+         {<<"/">>, 'SEND', [{<<"destination">>, <<"/queue/q3">>},
+                            {<<"exclusive">>, <<"true">>}],
+          #'queue.declare'{durable = true, exclusive = true}},
+         {<<"/">>, 'SEND', [{<<"destination">>, <<"/queue/q10">>},
+                            {<<"exclusive">>, <<"true">>},
+                            {<<"x-queue-type">>, <<"quorum">>}],
+          <<"precondition_failed">>},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/queue/q11">>},
+                                 {<<"durable">>, <<"false">>},
+                                 {<<"x-queue-type">>, <<"quorum">>}],
+          <<"precondition_failed">>},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/queue/q12">>},
+                                 {<<"x-queue-type">>, <<"stream">>} | Stream],
+          #'queue.declare'{durable = true,
+                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}},
+         {<<"/">>, 'SEND', [{<<"destination">>, <<"/queue/q4">>},
+                            {<<"persistent">>, <<"yes">>}],
+          <<"precondition_failed">>},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/queue/q7">>},
+                                 {<<"durable">>, <<"yes">>}],
+          <<"precondition_failed">>},
+         {<<"/">>, 'SEND', [{<<"destination">>, <<"/amq/queue/declare_matches_amqp_0_9_1.qq">>},
+                            {<<"persistent">>, <<"yes">>}],
+          existing},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/queue/q8">>},
+                                 {<<"exclusive">>, <<"yes">>}],
+          #'queue.declare'{durable = true}},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t9">>},
+                                 {<<"durable">>, <<"true">>},
+                                 {<<"auto-delete">>, <<"FALSE">>}],
+          #'queue.declare'{durable = true}},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t12">>},
+                                 {<<"exclusive">>, <<"yes">>}],
+          #'queue.declare'{exclusive = true, auto_delete = true}},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/exchange/amq.fanout">>},
+                                 {<<"durable">>, <<"true">>},
+                                 {<<"exclusive">>, <<"yes">>}],
+          #'queue.declare'{durable = true, auto_delete = true}},
+         {VHost, 'SEND', [{<<"destination">>, <<"/queue/q5">>}],
+          #'queue.declare'{durable = true}},
+         {VHost, 'SEND', [{<<"destination">>, <<"/queue/q6">>},
+                          {<<"exclusive">>, <<"true">>}],
+          #'queue.declare'{durable = true, exclusive = true}},
+         {VHost, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t6">>}],
+          #'queue.declare'{exclusive = true, auto_delete = true}},
+         {VHost, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t10">>},
+                               {<<"x-queue-type">>, <<>>}],
+          <<"precondition_failed">>},
+         {VHost, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t11">>},
+                               {<<"x-queue-type">>, <<"undefined">>}],
+          <<"precondition_failed">>},
+         {VHost, 'SEND', [{<<"destination">>, <<"/queue/q9">>},
+                          {<<"x-queue-type">>, <<>>}],
+          #'queue.declare'{durable = true,
+                           arguments = [{<<"x-queue-type">>, longstr, <<>>}]}},
+         {<<"/">>, 'SEND', [{<<"destination">>, <<"/queue/declare_matches_amqp_0_9_1.qq">>}],
+          <<"precondition_failed">>},
+         {<<"/">>, 'SEND', [{<<"destination">>, <<"/queue/declare_matches_amqp_0_9_1.qq">>},
+                            {<<"x-queue-type">>, <<"quorum">>}],
+          existing},
+         {<<"/">>, 'SEND', [{<<"destination">>, <<"/queue/declare_matches_amqp_0_9_1.empty">>},
+                            {<<"x-queue-type">>, <<>>}],
+          existing},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/queue/declare_matches_amqp_0_9_1.sq">>} | Stream],
+          <<"precondition_failed">>},
+         {<<"/">>, 'SUBSCRIBE', [{<<"destination">>, <<"/queue/declare_matches_amqp_0_9_1.sq">>},
+                                 {<<"x-queue-type">>, <<"stream">>},
+                                 {<<"x-max-length">>, <<"100000">>} | Stream],
+          existing}],
+    New = fun(V) ->
+                  [Q || Q <- list_queues(Config, V),
+                        not lists:member(amqqueue:get_name(Q), Before),
+                        not lists:member((amqqueue:get_name(Q))#resource.name, Existing)]
+          end,
+    try
+        [begin
+             [delete_queue_if_present(amqqueue:get_name(Q), Config) || Q <- New(V)],
+             Reference = case Expected of
+                             #'queue.declare'{} ->
+                                 amqp_0_9_1_declaration(Config, V, Expected);
+                             _ ->
+                                 Expected
+                         end,
+             Client = declare_attempt(Config, V, Command, Headers),
+             Actual = case stomp_receive_any(Client) of
+                          {'RECEIPT', _} ->
+                              case New(V) of
+                                  []  -> existing;
+                                  [Q] -> queue_properties(Q)
+                              end;
+                          {'ERROR', Hdrs} ->
+                              ?assertEqual([], New(V)),
+                              maps:get(<<"message">>, Hdrs)
+                      end,
+             rabbit_stomp_client:disconnect(Client),
+             ?assertEqual({V, Command, Headers, Reference},
+                          {V, Command, Headers, Actual})
+         end || {V, Command, Headers, Expected} <- Cases],
+
+        [delete_queue_if_present(amqqueue:get_name(Q), Config) || Q <- New(VHost)],
+        rabbit_stomp_client:send(ReplyToClient, 'SEND',
+                                 [{<<"destination">>, <<"/topic/t7">>},
+                                  {<<"reply-to">>, <<"/temp-queue/r">>}],
+                                 ["hello"]),
+        Reference = amqp_0_9_1_declaration(
+                      Config, VHost, #'queue.declare'{exclusive = true, auto_delete = true}),
+        ?awaitMatch([Reference], [queue_properties(Q) || Q <- New(VHost)], 10000),
+        rabbit_stomp_client:disconnect(ReplyToClient)
+    after
+        [delete_queue_if_present(amqqueue:get_name(Q), Config)
+         || Q <- list_queues(Config, <<"/">>),
+            not lists:member(amqqueue:get_name(Q), Before)]
+    end.
+
+failed_subscription_deletes_only_its_own_queue(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              Topic = [{<<"x-queue-type">>, <<"stream">>}, {<<"auto-delete">>, <<"false">>}],
+              Stream = [{<<"destination">>, <<"/topic/failed-sub">>} | Topic],
+              Consumable = [{<<"ack">>, <<"client">>}, {<<"prefetch-count">>, <<"10">>}],
+              Durable = [{<<"durable">>, <<"true">>}, {<<"id">>, <<"durable-sub">>}],
+              Subscribe = fun(Headers) ->
+                                  C = declare_attempt(Config, VHost, 'SUBSCRIBE', Headers),
+                                  Reply = stomp_receive_any(C),
+                                  rabbit_stomp_client:disconnect(C),
+                                  case Reply of
+                                      {'ERROR', Hdrs} -> maps:get(<<"message">>, Hdrs);
+                                      {Command, _}    -> Command
+                                  end
+                          end,
+              Names = fun() ->
+                              [(amqqueue:get_name(Q))#resource.name
+                               || Q <- list_queues(Config, VHost)]
+                      end,
+              ?assertEqual('RECEIPT', Subscribe(Durable ++ Stream ++ Consumable)),
+              [Existing] = Names(),
+              Named = [{<<"x-queue-name">>, Existing}],
+
+              ?assertEqual(<<"precondition_failed">>, Subscribe(Stream)),
+              ?assertEqual(<<"not_implemented">>,
+                           Subscribe([{<<"prefetch-count">>, <<"10">>} | Stream])),
+              ?assertEqual(<<"precondition_failed">>,
+                           Subscribe(lists:keyreplace(<<"id">>, 1, Durable,
+                                                      {<<"id">>, <<"new-durable-sub">>})
+                                     ++ Stream)),
+              ?assertEqual(<<"Processing error">>,
+                           Subscribe([{<<"x-stream-offset">>, <<"offset=abc">>}
+                                      | Stream ++ Consumable])),
+              ?assertEqual(<<"Failed to consume">>, Subscribe(Named ++ Stream)),
+              ?assertEqual(<<"precondition_failed">>,
+                           Subscribe([{<<"destination">>, <<"/queue/failed-sub-q">>},
+                                      {<<"x-queue-type">>, <<"stream">>}])),
+              ?assertEqual(<<"Failed to consume">>,
+                           Subscribe([{<<"destination">>, <<"/amq/queue/", Existing/binary>>}])),
+              ?assertEqual([Existing], Names()),
+
+              Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+              {ok, Conn} = amqp_connection:start(#amqp_params_direct{node = Node,
+                                                                     virtual_host = VHost}),
+              {ok, Ch} = amqp_connection:open_channel(Conn),
+              #'exchange.declare_ok'{} =
+                  amqp_channel:call(Ch, #'exchange.declare'{exchange = <<"failed-sub-lr">>,
+                                                            type = <<"x-local-random">>}),
+              amqp_connection:close(Conn),
+              [begin
+                   ?assertEqual(Expected, Subscribe([{<<"destination">>, D} | Topic] ++ Consumable)),
+                   ?assertEqual([Existing], Names()),
+                   ?assertEqual(Expected,
+                                Subscribe([{<<"destination">>, D} | Named ++ Topic] ++ Consumable)),
+                   ?assertEqual([Existing], Names())
+               end || {D, Expected} <- [{<<"/exchange/failed-sub-missing">>, <<"not_found">>},
+                                        {<<"/exchange/failed-sub-lr/key">>,
+                                         <<"precondition_failed">>}]],
+
+              rabbit_ct_broker_helpers:setup_meck(Config),
+              [try
+                   ok = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, meck, new,
+                          [rabbit_exchange_type_direct, [no_link, passthrough]]),
+                   ok = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, meck, expect,
+                          [rabbit_exchange_type_direct, add_binding, 3,
+                           meck:raise(Class, refused)]),
+                   Direct = [{<<"destination">>,
+                              <<"/exchange/amq.direct/", (atom_to_binary(Class))/binary>>}
+                             | Topic] ++ Consumable,
+                   ?assertEqual({Class, <<"internal_error">>}, {Class, Subscribe(Direct)}),
+                   ?assertEqual([Existing], Names()),
+                   ?assertEqual({Class, <<"Processing error">>},
+                                {Class, Subscribe(Named ++ Direct)}),
+                   ?assertEqual([Existing], Names())
+               after
+                   ok = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, meck, unload, [rabbit_exchange_type_direct])
+               end || Class <- [error, throw, exit]],
+              try
+                  ok = rabbit_ct_broker_helpers:rpc(
+                         Config, 0, meck, new, [rabbit_stream_queue, [no_link, passthrough]]),
+                  ok = rabbit_ct_broker_helpers:rpc(
+                         Config, 0, meck, expect,
+                         [rabbit_stream_queue, consume, 3,
+                          {error, internal_error, "refused", []}]),
+                  ?assertEqual(<<"Failed to consume">>, Subscribe(Stream ++ Consumable))
+              after
+                  ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [rabbit_stream_queue])
+              end,
+              ?assert(lists:member(Existing, Names())),
+              [delete_queue_if_present(rabbit_misc:r(VHost, queue, N), Config)
+               || N <- Names(), N =/= Existing],
+
+              Dup = [{<<"id">>, <<"dup">>} | Stream ++ Consumable],
+              C = declare_attempt(Config, VHost, 'SUBSCRIBE', Dup),
+              ?assertMatch({'RECEIPT', _}, stomp_receive_any(C)),
+              rabbit_stomp_client:send(C, 'SUBSCRIBE', Dup),
+              ?assertMatch({'ERROR', #{<<"message">> := <<"Duplicated subscription identifier">>}},
+                           stomp_receive_any(C)),
+              ?assertEqual(2, length(Names())),
+              rabbit_stomp_client:disconnect(Client)
+      end).
+
+amqp_0_9_1_declaration(Config, VHost, Declare) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {ok, Connection} = amqp_connection:start(#amqp_params_direct{node = Node,
+                                                                 virtual_host = VHost}),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    Name = <<"amqp_0_9_1_declaration">>,
+    #'queue.declare_ok'{} = amqp_channel:call(Channel, Declare#'queue.declare'{queue = Name}),
+    {ok, Q} = lookup_queue(rabbit_misc:r(VHost, queue, Name), Config),
+    Properties = queue_properties(Q),
+    #'queue.delete_ok'{} = amqp_channel:call(Channel, #'queue.delete'{queue = Name}),
+    amqp_connection:close(Connection),
+    Properties.
+
+queue_properties(Q) ->
+    {amqqueue:get_type(Q),
+     amqqueue:is_durable(Q),
+     amqqueue:is_auto_delete(Q),
+     amqqueue:is_exclusive(Q),
+     lists:sort(amqqueue:get_arguments(Q))}.
+
+declare_attempt(Config, VHost, Command, Headers) ->
+    Client = connect_to_vhost(Config, VHost),
+    Id = case Command =:= 'SUBSCRIBE' andalso not lists:keymember(<<"id">>, 1, Headers) of
+             true  -> [{<<"id">>, <<"0">>}];
+             false -> []
+         end,
+    rabbit_stomp_client:send(Client, Command,
+                             [{<<"receipt">>, <<"r0">>} | Id ++ Headers], ["hello"]),
+    Client.
+
+stomp_receive_any(Client) ->
+    stomp_receive_any(Client, 10).
+
+stomp_receive_any(Client, Attempts) ->
+    try rabbit_stomp_client:recv(Client) of
+        {#stomp_frame{command = Command, headers = Hdrs}, _} ->
+            {Command, Hdrs}
+    catch
+        error:{badmatch, {error, timeout}} when Attempts > 1 ->
+            stomp_receive_any(Client, Attempts - 1)
+    end.
+
+list_queues(Config, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, [VHost]).
 
 stomp_receive_messages(Client, Version) ->
     stomp_receive_messages(Client, [], Version).
