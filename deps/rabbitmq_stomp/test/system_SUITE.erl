@@ -76,6 +76,10 @@ groups() ->
         send,
         send_body_larger_than_max_message_size_is_rejected,
         delete_queue_subscribe,
+        durable_resubscribe_pipelined_classic,
+        durable_resubscribe_pipelined_stream,
+        durable_resubscribe_pipelined_quorum,
+        durable_resubscribe_pipelined_quorum_without_publish,
         temp_destination_queue,
         temp_destination_in_send,
         blank_destination_in_send,
@@ -935,6 +939,72 @@ multiack_prune_is_connection_wide(Config) ->
 %% An UNSUBSCRIBE frame of a topic subscription with a durable header set to `true`
 %% must delete the queue recorded on the subscription,
 %% not the one named in the frame's x-queue-name header.
+durable_resubscribe_pipelined_classic(Config) ->
+    durable_resubscribe_pipelined(Config, []).
+
+durable_resubscribe_pipelined_stream(Config) ->
+    durable_resubscribe_pipelined(Config, [{<<"x-queue-type">>, <<"stream">>},
+                                           {<<"prefetch-count">>, <<"10">>}]).
+
+durable_resubscribe_pipelined_quorum(Config) ->
+    durable_resubscribe_pipelined(Config, [{<<"x-queue-type">>, <<"quorum">>}]).
+
+durable_resubscribe_pipelined_quorum_without_publish(Config) ->
+    durable_resubscribe_pipelined(Config, [{<<"x-queue-type">>, <<"quorum">>}], false).
+
+durable_resubscribe_pipelined(Config, ExtraHeaders) ->
+    durable_resubscribe_pipelined(Config, ExtraHeaders, true).
+
+durable_resubscribe_pipelined(Config, ExtraHeaders, PublishFirst) ->
+    {Sock, _} = Client = ?config(stomp_client, Config),
+    Dest = <<"/topic/pipelined-resubscribe">>,
+    SubHeaders = fun(Receipt) ->
+                         [{<<"destination">>, Dest},
+                          {<<"id">>, <<"d">>},
+                          {<<"durable">>, <<"true">>},
+                          {<<"auto-delete">>, <<"false">>},
+                          {<<"ack">>, <<"client">>},
+                          {<<"receipt">>, Receipt}] ++ ExtraHeaders
+                 end,
+    Frame = fun(Command, Headers) ->
+                    rabbit_stomp_frame:serialize(
+                      #stomp_frame{command = Command,
+                                   headers = maps:from_list(Headers),
+                                   body_iolist_rev = []})
+            end,
+    rabbit_stomp_client:send(Client, 'SUBSCRIBE', SubHeaders(<<"r1">>)),
+    Client0 = stomp_receive_receipt(Client, <<"r1">>),
+    Client1 = case PublishFirst of
+                  true ->
+                      rabbit_stomp_client:send(
+                        Client0, 'SEND', [{<<"destination">>, Dest},
+                                          {<<"receipt">>, <<"r0">>}], [<<"first">>]),
+                      {F1, Client00} = rabbit_stomp_client:recv(Client0),
+                      {F2, Client01} = rabbit_stomp_client:recv(Client00),
+                      ?assertEqual(['MESSAGE', 'RECEIPT'],
+                                   lists:sort([F1#stomp_frame.command,
+                                               F2#stomp_frame.command])),
+                      Client01;
+                  false ->
+                      Client0
+              end,
+    ok = gen_tcp:send(Sock, [Frame('UNSUBSCRIBE', [{<<"destination">>, Dest},
+                                                   {<<"id">>, <<"d">>},
+                                                   {<<"durable">>, <<"true">>},
+                                                   {<<"receipt">>, <<"r2">>}]),
+                             Frame('SUBSCRIBE', SubHeaders(<<"r3">>))]),
+    Client2 = stomp_receive_receipt(Client1, <<"r2">>),
+    Client3 = stomp_receive_receipt(Client2, <<"r3">>),
+    rabbit_stomp_client:send(Client3, 'SEND', [{<<"destination">>, Dest}], [<<"hello">>]),
+    {ok, Client4, _, [<<"hello">>]} = stomp_receive(Client3, 'MESSAGE'),
+    [QName] = [N || Q <- rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, [<<"/">>]),
+                    #resource{name = <<"stomp-subscription", _/binary>> = N} <- [amqqueue:get_name(Q)]],
+    #'queue.delete_ok'{} = amqp_channel:call(?config(amqp_channel, Config),
+                                             #'queue.delete'{queue = QName}),
+    {ok, _, #{<<"message">> := <<"Server cancelled subscription">>}, _} =
+        stomp_receive(Client4, 'ERROR'),
+    ok.
+
 durable_unsubscribe_ignores_frame_queue_name(Config) ->
     Client = ?config(authz_client, Config),
     Bystander = authz_bystander_queue(Config),
