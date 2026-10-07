@@ -56,6 +56,7 @@ groups() ->
         declare_with_authorised_dlx,
         declare_with_restricted_dlx,
         declare_without_dlx,
+        redeclare_existing_queue_with_restricted_dlx,
         subscribe_error,
         subscribe,
         subscribe_with_x_priority,
@@ -93,7 +94,12 @@ groups() ->
                 durable_subscription_uses_vhost_default_queue_type,
                 redeclare_with_same_arguments_succeeds,
                 redeclare_after_vhost_default_queue_type_change_is_rejected,
-                redeclare_queue_without_stored_queue_type],
+                redeclare_queue_without_stored_queue_type,
+                declare_with_invalid_argument_is_refused,
+                queue_limit_applies_to_new_queues_only,
+                existing_queue_of_disabled_type_is_usable,
+                temp_queue_is_classic_with_quorum_default,
+                temp_queue_refused_at_queue_limit],
 
     [{version_to_group_name(V), [sequence], Tests}
      || V <- ?SUPPORTED_VERSIONS] ++
@@ -172,7 +178,8 @@ init_per_testcase0(publish_unauthorized_error, Config) ->
 init_per_testcase0(TestCase, Config)
   when TestCase =:= declare_with_authorised_dlx;
        TestCase =:= declare_with_restricted_dlx;
-       TestCase =:= declare_without_dlx ->
+       TestCase =:= declare_without_dlx;
+       TestCase =:= redeclare_existing_queue_with_restricted_dlx ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user,
                                  [<<"stompuser">>, <<"pass">>, <<"acting-user">>]),
     %% configure, write and read confined to the stomp.* namespace
@@ -235,7 +242,8 @@ end_per_testcase0(publish_unauthorized_error, Config) ->
 end_per_testcase0(TestCase, Config)
   when TestCase =:= declare_with_authorised_dlx;
        TestCase =:= declare_with_restricted_dlx;
-       TestCase =:= declare_without_dlx ->
+       TestCase =:= declare_without_dlx;
+       TestCase =:= redeclare_existing_queue_with_restricted_dlx ->
     ClientFoo = ?config(client_foo, Config),
     rabbit_stomp_client:disconnect(ClientFoo),
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user,
@@ -357,7 +365,26 @@ declare_with_restricted_dlx(Config) ->
     subscribe_with_dlx(ClientFoo, <<"/queue/stomp.restricted">>, <<"restricted.x">>),
     {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, 'ERROR'),
     <<"access_refused">> = maps:get(<<"message">>, Hdrs),
+    QName = rabbit_misc:r(?config(rmq_vhost, Config), queue, <<"stomp.restricted">>),
+    ?assertEqual({error, not_found}, lookup_queue(QName, Config)),
     ok.
+
+redeclare_existing_queue_with_restricted_dlx(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    ClientFoo = ?config(client_foo, Config),
+    Queue = <<"stomp.existing_restricted_dlx">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel,
+                          #'queue.declare'{queue = Queue,
+                                           durable = true,
+                                           arguments = [{<<"x-dead-letter-exchange">>,
+                                                         longstr, <<"restricted.x">>}]}),
+    try
+        subscribe_with_dlx(ClientFoo, <<"/queue/", Queue/binary>>, <<"restricted.x">>),
+        {ok, _Client1, _Hdrs, _} = stomp_receive(ClientFoo, 'RECEIPT')
+    after
+        #'queue.delete_ok'{} = amqp_channel:call(Channel, #'queue.delete'{queue = Queue})
+    end.
 
 declare_without_dlx(Config) ->
     ClientFoo = ?config(client_foo, Config),
@@ -1625,6 +1652,77 @@ redeclare_queue_without_stored_queue_type(Config) ->
               ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
       end).
 
+declare_with_invalid_argument_is_refused(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              rabbit_stomp_client:send(
+                Client, 'SUBSCRIBE', [{<<"destination">>, <<"/queue/dqt-q">>},
+                                      {<<"id">>, <<"0">>},
+                                      {<<"x-expires">>, <<"-1">>},
+                                      {<<"receipt">>, <<"r">>}]),
+              {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+              ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Hdrs)),
+              ?assertEqual([], queue_types(Config, VHost))
+      end).
+
+queue_limit_applies_to_new_queues_only(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              Churn0 = queue_churn(Config),
+              {ok, _, _, _} = dqt_send(Client, 'RECEIPT'),
+              ?assertEqual({1, 1}, queue_churn_since(Churn0, Config)),
+              ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, VHost, max_queues, 1),
+              Churn = queue_churn(Config),
+              {ok, _, _, _} = dqt_send(connect_to_vhost(Config, VHost), 'RECEIPT'),
+              ?assertEqual({1, 0}, queue_churn_since(Churn, Config)),
+              {ok, _, Hdrs, _} = dqt_send(connect_to_vhost(Config, VHost),
+                                          <<"/queue/dqt-q2">>, 'ERROR'),
+              ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Hdrs)),
+              ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
+      end).
+
+existing_queue_of_disabled_type_is_usable(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              {ok, _, _, _} = dqt_send(Client, 'RECEIPT'),
+              ok = rabbit_ct_broker_helpers:rpc(
+                     Config, 0, application, set_env,
+                     [rabbit, classic_queues_enabled, false]),
+              try
+                  {ok, _, _, _} = dqt_send(connect_to_vhost(Config, VHost), 'RECEIPT'),
+                  {ok, _, Hdrs, _} = dqt_send(connect_to_vhost(Config, VHost),
+                                              <<"/queue/dqt-q2">>, 'ERROR'),
+                  ?assertEqual(<<"internal_error">>, maps:get(<<"message">>, Hdrs)),
+                  ?assertEqual([rabbit_classic_queue], queue_types(Config, VHost))
+              after
+                  ok = rabbit_ct_broker_helpers:rpc(
+                         Config, 0, application, unset_env,
+                         [rabbit, classic_queues_enabled])
+              end
+      end).
+
+temp_queue_is_classic_with_quorum_default(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"quorum">>,
+      fun(Client, VHost) ->
+              ok = temp_queue_send(Client),
+              ?awaitMatch([rabbit_classic_queue], queue_types(Config, VHost), 10_000)
+      end).
+
+temp_queue_refused_at_queue_limit(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, VHost, max_queues, 0),
+              ok = temp_queue_send(Client),
+              {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+              ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Hdrs)),
+              ?assertEqual([], queue_types(Config, VHost))
+      end).
+
 with_dqt_vhost(Config, TestCase, DefaultQueueType, Fun) ->
     VHost = atom_to_binary(TestCase),
     ok = rabbit_ct_broker_helpers:rpc(
@@ -1647,15 +1745,33 @@ connect_to_vhost(Config, VHost) ->
     Client.
 
 dqt_send(Client, ExpectedCommand) ->
+    dqt_send(Client, <<"/queue/dqt-q">>, ExpectedCommand).
+
+dqt_send(Client, Destination, ExpectedCommand) ->
     rabbit_stomp_client:send(
-      Client, 'SEND', [{<<"destination">>, <<"/queue/dqt-q">>},
+      Client, 'SEND', [{<<"destination">>, Destination},
                        {<<"receipt">>, <<"r">>}], ["hello"]),
     stomp_receive(Client, ExpectedCommand).
+
+temp_queue_send(Client) ->
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, <<"/topic/dqt-t">>},
+                       {<<"reply-to">>, <<"/temp-queue/r">>}], ["hello"]).
 
 dqt_subscribe(Client, Headers) ->
     rabbit_stomp_client:send(
       Client, 'SUBSCRIBE', [{<<"receipt">>, <<"r">>} | Headers]),
     stomp_receive(Client, 'RECEIPT').
+
+queue_churn(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    [Row] = rabbit_ct_broker_helpers:rpc(
+              Config, 0, ets, lookup, [connection_churn_metrics, Node]),
+    {element(6, Row), element(7, Row)}.
+
+queue_churn_since({Declared0, Created0}, Config) ->
+    {Declared, Created} = queue_churn(Config),
+    {Declared - Declared0, Created - Created0}.
 
 queue_types(Config, VHost) ->
     [rabbit_ct_broker_helpers:rpc(Config, 0, amqqueue, get_type, [Q])
