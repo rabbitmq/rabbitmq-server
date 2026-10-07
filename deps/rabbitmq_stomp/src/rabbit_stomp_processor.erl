@@ -760,18 +760,28 @@ delete_durable_sub_queue(QRes, State = #state{user = #user{username = Username} 
            User, QRes, configure, AuthzCtx),
     {ok, _} = rabbit_amqqueue:delete_with(QRes, self(), false, false,
                                           Username, true),
-    %% Its DOWN or `eol` can arrive after a queue with the same name is redeclared.
     case rabbit_queue_type:module(QRes, QStates0) of
-        {ok, _} ->
+        {ok, Mod} ->
             {ConfirmMXs, UC} = rabbit_confirms:remove_queue(QRes, State#state.unconfirmed),
             _ = erase_queue_stats(QRes),
             State1 = record_confirms(ConfirmMXs, State#state{unconfirmed = UC}),
             ok(send_confirms_and_nacks(
                  State1#state{queue_states = rabbit_queue_type:remove(QRes, QStates0),
-                              deleted_queues = sets:add_element(QRes, Deleted)}));
+                              deleted_queues = mark_deleted(Mod, QRes, Deleted)}));
         {error, not_found} ->
             ok(State)
     end.
+
+%% A quorum queue's `eol`, if any, is sent before the delete reply, so it is
+%% already in the mailbox. A classic queue's `DOWN` and a stream's `eol` can
+%% arrive after a queue with the same name is redeclared.
+mark_deleted(rabbit_quorum_queue, QRes, Deleted) ->
+    receive
+        {'$gen_cast', {queue_event, QRes, {_, {machine, eol}}}} -> Deleted
+    after 0 -> Deleted
+    end;
+mark_deleted(_Mod, QRes, Deleted) ->
+    sets:add_element(QRes, Deleted).
 
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
@@ -1893,7 +1903,7 @@ handle_down0(QPid, QName, Reason, State0 = #state{queue_states = QStates0}) ->
     end.
 
 handle_queue_event({queue_event, QRef, Evt}, #state{deleted_queues = Deleted} = State)
-  when Evt =:= eol orelse element(2, Evt) =:= {machine, eol} ->
+  when Evt =:= eol ->
     case sets:is_element(QRef, Deleted) of
         true ->
             {ok, State#state{deleted_queues = sets:del_element(QRef, Deleted)}};
