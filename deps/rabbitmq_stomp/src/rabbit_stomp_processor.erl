@@ -841,41 +841,33 @@ do_subscribe(Destination, DestHdr, Frame,
                 error ->
                     ExchangeAndKey = parse_routing(Destination, DfltTopicEx),
                     Arguments = subscribe_arguments(Frame),
-                    try
-                        {ok, State1} = consume_queue(QueueName, #{no_ack => (AckMode == auto),
-                                                                  mode => {simple_prefetch, Prefetch},
-                                                                  consumer_tag => ConsumerTag,
-                                                                  exclusive_consume => false,
-                                                                  args => Arguments},
-                                                     State),
-                        ok = ensure_binding(QueueName, ExchangeAndKey, State1),
-                        CTags1 = case maps:find(QueueName, QCons) of
-                                     {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
-                                     error -> gb_sets:singleton(ConsumerTag)
-                                 end,
-                        QCons1 = maps:put(QueueName, CTags1, QCons),
-                        ok(State1#state{subscriptions = maps:put(
-                                                               ConsumerTag,
-                                                               #subscription{dest_hdr    = DestHdr,
-                                                                             ack_mode    = AckMode,
-                                                                             multi_ack   = IsMulti,
-                                                                             description = Description,
-                                                                             queue_name  = QueueName},
-                                                               Subs),
-                                             queue_consumers = QCons1})
-                    catch exit:Err ->
-                            %% it's safe to delete this queue, it
-                            %% was server-named and declared by us
-                            case Destination of
-                                {exchange, _} ->
-                                    ok = maybe_clean_up_queue(QueueName, State);
-                                {topic, _} ->
-                                    ok = maybe_clean_up_queue(QueueName, State);
-                                _ ->
-                                    ok
-                            end,
-                            exit(Err)
-                    end
+                    Added = ensure_binding(QueueName, ExchangeAndKey, State),
+                    {ok, State1} =
+                        try
+                            consume_queue(QueueName, #{no_ack => (AckMode == auto),
+                                                       mode => {simple_prefetch, Prefetch},
+                                                       consumer_tag => ConsumerTag,
+                                                       exclusive_consume => false,
+                                                       args => Arguments},
+                                          State)
+                        catch Class:Reason:Stacktrace ->
+                                ok = remove_added_binding(Added, State),
+                                erlang:raise(Class, Reason, Stacktrace)
+                        end,
+                    CTags1 = case maps:find(QueueName, QCons) of
+                                 {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
+                                 error -> gb_sets:singleton(ConsumerTag)
+                             end,
+                    QCons1 = maps:put(QueueName, CTags1, QCons),
+                    ok(State1#state{subscriptions = maps:put(
+                                                           ConsumerTag,
+                                                           #subscription{dest_hdr    = DestHdr,
+                                                                         ack_mode    = AckMode,
+                                                                         multi_ack   = IsMulti,
+                                                                         description = Description,
+                                                                         queue_name  = QueueName},
+                                                           Subs),
+                                         queue_consumers = QCons1})
             end;
         {error, _} = Err ->
             Err
@@ -942,8 +934,10 @@ check_subscription_access(Destination = {topic, _Topic},
 check_subscription_access(_, _) ->
     authorized.
 
-maybe_clean_up_queue(Queue, #state{cfg = #cfg{auth_login = Username}}) ->
-    try delete_queue(Queue, Username) catch _:_ -> ok end,
+remove_added_binding({added, Binding}, #state{cfg = #cfg{auth_login = Username}}) ->
+    _ = (catch rabbit_binding:remove(Binding, Username)),
+    ok;
+remove_added_binding(_, _State) ->
     ok.
 
 do_send(Destination, _DestHdr,
@@ -1757,27 +1751,6 @@ create_queue(_State = #state{authz_ctx = AuthzCtx,
             {error, queue_limit_exceeded}
     end.
 
-delete_queue(QRes, Username) ->
-    case rabbit_amqqueue:with(
-           QRes,
-           fun (Q) ->
-                   rabbit_queue_type:delete(Q, false, false, Username)
-           end,
-           fun (not_found) ->
-                   ok;
-               ({absent, Q, crashed}) ->
-                   rabbit_classic_queue:delete_crashed(Q, Username);
-               ({absent, Q, stopped}) ->
-                   rabbit_classic_queue:delete_crashed(Q, Username);
-               ({absent, _Q, _Reason}) ->
-                   ok
-           end) of
-        {ok, _N} ->
-            ok;
-        ok ->
-            ok
-    end.
-
 ensure_binding(#resource{name = QueueBin}, {<<>>, QueueBin}, _State) ->
     %% i.e., we should only be asked to bind to the default exchange a
     %% queue with its own name
@@ -1792,7 +1765,7 @@ ensure_binding(QName, {Exchange, RoutingKey},
     Binding = #binding{source = ExchangeName,
                        destination = QName,
                        key = RoutingKey},
-    case rabbit_binding:add(Binding, Username) of
+    case rabbit_binding:add_if_absent(Binding, fun(_, _) -> ok end, Username) of
         {error, {resources_missing, [{not_found, Name} | _]}} ->
             rabbit_amqqueue:not_found(Name);
         {error, {resources_missing, [{absent, Q, Reason} | _]}} ->
@@ -1801,7 +1774,9 @@ ensure_binding(QName, {Exchange, RoutingKey},
             rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
         {error, #amqp_error{} = Error} ->
             rabbit_misc:protocol_error(Error);
-        ok ->
+        {added, _} = Added ->
+            Added;
+        {existing, _} ->
             ok
     end.
 
