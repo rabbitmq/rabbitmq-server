@@ -959,7 +959,7 @@ check_subscription_access(_, _) ->
     authorized.
 
 remove_added_binding({added, Binding}, #state{cfg = #cfg{auth_login = Username}}) ->
-    _ = (catch rabbit_binding:remove(Binding, Username)),
+    try rabbit_binding:remove(Binding, Username) catch _:_ -> ok end,
     ok;
 remove_added_binding(_, _State) ->
     ok.
