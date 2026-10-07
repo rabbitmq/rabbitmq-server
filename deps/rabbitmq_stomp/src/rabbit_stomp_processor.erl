@@ -1729,33 +1729,9 @@ maybe_apply_default_topic_exchange(Exchange, _DefaultTopicExchange) ->
     %% message headers
     Exchange.
 
-create_queue(_State = #state{authz_ctx = AuthzCtx,
-                             user = #user{username = Username} = User,
-                             cfg = #cfg{vhost = VHost}}) ->
+create_queue(State) ->
     QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "stomp.gen"),
-    QName = rabbit_misc:r(VHost, queue, QNameBin),
-
-    %% configure access to queue required for queue.declare
-    ok = check_resource_access(User, QName, configure, AuthzCtx),
-    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-        false ->
-            rabbit_core_metrics:queue_declared(QName),
-
-            case rabbit_amqqueue:declare(QName, _Durable = false, _AutoDelete = true,
-                                         [], self(), Username) of
-                {new, Q} when ?is_amqqueue(Q) ->
-                    rabbit_core_metrics:queue_created(QName),
-                    {ok, Q};
-                Other ->
-                    log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
-                    {error, queue_declare}
-            end;
-        {true, Limit} ->
-            log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
-                      rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
-                      none),
-            {error, queue_limit_exceeded}
-    end.
+    create_queue(new_amqqueue(QNameBin, queue, [{durable, false}], State), State).
 
 delete_queue(QRes, Username) ->
     case rabbit_amqqueue:with(
@@ -2112,53 +2088,61 @@ consume_queue(QRes, Spec0, State = #state{user = #user{username = Username} = Us
               end
       end).
 
-assert_equivalent_if_exists(Amqqueue) ->
-    case rabbit_amqqueue:with(
-           amqqueue:get_name(Amqqueue),
-           fun(Q) ->
-                   rabbit_amqqueue:assert_equivalence(
-                     Q,
-                     amqqueue:is_durable(Amqqueue),
-                     amqqueue:is_auto_delete(Amqqueue),
-                     amqqueue:get_arguments(Amqqueue),
-                     amqqueue:get_exclusive_owner(Amqqueue))
-           end) of
-        ok -> ok;
-        {error, not_found} -> ok;
-        {error, {absent, Q, Reason}} -> rabbit_amqqueue:absent(Q, Reason)
-    end.
-
 create_queue(Amqqueue, _State = #state{authz_ctx = AuthzCtx,
-                                       user = User,
-                                       cfg = #cfg{vhost = VHost}}) ->
+                                       user = User}) ->
     QName = amqqueue:get_name(Amqqueue),
 
     %% configure access to queue required for queue.declare
     ok = check_resource_access(User, QName, configure, AuthzCtx),
-    ok = check_dead_letter_exchange_access(
-           QName, amqqueue:get_arguments(Amqqueue), User, AuthzCtx),
-    ok = assert_equivalent_if_exists(Amqqueue),
+    rabbit_core_metrics:queue_declared(QName),
+    lookup_or_declare(Amqqueue, User, AuthzCtx).
 
-    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-        false ->
-            rabbit_core_metrics:queue_declared(QName),
+lookup_or_declare(Amqqueue, User, AuthzCtx) ->
+    QName = amqqueue:get_name(Amqqueue),
+    case rabbit_amqqueue:with(
+           QName,
+           fun(Q) ->
+                   ok = rabbit_amqqueue:assert_equivalence(
+                          Q,
+                          amqqueue:is_durable(Amqqueue),
+                          amqqueue:is_auto_delete(Amqqueue),
+                          amqqueue:get_arguments(Amqqueue),
+                          amqqueue:get_exclusive_owner(Amqqueue)),
+                   {ok, Q}
+           end) of
+        {ok, Q} ->
+            {ok, Q};
+        {error, not_found} ->
+            ok = check_dead_letter_exchange_access(
+                   QName, amqqueue:get_arguments(Amqqueue), User, AuthzCtx),
+            declare_queue(Amqqueue, User, AuthzCtx);
+        {error, {absent, Q, Reason}} ->
+            rabbit_amqqueue:absent(Q, Reason)
+    end.
 
-            case rabbit_queue_type:declare(Amqqueue, node()) of
-                {new, Q} when ?is_amqqueue(Q) ->
-                    rabbit_core_metrics:queue_created(QName),
-                    {ok, Q};
-                {existing, Q} when ?is_amqqueue(Q) ->
-                    rabbit_core_metrics:queue_created(QName),
-                    {ok, Q};
-                Other ->
-                    log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
-                    {error, queue_declare}
-            end;
-        {true, Limit} ->
-            log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
-                      rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
-                      none),
-            {error, queue_limit_exceeded}
+declare_queue(Amqqueue, User = #user{username = Username}, AuthzCtx) ->
+    QName = amqqueue:get_name(Amqqueue),
+    case rabbit_amqqueue:declare(QName,
+                                 amqqueue:is_durable(Amqqueue),
+                                 amqqueue:is_auto_delete(Amqqueue),
+                                 amqqueue:get_arguments(Amqqueue),
+                                 amqqueue:get_exclusive_owner(Amqqueue),
+                                 Username) of
+        {new, Q} when ?is_amqqueue(Q) ->
+            rabbit_core_metrics:queue_created(QName),
+            {ok, Q};
+        {existing, _} ->
+            %% Declared by another client after the lookup.
+            lookup_or_declare(Amqqueue, User, AuthzCtx);
+        {absent, Q, Reason} ->
+            rabbit_amqqueue:absent(Q, Reason);
+        {error, queue_limit_exceeded, Fmt, FmtArgs} ->
+            rabbit_misc:precondition_failed(Fmt, FmtArgs);
+        {protocol_error, ErrType, Fmt, FmtArgs} ->
+            rabbit_misc:protocol_error(ErrType, Fmt, FmtArgs);
+        Other ->
+            rabbit_misc:protocol_error(internal_error, "failed to declare ~ts: ~tp",
+                                       [rabbit_misc:rs(QName), Other])
     end.
 
 routing_init_state() -> sets:new([{version, 2}]).
