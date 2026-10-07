@@ -78,6 +78,7 @@ groups() ->
         durable_resubscribe_pipelined_classic,
         durable_resubscribe_pipelined_stream,
         durable_resubscribe_pipelined_quorum,
+        durable_resubscribe_pipelined_quorum_without_publish,
         temp_destination_queue,
         temp_destination_in_send,
         blank_destination_in_send,
@@ -921,7 +922,13 @@ durable_resubscribe_pipelined_stream(Config) ->
 durable_resubscribe_pipelined_quorum(Config) ->
     durable_resubscribe_pipelined(Config, [{<<"x-queue-type">>, <<"quorum">>}]).
 
+durable_resubscribe_pipelined_quorum_without_publish(Config) ->
+    durable_resubscribe_pipelined(Config, [{<<"x-queue-type">>, <<"quorum">>}], false).
+
 durable_resubscribe_pipelined(Config, ExtraHeaders) ->
+    durable_resubscribe_pipelined(Config, ExtraHeaders, true).
+
+durable_resubscribe_pipelined(Config, ExtraHeaders, PublishFirst) ->
     {Sock, _} = Client = ?config(stomp_client, Config),
     Dest = <<"/topic/pipelined-resubscribe">>,
     SubHeaders = fun(Receipt) ->
@@ -940,12 +947,20 @@ durable_resubscribe_pipelined(Config, ExtraHeaders) ->
             end,
     rabbit_stomp_client:send(Client, 'SUBSCRIBE', SubHeaders(<<"r1">>)),
     Client0 = stomp_receive_receipt(Client, <<"r1">>),
-    rabbit_stomp_client:send(Client0, 'SEND', [{<<"destination">>, Dest},
-                                               {<<"receipt">>, <<"r0">>}], [<<"first">>]),
-    {F1, Client00} = rabbit_stomp_client:recv(Client0),
-    {F2, Client1} = rabbit_stomp_client:recv(Client00),
-    ?assertEqual(['MESSAGE', 'RECEIPT'],
-                 lists:sort([F1#stomp_frame.command, F2#stomp_frame.command])),
+    Client1 = case PublishFirst of
+                  true ->
+                      rabbit_stomp_client:send(
+                        Client0, 'SEND', [{<<"destination">>, Dest},
+                                          {<<"receipt">>, <<"r0">>}], [<<"first">>]),
+                      {F1, Client00} = rabbit_stomp_client:recv(Client0),
+                      {F2, Client01} = rabbit_stomp_client:recv(Client00),
+                      ?assertEqual(['MESSAGE', 'RECEIPT'],
+                                   lists:sort([F1#stomp_frame.command,
+                                               F2#stomp_frame.command])),
+                      Client01;
+                  false ->
+                      Client0
+              end,
     ok = gen_tcp:send(Sock, [Frame('UNSUBSCRIBE', [{<<"destination">>, Dest},
                                                    {<<"id">>, <<"d">>},
                                                    {<<"durable">>, <<"true">>},
