@@ -116,6 +116,7 @@
          queue_consumers   :: #{rabbit_amqqueue:name() => rabbit_types:ctag()},
          unacked_message_q :: ?QUEUE:?QUEUE(#pending_ack{}),
          queue_states      :: rabbit_queue_type:state(),
+         deleted_queues = sets:new([{version, 2}]) :: sets:set(rabbit_amqqueue:name()),
          delivery_tag = 0  :: non_neg_integer(),
          msg_seq_no = 1    :: pos_integer(),
          publisher = false :: boolean()
@@ -752,12 +753,35 @@ maybe_delete_durable_sub_queue(_Destination, _QRes, _Frame, State) ->
 -spec delete_durable_sub_queue(rabbit_amqqueue:name(), #state{}) ->
           {ok, none, #state{}}.
 delete_durable_sub_queue(QRes, State = #state{user = #user{username = Username} = User,
-                                              authz_ctx = AuthzCtx}) ->
+                                              authz_ctx = AuthzCtx,
+                                              queue_states = QStates0,
+                                              deleted_queues = Deleted}) ->
     ok = rabbit_access_control:check_resource_access(
            User, QRes, configure, AuthzCtx),
     {ok, _} = rabbit_amqqueue:delete_with(QRes, self(), false, false,
                                           Username, true),
-    ok(State).
+    case rabbit_queue_type:module(QRes, QStates0) of
+        {ok, Mod} ->
+            {ConfirmMXs, UC} = rabbit_confirms:remove_queue(QRes, State#state.unconfirmed),
+            _ = erase_queue_stats(QRes),
+            State1 = record_confirms(ConfirmMXs, State#state{unconfirmed = UC}),
+            ok(send_confirms_and_nacks(
+                 State1#state{queue_states = rabbit_queue_type:remove(QRes, QStates0),
+                              deleted_queues = mark_deleted(Mod, QRes, Deleted)}));
+        {error, not_found} ->
+            ok(State)
+    end.
+
+%% A quorum queue's `eol`, if any, is sent before the delete reply, so it is
+%% already in the mailbox. A classic queue's `DOWN` and a stream's `eol` can
+%% arrive after a queue with the same name is redeclared.
+mark_deleted(rabbit_quorum_queue, QRes, Deleted) ->
+    receive
+        {'$gen_cast', {queue_event, QRes, {_, {machine, eol}}}} -> Deleted
+    after 0 -> Deleted
+    end;
+mark_deleted(_Mod, QRes, Deleted) ->
+    sets:add_element(QRes, Deleted).
 
 with_destination(Command, Frame, State, Fun) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_DESTINATION) of
@@ -1830,14 +1854,22 @@ check_resource_access(User, Resource, Perm, Context) ->
     end.
 
 handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
-            State0 =  #state{queue_states  = QStates0} = State) ->
+            State0 = #state{deleted_queues = Deleted}) ->
+    case sets:is_element(QName, Deleted) of
+        true ->
+            {ok, State0#state{deleted_queues = sets:del_element(QName, Deleted)}};
+        false ->
+            handle_down0(QPid, QName, Reason, State0)
+    end.
+
+handle_down0(QPid, QName, Reason, State0 = #state{queue_states = QStates0}) ->
     case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
         {ok, QStates1, Actions} ->
             State1 = State0#state{queue_states = QStates1},
             State2 = handle_queue_actions(Actions, State1),
             {ok, State2};
         {eol, QStates1, QRef} ->
-            State1 = handle_consuming_queue_down_or_eol(QRef, State#state{queue_states = QStates1}),
+            State1 = handle_consuming_queue_down_or_eol(QRef, State0#state{queue_states = QStates1}),
             {ConfirmMXs, UC1} =
                 rabbit_confirms:remove_queue(QRef, State1#state.unconfirmed),
             State2 = record_confirms(ConfirmMXs,
@@ -1846,7 +1878,18 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             {ok, State2#state{queue_states = rabbit_queue_type:remove(QRef, State2#state.queue_states)}}
     end.
 
-handle_queue_event({queue_event, QRef, Evt}, #state{queue_states  = QStates0} = State) ->
+handle_queue_event({queue_event, QRef, Evt}, #state{deleted_queues = Deleted} = State)
+  when Evt =:= eol ->
+    case sets:is_element(QRef, Deleted) of
+        true ->
+            {ok, State#state{deleted_queues = sets:del_element(QRef, Deleted)}};
+        false ->
+            handle_queue_event0(QRef, Evt, State)
+    end;
+handle_queue_event({queue_event, QRef, Evt}, State) ->
+    handle_queue_event0(QRef, Evt, State).
+
+handle_queue_event0(QRef, Evt, #state{queue_states  = QStates0} = State) ->
     case rabbit_queue_type:handle_event(QRef, Evt, QStates0) of
         {ok, QState1, Actions} ->
             State1 = State#state{queue_states = QState1},
