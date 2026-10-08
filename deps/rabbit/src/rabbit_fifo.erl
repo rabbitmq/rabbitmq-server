@@ -1343,7 +1343,8 @@ which_module(9) -> ?MODULE.
                tick_pid :: undefined | pid(),
                cache = #{} :: map(),
                last_checkpoint :: tuple() | #snapshot{},
-               ingress = #ingress_aux{} :: #ingress_aux{}
+               ingress = #ingress_aux{} :: #ingress_aux{},
+               has_decorators = unknown :: unknown | boolean()
               }).
 
 init_aux(Name) when is_atom(Name) ->
@@ -1431,9 +1432,10 @@ handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux)
                   ingress = #ingress_aux{decay_ms = DecayMs}},
     handle_aux(RaftState, Tag, Cmd, AuxV5, RaAux);
 handle_aux(leader, cast, eval,
-           #?AUX{last_decorators_state = LastDec,
+           #?AUX{last_decorators_state = LastDec0,
                  last_consumer_timeout = LastConTimeout0,
-                 last_checkpoint = Check0} = Aux0,
+                 last_checkpoint = Check0,
+                 has_decorators = HasDecs0} = Aux0,
            RaAux) ->
 
     #?STATE{cfg = #cfg{resource = QName},
@@ -1466,20 +1468,13 @@ handle_aux(leader, cast, eval,
     Effects2 = maybe_add_consumer_timeout_effect(NextConTimeout,
                                                  LastConTimeout,
                                                  Effects1),
-    case query_notify_decorators_info(MacState) of
-        LastDec ->
-            {no_reply, Aux0#?AUX{last_checkpoint = Check,
-                                 last_consumer_timeout = NextConTimeout},
-             RaAux, Effects2};
-        {MaxActivePriority, IsEmpty} = NewLast ->
-            Effects = [notify_decorators_effect(QName, MaxActivePriority,
-                                                IsEmpty)
-                       | Effects2],
-            {no_reply, Aux0#?AUX{last_checkpoint = Check,
-                                 last_consumer_timeout = NextConTimeout,
-                                 last_decorators_state = NewLast}, RaAux,
-             Effects}
-    end;
+    HasDecs = has_decorators(QName, HasDecs0),
+    {LastDec, Effects} = decorators_effects(HasDecs, MacState, LastDec0,
+                                            Effects2),
+    {no_reply, Aux0#?AUX{last_checkpoint = Check,
+                         last_consumer_timeout = NextConTimeout,
+                         last_decorators_state = LastDec,
+                         has_decorators = HasDecs}, RaAux, Effects};
 handle_aux(_RaftState, cast, eval,
            #?AUX{last_checkpoint = Check0} = Aux0, RaAux) ->
 
@@ -1526,7 +1521,8 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
     end;
 
 handle_aux(RaftState, _, {handle_tick, [QName, Overview0, Nodes]},
-           #?AUX{tick_pid = Pid, ingress = Ingress0} = Aux, RaAux) ->
+           #?AUX{tick_pid = Pid, ingress = Ingress0,
+                 last_decorators_state = LastDec0} = Aux, RaAux) ->
     Overview = Overview0#{members_info => ra_aux:members_info(RaAux)},
     Ingress = update_ingress(Overview0, Nodes, Ingress0),
     Aux1 = Aux#?AUX{ingress = Ingress},
@@ -1539,9 +1535,18 @@ handle_aux(RaftState, _, {handle_tick, [QName, Overview0, Nodes]},
                     true ->
                         Pid
                 end,
-            {no_reply, Aux1#?AUX{tick_pid = NewPid}, RaAux, []};
+            %% Decorators can be added by a policy change or a plugin while
+            %% the queue is idle and no `eval` follows.
+            HasDecs = rabbit_quorum_queue:has_decorators(QName),
+            {LastDec, Effects} = decorators_effects(HasDecs,
+                                                    ra_aux:machine_state(RaAux),
+                                                    LastDec0, []),
+            {no_reply, Aux1#?AUX{tick_pid = NewPid,
+                                 has_decorators = HasDecs,
+                                 last_decorators_state = LastDec},
+             RaAux, Effects};
         _ ->
-            {no_reply, Aux1, RaAux, []}
+            {no_reply, Aux1#?AUX{has_decorators = unknown}, RaAux, []}
     end;
 handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
     #?STATE{cfg = #cfg{},
@@ -3972,6 +3977,24 @@ get_consumer_priority(#{args := Args}) ->
     end;
 get_consumer_priority(_) ->
     0.
+
+has_decorators(QName, unknown) ->
+    rabbit_quorum_queue:has_decorators(QName);
+has_decorators(_QName, HasDecs) ->
+    HasDecs.
+
+decorators_effects(false, _MacState, _LastDec, Effects) ->
+    {undefined, Effects};
+decorators_effects(true, #?STATE{cfg = #cfg{resource = QName}} = MacState,
+                   LastDec, Effects) ->
+    case query_notify_decorators_info(MacState) of
+        LastDec ->
+            {LastDec, Effects};
+        {MaxActivePriority, IsEmpty} = NewLast ->
+            {NewLast,
+             [notify_decorators_effect(QName, MaxActivePriority, IsEmpty)
+              | Effects]}
+    end.
 
 notify_decorators_effect(QName, MaxActivePriority, IsEmpty) ->
     {mod_call, rabbit_quorum_queue, spawn_notify_decorators,
