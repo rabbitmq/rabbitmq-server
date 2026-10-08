@@ -102,6 +102,12 @@ groups() ->
                 redeclare_after_vhost_default_queue_type_change_is_rejected,
                 redeclare_queue_without_stored_queue_type,
                 declare_with_invalid_argument_is_refused,
+                topic_subscription_with_queue_type,
+                malformed_durable_is_refused,
+                stream_subscription_with_auto_ack_creates_no_queue,
+                failed_subscription_deletes_only_its_own_queue,
+                failed_binding_deletes_new_queue,
+                malformed_auto_delete_is_ignored,
                 queue_limit_applies_to_new_queues_only,
                 existing_queue_of_disabled_type_is_usable,
                 temp_queue_is_classic_with_quorum_default,
@@ -1772,6 +1778,89 @@ declare_with_invalid_argument_is_refused(Config) ->
               ?assertEqual([], queue_types(Config, VHost))
       end).
 
+topic_subscription_with_queue_type(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              [{ok, _, _, _} = dqt_subscribe(Client, [{<<"destination">>, <<"/topic/", Type/binary>>},
+                                                      {<<"id">>, Type},
+                                                      {<<"ack">>, <<"client">>},
+                                                      {<<"prefetch-count">>, <<"10">>},
+                                                      {<<"auto-delete">>, <<"false">>},
+                                                      {<<"x-queue-type">>, Type}])
+               || Type <- [<<"quorum">>, <<"stream">>]],
+              ?assertEqual([rabbit_quorum_queue, rabbit_stream_queue],
+                           lists:sort(queue_types(Config, VHost)))
+      end).
+
+malformed_durable_is_refused(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              Hdrs = dqt_subscribe_error(Client, [{<<"destination">>, <<"/queue/dqt-q">>},
+                                                  {<<"durable">>, <<"maybe">>}]),
+              ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Hdrs)),
+              ?assertEqual([], queue_types(Config, VHost))
+      end).
+
+stream_subscription_with_auto_ack_creates_no_queue(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              Hdrs = dqt_subscribe_error(Client, [{<<"destination">>, <<"/topic/dqt-t">>},
+                                                  {<<"ack">>, <<"auto">>},
+                                                  {<<"prefetch-count">>, <<"10">>},
+                                                  {<<"auto-delete">>, <<"false">>},
+                                                  {<<"x-queue-type">>, <<"stream">>}]),
+              ?assertEqual(<<"not_implemented">>, maps:get(<<"message">>, Hdrs)),
+              ?assertEqual([], queue_types(Config, VHost))
+      end).
+
+failed_subscription_deletes_only_its_own_queue(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              Existing = rabbit_misc:r(VHost, queue, <<"existing-s">>),
+              StreamArgs = [{<<"x-queue-type">>, longstr, <<"stream">>}],
+              {new, _} = rabbit_ct_broker_helpers:rpc(
+                           Config, 0, rabbit_amqqueue, declare,
+                           [Existing, true, false, StreamArgs, none, <<"acting-user">>]),
+              [dqt_subscribe_error(C, [{<<"destination">>, <<"/queue/", Name/binary>>},
+                                       {<<"ack">>, <<"auto">>},
+                                       {<<"x-queue-type">>, <<"stream">>}])
+               || {C, Name} <- [{Client, <<"existing-s">>},
+                                {connect_to_vhost(Config, VHost), <<"new-s">>}]],
+              ?assertEqual([Existing],
+                           rabbit_ct_broker_helpers:rpc(
+                             Config, 0, rabbit_amqqueue, list_names, [VHost]))
+      end).
+
+failed_binding_deletes_new_queue(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              Hdrs = dqt_subscribe_error(Client, [{<<"destination">>, <<"/exchange/missing-x/key">>},
+                                                  {<<"durable">>, <<"true">>},
+                                                  {<<"auto-delete">>, <<"false">>},
+                                                  {<<"exclusive">>, <<"false">>}]),
+              ?assertEqual(<<"not_found">>, maps:get(<<"message">>, Hdrs)),
+              ?assertEqual([], queue_types(Config, VHost))
+      end).
+
+malformed_auto_delete_is_ignored(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              {ok, _, _, _} = dqt_subscribe(Client, [{<<"destination">>, <<"/queue/dqt-q">>},
+                                                     {<<"id">>, <<"0">>},
+                                                     {<<"auto-delete">>, <<"maybe">>}]),
+              {ok, Q} = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, rabbit_amqqueue, lookup,
+                          [rabbit_misc:r(VHost, queue, <<"dqt-q">>)]),
+              ?assert(amqqueue:is_durable(Q)),
+              ?assertNot(amqqueue:is_auto_delete(Q))
+      end).
+
 queue_limit_applies_to_new_queues_only(Config) ->
     with_dqt_vhost(
       Config, ?FUNCTION_NAME, <<"classic">>,
@@ -1864,10 +1953,15 @@ temp_queue_send(Client) ->
       Client, 'SEND', [{<<"destination">>, <<"/topic/dqt-t">>},
                        {<<"reply-to">>, <<"/temp-queue/r">>}], ["hello"]).
 
+dqt_subscribe_error(Client, Headers) ->
+    rabbit_stomp_client:send(Client, 'SUBSCRIBE', [{<<"id">>, <<"0">>} | Headers]),
+    {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR', 30_000),
+    Hdrs.
+
 dqt_subscribe(Client, Headers) ->
     rabbit_stomp_client:send(
       Client, 'SUBSCRIBE', [{<<"receipt">>, <<"r">>} | Headers]),
-    stomp_receive(Client, 'RECEIPT').
+    stomp_receive(Client, 'RECEIPT', 30_000).
 
 queue_churn(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -1885,10 +1979,13 @@ queue_types(Config, VHost) ->
                Config, 0, rabbit_amqqueue, list, [VHost])].
 
 stomp_receive(Client, Command) ->
+    stomp_receive(Client, Command, 1000).
+
+stomp_receive(Client, Command, Timeout) ->
     {#stomp_frame{command     = Command,
                   headers     = Hdrs,
                   body_iolist_rev = Body},   Client1} =
-    rabbit_stomp_client:recv(Client),
+    rabbit_stomp_client:recv(Client, Timeout),
     {ok, Client1, Hdrs, Body}.
 
 stomp_receive_receipt(Client, ReceiptId) ->
