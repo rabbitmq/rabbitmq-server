@@ -386,8 +386,8 @@ format_destination(Exchange, RoutingKey) ->
 %%--------------------------------------------------------------------
 
 subscription_queue_name(Destination, SubscriptionId, Frame) ->
-    case rabbit_stomp_frame:header(Frame, ?HEADER_X_QUEUE_NAME, undefined) of
-        undefined ->
+    case strip_cr_lf(rabbit_stomp_frame:header(Frame, ?HEADER_X_QUEUE_NAME, <<>>)) of
+        <<>> ->
             rabbit_guid:binary(
               erlang:md5(
                 term_to_binary_compat:term_to_binary_1(
@@ -396,6 +396,9 @@ subscription_queue_name(Destination, SubscriptionId, Frame) ->
         Name ->
             Name
     end.
+
+strip_cr_lf(Name) ->
+    binary:replace(Name, [<<"\n">>, <<"\r">>], <<>>, [global]).
 
 %% ---- Helpers ----
 

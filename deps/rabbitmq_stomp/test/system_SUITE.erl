@@ -59,6 +59,7 @@ groups() ->
         declare_without_dlx,
         redeclare_existing_queue_with_restricted_dlx,
         subscribe_error,
+        queue_names_checked_as_amqp_0_9_1,
         subscribe_binding_failure_keeps_queue_messages,
         subscribe,
         subscribe_with_x_priority,
@@ -423,6 +424,66 @@ subscribe_error(Config) ->
       Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION}]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
     <<"not_found">> = maps:get(<<"message">>, Hdrs),
+    ok.
+
+queue_names_checked_as_amqp_0_9_1(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    VHost = ?config(rmq_vhost, Config),
+    Dest = iolist_to_binary(["/topic/queue-names-", Version]),
+    Refused = [{'SEND', [{<<"destination">>, <<"/queue/amq.reserved">>}]},
+               {'SEND', [{<<"destination">>, <<"/queue/amq.rabbitmq.reply-to.abc">>}]},
+               {'SUBSCRIBE', [{<<"destination">>, Dest}, {<<"id">>, <<"s">>},
+                              {<<"x-queue-name">>, <<"amq.reserved">>}]}],
+    lists:foreach(
+      fun({Command, Headers}) ->
+              {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+              rabbit_stomp_client:send(Client, Command, Headers, ["hello"]),
+              {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+              ?assertEqual({Command, Headers, <<"access_refused">>},
+                           {Command, Headers, maps:get(<<"message">>, Hdrs)})
+      end, Refused),
+    lists:foreach(
+      fun(Name) ->
+              ?assertEqual({error, not_found},
+                           lookup_queue(rabbit_misc:r(VHost, queue, Name), Config))
+      end, [<<"amq.reserved">>, <<"amq.rabbitmq.reply-to.abc">>]),
+
+    Client = ?config(stomp_client, Config),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, Dest}, {<<"id">>, <<"empty">>},
+                            {<<"x-queue-name">>, <<>>}, {<<"receipt">>, <<"empty">>}]),
+    Client1 = stomp_receive_receipt(Client, <<"empty">>),
+    ?assertEqual({error, not_found}, lookup_queue(rabbit_misc:r(VHost, queue, <<>>), Config)),
+    queue_names_with_cr(Version, Client1, Dest, Config).
+
+%% STOMP 1.2 is the first version that escapes CR in header values.
+queue_names_with_cr("1.2", Client, Dest, Config) ->
+    VHost = ?config(rmq_vhost, Config),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, Dest}, {<<"id">>, <<"cr">>},
+                            {<<"x-queue-name">>, <<"queue-names-\rcr">>},
+                            {<<"receipt">>, <<"cr">>}]),
+    Client1 = stomp_receive_receipt(Client, <<"cr">>),
+    QName = rabbit_misc:r(VHost, queue, <<"queue-names-cr">>),
+    ?assertMatch({ok, _}, lookup_queue(QName, Config)),
+    CRQueue = <<"queue-names-\rdest">>,
+    CRDest = <<"/queue/", CRQueue/binary>>,
+    rabbit_stomp_client:send(
+      Client1, 'SEND', [{<<"destination">>, CRDest}, {<<"receipt">>, <<"cr-send">>}],
+      ["hello"]),
+    Client2 = stomp_receive_receipt(Client1, <<"cr-send">>),
+    rabbit_stomp_client:send(
+      Client2, 'SUBSCRIBE', [{<<"destination">>, CRDest}, {<<"id">>, <<"cr-dest">>}]),
+    {ok, _, _, [<<"hello">>]} = stomp_receive(Client2, 'MESSAGE'),
+    CRQName = rabbit_misc:r(VHost, queue, CRQueue),
+    ?assertEqual([CRQueue],
+                 [Key || #binding{key = Key} <- rabbit_ct_broker_helpers:rpc(
+                                                  Config, 0, rabbit_binding,
+                                                  list_for_destination, [CRQName])]),
+    delete_queue_if_present(CRQName, Config),
+    delete_queue_if_present(QName, Config);
+queue_names_with_cr(_Version, _Client, _Dest, _Config) ->
     ok.
 
 subscribe_binding_failure_keeps_queue_messages(Config) ->

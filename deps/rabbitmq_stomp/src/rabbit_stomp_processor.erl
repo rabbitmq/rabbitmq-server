@@ -1996,7 +1996,7 @@ util_ensure_endpoint(_Dir, {queue, undefined}, _Params, State) ->
 util_ensure_endpoint(_, {queue, Name}, Params, State=#state{route_state = RoutingState,
                                                             cfg = #cfg{vhost = VHost}}) ->
     Params1 = rabbit_misc:pmerge(durable, true, Params),
-    QueueNameBin = Name,
+    QueueNameBin = check_queue_name(Name),
     {RState1, Created} =
         case sets:is_element(QueueNameBin, RoutingState) of
             true -> {RoutingState, existing};
@@ -2022,6 +2022,14 @@ util_ensure_endpoint(_, {reply_queue, Name}, _Params, State = #state{cfg = #cfg{
 
 util_ensure_endpoint(_Direction, _Endpoint, _Params, _State) ->
     {error, invalid_endpoint}.
+
+%% As `rabbit_channel` does for `queue.declare`.
+-spec check_queue_name(binary()) -> binary().
+check_queue_name(<<"amq.", _/binary>> = Name) ->
+    rabbit_misc:protocol_error(
+      access_refused, "queue name '~ts' contains reserved prefix 'amq.*'", [Name]);
+check_queue_name(Name) ->
+    Name.
 
 
 %% --------------------------------------------------------------------------
@@ -2055,9 +2063,9 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #state{user = #user{username = U
                                                        cfg = #cfg{vhost = VHost}}) ->
     QNameBin = case  {Type, proplists:get_value(subscription_queue_name_gen, Params0)} of
                    {topic, SQNG} when is_function(SQNG) ->
-                       SQNG();
+                       check_queue_name(SQNG());
                    {exchange, SQNG} when is_function(SQNG) ->
-                       SQNG();
+                       check_queue_name(SQNG());
                    _ ->
                        QNameBin0
                end,
