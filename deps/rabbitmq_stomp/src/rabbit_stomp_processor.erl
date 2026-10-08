@@ -375,16 +375,17 @@ process_connect(Implicit, Frame,
                                                           auth_login = Username}},
                   {Username, AuthProps} = auth_props_for_creds(Creds, StateN1),
                   {ok, User} ?= rabbit_access_control:check_user_login(Username, AuthProps),
-                  ok ?= check_vhost_exists(VHost, Username, PeerIp),
+                  #user{username = AuthUsername} = User,
+                  ok ?= check_vhost_exists(VHost, AuthUsername, PeerIp),
                   {ok, AuthzCtx} ?= check_vhost_access(VHost, User, PeerIp),
                   ok ?= check_vhost_connection_limit(VHost),
-                  ok ?= check_user_loopback(Username, PeerIp),
-                  rabbit_core_metrics:auth_attempt_succeeded(PeerIp, Username, stomp),
+                  ok ?= check_user_loopback(AuthUsername, PeerIp),
+                  rabbit_core_metrics:auth_attempt_succeeded(PeerIp, AuthUsername, stomp),
                   ok = register_connection(),
                   TraceState = rabbit_trace:init(VHost),
                   MsgIcptCtx = #{protocol => stomp,
                                  vhost => VHost,
-                                 username => Username,
+                                 username => AuthUsername,
                                  connection_name => ConnInfo#conn_info.conn_name},
                   SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
                   {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
@@ -905,7 +906,7 @@ do_subscribe(Destination, DestHdr, Frame,
             end
     end.
 
-maybe_delete_new_queue(new, QRes, #state{cfg = #cfg{auth_login = Username}}) ->
+maybe_delete_new_queue(new, QRes, #state{user = #user{username = Username}}) ->
     _ = try
             rabbit_amqqueue:delete_with(QRes, self(), true, false, Username, true)
         catch _:_ -> ok
@@ -975,7 +976,7 @@ check_subscription_access(Destination = {topic, _Topic},
 check_subscription_access(_, _) ->
     authorized.
 
-remove_added_binding({added, Binding}, #state{cfg = #cfg{auth_login = Username}}) ->
+remove_added_binding({added, Binding}, #state{user = #user{username = Username}}) ->
     _ = try rabbit_binding:remove(Binding, Username) catch _:_ -> ok end,
     ok;
 remove_added_binding(_, _State) ->
@@ -1773,9 +1774,9 @@ ensure_binding(#resource{name = QueueBin}, {<<>>, QueueBin}, _State) ->
     %% queue with its own name
     ok;
 ensure_binding(QName, {Exchange, RoutingKey},
-               #state{user = User,
+               #state{user = User = #user{username = Username},
                       authz_ctx = AuthzCtx,
-                      cfg = #cfg{auth_login = Username, vhost = VHost}}) ->
+                      cfg = #cfg{vhost = VHost}}) ->
     ExchangeName = rabbit_misc:r(VHost, exchange, Exchange),
     ok = check_subscription_binding_access(QName, ExchangeName, RoutingKey,
                                            User, AuthzCtx),

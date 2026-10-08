@@ -10,6 +10,7 @@
 
 -import(rabbit_misc, [pget/2]).
 
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -24,6 +25,7 @@ all() ->
         heartbeat,
         login_timeout,
         credential_expires,
+        authenticated_username_used_after_login,
         frame_size,
         frame_size_huge,
         unauthenticated_frame_size_limited,
@@ -212,6 +214,79 @@ credential_expires(Config) ->
         {error, closed} = gen_tcp:recv(Socket, 0, 30000)
     after
         ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [Mod])
+    end.
+
+authenticated_username_used_after_login(Config) ->
+    Username = <<"stomp-identity">>,
+    Rpc = fun(M, F, A) -> rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A) end,
+    ok = Rpc(rabbit_auth_backend_internal, add_user, [Username, Username, <<"acting-user">>]),
+    ok = Rpc(rabbit_auth_backend_internal, set_permissions,
+             [Username, <<"/">>, <<".*">>, <<".*">>, <<".*">>, <<"acting-user">>]),
+    {ok, TrackSource} = Rpc(application, get_env, [rabbit, track_auth_attempt_source]),
+    ok = Rpc(application, set_env, [rabbit, track_auth_attempt_source, true]),
+    ok = Rpc(rabbit_core_metrics, reset_auth_attempt_metrics, []),
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mocked = [rabbit_auth_backend_internal, rabbit_access_control, rabbit_event,
+              rabbit_msg_interceptor],
+    StompPort = get_stomp_port(Config),
+    try
+        lists:foreach(fun(Mod) -> ok = Rpc(meck, new, [Mod, [no_link, passthrough]]) end,
+                      Mocked),
+        ok = Rpc(meck, expect, [rabbit_auth_backend_internal, user_login_authentication, 2,
+                                {ok, #auth_user{username = Username, tags = [], impl = none}}]),
+        {ok, Client} = rabbit_stomp_client:connect("1.2", "login-header", "password",
+                                                   StompPort, []),
+        Durable = [{<<"durable">>, <<"true">>}, {<<"auto-delete">>, <<"false">>}],
+        rabbit_stomp_client:send(
+          Client, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/identity">>},
+                                {<<"id">>, <<"identity">>}, {<<"receipt">>, <<"r">>} | Durable]),
+        {#stomp_frame{command = 'RECEIPT'}, Client1} = rabbit_stomp_client:recv(Client),
+        rabbit_stomp_client:send(
+          Client1, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/identity-refused">>},
+                                 {<<"id">>, <<"identity-refused">>},
+                                 {<<"x-queue-type">>, <<"stream">>},
+                                 {<<"prefetch-count">>, <<"0">>},
+                                 {<<"ack">>, <<"client">>} | Durable]),
+        {#stomp_frame{command = 'ERROR'}, _} = rabbit_stomp_client:recv(Client1),
+        {ok, Client2} = rabbit_stomp_client:connect("1.2", "login-header", "password",
+                                                    StompPort, []),
+        rabbit_stomp_client:send(
+          Client2, 'SEND', [{<<"destination">>, <<"/topic/identity">>},
+                            {<<"receipt">>, <<"sent">>}], ["hello"]),
+        {#stomp_frame{command = 'RECEIPT'}, _} = rabbit_stomp_client:recv(Client2),
+        ?assertError({badmatch, {#stomp_frame{command = 'ERROR'}, _}},
+                     rabbit_stomp_client:connect("1.2", "login-header", "password", StompPort,
+                                                 [{<<"host">>, <<"no-such-vhost">>}])),
+
+        Events = [{Type, proplists:get_value(user_who_performed_action, Props)}
+                  || {_, {rabbit_event, notify, [Type, Props | _]}, _}
+                         <- Rpc(meck, history, [rabbit_event]),
+                     lists:member(Type, [binding_created, binding_deleted, queue_deleted]),
+                     is_list(Props)],
+        ?assertMatch([_ | _], Events),
+        ?assertEqual([], [E || {_, Actor} = E <- Events, Actor =/= Username]),
+        ?assert(lists:member(binding_deleted, [T || {T, _} <- Events])),
+        ?assert(lists:member(queue_deleted, [T || {T, _} <- Events])),
+        ?assertEqual([Username],
+                     lists:usort([U || {_, {rabbit_access_control, check_user_loopback, [U, _]}, _}
+                                           <- Rpc(meck, history, [rabbit_access_control])])),
+        ?assertEqual([Username],
+                     lists:usort([maps:get(username, Ctx)
+                                  || {_, {rabbit_msg_interceptor, intercept_incoming, [_, Ctx]}, _}
+                                         <- Rpc(meck, history, [rabbit_msg_interceptor])])),
+        Attempts = [A || A <- Rpc(rabbit_core_metrics, get_auth_attempts_by_source, []),
+                         pget(protocol, A) =:= <<"stomp">>],
+        ?assertEqual([Username], lists:usort([pget(username, A) || A <- Attempts])),
+        ?assert(lists:sum([pget(auth_attempts_failed, A) || A <- Attempts]) > 0)
+    after
+        lists:foreach(fun(Mod) -> _ = Rpc(meck, unload, [Mod]) end, Mocked),
+        _ = Rpc(rabbit_amqqueue, delete_with,
+                [rabbit_misc:r(<<"/">>, queue,
+                               rabbit_stomp_util:subscription_queue_name(
+                                 <<"identity">>, <<"identity">>, #stomp_frame{headers = #{}})),
+                 false, false, <<"acting-user">>]),
+        ok = Rpc(application, set_env, [rabbit, track_auth_attempt_source, TrackSource]),
+        _ = Rpc(rabbit_auth_backend_internal, delete_user, [Username, <<"acting-user">>])
     end.
 
 frame_size(Config) ->
