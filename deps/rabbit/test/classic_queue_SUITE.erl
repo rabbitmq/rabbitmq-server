@@ -27,13 +27,19 @@ groups() ->
     [
      {cluster_size_1, [], [
                            classic_queue_flow_control_enabled,
-                           classic_queue_flow_control_disabled
+                           classic_queue_flow_control_disabled,
+                           expires_counts_node_downtime,
+                           expires_counts_idle_time_before_shutdown,
+                           expires_resumes_remaining_time_after_restart,
+                           expires_not_counted_while_consumer_attached,
+                           expires_counts_node_downtime_priority_queue
                            ]
      },
      {cluster_size_3, [], [
                            leader_locator_client_local,
                            leader_locator_balanced,
-                           locator_deprecated
+                           locator_deprecated,
+                           expires_policy_removed_before_restart
                           ]
      }].
 
@@ -121,6 +127,84 @@ classic_queue_flow_control_disabled(Config) ->
                 ?assertMatch([], proplists:get_value(credit_blocked, Dict, []))
         end,
     flow_control(Config, FlowEnabled, VerifyFun).
+
+expires_counts_node_downtime(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    declare_expiring_queue(Config, QName, 5000, []),
+    restart_node_after(Config, 7000),
+    ?awaitMatch({error, not_found}, lookup_queue(Config, QName), 5000).
+
+expires_counts_idle_time_before_shutdown(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    declare_expiring_queue(Config, QName, 10000, []),
+    timer:sleep(7000),
+    restart_node_after(Config, 4000),
+    ?awaitMatch({error, not_found}, lookup_queue(Config, QName), 3000).
+
+expires_resumes_remaining_time_after_restart(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    declare_expiring_queue(Config, QName, 60000, []),
+    restart_node_after(Config, 1000),
+    ?assertMatch({ok, _}, lookup_queue(Config, QName)).
+
+expires_not_counted_while_consumer_attached(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} =
+        declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"classic">>},
+                            {<<"x-expires">>, long, 10000}]),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName}, self()),
+    receive #'basic.consume_ok'{} -> ok after 5000 -> ct:fail(no_consume_ok) end,
+    timer:sleep(8000),
+    restart_node_after(Config, 3000),
+    ?assertMatch({ok, _}, lookup_queue(Config, QName)).
+
+expires_counts_node_downtime_priority_queue(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    declare_expiring_queue(Config, QName, 5000,
+                           [{<<"x-max-priority">>, byte, 5}]),
+    restart_node_after(Config, 7000),
+    ?awaitMatch({error, not_found}, lookup_queue(Config, QName), 5000).
+
+expires_policy_removed_before_restart(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} =
+        declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 1, <<"expires">>, QName, <<"queues">>, [{<<"expires">>, 12000}]),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 1, <<"expires">>),
+    timer:sleep(8000),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 1, <<"expires">>, QName, <<"queues">>, [{<<"expires">>, 12000}]),
+    timer:sleep(5000),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+
+    ?assertMatch({ok, _}, lookup_queue(Config, QName)),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 1, <<"expires">>).
+
+declare_expiring_queue(Config, QName, Expires, Args) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} =
+        declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"classic">>},
+                            {<<"x-expires">>, long, Expires} | Args]),
+    ok = rabbit_ct_client_helpers:close_connection(Conn).
+
+restart_node_after(Config, Downtime) ->
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
+    timer:sleep(Downtime),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 0).
+
+lookup_queue(Config, QName) ->
+    rpc(Config, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, QName)]).
 
 flow_control(Config, FlowEnabled, VerifyFun) ->
     OrigCredit = set_default_credit(Config, {2, 1}),
