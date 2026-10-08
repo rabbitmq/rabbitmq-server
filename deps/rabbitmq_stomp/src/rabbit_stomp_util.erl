@@ -385,13 +385,16 @@ format_destination(Exchange, RoutingKey) ->
 %% Destination Parsing
 %%--------------------------------------------------------------------
 
+-spec subscription_queue_name(binary(), binary(), #stomp_frame{}) -> binary().
 subscription_queue_name(Destination, SubscriptionId, Frame) ->
     case rabbit_stomp_frame:header(Frame, ?HEADER_X_QUEUE_NAME, undefined) of
         undefined ->
+            %% Hashed as byte lists so that a durable subscription keeps the
+            %% queue name it had on `4.3`.
             rabbit_guid:binary(
               erlang:md5(
                 term_to_binary_compat:term_to_binary_1(
-                  {Destination, SubscriptionId})),
+                  {binary_to_list(Destination), binary_to_list(SubscriptionId)})),
               "stomp-subscription");
         Name ->
             Name

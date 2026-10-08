@@ -40,7 +40,8 @@ all() -> [
     consumer_tag_destination,
     consumer_tag_invalid,
     parse_valid_message_id,
-    parse_invalid_message_id
+    parse_invalid_message_id,
+    subscription_queue_name_matches_4_3
     ].
 
 
@@ -276,3 +277,22 @@ parse_valid_message_id(_) ->
 parse_invalid_message_id(_) ->
     {error, invalid_message_id} =
         rabbit_stomp_util:parse_message_id(<<"blah">>).
+
+%% Names recorded from durable subscriptions on `4.3.6`. Changing them leaves
+%% existing subscription queues behind on upgrade.
+subscription_queue_name_matches_4_3(_) ->
+    Frame = #stomp_frame{headers = #{}},
+    lists:foreach(
+      fun({Destination, Id, Expected}) ->
+              ?assertEqual({Destination, Id, Expected},
+                           {Destination, Id,
+                            rabbit_stomp_util:subscription_queue_name(
+                              Destination, Id, Frame)})
+      end,
+      [{<<"ascii">>, <<"d1">>, <<"stomp-subscription-XDrH2Y3c7_jz3DjSx7MIBA">>},
+       {<<"日本"/utf8>>, <<"идентификатор"/utf8>>,
+        <<"stomp-subscription-FhsDeJnFyW6rGZ3dHA4aQA">>},
+       {<<"esc">>, <<"a:b\\c">>, <<"stomp-subscription-UOsSxy9_xThknKhn6XUB0g">>},
+       {<<"a/b">>, <<"d4">>, <<"stomp-subscription-V_WQzD3fcIsVt-6i0_pvfw">>},
+       {<<"rk">>, <<"d5">>, <<"stomp-subscription-204HJnSiDVhzfJz6o0oSZw">>},
+       {<<>>, <<"d6">>, <<"stomp-subscription-gnQujKOVBH4ofxi0HkbeqQ">>}]).
