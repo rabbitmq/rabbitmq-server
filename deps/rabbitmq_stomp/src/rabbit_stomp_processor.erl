@@ -951,13 +951,17 @@ subscribe_argument(?HEADER_X_STREAM_MATCH_UNFILTERED, Frame, Acc) ->
             Acc
     end;
 subscribe_argument(?HEADER_X_PRIORITY, Frame, Acc) ->
-    Priority = rabbit_stomp_frame:integer_header(Frame, ?HEADER_X_PRIORITY),
-    case Priority of
-        {ok, P} ->
-            [{?HEADER_X_PRIORITY, byte, P}] ++ Acc;
-        not_found ->
-            Acc
-    end.
+    priority_argument(rabbit_stomp_frame:integer_header(Frame, ?HEADER_X_PRIORITY),
+                      rabbit_stomp_frame:binary_header(Frame, ?HEADER_X_PRIORITY),
+                      Acc).
+
+priority_argument({ok, P}, _, Acc) ->
+    [{?HEADER_X_PRIORITY, byte, P}] ++ Acc;
+%% Passed on so that the consume is refused as over AMQP 0-9-1.
+priority_argument(not_found, {ok, Value}, Acc) ->
+    [{?HEADER_X_PRIORITY, longstr, Value}] ++ Acc;
+priority_argument(not_found, not_found, Acc) ->
+    Acc.
 
 check_subscription_access(Destination = {topic, _Topic},
                           #state{user = #user{username = Username} = User,
@@ -2124,19 +2128,21 @@ unescape(<<"%2F", Rest/binary>>, Acc) -> unescape(Rest, [$/ | Acc]);
 unescape(<<C, Rest/binary>>, Acc) -> unescape(Rest, [C | Acc]).
 
 
-consume_queue(QRes, Spec0, State = #state{user = #user{username = Username} = User,
-                                               authz_ctx = AuthzCtx,
-                                               queue_states  = QStates0}) ->
+consume_queue(QRes, #{no_ack := NoAck,
+                     mode := {simple_prefetch, Prefetch},
+                     consumer_tag := ConsumerTag,
+                     exclusive_consume := ExclusiveConsume,
+                     args := Args},
+              State = #state{user = #user{username = Username} = User,
+                             authz_ctx = AuthzCtx,
+                             queue_states  = QStates0}) ->
     check_resource_access(User, QRes, read, AuthzCtx),
-    Spec = Spec0#{channel_pid => self(),
-                  limiter_pid => none,
-                  limiter_active => false,
-                  ok_msg => undefined,
-                  acting_user => Username},
     rabbit_amqqueue:with_or_die(
       QRes,
       fun(Q1) ->
-              case rabbit_queue_type:consume(Q1, Spec, QStates0) of
+              case rabbit_amqqueue:basic_consume(Q1, NoAck, self(), none, false, Prefetch,
+                                                 ConsumerTag, ExclusiveConsume, Args,
+                                                 undefined, Username, QStates0) of
                   {ok, QStates} ->
                       rabbit_global_counters:consumer_created(
                         State#state.cfg#cfg.proto_ver),

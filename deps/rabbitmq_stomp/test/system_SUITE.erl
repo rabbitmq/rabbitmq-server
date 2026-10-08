@@ -60,6 +60,7 @@ groups() ->
         redeclare_existing_queue_with_restricted_dlx,
         subscribe_error,
         queue_names_checked_as_amqp_0_9_1,
+        consume_arguments_checked_as_amqp_0_9_1,
         subscribe_binding_failure_keeps_queue_messages,
         subscribe,
         subscribe_with_x_priority,
@@ -484,6 +485,32 @@ queue_names_with_cr("1.2", Client, Dest, Config) ->
     delete_queue_if_present(CRQName, Config),
     delete_queue_if_present(QName, Config);
 queue_names_with_cr(_Version, _Client, _Dest, _Config) ->
+    ok.
+
+consume_arguments_checked_as_amqp_0_9_1(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Channel = ?config(amqp_channel, Config),
+    Queue = iolist_to_binary(["consume-arguments-", Version]),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue = Queue, durable = true}),
+    Dest = <<"/amq/queue/", Queue/binary>>,
+    lists:foreach(
+      fun(Header) ->
+              {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+              rabbit_stomp_client:send(
+                Client, 'SUBSCRIBE', [{<<"destination">>, Dest}, {<<"id">>, <<"s">>}, Header]),
+              {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+              ?assertEqual({Header, <<"precondition_failed">>},
+                           {Header, maps:get(<<"message">>, Hdrs)})
+      end, [{<<"x-stream-offset">>, <<"first">>}, {<<"x-priority">>, <<"abc">>}]),
+
+    Client = ?config(stomp_client, Config),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, Dest}, {<<"id">>, <<"ok">>},
+                            {<<"x-priority">>, <<"5">>}, {<<"receipt">>, <<"ok">>}]),
+    stomp_receive_receipt(Client, <<"ok">>),
+    #'queue.delete_ok'{} = amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
     ok.
 
 subscribe_binding_failure_keeps_queue_messages(Config) ->
