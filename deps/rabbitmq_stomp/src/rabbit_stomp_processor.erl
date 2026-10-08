@@ -109,8 +109,8 @@
          pending_receipts  :: gb_trees:tree(integer(), binary()),
          route_state       :: sets:set(),
          reply_queues      :: #{binary() => binary()},
-         confirmed         :: [rabbit_confirms:mx()],
-         rejected          :: [rabbit_confirms:mx()],
+         confirmed         :: [[rabbit_confirms:mx()]],
+         rejected          :: [[rabbit_confirms:mx()]],
          unconfirmed       :: rabbit_confirms:state(),
          %% a map of queue names to consumer tag lists
          queue_consumers   :: #{rabbit_amqqueue:name() => rabbit_types:ctag()},
@@ -1061,6 +1061,12 @@ deliver_to_queues(_XName,
     {ok, State};
 
 deliver_to_queues(XName,
+                  {_Message, #{correlation := MsgSeqNo}, _RoutedToQueues = []},
+                  #state{cfg = #cfg{proto_ver = ProtoVer}} = State) ->
+    rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
+    {ok, send_confirms_and_nacks(record_confirms([{MsgSeqNo, XName}], State))};
+
+deliver_to_queues(XName,
                   {Message, Options, RoutedToQNames},
                   State0 = #state{cfg = #cfg{proto_ver = ProtoVer},
                                   queue_states = QStates0}) ->
@@ -1614,7 +1620,14 @@ abort_transaction(Transaction, State0) ->
 perform_transaction_action(_, {stop, _, _} = Res) ->
     Res;
 perform_transaction_action({_Frame, Fun}, {ok, State}) ->
-    process_request(Fun, State).
+    case process_request(Fun, State) of
+        %% `process_request/2` reports a fatal error as `normal`, which would
+        %% give the COMMIT its RECEIPT.
+        {stop, normal, State1} ->
+            {stop, error_close, State1};
+        Res ->
+            Res
+    end.
 
 %%--------------------------------------------------------------------
 %% Heartbeat Management

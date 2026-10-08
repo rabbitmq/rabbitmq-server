@@ -87,6 +87,8 @@ groups() ->
         blank_destination_in_send,
         stream_filtering,
         transaction_limit,
+        commit_of_failed_transaction_has_no_receipt,
+        send_unroutable_with_receipt,
         global_counters
     ],
 
@@ -303,6 +305,37 @@ transaction_limit(Config) ->
         [{<<"transaction">>, <<"17">>}]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
     <<"Transaction limit exceeded">> = maps:get(<<"message">>, Hdrs),
+    ok.
+
+commit_of_failed_transaction_has_no_receipt(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+    Tx = [{<<"transaction">>, <<"tx">>}],
+    rabbit_stomp_client:send(Client, 'BEGIN', Tx),
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, <<"/exchange/commit-failed-missing/k">>} | Tx],
+      ["hello"]),
+    rabbit_stomp_client:send(Client, 'COMMIT', [{<<"receipt">>, <<"commit">>} | Tx]),
+    {ok, {Sock, Buffered}, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+    ?assertEqual(<<"not_found">>, maps:get(<<"message">>, Hdrs)),
+    ?assertEqual([], Buffered),
+    ?assertEqual({error, closed}, gen_tcp:recv(Sock, 0, 5_000)),
+    ok.
+
+send_unroutable_with_receipt(Config) ->
+    Version = ?config(version, Config),
+    ProtoVer = stomp_proto_ver(Version),
+    Client = ?config(stomp_client, Config),
+    Dest = iolist_to_binary(["/topic/unroutable-with-receipt-", Version]),
+    Dropped0 = maps:get(messages_unroutable_dropped_total, get_global_counters(Config, ProtoVer)),
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, Dest}, {<<"receipt">>, <<"unroutable">>}],
+      ["hello"]),
+    stomp_receive_receipt(Client, <<"unroutable">>),
+    ?assertEqual(Dropped0 + 1,
+                 maps:get(messages_unroutable_dropped_total,
+                          get_global_counters(Config, ProtoVer))),
     ok.
 
 global_counters(Config) ->
