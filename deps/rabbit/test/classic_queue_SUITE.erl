@@ -38,7 +38,8 @@ groups() ->
      {cluster_size_3, [], [
                            leader_locator_client_local,
                            leader_locator_balanced,
-                           locator_deprecated
+                           locator_deprecated,
+                           expires_policy_removed_before_restart
                           ]
      }].
 
@@ -166,6 +167,28 @@ expires_counts_node_downtime_priority_queue(Config) ->
                            [{<<"x-max-priority">>, byte, 5}]),
     restart_node_after(Config, 7000),
     ?awaitMatch({error, not_found}, lookup_queue(Config, QName), 5000).
+
+expires_policy_removed_before_restart(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} =
+        declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 1, <<"expires">>, QName, <<"queues">>, [{<<"expires">>, 12000}]),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 1, <<"expires">>),
+    timer:sleep(8000),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 1, <<"expires">>, QName, <<"queues">>, [{<<"expires">>, 12000}]),
+    timer:sleep(5000),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+
+    ?assertMatch({ok, _}, lookup_queue(Config, QName)),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 1, <<"expires">>).
 
 declare_expiring_queue(Config, QName, Expires, Args) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
