@@ -461,7 +461,7 @@ process_recovery_terms(Terms) ->
         PRef      -> {PRef, Terms}
     end.
 
-terminate(_Reason, State) ->
+terminate(Reason, State) ->
     State1 = #vqstate { virtual_host        = VHost,
                         next_seq_id         = NextSeqId,
                         redeliver_seq_id    = ReDeliverSeqId,
@@ -483,11 +483,15 @@ terminate(_Reason, State) ->
              {delivery_count,      DeliveryCount},
              {persistent_ref,      PRef},
              {persistent_count,    PCount},
-             {persistent_bytes,    PBytes}],
+             {persistent_bytes,    PBytes},
+             {idle_since,          idle_since(Reason)}],
     a(State1#vqstate {
         index_state = rabbit_classic_queue_index_v2:terminate(VHost, Terms, IndexState),
         store_state = rabbit_classic_queue_store_v2:terminate(StoreState),
         msg_store_clients = undefined }).
+
+idle_since({shutdown, #{idle_since := IdleSince}}) -> IdleSince;
+idle_since(_Reason)                                -> os:system_time(millisecond).
 
 %% the only difference between purge and delete is that delete also
 %% needs to delete everything that's been delivered and not ack'd.
