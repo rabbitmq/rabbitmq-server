@@ -181,3 +181,32 @@ describe('form submission', () => {
         app.unload();
     });
 });
+
+describe('route parameter decoding', () => {
+    it('decodes percent-encoded named parameters', () => {
+        var app = new Application();
+        var seen;
+        app.get('#/queues/:vhost/:name', function() { seen = this.params; });
+        app._runRoute('get', '#/queues/%2F/my%20queue');
+        assert.equal(seen.vhost, '/');
+        assert.equal(seen.name, 'my queue');
+    });
+
+    it('does not include the query string in the last parameter', () => {
+        var app = new Application();
+        var seen;
+        app.get('#/queues/:vhost/:name', function() { seen = this.params; });
+        app._runRoute('get', '#/queues/%2F/cq?page=2');
+        assert.equal(seen.name, 'cq');
+    });
+
+    it('merges decoded query parameters into params', () => {
+        var app = new Application();
+        var seen;
+        app.get('#/queues', function() { seen = this.params; });
+        app._runRoute('get', '#/queues?a=b%20c&tag=x&tag=y&plus=a+b');
+        assert.equal(seen.a, 'b c');
+        assert.deepEqual(Array.from(seen.tag), ['x', 'y']);
+        assert.equal(seen.plus, 'a b');
+    });
+});

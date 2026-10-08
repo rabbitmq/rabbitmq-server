@@ -59,22 +59,63 @@ Application.prototype.use = function(pluginName) {
 Application.prototype.helper = function(name, fn) {
 };
 
-Application.prototype._runRoute = function(verb, path, extraParams) {
+function decodeParam(str) {
+    return decodeURIComponent((str || '').replace(/\+/g, ' '));
+}
+
+function addParam(params, key, value) {
+    if (params.hasOwnProperty(key)) {
+        if (!Array.isArray(params[key])) {
+            params[key] = [params[key]];
+        }
+        params[key].push(value);
+    } else {
+        params[key] = value;
+    }
+}
+
+function parseQueryString(query) {
+    var params = {};
+    if (!query) {
+        return params;
+    }
+    var pairs = query.split('&');
+    for (var i = 0; i < pairs.length; i++) {
+        if (pairs[i] === '') {
+            continue;
+        }
+        var pair = pairs[i].split('=');
+        addParam(params, decodeParam(pair[0]), decodeParam(pair.slice(1).join('=')));
+    }
+    return params;
+}
+
+Application.prototype._runRoute = function(verb, fullPath, extraParams) {
+    var queryStart = fullPath.indexOf('?');
+    var path = queryStart === -1 ? fullPath : fullPath.substring(0, queryStart);
+    var query = queryStart === -1 ? '' : fullPath.substring(queryStart + 1);
     var routes = this._routes[verb];
     for (var i = 0; i < routes.length; i++) {
         var route = routes[i];
         var match = route.regex.exec(path);
         if (match) {
             var params = {};
-            for (var j = 0; j < route.paramNames.length; j++) {
-                params[route.paramNames[j]] = match[j + 1];
-            }
+            var key;
             if (extraParams) {
-                for (var key in extraParams) {
+                for (key in extraParams) {
                     if (extraParams.hasOwnProperty(key)) {
                         params[key] = extraParams[key];
                     }
                 }
+            }
+            var queryParams = parseQueryString(query);
+            for (key in queryParams) {
+                if (queryParams.hasOwnProperty(key)) {
+                    params[key] = queryParams[key];
+                }
+            }
+            for (var j = 0; j < route.paramNames.length; j++) {
+                params[route.paramNames[j]] = decodeParam(match[j + 1]);
             }
             var context = new RouteContext(this, params);
             return route.callback.call(context);
@@ -111,14 +152,7 @@ Application.prototype.run = function() {
         var fields = $(form).serializeArray();
         for (var i = 0; i < fields.length; i++) {
             var field = fields[i];
-            if (params.hasOwnProperty(field.name)) {
-                if (!Array.isArray(params[field.name])) {
-                    params[field.name] = [params[field.name]];
-                }
-                params[field.name].push(field.value);
-            } else {
-                params[field.name] = field.value;
-            }
+            addParam(params, field.name, field.value);
         }
 
         e.preventDefault();
