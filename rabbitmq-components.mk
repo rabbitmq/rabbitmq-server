@@ -77,7 +77,6 @@ RABBITMQ_BUILTIN = \
 	oauth2_client \
 	rabbit \
 	rabbit_common \
-	rabbitmq_amqp1_0 \
 	rabbitmq_amqp_client \
 	rabbitmq_auth_backend_cache \
 	rabbitmq_auth_backend_http \
