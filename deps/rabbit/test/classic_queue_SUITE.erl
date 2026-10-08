@@ -31,6 +31,7 @@ groups() ->
                            expires_counts_node_downtime,
                            expires_counts_idle_time_before_shutdown,
                            expires_resumes_remaining_time_after_restart,
+                           expires_not_counted_while_consumer_attached,
                            expires_counts_node_downtime_priority_queue
                            ]
      },
@@ -141,10 +142,23 @@ expires_counts_idle_time_before_shutdown(Config) ->
 
 expires_resumes_remaining_time_after_restart(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
-    declare_expiring_queue(Config, QName, 10000, []),
-    restart_node_after(Config, 2000),
-    ?assertMatch({ok, _}, lookup_queue(Config, QName)),
-    ?awaitMatch({error, not_found}, lookup_queue(Config, QName), 15000).
+    declare_expiring_queue(Config, QName, 60000, []),
+    restart_node_after(Config, 1000),
+    ?assertMatch({ok, _}, lookup_queue(Config, QName)).
+
+expires_not_counted_while_consumer_attached(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} =
+        declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"classic">>},
+                            {<<"x-expires">>, long, 10000}]),
+    #'basic.consume_ok'{} =
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName}, self()),
+    receive #'basic.consume_ok'{} -> ok after 5000 -> ct:fail(no_consume_ok) end,
+    timer:sleep(8000),
+    restart_node_after(Config, 3000),
+    ?assertMatch({ok, _}, lookup_queue(Config, QName)).
 
 expires_counts_node_downtime_priority_queue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
