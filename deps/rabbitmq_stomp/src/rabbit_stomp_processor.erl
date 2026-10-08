@@ -852,30 +852,38 @@ do_subscribe(Destination, DestHdr, Frame,
         rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT, DefaultPrefetch),
     %% io:format("Prefetch: ~p~n", [Prefetch]),
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
-    case ensure_endpoint(source, Destination, Frame, State0) of
-        {ok, QueueName, State} ->
-            {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
-            case maps:find(ConsumerTag, Subs) of
-                {ok, _} ->
-                    Message = "Duplicated subscription identifier",
-                    Detail = "A subscription identified by '~ts' already exists.",
-                    _ = error(Message, Detail, [ConsumerTag], State),
-                    _ = send_error(Message, Detail, [ConsumerTag], State),
-                    {stop, error_close, close_connection(State)};
-                error ->
+    {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
+    case maps:is_key(ConsumerTag, Subs) of
+        true ->
+            Message = "Duplicated subscription identifier",
+            Detail = "A subscription identified by '~ts' already exists.",
+            _ = error(Message, Detail, [ConsumerTag], State0),
+            _ = send_error(Message, Detail, [ConsumerTag], State0),
+            {stop, error_close, close_connection(State0)};
+        false ->
+            case ensure_endpoint(source, Destination, Frame, State0) of
+                {ok, QueueName, State, Created} ->
                     ExchangeAndKey = parse_routing(Destination, DfltTopicEx),
                     Arguments = subscribe_arguments(Frame),
-                    Added = ensure_binding(QueueName, ExchangeAndKey, State),
-                    {ok, State1} =
+                    Added = try
+                                ensure_binding(QueueName, ExchangeAndKey, State)
+                            catch Class0:Reason0:Stacktrace0 ->
+                                    ok = maybe_delete_new_queue(Created, QueueName, State),
+                                    erlang:raise(Class0, Reason0, Stacktrace0)
+                            end,
+                    State1 =
                         try
-                            consume_queue(QueueName, #{no_ack => (AckMode == auto),
-                                                       mode => {simple_prefetch, Prefetch},
-                                                       consumer_tag => ConsumerTag,
-                                                       exclusive_consume => false,
-                                                       args => Arguments},
-                                          State)
+                            {ok, State2} =
+                                consume_queue(QueueName, #{no_ack => (AckMode == auto),
+                                                           mode => {simple_prefetch, Prefetch},
+                                                           consumer_tag => ConsumerTag,
+                                                           exclusive_consume => false,
+                                                           args => Arguments},
+                                              State),
+                            State2
                         catch Class:Reason:Stacktrace ->
                                 ok = remove_added_binding(Added, State),
+                                ok = maybe_delete_new_queue(Created, QueueName, State),
                                 erlang:raise(Class, Reason, Stacktrace)
                         end,
                     CTags1 = case maps:find(QueueName, QCons) of
@@ -891,11 +899,20 @@ do_subscribe(Destination, DestHdr, Frame,
                                                                          description = Description,
                                                                          queue_name  = QueueName},
                                                            Subs),
-                                         queue_consumers = QCons1})
-            end;
-        {error, _} = Err ->
-            Err
+                                         queue_consumers = QCons1});
+                {error, _} = Err ->
+                    Err
+            end
     end.
+
+maybe_delete_new_queue(new, QRes, #state{cfg = #cfg{auth_login = Username}}) ->
+    _ = try
+            rabbit_amqqueue:delete_with(QRes, self(), true, false, Username, true)
+        catch _:_ -> ok
+        end,
+    ok;
+maybe_delete_new_queue(_Created, _QRes, _State) ->
+    ok.
 
 subscribe_arguments(Frame) ->
     subscribe_arguments([?HEADER_X_STREAM_OFFSET,
@@ -983,7 +1000,7 @@ do_send(Destination, _DestHdr,
                           State00#state{publisher = true}
              end,
     case ensure_endpoint(dest, Destination, Frame, State0) of
-        {ok, _Q, State} ->
+        {ok, _Q, State, _Created} ->
             {Frame1, State1} =
                 ensure_reply_to(Frame, State),
 
@@ -1416,7 +1433,7 @@ ensure_reply_queue(TempQueueId, State = #state{reply_queues  = RQS,
         {ok, RQ} ->
             {RQ, State};
         error ->
-            {ok, Queue} = create_queue(State),
+            {_, Queue} = create_queue(State),
             #resource{name = QNameBin} = QName = amqqueue:get_name(Queue),
 
             ConsumerTag = rabbit_stomp_util:consumer_tag_reply_to(TempQueueId),
@@ -1965,42 +1982,43 @@ parse_endpoint0(Type,     Rest) ->
 util_ensure_endpoint(source, {exchange, {Name, _}}, Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
     ensure_exchange_exists(VHost, Name, Params),
     Amqqueue = new_amqqueue(undefined, exchange, Params, State),
-    {ok, Queue} = create_queue(Amqqueue, State),
-    {ok, amqqueue:get_name(Queue), State};
+    {Created, Queue} = create_queue(Amqqueue, State),
+    {ok, amqqueue:get_name(Queue), State, Created};
 
 util_ensure_endpoint(source, {topic, _}, Params, State) ->
     Amqqueue = new_amqqueue(undefined, topic, Params, State),
-    {ok, Queue} = create_queue(Amqqueue, State),
-    {ok, amqqueue:get_name(Queue), State};
+    {Created, Queue} = create_queue(Amqqueue, State),
+    {ok, amqqueue:get_name(Queue), State, Created};
 
 util_ensure_endpoint(_Dir, {queue, undefined}, _Params, State) ->
-    {ok, undefined, State};
+    {ok, undefined, State, none};
 
 util_ensure_endpoint(_, {queue, Name}, Params, State=#state{route_state = RoutingState,
                                                             cfg = #cfg{vhost = VHost}}) ->
     Params1 = rabbit_misc:pmerge(durable, true, Params),
     QueueNameBin = Name,
-    RState1 = case sets:is_element(QueueNameBin, RoutingState) of
-                  true -> RoutingState;
-                  _    -> Amqqueue = new_amqqueue(QueueNameBin, queue, Params1, State),
-                          {ok, Queue} = create_queue(Amqqueue, State),
-                          #resource{name = QNameBin} = amqqueue:get_name(Queue),
-                          sets:add_element(QNameBin, RoutingState)
-              end,
-    {ok,  rabbit_misc:r(VHost, queue, QueueNameBin), State#state{route_state = RState1}};
+    {RState1, Created} =
+        case sets:is_element(QueueNameBin, RoutingState) of
+            true -> {RoutingState, existing};
+            _    -> Amqqueue = new_amqqueue(QueueNameBin, queue, Params1, State),
+                    {Created0, Queue} = create_queue(Amqqueue, State),
+                    #resource{name = QNameBin} = amqqueue:get_name(Queue),
+                    {sets:add_element(QNameBin, RoutingState), Created0}
+        end,
+    {ok,  rabbit_misc:r(VHost, queue, QueueNameBin), State#state{route_state = RState1}, Created};
 
 util_ensure_endpoint(dest, {exchange, {Name, _}}, Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
     ensure_exchange_exists(VHost, Name, Params),
-    {ok, undefined, State};
+    {ok, undefined, State, none};
 
 util_ensure_endpoint(dest, {topic, _}, _Params, State) ->
-    {ok, undefined, State};
+    {ok, undefined, State, none};
 
 util_ensure_endpoint(_, {amqqueue, Name}, _Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
-    {ok, rabbit_misc:r(VHost, queue, Name), State};
+    {ok, rabbit_misc:r(VHost, queue, Name), State, none};
 
 util_ensure_endpoint(_, {reply_queue, Name}, _Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
-    {ok, rabbit_misc:r(VHost, queue, Name), State};
+    {ok, rabbit_misc:r(VHost, queue, Name), State, none};
 
 util_ensure_endpoint(_Direction, _Endpoint, _Params, _State) ->
     {error, invalid_endpoint}.
@@ -2044,17 +2062,35 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #state{user = #user{username = U
                        QNameBin0
                end,
     QName = rabbit_misc:r(VHost, queue, QNameBin),
-    %% defaults
-    Params = case proplists:get_value(durable, Params0, false) of
-                 false -> [{auto_delete, true}, {exclusive, true} | Params0];
-                 true  -> Params0
+    %% Malformed `auto-delete` and `exclusive` values are ignored, as in `4.3.6`.
+    Params1 = [P || P = {K, V} <- Params0,
+                    V =/= undefined orelse
+                    (K =/= auto_delete andalso K =/= exclusive)],
+    case proplists:lookup(durable, Params1) of
+        {durable, undefined} ->
+            rabbit_misc:precondition_failed("invalid value for 'durable' for ~ts",
+                                            [rabbit_misc:rs(QName)]);
+        _ ->
+            ok
+    end,
+    Params = case proplists:get_value(durable, Params1, false) of
+                 false -> [{exclusive, true} | Params1] ++ [{auto_delete, true}];
+                 true  -> Params1
              end,
-    Durable = proplists:get_value(durable, Params, false),
+    QArgs = proplists:get_value(arguments, Params, []),
+    {Durable, Exclusive} =
+        case rabbit_misc:table_lookup(QArgs, <<"x-queue-type">>) =/= undefined andalso
+             lists:member(rabbit_amqqueue:get_queue_type(QArgs),
+                          [rabbit_quorum_queue, rabbit_stream_queue]) of
+            true ->
+                {true, false};
+            false ->
+                {proplists:get_value(durable, Params, false),
+                 proplists:get_value(exclusive, Params, false)}
+        end,
     AutoDelete = proplists:get_value(auto_delete, Params, false),
-    Exclusive = proplists:get_value(exclusive, Params, false),
     Args = rabbit_amqqueue:augment_declare_args(
-             VHost, Durable, Exclusive, AutoDelete,
-             proplists:get_value(arguments, Params, [])),
+             VHost, Durable, Exclusive, AutoDelete, QArgs),
 
     amqqueue:new(QName,
                  none,
@@ -2099,10 +2135,7 @@ consume_queue(QRes, Spec0, State = #state{user = #user{username = Username} = Us
                       State1 = State#state{queue_states = QStates},
                       {ok, State1};
                   {error, Type, Fmt, FmtArgs} ->
-                      error("Failed to consume",
-                            "~ts from ~ts: " ++ Fmt,
-                            [Type, rabbit_misc:rs(QRes) | FmtArgs],
-                            State)
+                      rabbit_misc:protocol_error(Type, Fmt, FmtArgs)
               end
       end).
 
@@ -2129,7 +2162,7 @@ lookup_or_declare(Amqqueue, User, AuthzCtx) ->
                    {ok, Q}
            end) of
         {ok, Q} ->
-            {ok, Q};
+            {existing, Q};
         {error, not_found} ->
             ok = check_dead_letter_exchange_access(
                    QName, amqqueue:get_arguments(Amqqueue), User, AuthzCtx),
@@ -2148,7 +2181,7 @@ declare_queue(Amqqueue, User = #user{username = Username}, AuthzCtx) ->
                                  Username) of
         {new, Q} when ?is_amqqueue(Q) ->
             rabbit_core_metrics:queue_created(QName),
-            {ok, Q};
+            {new, Q};
         {existing, _} ->
             %% Declared by another client after the lookup.
             lookup_or_declare(Amqqueue, User, AuthzCtx);
