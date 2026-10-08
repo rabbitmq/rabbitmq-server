@@ -33,6 +33,7 @@
 
 -export([queue_stats/2,
          queue_stats/5,
+         queue_stats_deleted/1,
          queue_declared/1,
          queue_created/1,
          queue_deleted/1,
@@ -92,6 +93,7 @@
 -spec queue_stats(rabbit_types:rabbit_amqqueue_name(), rabbit_types:infos()) -> ok.
 -spec queue_stats(rabbit_types:rabbit_amqqueue_name(), integer(), integer(), integer(),
                   integer()) -> ok.
+-spec queue_stats_deleted(rabbit_types:rabbit_amqqueue_name()) -> ok.
 -spec node_stats(atom(), rabbit_types:infos()) -> ok.
 -spec node_node_stats({node(), node()}, rabbit_types:infos()) -> ok.
 -spec gen_server2_stats(pid(), integer()) -> ok.
@@ -272,6 +274,9 @@ queue_stats(Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions) ->
     ets:insert(queue_coarse_metrics, {Name, MessagesReady, MessagesUnacknowledge,
                                       Messages, Reductions}),
     ok.
+
+queue_stats_deleted(Name) ->
+    delete_queue_metrics(Name).
 
 queue_declared(_Name) ->
     %% Name is not needed, but might be useful in the future.
