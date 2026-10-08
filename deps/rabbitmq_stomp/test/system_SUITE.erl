@@ -111,7 +111,8 @@ groups() ->
                 queue_limit_applies_to_new_queues_only,
                 existing_queue_of_disabled_type_is_usable,
                 temp_queue_is_classic_with_quorum_default,
-                temp_queue_refused_at_queue_limit],
+                temp_queue_refused_at_queue_limit,
+                temp_queue_uses_amq_gen_prefix],
 
     [{version_to_group_name(V), [sequence], Tests}
      || V <- ?SUPPORTED_VERSIONS] ++
@@ -1916,6 +1917,20 @@ temp_queue_refused_at_queue_limit(Config) ->
               {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
               ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Hdrs)),
               ?assertEqual([], queue_types(Config, VHost))
+      end).
+
+temp_queue_uses_amq_gen_prefix(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(_, VHost) ->
+              ok = rabbit_ct_broker_helpers:set_permissions(
+                     Config, <<"guest">>, VHost, <<"^amq\\.gen-">>, <<".*">>, <<".*">>),
+              ok = temp_queue_send(connect_to_vhost(Config, VHost)),
+              ?awaitMatch([<<"amq.gen-", _/binary>>],
+                          [N || #resource{name = N} <- rabbit_ct_broker_helpers:rpc(
+                                                         Config, 0, rabbit_amqqueue,
+                                                         list_names, [VHost])],
+                          10_000)
       end).
 
 with_dqt_vhost(Config, TestCase, DefaultQueueType, Fun) ->

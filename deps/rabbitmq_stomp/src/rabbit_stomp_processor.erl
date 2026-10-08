@@ -1765,7 +1765,7 @@ maybe_apply_default_topic_exchange(Exchange, _DefaultTopicExchange) ->
     Exchange.
 
 create_queue(State) ->
-    QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "stomp.gen"),
+    QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.gen"),
     create_queue(new_amqqueue(QNameBin, queue, [{durable, false}], State), State).
 
 ensure_binding(#resource{name = QueueBin}, {<<>>, QueueBin}, _State) ->
