@@ -537,7 +537,8 @@ res_min(PolVal, ArgVal)  -> erlang:min(PolVal, ArgVal).
 %% In both these we init with the undefined variant first to stop any
 %% existing timer, then start a new one which may fire after a
 %% different time.
-init_exp(undefined, State) -> stop_expiry_timer(State#q{expires = undefined});
+init_exp(undefined, State) -> stop_expiry_timer(State#q{expires    = undefined,
+                                                       idle_since = undefined});
 init_exp(Expires,   State) -> State1 = init_exp(undefined, State),
                               ensure_expiry_timer(State1#q{expires = Expires}).
 
