@@ -164,6 +164,7 @@ all_tests() ->
      relaxed_argument_equivalence_checks_on_qq_redeclare,
      consume_invalid_arg_1,
      consume_invalid_arg_2,
+     decorator_added_to_idle_queue_is_notified,
      consume_invalid_consumer_timeout_negative,
      consume_invalid_consumer_timeout_wrong_type,
      start_queue,
@@ -425,6 +426,8 @@ init_per_testcase(Testcase, Config) ->
             {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
         peek_with_wrong_queue_type when IsMixed ->
             {skip, "peek_with_wrong_queue_type isn't mixed versions compatible"};
+        decorator_added_to_idle_queue_is_notified when IsMixed ->
+            {skip, "decorator_added_to_idle_queue_is_notified isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -450,6 +453,16 @@ end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
     Config1 = rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
+end_per_testcase(decorator_added_to_idle_queue_is_notified = Testcase,
+                 Config) ->
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_decorator,
+                                     unregister, [<<"dummy">>]),
+    _ = rabbit_ct_broker_helpers:rpc_all(Config, dummy_queue_decorator,
+                                         clear_target, []),
+    Config1 = rabbit_ct_helpers:run_steps(
+                Config,
+                rabbit_ct_client_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(Testcase, Config) ->
     % catch delete_queues(),
@@ -648,6 +661,27 @@ consume_invalid_arg_2(Config) ->
                                      no_ack = false,
                                      consumer_tag = <<"ctag">>},
                               self())).
+
+decorator_added_to_idle_queue_is_notified(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    QName = rabbit_misc:r(<<"/">>, queue, Q),
+    subscribe(Ch, Q, false),
+    _ = rabbit_ct_broker_helpers:rpc_all(Config, dummy_queue_decorator,
+                                         set_target, [QName, self()]),
+    %% `rabbit_queue_decorator:register/2` updates the queue record but
+    %% applies no command to the queue, so only a tick can notify the decorator.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_decorator,
+                                      register, [<<"dummy">>, dummy_queue_decorator]),
+    receive
+        {dummy_queue_decorator, QName, MaxActivePriority, IsEmpty} ->
+            ?assertEqual({0, true}, {MaxActivePriority, IsEmpty})
+    after 30_000 ->
+            ct:fail(decorator_not_notified)
+    end.
 
 consume_invalid_consumer_timeout_negative(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
