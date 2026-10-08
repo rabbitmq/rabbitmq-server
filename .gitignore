@@ -147,3 +147,6 @@ callgraph.dot*
 
 # @todo Should be moved to rabbitmq_stomp directly.
 deps/rabbitmq_stomp/test/python_SUITE_data/src/deps
+
+# Playwright MCP artifacts
+/.playwright-mcp/
