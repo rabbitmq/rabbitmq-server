@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   selenium:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
     # Hard timeout of 1.5h. The suites take about 1h to complete. If the workflow times out,
     # it very likely there's an issue with either infra or some script.
     timeout-minutes: 90

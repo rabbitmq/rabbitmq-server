@@ -45,7 +45,7 @@ jobs:
       matrix:
         otp_version:
         - ${{ github.event.inputs.otp_version || '28' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       # When dependabot, or a user from a fork, creates PRs, secrets are not injected, and the OCI workflow can't push the image
       # This check acts as a gate keeper
@@ -88,7 +88,7 @@ jobs:
         otp_version:
         - ${{ github.event.inputs.otp_version || '28' }}
     needs: build-package-generic-unix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     if: ${{ needs.build-package-generic-unix.outputs.authorized == 'true' }}
     steps:
       - name: Checkout

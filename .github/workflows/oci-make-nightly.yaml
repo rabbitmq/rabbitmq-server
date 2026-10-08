@@ -42,7 +42,7 @@ jobs:
             otp_version: '28'
             project_version: 4.4.0
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -104,7 +104,7 @@ jobs:
             otp_version: '28'
 
     needs: build-package-generic-unix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6

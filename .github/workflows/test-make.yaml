@@ -27,7 +27,7 @@ jobs:
         elixir_version:
         - '1.20'
     # @todo Add macOS and Windows.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY

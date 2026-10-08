@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   selenium:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -89,7 +89,7 @@ jobs:
   summary-selenium:
     needs:
     - selenium
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
     - name: SUMMARY
       run: |

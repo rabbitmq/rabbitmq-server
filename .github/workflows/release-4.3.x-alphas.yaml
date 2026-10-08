@@ -13,7 +13,7 @@ env:
   DEV_WORKFLOW_REPOSITORY: "rabbitmq/server-packages"
 jobs:
   trigger_alpha_build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Compute prerelease identifier from commit SHA
         run: echo "PRERELEASE_IDENTIFIER=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV

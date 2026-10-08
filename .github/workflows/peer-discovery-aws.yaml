@@ -17,7 +17,7 @@ env:
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
     - name: CHECK IF IMAGE WILL PUSH
