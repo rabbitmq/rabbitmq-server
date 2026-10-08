@@ -61,6 +61,7 @@ groups() ->
         subscribe_error,
         queue_names_checked_as_amqp_0_9_1,
         consume_arguments_checked_as_amqp_0_9_1,
+        malformed_headers_are_refused,
         subscribe_binding_failure_keeps_queue_messages,
         subscribe,
         subscribe_with_x_priority,
@@ -511,6 +512,51 @@ consume_arguments_checked_as_amqp_0_9_1(Config) ->
                             {<<"x-priority">>, <<"5">>}, {<<"receipt">>, <<"ok">>}]),
     stomp_receive_receipt(Client, <<"ok">>),
     #'queue.delete_ok'{} = amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
+    ok.
+
+malformed_headers_are_refused(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Channel = ?config(amqp_channel, Config),
+    Stream = iolist_to_binary(["malformed-headers-", Version]),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{
+                                      queue = Stream, durable = true,
+                                      arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
+    Topic = iolist_to_binary(["/topic/malformed-headers-", Version]),
+    NewStream = iolist_to_binary(["malformed-headers-new-", Version]),
+    Consumer = [{<<"ack">>, <<"client">>}, {<<"prefetch-count">>, <<"10">>}],
+    Cases = [{'SEND', [{<<"destination">>, Topic}, {<<"x-message-ttl">>, <<"60s">>}],
+              <<"precondition_failed">>},
+             {'SUBSCRIBE', [{<<"destination">>, <<"/queue/malformed-headers">>},
+                            {<<"id">>, <<"s">>}, {<<"x-max-length">>, <<"abc">>}],
+              <<"precondition_failed">>},
+             {'SUBSCRIBE', [{<<"destination">>, <<"/amq/queue/", Stream/binary>>},
+                            {<<"id">>, <<"s">>},
+                            {<<"x-stream-offset">>, <<"offset=abc">>} | Consumer],
+              <<"precondition_failed">>},
+             {'SUBSCRIBE', [{<<"destination">>, <<"/queue/", NewStream/binary>>},
+                            {<<"id">>, <<"s">>}, {<<"x-queue-type">>, <<"stream">>},
+                            {<<"x-stream-offset">>, <<"timestamp=abc">>} | Consumer],
+              <<"precondition_failed">>},
+             {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"durable">>, <<"True">>}],
+              <<"Missing Header">>},
+             {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"/temp-queue/x">>}],
+              <<"Invalid id">>},
+             {'UNSUBSCRIBE', [{<<"destination">>, Topic}, {<<"durable">>, <<"True">>}],
+              <<"Missing Header">>}],
+    lists:foreach(
+      fun({Command, Headers, Expected}) ->
+              {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+              rabbit_stomp_client:send(Client, Command, Headers, ["hello"]),
+              {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+              ?assertEqual({Command, Headers, Expected},
+                           {Command, Headers, maps:get(<<"message">>, Hdrs)})
+      end, Cases),
+    VHost = ?config(rmq_vhost, Config),
+    ?assertEqual({error, not_found},
+                 lookup_queue(rabbit_misc:r(VHost, queue, NewStream), Config)),
+    #'queue.delete_ok'{} = amqp_channel:call(Channel, #'queue.delete'{queue = Stream}),
     ok.
 
 subscribe_binding_failure_keeps_queue_messages(Config) ->

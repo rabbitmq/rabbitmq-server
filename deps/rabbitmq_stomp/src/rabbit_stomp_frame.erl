@@ -470,9 +470,14 @@ stream_offset_header(F) ->
         {ok, <<"first">>}                    -> {longstr, <<"first">>};
         {ok, <<"last">>}                     -> {longstr, <<"last">>};
         {ok, <<"next">>}                     -> {longstr, <<"next">>};
-        {ok, <<"offset=", V/binary>>}        -> {long, binary_to_integer(V)};
-        {ok, <<"timestamp=", V/binary>>}     -> {timestamp, binary_to_integer(V)};
+        {ok, <<"offset=", V/binary>>}        -> integer_offset(long, V);
+        {ok, <<"timestamp=", V/binary>>}     -> integer_offset(timestamp, V);
         _                                    -> not_found
+    end.
+
+integer_offset(Type, V) ->
+    try {Type, binary_to_integer(V)}
+    catch error:badarg -> invalid
     end.
 
 stream_filter_header(F) ->

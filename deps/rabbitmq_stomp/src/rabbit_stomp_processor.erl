@@ -510,19 +510,29 @@ report_missing_id_header(State) ->
     error("Missing Header",
           "Header 'id' is required for durable subscriptions", State).
 
-validate_frame(Command, Frame, State)
-  when Command =:= 'SUBSCRIBE' orelse Command =:= 'UNSUBSCRIBE' ->
-    Hdr = fun(Name) -> rabbit_stomp_frame:header(Frame, Name) end,
-    case {Hdr(?HEADER_DURABLE), Hdr(?HEADER_PERSISTENT), Hdr(?HEADER_ID)} of
-        {{ok, <<"true">>}, _, not_found} ->
-            report_missing_id_header(State);
-        {_, {ok, <<"true">>}, not_found} ->
-            report_missing_id_header(State);
-        _ ->
-            ok(State)
-    end;
+validate_frame('SUBSCRIBE', Frame, State) ->
+    validate_subscription_id(rabbit_stomp_util:consumer_tag(Frame), Frame, State);
+validate_frame('UNSUBSCRIBE', Frame, State) ->
+    validate_durable_id(Frame, State);
 validate_frame(_Command, _Frame, State) ->
     ok(State).
+
+validate_subscription_id({error, invalid_prefix}, _Frame, State) ->
+    error("Invalid id",
+          "SUBSCRIBE 'id' may not start with ~ts~n",
+          [?TEMP_QUEUE_ID_PREFIX],
+          State);
+validate_subscription_id(_ConsumerTag, Frame, State) ->
+    validate_durable_id(Frame, State).
+
+-spec validate_durable_id(#stomp_frame{}, #state{}) ->
+          {ok, none, #state{}} | {error, string(), string(), #state{}}.
+validate_durable_id(Frame, State) ->
+    case rabbit_stomp_util:has_durable_header(Frame) andalso
+         rabbit_stomp_frame:header(Frame, ?HEADER_ID) =:= not_found of
+        true  -> report_missing_id_header(State);
+        false -> ok(State)
+    end.
 
 %%----------------------------------------------------------------------------
 %% Frame handlers
@@ -852,6 +862,7 @@ do_subscribe(Destination, DestHdr, Frame,
         rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT, DefaultPrefetch),
     %% io:format("Prefetch: ~p~n", [Prefetch]),
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
+    Arguments = subscribe_arguments(Frame),
     {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
     case maps:is_key(ConsumerTag, Subs) of
         true ->
@@ -864,7 +875,6 @@ do_subscribe(Destination, DestHdr, Frame,
             case ensure_endpoint(source, Destination, Frame, State0) of
                 {ok, QueueName, State, Created} ->
                     ExchangeAndKey = parse_routing(Destination, DfltTopicEx),
-                    Arguments = subscribe_arguments(Frame),
                     Added = try
                                 ensure_binding(QueueName, ExchangeAndKey, State)
                             catch Class0:Reason0:Stacktrace0 ->
@@ -931,6 +941,8 @@ subscribe_argument(?HEADER_X_STREAM_OFFSET, Frame, Acc) ->
     case StreamOffset of
         not_found ->
             Acc;
+        invalid ->
+            rabbit_stomp_util:invalid_header(?HEADER_X_STREAM_OFFSET);
         {OffsetType, OffsetValue} ->
             [{?HEADER_X_STREAM_OFFSET, OffsetType, OffsetValue}] ++ Acc
     end;
