@@ -9,7 +9,7 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([create_session/2, touch/2, delete_session/2,
+-export([create_session/3, touch/3, delete_session/2,
          list_sessions/3, terminate_sessions/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -36,12 +36,12 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-create_session(Username, Metadata) ->
+create_session(Username, Metadata, TokenExpiry) ->
     SessionId = binary:encode_hex(crypto:strong_rand_bytes(16), lowercase),
     Now = os:system_time(millisecond),
     SessionTimeoutMs = session_timeout_ms(),
     HeartbeatTimeoutMs = heartbeat_timeout_ms(),
-    ExpiresAt = calculate_expires_at(Now, Now, SessionTimeoutMs, HeartbeatTimeoutMs),
+    ExpiresAt = calculate_expires_at(Now, Now, SessionTimeoutMs, HeartbeatTimeoutMs, TokenExpiry),
     Session = #{
         created_at => Now,
         expires_at => ExpiresAt,
@@ -58,11 +58,12 @@ create_session(Username, Metadata) ->
             {ok, M} -> M;
             _       -> #{}
         end,
-        ActiveSessions = maps:fold(fun(_P, S, Acc) ->
+        ActiveSessions = maps:fold(fun(P, S, Acc) ->
             case is_active(S, Now) of
                 true ->
                     [S | Acc];
                 false ->
+                    ok = khepri_tx:delete(P),
                     Acc
             end
         end, [], Map),
@@ -90,11 +91,11 @@ create_session(Username, Metadata) ->
             {error, Reason}
     end.
 
-touch(undefined, _Username) ->
+touch(undefined, _Username, _TokenExpiry) ->
     {error, not_found};
-touch(_SessionId, undefined) ->
+touch(_SessionId, undefined, _TokenExpiry) ->
     {error, not_found};
-touch(SessionId, Username) ->
+touch(SessionId, Username, TokenExpiry) ->
     Now = os:system_time(millisecond),
     SessionTimeoutMs = session_timeout_ms(),
     HeartbeatTimeoutMs = heartbeat_timeout_ms(),
@@ -106,7 +107,8 @@ touch(SessionId, Username) ->
                 case is_active(Session, Now) of
                     true ->
                         NewExpiresAt = calculate_expires_at(
-                            maps:get(created_at, Session, Now), Now, SessionTimeoutMs, HeartbeatTimeoutMs),
+                            maps:get(created_at, Session, Now), Now, SessionTimeoutMs, HeartbeatTimeoutMs,
+                            TokenExpiry),
                         NewSession = Session#{expires_at => NewExpiresAt},
                         khepri_tx:put(SessionPath, NewSession);
                     false ->
@@ -302,8 +304,11 @@ is_expired(S, Now) ->
 created_at(S) ->
     maps:get(created_at, S, 0).
 
-calculate_expires_at(CreatedAt, Now, SessionTimeoutMs, HeartbeatTimeoutMs) ->
-    min(CreatedAt + SessionTimeoutMs, Now + HeartbeatTimeoutMs).
+calculate_expires_at(CreatedAt, Now, SessionTimeoutMs, HeartbeatTimeoutMs, never) ->
+    min(CreatedAt + SessionTimeoutMs, Now + HeartbeatTimeoutMs);
+calculate_expires_at(CreatedAt, Now, SessionTimeoutMs, HeartbeatTimeoutMs, TokenExpiry) ->
+    min(calculate_expires_at(CreatedAt, Now, SessionTimeoutMs, HeartbeatTimeoutMs, never),
+        TokenExpiry * 1000).
 
 session_timeout_ms() ->
     application:get_env(rabbitmq_management, login_session_timeout, 480) * 60 * 1000.
