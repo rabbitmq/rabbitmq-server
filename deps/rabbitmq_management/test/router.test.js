@@ -269,6 +269,15 @@ describe('route parameter decoding', () => {
         assert.deepEqual(Array.from(seen.tag), ['x', 'y']);
         assert.equal(seen.plus, 'a b');
     });
+
+    it('accepts query parameters named after Object methods', () => {
+        var app = new Application();
+        var seen;
+        app.get('#/queues', function() { seen = this.params; });
+        app._runRoute('get', '#/queues?hasOwnProperty=1&hasOwnProperty=2&toString=3');
+        assert.deepEqual(Array.from(seen.hasOwnProperty), ['1', '2']);
+        assert.equal(seen.toString, '3');
+    });
 });
 
 describe('location changes', () => {
