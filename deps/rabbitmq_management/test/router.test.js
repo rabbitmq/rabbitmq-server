@@ -329,6 +329,15 @@ describe('location changes', () => {
     });
 });
 
+describe('globals', () => {
+    it('are limited to the router and the Sammy shim', () => {
+        var fresh = makeSandbox();
+        var added = Object.keys(fresh).filter(key => !key.startsWith('_') &&
+            !['window', 'document', '$', 'jQuery', 'console'].includes(key));
+        assert.deepEqual(added.sort(), ['Application', 'Sammy']);
+    });
+});
+
 describe('Sammy removal', () => {
     it('leaves no Sammy calls outside of the router', () => {
         const deps = path.join(__dirname, '../..');
