@@ -259,8 +259,14 @@ var chart_chrome = {
     grid:   { borderWidth: 2, borderColor: "#aaa" },
     xaxis:  { tickColor: "#fff", mode: "time", timezone: "browser", timeBase: "milliseconds" },
     yaxis:  { tickColor: "#eee", min: 0 },
-    legend: { show: false }
+    legend: { show: false },
+    // Flot 4 ignores `yaxis.min` when it scales the axis to the data.
+    hooks:  { adjustSeriesDataRange: [chart_y_range_from_zero] }
 };
+
+function chart_y_range_from_zero(plot, series, range) {
+    range.ymin = 0;
+}
 
 function chart_fill(mode, i) {
     return mode =='node' && i == 0;
