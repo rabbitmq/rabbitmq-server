@@ -179,6 +179,8 @@ stream_offset_header(_) ->
         {{<<"x-stream-offset">>, <<"next">>}, {longstr, <<"next">>}},
         {{<<"x-stream-offset">>, <<"offset=5000">>}, {long, 5000}},
         {{<<"x-stream-offset">>, <<"timestamp=1000">>}, {timestamp, 1000}},
+        {{<<"x-stream-offset">>, <<"offset=abc">>}, invalid},
+        {{<<"x-stream-offset">>, <<"timestamp=abc">>}, invalid},
         {{<<"x-stream-offset">>, <<"foo">>}, not_found},
         {{<<"some-header">>, <<"some value">>}, not_found}
     ],
