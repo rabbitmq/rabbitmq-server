@@ -109,8 +109,8 @@
          pending_receipts  :: gb_trees:tree(integer(), binary()),
          route_state       :: sets:set(),
          reply_queues      :: #{binary() => binary()},
-         confirmed         :: [rabbit_confirms:mx()],
-         rejected          :: [rabbit_confirms:mx()],
+         confirmed         :: [[rabbit_confirms:mx()]],
+         rejected          :: [[rabbit_confirms:mx()]],
          unconfirmed       :: rabbit_confirms:state(),
          %% a map of queue names to consumer tag lists
          queue_consumers   :: #{rabbit_amqqueue:name() => rabbit_types:ctag()},
@@ -196,8 +196,19 @@ process_frame(Frame = #stomp_frame{command = Command}, State) ->
     command({Command, Frame}, State).
 
 -spec flush_and_die(#state{}) -> #state{}.
-flush_and_die(State) ->
-    close_connection(State).
+flush_and_die(State = #state{cfg = #cfg{proto_ver = undefined}}) ->
+    State;
+flush_and_die(State = #state{publisher = IsPublisher,
+                             subscriptions = Subs,
+                             queue_states = QStates,
+                             cfg = #cfg{proto_ver = ProtoVer}}) ->
+    case IsPublisher of
+        true  -> rabbit_global_counters:publisher_deleted(ProtoVer);
+        false -> ok
+    end,
+    maps:foreach(fun(_, _) -> rabbit_global_counters:consumer_deleted(ProtoVer) end, Subs),
+    ok = rabbit_queue_type:close(QStates),
+    State.
 
 -spec info(Key, State) -> Result
               when
@@ -375,16 +386,17 @@ process_connect(Implicit, Frame,
                                                           auth_login = Username}},
                   {Username, AuthProps} = auth_props_for_creds(Creds, StateN1),
                   {ok, User} ?= rabbit_access_control:check_user_login(Username, AuthProps),
-                  ok ?= check_vhost_exists(VHost, Username, PeerIp),
+                  #user{username = AuthUsername} = User,
+                  ok ?= check_vhost_exists(VHost, AuthUsername, PeerIp),
                   {ok, AuthzCtx} ?= check_vhost_access(VHost, User, PeerIp),
                   ok ?= check_vhost_connection_limit(VHost),
-                  ok ?= check_user_loopback(Username, PeerIp),
-                  rabbit_core_metrics:auth_attempt_succeeded(PeerIp, Username, stomp),
+                  ok ?= check_user_loopback(AuthUsername, PeerIp),
+                  rabbit_core_metrics:auth_attempt_succeeded(PeerIp, AuthUsername, stomp),
                   ok = register_connection(),
                   TraceState = rabbit_trace:init(VHost),
                   MsgIcptCtx = #{protocol => stomp,
                                  vhost => VHost,
-                                 username => Username,
+                                 username => AuthUsername,
                                  connection_name => ConnInfo#conn_info.conn_name},
                   SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
                   {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
@@ -510,26 +522,48 @@ report_missing_id_header(State) ->
     error("Missing Header",
           "Header 'id' is required for durable subscriptions", State).
 
-validate_frame(Command, Frame, State)
-  when Command =:= 'SUBSCRIBE' orelse Command =:= 'UNSUBSCRIBE' ->
-    Hdr = fun(Name) -> rabbit_stomp_frame:header(Frame, Name) end,
-    case {Hdr(?HEADER_DURABLE), Hdr(?HEADER_PERSISTENT), Hdr(?HEADER_ID)} of
-        {{ok, <<"true">>}, _, not_found} ->
-            report_missing_id_header(State);
-        {_, {ok, <<"true">>}, not_found} ->
-            report_missing_id_header(State);
+validate_frame('SUBSCRIBE', Frame, State) ->
+    case rabbit_stomp_util:consumer_tag(Frame) of
+        {error, invalid_prefix} ->
+            error("Invalid id",
+                  "SUBSCRIBE 'id' may not start with ~ts~n",
+                  [?TEMP_QUEUE_ID_PREFIX],
+                  State);
         _ ->
-            ok(State)
+            validate_subscription_queue_name(Frame, State)
     end;
+validate_frame('UNSUBSCRIBE', Frame, State) ->
+    validate_durable_id(Frame, State);
 validate_frame(_Command, _Frame, State) ->
     ok(State).
+
+validate_subscription_queue_name(Frame, State) ->
+    EmptyName = case rabbit_stomp_frame:header(Frame, ?HEADER_X_QUEUE_NAME) of
+                    {ok, Name} -> rabbit_stomp_util:strip_cr_lf(Name) =:= <<>>;
+                    not_found  -> false
+                end,
+    case EmptyName andalso rabbit_stomp_util:has_durable_header(Frame) of
+        true ->
+            error("Invalid x-queue-name",
+                  "Header 'x-queue-name' may not be empty for durable subscriptions",
+                  State);
+        false ->
+            validate_durable_id(Frame, State)
+    end.
+
+validate_durable_id(Frame, State) ->
+    case rabbit_stomp_util:has_durable_header(Frame) andalso
+         rabbit_stomp_frame:header(Frame, ?HEADER_ID) =:= not_found of
+        true  -> report_missing_id_header(State);
+        false -> ok(State)
+    end.
 
 %%----------------------------------------------------------------------------
 %% Frame handlers
 %%----------------------------------------------------------------------------
 
 handle_frame('DISCONNECT', _Frame, State) ->
-    {stop, normal, close_connection(State)};
+    {stop, normal, State};
 
 handle_frame('SUBSCRIBE', Frame, State) ->
     with_destination('SUBSCRIBE', Frame, State, fun do_subscribe/4);
@@ -686,15 +720,10 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
                              end)
                    end) of
                 {ok, QueueStates} ->
-                    rabbit_global_counters:consumer_deleted(
-                      State#state.cfg#cfg.proto_ver),
                     {ok, _, NewState} = tidy_canceled_subscription(ConsumerTag, Subscription,
                                                                    Frame, State#state{queue_states = QueueStates}),
                     {ok, NewState};
                 {error, not_found} ->
-                    rabbit_global_counters:consumer_deleted(
-                      State#state.cfg#cfg.proto_ver),
-
                     {ok, _, NewState} = tidy_canceled_subscription(ConsumerTag, Subscription,
                                                                    Frame, State),
                     {ok, NewState}
@@ -721,7 +750,9 @@ tidy_canceled_subscription(ConsumerTag,
 tidy_canceled_subscription_state(ConsumerTag,
                                  _Subscription = #subscription{queue_name = QName},
                                  State = #state{subscriptions = Subs,
-                                                     queue_consumers = QCons}) ->
+                                                queue_consumers = QCons,
+                                                cfg = #cfg{proto_ver = ProtoVer}}) ->
+    rabbit_global_counters:consumer_deleted(ProtoVer),
     Subs1 = maps:remove(ConsumerTag, Subs),
     QCons1 =
         case maps:find(QName, QCons) of
@@ -852,6 +883,7 @@ do_subscribe(Destination, DestHdr, Frame,
         rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT, DefaultPrefetch),
     %% io:format("Prefetch: ~p~n", [Prefetch]),
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
+    Arguments = subscribe_arguments(Frame),
     {ok, ConsumerTag, Description} = rabbit_stomp_util:consumer_tag(Frame),
     case maps:is_key(ConsumerTag, Subs) of
         true ->
@@ -859,12 +891,11 @@ do_subscribe(Destination, DestHdr, Frame,
             Detail = "A subscription identified by '~ts' already exists.",
             _ = error(Message, Detail, [ConsumerTag], State0),
             _ = send_error(Message, Detail, [ConsumerTag], State0),
-            {stop, error_close, close_connection(State0)};
+            {stop, error_close, State0};
         false ->
             case ensure_endpoint(source, Destination, Frame, State0) of
                 {ok, QueueName, State, Created} ->
                     ExchangeAndKey = parse_routing(Destination, DfltTopicEx),
-                    Arguments = subscribe_arguments(Frame),
                     Added = try
                                 ensure_binding(QueueName, ExchangeAndKey, State)
                             catch Class0:Reason0:Stacktrace0 ->
@@ -905,7 +936,7 @@ do_subscribe(Destination, DestHdr, Frame,
             end
     end.
 
-maybe_delete_new_queue(new, QRes, #state{cfg = #cfg{auth_login = Username}}) ->
+maybe_delete_new_queue(new, QRes, #state{user = #user{username = Username}}) ->
     _ = try
             rabbit_amqqueue:delete_with(QRes, self(), true, false, Username, true)
         catch _:_ -> ok
@@ -931,6 +962,8 @@ subscribe_argument(?HEADER_X_STREAM_OFFSET, Frame, Acc) ->
     case StreamOffset of
         not_found ->
             Acc;
+        invalid ->
+            rabbit_stomp_util:invalid_header(?HEADER_X_STREAM_OFFSET);
         {OffsetType, OffsetValue} ->
             [{?HEADER_X_STREAM_OFFSET, OffsetType, OffsetValue}] ++ Acc
     end;
@@ -951,9 +984,9 @@ subscribe_argument(?HEADER_X_STREAM_MATCH_UNFILTERED, Frame, Acc) ->
             Acc
     end;
 subscribe_argument(?HEADER_X_PRIORITY, Frame, Acc) ->
-    Priority = rabbit_stomp_frame:integer_header(Frame, ?HEADER_X_PRIORITY),
-    case Priority of
-        {ok, P} ->
+    case rabbit_stomp_frame:header(Frame, ?HEADER_X_PRIORITY) of
+        {ok, Val} ->
+            P = rabbit_stomp_util:integer_argument(?HEADER_X_PRIORITY, Val),
             [{?HEADER_X_PRIORITY, byte, P}] ++ Acc;
         not_found ->
             Acc
@@ -975,7 +1008,7 @@ check_subscription_access(Destination = {topic, _Topic},
 check_subscription_access(_, _) ->
     authorized.
 
-remove_added_binding({added, Binding}, #state{cfg = #cfg{auth_login = Username}}) ->
+remove_added_binding({added, Binding}, #state{user = #user{username = Username}}) ->
     _ = try rabbit_binding:remove(Binding, Username) catch _:_ -> ok end,
     ok;
 remove_added_binding(_, _State) ->
@@ -983,10 +1016,9 @@ remove_added_binding(_, _State) ->
 
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist_rev = BodyFragments},
-        State00 = #state{
+        State0 = #state{
                         user = #user{username = Username} = User,
                         authz_ctx = AuthzCtx,
-                        publisher = IsPublisher,
                         cfg = #cfg{
                                  proto_ver = ProtoVer,
                                  delivery_flow = Flow,
@@ -994,11 +1026,6 @@ do_send(Destination, _DestHdr,
                                  trace_state = TraceState,
                                  default_topic_exchange = DfltTopicEx,
                                  vhost = VHost}}) ->
-    State0 = case IsPublisher of
-                 true  -> State00;
-                 false -> rabbit_global_counters:publisher_created(ProtoVer),
-                          State00#state{publisher = true}
-             end,
     case ensure_endpoint(dest, Destination, Frame, State0) of
         {ok, _Q, State, _Created} ->
             {Frame1, State1} =
@@ -1048,10 +1075,16 @@ do_send(Destination, _DestHdr,
             rabbit_trace:tap_in(Message, QNames, ConnName, Username, TraceState),
 
             Delivery = {Message, DeliveryOptions, Queues},
-            deliver_to_queues(ExchangeName, Delivery, State2);
+            mark_publisher(deliver_to_queues(ExchangeName, Delivery, State2));
         {error, _} = Err ->
             Err
     end.
+
+mark_publisher({ok, State = #state{publisher = false, cfg = #cfg{proto_ver = ProtoVer}}}) ->
+    rabbit_global_counters:publisher_created(ProtoVer),
+    {ok, State#state{publisher = true}};
+mark_publisher(Res) ->
+    Res.
 
 deliver_to_queues(_XName,
                   {_Message, Options, _RoutedToQueues = []},
@@ -1059,6 +1092,12 @@ deliver_to_queues(_XName,
   when not is_map_key(correlation, Options) ->
     rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
     {ok, State};
+
+deliver_to_queues(XName,
+                  {_Message, #{correlation := MsgSeqNo}, _RoutedToQueues = []},
+                  #state{cfg = #cfg{proto_ver = ProtoVer}} = State) ->
+    rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
+    {ok, send_confirms_and_nacks(record_confirms([{MsgSeqNo, XName}], State))};
 
 deliver_to_queues(XName,
                   {Message, Options, RoutedToQNames},
@@ -1397,14 +1436,6 @@ maybe_notify_sent(undefined) ->
 maybe_notify_sent({_, QPid, _}) ->
     ok = rabbit_amqqueue:notify_sent(QPid, self()).
 
-close_connection(State = #state{publisher = IsPublisher,
-                                cfg = #cfg{proto_ver = ProtoVer}}) ->
-    case IsPublisher andalso ProtoVer =/= undefined of
-        true  -> rabbit_global_counters:publisher_deleted(ProtoVer);
-        false -> ok
-    end,
-    State.
-
 %%----------------------------------------------------------------------------
 %% Reply-To
 %%----------------------------------------------------------------------------
@@ -1614,7 +1645,14 @@ abort_transaction(Transaction, State0) ->
 perform_transaction_action(_, {stop, _, _} = Res) ->
     Res;
 perform_transaction_action({_Frame, Fun}, {ok, State}) ->
-    process_request(Fun, State).
+    case process_request(Fun, State) of
+        %% `process_request/2` reports a fatal error as `normal`, which
+        %% would send a `RECEIPT` for the `COMMIT`.
+        {stop, normal, State1} ->
+            {stop, error_close, State1};
+        Res ->
+            Res
+    end.
 
 %%--------------------------------------------------------------------
 %% Heartbeat Management
@@ -1685,12 +1723,12 @@ ok(Command, Headers, BodyFragments, State) ->
 amqp_death(ErrorName, Explanation, State) when is_atom(ErrorName) ->
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, error_close, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
+    {stop, error_close, send_error(atom_to_list(ErrorName), ErrorDesc, State)};
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = rabbit_framing_amqp_0_9_1:amqp_exception(ReplyCode),
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, error_close, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
+    {stop, error_close, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).
@@ -1765,7 +1803,7 @@ maybe_apply_default_topic_exchange(Exchange, _DefaultTopicExchange) ->
     Exchange.
 
 create_queue(State) ->
-    QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "stomp.gen"),
+    QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.gen"),
     create_queue(new_amqqueue(QNameBin, queue, [{durable, false}], State), State).
 
 ensure_binding(#resource{name = QueueBin}, {<<>>, QueueBin}, _State) ->
@@ -1773,9 +1811,9 @@ ensure_binding(#resource{name = QueueBin}, {<<>>, QueueBin}, _State) ->
     %% queue with its own name
     ok;
 ensure_binding(QName, {Exchange, RoutingKey},
-               #state{user = User,
+               #state{user = User = #user{username = Username},
                       authz_ctx = AuthzCtx,
-                      cfg = #cfg{auth_login = Username, vhost = VHost}}) ->
+                      cfg = #cfg{vhost = VHost}}) ->
     ExchangeName = rabbit_misc:r(VHost, exchange, Exchange),
     ok = check_subscription_binding_access(QName, ExchangeName, RoutingKey,
                                            User, AuthzCtx),
@@ -1996,7 +2034,7 @@ util_ensure_endpoint(_Dir, {queue, undefined}, _Params, State) ->
 util_ensure_endpoint(_, {queue, Name}, Params, State=#state{route_state = RoutingState,
                                                             cfg = #cfg{vhost = VHost}}) ->
     Params1 = rabbit_misc:pmerge(durable, true, Params),
-    QueueNameBin = Name,
+    QueueNameBin = check_queue_name(Name),
     {RState1, Created} =
         case sets:is_element(QueueNameBin, RoutingState) of
             true -> {RoutingState, existing};
@@ -2022,6 +2060,15 @@ util_ensure_endpoint(_, {reply_queue, Name}, _Params, State = #state{cfg = #cfg{
 
 util_ensure_endpoint(_Direction, _Endpoint, _Params, _State) ->
     {error, invalid_endpoint}.
+
+check_queue_name(Name) ->
+    case rabbit_stomp_util:strip_cr_lf(Name) of
+        <<"amq.", _/binary>> = Stripped ->
+            rabbit_misc:protocol_error(
+              access_refused, "queue name '~ts' contains reserved prefix 'amq.*'", [Stripped]);
+        Stripped ->
+            Stripped
+    end.
 
 
 %% --------------------------------------------------------------------------
@@ -2055,9 +2102,9 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #state{user = #user{username = U
                                                        cfg = #cfg{vhost = VHost}}) ->
     QNameBin = case  {Type, proplists:get_value(subscription_queue_name_gen, Params0)} of
                    {topic, SQNG} when is_function(SQNG) ->
-                       SQNG();
+                       check_queue_name(SQNG());
                    {exchange, SQNG} when is_function(SQNG) ->
-                       SQNG();
+                       check_queue_name(SQNG());
                    _ ->
                        QNameBin0
                end,
@@ -2116,19 +2163,21 @@ unescape(<<"%2F", Rest/binary>>, Acc) -> unescape(Rest, [$/ | Acc]);
 unescape(<<C, Rest/binary>>, Acc) -> unescape(Rest, [C | Acc]).
 
 
-consume_queue(QRes, Spec0, State = #state{user = #user{username = Username} = User,
-                                               authz_ctx = AuthzCtx,
-                                               queue_states  = QStates0}) ->
+consume_queue(QRes, #{no_ack := NoAck,
+                      mode := {simple_prefetch, Prefetch},
+                      consumer_tag := ConsumerTag,
+                      exclusive_consume := ExclusiveConsume,
+                      args := Args},
+              State = #state{user = #user{username = Username} = User,
+                             authz_ctx = AuthzCtx,
+                             queue_states  = QStates0}) ->
     check_resource_access(User, QRes, read, AuthzCtx),
-    Spec = Spec0#{channel_pid => self(),
-                  limiter_pid => none,
-                  limiter_active => false,
-                  ok_msg => undefined,
-                  acting_user => Username},
     rabbit_amqqueue:with_or_die(
       QRes,
       fun(Q1) ->
-              case rabbit_queue_type:consume(Q1, Spec, QStates0) of
+              case rabbit_amqqueue:basic_consume(Q1, NoAck, self(), none, false, Prefetch,
+                                                 ConsumerTag, ExclusiveConsume, Args,
+                                                 undefined, Username, QStates0) of
                   {ok, QStates} ->
                       rabbit_global_counters:consumer_created(
                         State#state.cfg#cfg.proto_ver),
