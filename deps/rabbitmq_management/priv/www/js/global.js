@@ -788,9 +788,9 @@ function setup_global_vars(settings) {
     rates_mode = settings.rates_mode;
     is_op_policy_updating_enabled = settings.is_op_policy_updating_enabled;
     user_tags = expand_user_tags(user.tags);
-    user_administrator = jQuery.inArray("administrator", user_tags) != -1;
-    is_user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
-    user_monitor = jQuery.inArray("monitoring", user_tags) != -1;
+    user_administrator = user_tags.indexOf("administrator") !== -1;
+    is_user_policymaker = user_tags.indexOf("policymaker") !== -1;
+    user_monitor = user_tags.indexOf("monitoring") !== -1;
     exchange_types = settings.exchange_types.map(function(xt) { return fmt_escape_html_one_line(xt.name); });
 
     update_cluster_name_ui(settings.cluster_name);
