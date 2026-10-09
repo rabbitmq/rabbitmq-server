@@ -539,7 +539,7 @@ validate_frame(_Command, _Frame, State) ->
 
 validate_subscription_queue_name(Frame, State) ->
     EmptyName = case rabbit_stomp_frame:header(Frame, ?HEADER_X_QUEUE_NAME) of
-                    {ok, Name} -> rabbit_stomp_util:strip_cr_lf(Name) =:= <<>>;
+                    {ok, Name} -> string:trim(rabbit_stomp_util:strip_cr_lf(Name)) =:= <<>>;
                     not_found  -> false
                 end,
     case EmptyName andalso rabbit_stomp_util:has_durable_header(Frame) of

@@ -399,7 +399,7 @@ format_destination(Exchange, RoutingKey) ->
 
 -spec subscription_queue_name(binary(), binary(), #stomp_frame{}) -> binary().
 subscription_queue_name(Destination, SubscriptionId, Frame) ->
-    case strip_cr_lf(rabbit_stomp_frame:header(Frame, ?HEADER_X_QUEUE_NAME, <<>>)) of
+    case string:trim(strip_cr_lf(rabbit_stomp_frame:header(Frame, ?HEADER_X_QUEUE_NAME, <<>>))) of
         <<>> ->
             %% Hashed as lists, as on `4.3`, so that durable subscriptions keep their queue names.
             rabbit_guid:binary(
