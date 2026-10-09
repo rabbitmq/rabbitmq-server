@@ -47,10 +47,5 @@ include ../../erlang.mk
 
 .PHONY: js-test
 js-test:
-	@if command -v node > /dev/null 2>&1; then \
-		echo "Running JavaScript unit tests..."; \
-		cd $(CURDIR) && node --test; \
-	else \
-		echo "node not found; skipping JavaScript unit tests"; \
-	fi
+	$(verbose) node --test
 
