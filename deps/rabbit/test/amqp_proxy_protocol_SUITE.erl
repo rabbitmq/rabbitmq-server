@@ -37,6 +37,7 @@ init_per_suite(Config) ->
     Config2 = rabbit_ct_helpers:merge_app_env(
                 Config1,
                 [{rabbit, [{proxy_protocol, true},
+                           {proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]},
                            {anonymous_login_user, <<"proxy_test">>},
                            {anonymous_login_pass, <<"proxy_test">>}]}]),
     Config3 = rabbit_ct_helpers:run_setup_steps(

@@ -38,8 +38,10 @@ init_per_suite(Config) ->
         {rabbitmq_ct_tls_verify, verify_none}
     ]),
     StompConfig = stomp_config(),
+    RabbitConfig = {rabbit, [{proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]}]},
     rabbit_ct_helpers:run_setup_steps(Config1,
-        [ fun(Conf) -> merge_app_env(StompConfig, Conf) end ] ++
+        [ fun(Conf) -> merge_app_env(StompConfig, Conf) end,
+          fun(Conf) -> merge_app_env(RabbitConfig, Conf) end ] ++
             rabbit_ct_broker_helpers:setup_steps() ++
             rabbit_ct_client_helpers:setup_steps()).
 
