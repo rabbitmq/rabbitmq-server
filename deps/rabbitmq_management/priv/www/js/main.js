@@ -1674,7 +1674,7 @@ function check_bad_response(req, full_page_404, on404fun) {
             if (last_page_out_of_range_error > 0)
                     seconds = (new Date().getTime() - last_page_out_of_range_error.getTime())/1000;
             if (seconds > 3) {
-                 Sammy.log('server reports page is out of range, redirecting to page 1');
+                 console.log('server reports page is out of range, redirecting to page 1');
                  var contexts = {
                      "queues": "queues",
                      "exchanges": "exchanges",
