@@ -85,7 +85,18 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(topic_exchange_zero_words = Testcase, Config) ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(
+           Config, topic_binding_projection_v5) of
+        ok ->
+            init_per_testcase0(Testcase, Config);
+        {skip, _} = Skip ->
+            Skip
+    end;
 init_per_testcase(Testcase, Config) ->
+    init_per_testcase0(Testcase, Config).
+
+init_per_testcase0(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     Name = rabbit_data_coercion:to_binary(Testcase),

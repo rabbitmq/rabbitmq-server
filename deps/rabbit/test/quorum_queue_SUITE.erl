@@ -1940,8 +1940,8 @@ recovery_checkpoint(Config) ->
         %% Verify state was recovered correctly by checking message count on both
         %% the leader and the restarted follower.
         ?awaitMatch({ok, {_, #{num_messages := N}}, _},
-                    rpc:call(Server0, ra, local_query,
-                             [{RaName, Server0}, fun rabbit_fifo:overview/1]),
+                    rpc:call(Server0, rabbit_fifo_client, local_query,
+                             [{RaName, Server0}, overview]),
                     10000),
         ?awaitMatch({ok, {_, #{num_messages := N}}, _},
                     rpc:call(Server1, ra, local_query,
