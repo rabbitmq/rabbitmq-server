@@ -62,6 +62,9 @@ groups() ->
         reserved_queue_names_are_refused,
         queue_name_cr_lf_is_stripped,
         malformed_headers_are_refused,
+        error_frame_with_non_latin1_text_case1,
+        error_frame_with_non_latin1_text_case2,
+        error_frame_with_non_latin1_text_case3,
         empty_queue_name_is_ignored_for_transient_subscription,
         stream_offset_is_refused_for_classic_queue,
         subscribe_binding_failure_keeps_queue_messages,
@@ -172,6 +175,9 @@ tests_with_new_behavior() ->
      queue_name_cr_lf_is_stripped,
      malformed_headers_are_refused,
      empty_queue_name_is_ignored_for_transient_subscription,
+     error_frame_with_non_latin1_text_case1,
+     error_frame_with_non_latin1_text_case2,
+     error_frame_with_non_latin1_text_case3,
      stream_offset_is_refused_for_classic_queue,
      commit_of_failed_transaction_has_no_receipt,
      send_unroutable_with_receipt,
@@ -632,6 +638,27 @@ malformed_headers_are_refused(Config) ->
               ?assertEqual({Command, Headers, Expected},
                            {Command, Headers, maps:get(<<"message">>, Hdrs)})
       end, Cases).
+
+error_frame_with_non_latin1_text_case1(Config) ->
+    error_frame_with_non_latin1_text(Config, "amériques.canada.québec").
+
+error_frame_with_non_latin1_text_case2(Config) ->
+    error_frame_with_non_latin1_text(Config, "भारत.दिल्ली").
+
+error_frame_with_non_latin1_text_case3(Config) ->
+    error_frame_with_non_latin1_text(Config, "ไทย.กรุงเทพ").
+
+error_frame_with_non_latin1_text(Config, Name) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Exchange = unicode:characters_to_binary(Name),
+    {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, <<"/exchange/", Exchange/binary>>},
+                            {<<"id">>, <<"s">>}]),
+    {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+    ?assertEqual(<<"not_found">>, maps:get(<<"message">>, Hdrs)),
+    ?assertNotEqual(nomatch, binary:match(iolist_to_binary(Body), Exchange)).
 
 empty_queue_name_is_ignored_for_transient_subscription(Config) ->
     Version = ?config(version, Config),
