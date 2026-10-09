@@ -299,4 +299,5 @@ subscription_queue_name_from_header(_) ->
            end,
     ?assertEqual(<<"queue-name">>, Name(<<"queue-\r\nname">>)),
     ?assertMatch(<<"stomp-subscription-", _/binary>>, Name(<<>>)),
+    ?assertMatch(<<"stomp-subscription-", _/binary>>, Name(<<" ">>)),
     ?assertMatch(<<"stomp-subscription-", _/binary>>, Name(<<"\r\n">>)).
