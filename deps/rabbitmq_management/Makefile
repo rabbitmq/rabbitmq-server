@@ -45,3 +45,7 @@ EJS_VERIFY  = scripts/verify_ejs_templates.cjs
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
+.PHONY: js-test
+js-test:
+	$(verbose) node --test
+
