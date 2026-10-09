@@ -47,3 +47,15 @@ describe('chart y-axis range', () => {
     assert.equal(range.ymax, 1000);
   });
 });
+
+describe('chart y-axis ticks', () => {
+  it('labels only both ends of an idle chart axis', () => {
+    const axis = { max: 1, tickGenerator: () => [0, 0.5, 1] };
+    assert.deepEqual(Array.from(sandbox.chart_chrome.yaxis.ticks(axis)), [0, 1]);
+  });
+
+  it('uses the generated ticks otherwise', () => {
+    const axis = { max: 1500, tickGenerator: () => [0, 500, 1000, 1500] };
+    assert.deepEqual(sandbox.chart_chrome.yaxis.ticks(axis), [0, 500, 1000, 1500]);
+  });
+});
