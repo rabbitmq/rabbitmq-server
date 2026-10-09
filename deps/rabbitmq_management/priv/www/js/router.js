@@ -3,6 +3,7 @@ function Application(configFn) {
     this.title_function = null;
     this._hashchange_handler = null;
     this._submit_handler = null;
+    this._last_location = null;
 
     if (configFn) {
         configFn.call(this);
@@ -123,12 +124,19 @@ Application.prototype._runRoute = function(verb, fullPath, extraParams) {
     }
 };
 
+Application.prototype._checkLocation = function() {
+    var hash = window.location.hash || '#/';
+    if (hash !== this._last_location) {
+        this._last_location = hash;
+        this._runRoute('get', hash);
+    }
+};
+
 Application.prototype.run = function() {
     var app = this;
 
     this._hashchange_handler = function() {
-        var hash = window.location.hash || '#/';
-        app._runRoute('get', hash);
+        app._checkLocation();
     };
     window.addEventListener('hashchange', this._hashchange_handler);
 
@@ -160,8 +168,7 @@ Application.prototype.run = function() {
     };
     $(document).on('submit', 'form', this._submit_handler);
 
-    var hash = window.location.hash || '#/';
-    this._runRoute('get', hash);
+    this._checkLocation();
 };
 
 Application.prototype.unload = function() {
@@ -174,6 +181,7 @@ Application.prototype.unload = function() {
         this._submit_handler = null;
     }
     this._routes = { get: [], put: [], post: [], del: [] };
+    this._last_location = null;
 };
 
 function RouteContext(app, params) {
