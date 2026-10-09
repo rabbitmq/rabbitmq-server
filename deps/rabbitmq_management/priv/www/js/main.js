@@ -94,7 +94,11 @@ function dispatcher_add(fun) {
 function dispatcher() {
     this.setTitle('RabbitMQ: ');
     for (var i in dispatcher_modules) {
-        dispatcher_modules[i](this);
+        try {
+            dispatcher_modules[i](this);
+        } catch (e) {
+            console.error('Could not add the routes of a management UI extension', e);
+        }
     }
 }
 
