@@ -11,6 +11,9 @@ function Application(configFn) {
 }
 
 Application.prototype._compile = function(path) {
+    if (typeof path !== 'string') {
+        return { regex: path, paramNames: [] };
+    }
     var paramNames = [];
     var pattern = path.replace(/:([^\/]+)/g, function(_, name) {
         paramNames.push(name);
@@ -115,11 +118,20 @@ Application.prototype._runRoute = function(verb, fullPath, extraParams) {
                     params[key] = queryParams[key];
                 }
             }
-            for (var j = 0; j < route.paramNames.length; j++) {
-                params[route.paramNames[j]] = decodeParam(match[j + 1]);
+            var splat = [];
+            for (var j = 1; j < match.length; j++) {
+                var name = route.paramNames[j - 1];
+                if (name) {
+                    params[name] = decodeParam(match[j]);
+                } else {
+                    splat.push(decodeParam(match[j]));
+                }
+            }
+            if (splat.length > 0) {
+                params.splat = splat;
             }
             var context = new RouteContext(this, params);
-            return route.callback.call(context);
+            return route.callback.apply(context, [context].concat(splat));
         }
     }
 };

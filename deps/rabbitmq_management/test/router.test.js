@@ -70,6 +70,34 @@ describe('route pattern compilation', () => {
     });
 });
 
+describe('regular expression routes', () => {
+    it('passes decoded unnamed groups as splat params and callback arguments', () => {
+        var app = new Application();
+        var seen = null;
+        app.get(/^#\/plugin\/([^\/]+)\/(.+)$/, function(context, vhost, name) {
+            seen = { context: context, vhost: vhost, name: name, splat: this.params.splat };
+        });
+        app._runRoute('get', '#/plugin/%2F/my%20queue?page=2');
+        assert.equal(seen.vhost, '/');
+        assert.equal(seen.name, 'my queue');
+        assert.equal(Array.prototype.join.call(seen.splat, ','), '/,my queue');
+        assert.equal(seen.context.params.page, '2');
+    });
+});
+
+describe('route callbacks', () => {
+    it('receive the route context as their first argument', () => {
+        var app = new Application();
+        var self = null;
+        var arg = null;
+        app.get('#/queues/:vhost', function(context) { self = this; arg = context; });
+        app._runRoute('get', '#/queues/%2F');
+        assert.equal(arg, self);
+        assert.equal(arg.params.vhost, '/');
+        assert.equal(arg.params.splat, undefined);
+    });
+});
+
 describe('literal routes', () => {
     it('matches only the exact literal path', () => {
         var app = new Application();
