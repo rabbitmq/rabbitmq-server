@@ -16,6 +16,7 @@
          write/4, write_flow/4, read/2, read_many/2, contains/2, remove/2]).
 
 -export([compact_file/2, truncate_file/4, delete_file/2]). %% internal
+-export([client_read3/2]). %% internal, exposed for tests
 
 -export([scan_file_for_valid_messages/1, scan_file_for_valid_messages/2]). %% salvage tool
 
@@ -27,10 +28,9 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include("rabbit_msg_store.hrl").
 
 -type(msg() :: any()).
-
--record(msg_location, {msg_id, ref_count, file, offset, total_size}).
 
 %% We flush to disk at an interval to make sure we don't keep
 %% the data in memory too long. Confirms are sent after the
@@ -123,19 +123,6 @@
           credit_disc_bound,
           %% Highest-numbered v1 (.rdq) file, or 'none' if the store has
           %% no v1 files at all.
-          last_v1_file
-        }).
-
--record(client_msstate,
-        { server,
-          client_ref,
-          reader,
-          index_ets,
-          dir,
-          file_handles_ets,
-          cur_file_cache_ets,
-          flying_ets,
-          credit_disc_bound,
           last_v1_file
         }).
 
@@ -646,10 +633,39 @@ client_write(MsgRef, MsgId, Msg, Flow,
 %% index information points to the file we are expecting we are good.
 %% And the file only gets deleted after all data was copied, index
 %% was updated and file handles got closed.
+%% Compaction only ever rewrites a live message's offset, never its file
+%% (index_update_offset_if_unchanged/5 always keeps the same File). So the
+%% only way the confirming lookup below can see a different file for a
+%% still-positive ref count is a full removal followed by another write of
+%% the same MsgId: with fan-out, one queue can drop its last reference
+%% before another queue's write of the same message is processed.
+%% That fresh copy can land in the store's current file, whose
+%% bytes may still be sitting in the write buffer rather than on disk
+%% (writer_append/3, flushed later by writer_flush/1) -- reading it
+%% straight from disk before that flush would misread garbage. Once a
+%% lookup below confirms the message is still alive, check the cache
+%% before the disk, exactly like read/2 does before ever calling
+%% here, since it's kept live for anything still in the current file.
+%% The cache is not consulted ahead of that liveness check: a removed
+%% message's cache row is deliberately not cleared (in case a write for
+%% the same MsgId is still in flight), so checking it first would return
+%% stale content instead of not_found for a message that is really gone.
+%%
+%% Bounds retries for a MsgId that keeps getting rewritten across every
+%% attempt. Exhausting them means the message is alive in a file we never
+%% managed to confirm, which is raised rather than reported as not_found
+%% because the latter would silently drop a readable message.
+-define(CLIENT_READ3_MAX_RETRIES, 3).
+
+client_read3(Location, CState) ->
+    client_read3(Location, CState, ?CLIENT_READ3_MAX_RETRIES).
+
 client_read3(#msg_location { msg_id = MsgId, file = File },
-             CState = #client_msstate { index_ets        = IndexEts,
-                                        file_handles_ets = FileHandlesEts,
-                                        client_ref       = Ref }) ->
+             CState = #client_msstate { index_ets          = IndexEts,
+                                        file_handles_ets   = FileHandlesEts,
+                                        cur_file_cache_ets = CurFileCacheEts,
+                                        client_ref         = Ref },
+             RetriesLeft) ->
     %% We immediately mark the handle open so that we don't get the
     %% file truncated while we are reading from it. The file may still
     %% be truncated past that point but that's OK because we do a second
@@ -657,9 +673,46 @@ client_read3(#msg_location { msg_id = MsgId, file = File },
     mark_handle_open(FileHandlesEts, File, Ref),
     case index_lookup(IndexEts, MsgId) of
         #msg_location { file = File, ref_count = RefCount } = MsgLocation when RefCount > 0 ->
-            {Msg, CState1} = read_from_disk(MsgLocation, CState),
+            {Msg, CState1} = read_from_cache_or_disk(MsgId, MsgLocation, CState, CurFileCacheEts),
             mark_handle_closed(FileHandlesEts, File, Ref),
-            {{ok, Msg}, CState1}
+            {{ok, Msg}, CState1};
+        #msg_location { ref_count = RefCount } = Fresh when RefCount > 0 ->
+            %% Still alive, but under a different file than the one our
+            %% caller's snapshot saw and this handle was just opened for.
+            %% Retry against the fresh location, which opens and confirms
+            %% that file in turn. Reading it here instead would risk a
+            %% stale offset: only a handle opened before the confirming
+            %% lookup defers truncation.
+            mark_handle_closed(FileHandlesEts, File, Ref),
+            case read_from_cache(CurFileCacheEts, MsgId) of
+                {ok, Msg} ->
+                    {{ok, Msg}, CState};
+                not_found when RetriesLeft > 0 ->
+                    client_read3(Fresh, CState, RetriesLeft - 1);
+                not_found ->
+                    error({rabbit_msg_store_read, relocation_retries_exhausted,
+                           Fresh#msg_location.file, MsgId})
+            end;
+        _ ->
+            %% Genuinely gone, e.g. a different queue acking the last
+            %% reference to a fanned-out message. Close the handle we just
+            %% opened instead of leaving it stuck in FileHandlesEts, which
+            %% would otherwise defer this file's truncation/deletion
+            %% forever.
+            mark_handle_closed(FileHandlesEts, File, Ref),
+            {not_found, CState}
+    end.
+
+read_from_cache_or_disk(MsgId, MsgLocation, CState, CurFileCacheEts) ->
+    case read_from_cache(CurFileCacheEts, MsgId) of
+        {ok, Msg} -> {Msg, CState};
+        not_found -> read_from_disk(MsgLocation, CState)
+    end.
+
+read_from_cache(CurFileCacheEts, MsgId) ->
+    case ets:lookup(CurFileCacheEts, MsgId) of
+        [{MsgId, Msg, _CacheRefCount}] -> {ok, Msg};
+        [] -> not_found
     end.
 
 read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
