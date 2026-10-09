@@ -151,7 +151,7 @@ function check_login () {
     if (oauth.enabled) {
       renderWarningMessageInLoginStatus(oauth, 'Not authorized');
     } else {
-      replace_content('login-status', '<p>Login failed</p>');
+      replace_content('login-status', '<p class="warning">Login failed</p>');
     }
     return false;
   }
@@ -168,7 +168,7 @@ function load_init_data() {
       if (oauth.enabled) {
           renderWarningMessageInLoginStatus(oauth, 'Could not load the management UI');
       } else {
-          replace_content('login-status', '<p>Could not load the management UI</p>');
+          replace_content('login-status', '<p class="warning">Could not load the management UI</p>');
       }
       return false;
   }
@@ -198,7 +198,7 @@ function do_login(username, password) {
 function login(username, password) {
   var result = do_login(username, password);
   if (!result || result.error) {
-    replace_content('login-status', '<p>Login failed</p>');
+    replace_content('login-status', '<p class="warning">Login failed</p>');
     if (result && result.reason && typeof result.reason === 'string') {
       show_popup('warn', fmt_escape_html(result.reason));
     }
@@ -233,7 +233,7 @@ function load_init_data_and_ui(user) {
       renderWarningMessageInLoginStatus(oauth, fmt_escape_html(errMsg));
       oauth_logout_after_failure(fmt_escape_html(errMsg));
     } else {
-      replace_content('login-status', '<p>' + fmt_escape_html(errMsg) + '</p>');
+      replace_content('login-status', '<p class="warning">' + fmt_escape_html(errMsg) + '</p>');
     }
     return false;
   }
@@ -244,7 +244,7 @@ function load_init_data_and_ui(user) {
     console.error("Application initialization failed:", err);
     invokeInitFailedProcessors(err);
     clear_auth();
-    replace_content('login-status', '<p>Application initialization failed</p>');
+    replace_content('login-status', '<p class="warning">Application initialization failed</p>');
     oauth_logout_after_failure('Application initialization failed');
     return false;
   }
