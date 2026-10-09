@@ -143,6 +143,7 @@
 
     --sub-text-color: var(--color-grey-600);
     --small-text-color: var(--color-grey-600);
+    --chart-tick-label-text-color: var(--color-grey-700);
 
     --main-sub-a-text-color: var(--color-grey-600);
     --main-sub-a-hover-text-color: var(--color-grey-800);
