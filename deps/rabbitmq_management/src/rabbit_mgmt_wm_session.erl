@@ -40,7 +40,8 @@ accept_content(ReqData, Context) ->
         undefined ->
             Username = Context#context.user#user.username,
             Metadata = build_metadata(ReqData),
-            case rabbit_mgmt_sessions:create_session(Username, Metadata) of
+            TokenExpiry = rabbit_access_control:expiry_timestamp(Context#context.user),
+            case rabbit_mgmt_sessions:create_session(Username, Metadata, TokenExpiry) of
                 {ok, SessionId} ->
                     Res = #{<<"session_id">> => SessionId},
                     ReqData2 = cowboy_req:reply(201, #{<<"content-type">> => <<"application/json">>}, rabbit_json:encode(Res), ReqData),
@@ -50,7 +51,8 @@ accept_content(ReqData, Context) ->
             end;
         SessionId ->
             Username = Context#context.user#user.username,
-            case rabbit_mgmt_sessions:touch(SessionId, Username) of
+            TokenExpiry = rabbit_access_control:expiry_timestamp(Context#context.user),
+            case rabbit_mgmt_sessions:touch(SessionId, Username, TokenExpiry) of
                 ok ->
                     {true, ReqData, Context};
                 {error, not_found} ->

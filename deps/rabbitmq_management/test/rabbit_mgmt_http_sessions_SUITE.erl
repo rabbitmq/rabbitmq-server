@@ -37,6 +37,8 @@ all() ->
         distributed_conflict_resolution_test,
         distributed_session_counting_test,
         session_expiry_test,
+        stale_sessions_are_deleted_on_create_test,
+        session_expiry_is_capped_by_token_expiry_test,
         auto_resume_orphaned_session_test,
         delete_user_sessions_test,
         session_removed_with_internal_user_test,
@@ -249,6 +251,48 @@ session_expiry_test(Config) ->
     
     passed.
 
+stale_sessions_are_deleted_on_create_test(Config) ->
+    N1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Username = <<"stale_user">>,
+
+    rpc(Config, N1, application, set_env, [rabbitmq_management, login_session_timeout, 0]),
+    rpc(Config, N1, application, set_env, [rabbitmq_management, sessions_heartbeat_interval, 0]),
+    {ok, StaleId} = rpc(Config, N1, rabbit_mgmt_sessions, create_session, [Username, #{}, never]),
+    StalePath = ?KHEPRI_USER_SESSIONS_PATH(Username) ++ [StaleId],
+    ?assertMatch({ok, _}, rpc(Config, N1, rabbit_khepri, get, [StalePath])),
+
+    rpc(Config, N1, application, set_env, [rabbitmq_management, login_session_timeout, 480]),
+    rpc(Config, N1, application, set_env, [rabbitmq_management, sessions_heartbeat_interval, 30]),
+    {ok, SessionId} = rpc(Config, N1, rabbit_mgmt_sessions, create_session, [Username, #{}, never]),
+
+    ?assertMatch({error, {khepri, node_not_found, _}}, rpc(Config, N1, rabbit_khepri, get, [StalePath])),
+    ?assertMatch({ok, _}, rpc(Config, N1, rabbit_khepri, get, [?KHEPRI_USER_SESSIONS_PATH(Username) ++ [SessionId]])),
+
+    ok = rpc(Config, N1, rabbit_mgmt_sessions, delete_session, [SessionId, Username]),
+    passed.
+
+session_expiry_is_capped_by_token_expiry_test(Config) ->
+    N1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Username = <<"token_user">>,
+    TokenExpiry = erlang:system_time(second) + 3,
+    Path = fun(Id) -> ?KHEPRI_USER_SESSIONS_PATH(Username) ++ [Id] end,
+
+    {ok, SessionId} = rpc(Config, N1, rabbit_mgmt_sessions, create_session, [Username, #{}, TokenExpiry]),
+    {ok, #{expires_at := ExpiresAt1}} = rpc(Config, N1, rabbit_khepri, get, [Path(SessionId)]),
+    ?assertEqual(TokenExpiry * 1000, ExpiresAt1),
+
+    ?assertMatch(ok, rpc(Config, N1, rabbit_mgmt_sessions, touch, [SessionId, Username, TokenExpiry])),
+    {ok, #{expires_at := ExpiresAt2}} = rpc(Config, N1, rabbit_khepri, get, [Path(SessionId)]),
+    ?assertEqual(TokenExpiry * 1000, ExpiresAt2),
+
+    timer:sleep(3500),
+    ?assertEqual({error, not_found}, rpc(Config, N1, rabbit_mgmt_sessions, touch, [SessionId, Username, TokenExpiry])),
+
+    {ok, SessionId2} = rpc(Config, N1, rabbit_mgmt_sessions, create_session, [Username, #{}, never]),
+    ?assertMatch({error, {khepri, node_not_found, _}}, rpc(Config, N1, rabbit_khepri, get, [Path(SessionId)])),
+    ok = rpc(Config, N1, rabbit_mgmt_sessions, delete_session, [SessionId2, Username]),
+    passed.
+
 auto_resume_orphaned_session_test(Config) ->
     N1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     N2 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
@@ -322,7 +366,7 @@ session_removed_with_internal_user_test(Config) ->
 session_for_user_without_internal_record_test(Config) ->
     N1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Username = <<"external_user">>,
-    {ok, SessionId} = rpc(Config, N1, rabbit_mgmt_sessions, create_session, [Username, #{}]),
+    {ok, SessionId} = rpc(Config, N1, rabbit_mgmt_sessions, create_session, [Username, #{}, never]),
     Path = ?KHEPRI_USER_SESSIONS_PATH(Username) ++ [SessionId],
     ?assertMatch({ok, _}, rpc(Config, N1, rabbit_khepri, get, [Path])),
     ?assertMatch({error, {khepri, node_not_found, _}},

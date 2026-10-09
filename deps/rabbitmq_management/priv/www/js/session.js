@@ -97,11 +97,20 @@ function check_session() {
     return 'error';
 }
 
-function end_rejected_session() {
+function rejected_session_message(res) {
+    try {
+        if (/expired/i.test(JSON.parse(res.responseText).reason)) {
+            return 'Token expired';
+        }
+    } catch (e) {}
+    return 'Session terminated or expired';
+}
+
+function end_rejected_session(res) {
     stop_session_heartbeat();
     clear_auth();
     clear_local_pref(SESSION_ID);
-    store_local_pref(SESSION_ENDED_MESSAGE, 'Session terminated or expired');
+    store_local_pref(SESSION_ENDED_MESSAGE, rejected_session_message(res));
     if (oauth.enabled && oauth.sp_initiated) {
         oauth_initiateLogout();
     } else {
@@ -112,7 +121,7 @@ function end_rejected_session() {
 function _send_heartbeat(session_id) {
     session_req('PUT', session_id, function(res) {
         if (is_session_rejected(res)) {
-            end_rejected_session();
+            end_rejected_session(res);
         }
     });
 }
