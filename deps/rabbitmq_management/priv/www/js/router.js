@@ -155,12 +155,15 @@ Application.prototype.run = function() {
     this._submit_handler = function(e) {
         var form = e.target;
         var verb = (form.getAttribute('method') || 'get').toLowerCase();
-        var path = form.getAttribute('action') || '';
+        var path = form.getAttribute('action');
+        if (!path) {
+            return;
+        }
 
         if (verb === 'get') {
             var qs = $(form).serialize();
             e.preventDefault();
-            window.location.hash = path + '?' + qs;
+            window.location.hash = qs ? path + '?' + qs : path;
             return;
         }
 

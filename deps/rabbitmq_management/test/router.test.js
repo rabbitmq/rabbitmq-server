@@ -211,6 +211,37 @@ describe('form submission', () => {
     });
 });
 
+describe('form submission without a method', () => {
+    function submit(action, qs) {
+        var prevented = false;
+        var form = {
+            getAttribute: function(name) { return name === 'action' ? action : null; },
+            _qs: qs
+        };
+        sandbox._docHandlers.submit({ target: form, preventDefault: function() { prevented = true; } });
+        return prevented;
+    }
+
+    it('moves to the action with the fields as the query string', () => {
+        var app = new Application();
+        app.run();
+        assert.equal(submit('#/queues', 'name=q1'), true);
+        assert.equal(sandbox.window.location.hash, '#/queues?name=q1');
+        assert.equal(submit('#/exchanges', ''), true);
+        assert.equal(sandbox.window.location.hash, '#/exchanges');
+        app.unload();
+    });
+
+    it('leaves a form without an action to its own handlers', () => {
+        var app = new Application();
+        app.run();
+        sandbox.window.location.hash = '#/';
+        assert.equal(submit(null, ''), false);
+        assert.equal(sandbox.window.location.hash, '#/');
+        app.unload();
+    });
+});
+
 describe('route parameter decoding', () => {
     it('decodes percent-encoded named parameters', () => {
         var app = new Application();
