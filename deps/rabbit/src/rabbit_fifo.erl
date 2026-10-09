@@ -1213,8 +1213,10 @@ state_enter(_, #?STATE{cfg = #cfg{dead_letter_handler = DLH,
     [].
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
-tick(Ts, #?STATE{cfg = #cfg{resource = QName}} = State) ->
-    case is_expired(Ts, State) of
+tick(Ts, #?STATE{cfg = #cfg{resource = QName},
+                 last_command_time = LastTs} = State) ->
+    MonotonicTs = max(LastTs, Ts),
+    case is_expired(MonotonicTs, State) of
         true ->
             [{mod_call, rabbit_quorum_queue, spawn_deleter, [QName]}];
         false ->
