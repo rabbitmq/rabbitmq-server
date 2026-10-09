@@ -15,7 +15,7 @@ Application.prototype._compile = function(path) {
         return { regex: path, paramNames: [] };
     }
     var paramNames = [];
-    var pattern = path.replace(/:([^\/]+)/g, function(_, name) {
+    var pattern = path.replace(/:(\w+)/g, function(_, name) {
         paramNames.push(name);
         return '([^/]+)';
     });

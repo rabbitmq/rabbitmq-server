@@ -68,6 +68,15 @@ describe('route pattern compilation', () => {
         assert.equal(seen.vhost, 'myvhost');
         assert.equal(seen.name, 'myexchange');
     });
+
+    it('ends a param name at the first non-word character', () => {
+        var app = new Application();
+        var seen = null;
+        app.get('#/bindings/:source-:destination', function() { seen = this.params; });
+        app._runRoute('get', '#/bindings/a-b');
+        assert.equal(seen.source, 'a');
+        assert.equal(seen.destination, 'b');
+    });
 });
 
 describe('regular expression routes', () => {
