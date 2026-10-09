@@ -20,6 +20,7 @@ function load(sandbox, file) {
 }
 
 const replaced = {};
+const consoleErrors = [];
 const jqStub = function(selector) {
     return {
         ready: function() {},
@@ -33,6 +34,7 @@ const sandbox = {
     jQuery: jqStub,
     window: {},
     document: {},
+    console: { error: function() { consoleErrors.push(arguments); } },
     COMPILED_TEMPLATES: { status: function(model) { return model.text; } },
     timer_interval: 5000
 };
@@ -77,5 +79,23 @@ describe('update_status', () => {
         sandbox.last_successful_connect = new Date(2026, 0, 2, 3, 4, 5);
         sandbox.update_status('error');
         assert.match(replaced['#status'], /^Error: could not connect to server since 2026-01-02 03:04:05\. /);
+    });
+});
+
+describe('dispatcher', () => {
+    it('adds the routes of other extensions when one of them throws', () => {
+        var routes = [];
+        var app = {
+            setTitle: function() {},
+            get: function(path) { routes.push(path); }
+        };
+        sandbox.dispatcher_modules = [
+            function(sammy) { sammy.get('#/'); },
+            function(sammy) { sammy.redirect('#/'); },
+            function(sammy) { sammy.get('#/plugin'); }
+        ];
+        sandbox.dispatcher.call(app);
+        assert.deepEqual(routes, ['#/', '#/plugin']);
+        assert.equal(consoleErrors.length, 1);
     });
 });
