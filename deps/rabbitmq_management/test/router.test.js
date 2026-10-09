@@ -48,7 +48,8 @@ function makeSandbox() {
         $: jqStub,
         jQuery: jqStub,
         console: console,
-        _docHandlers: docHandlers
+        _docHandlers: docHandlers,
+        _listeners: listeners
     };
     vm.createContext(sandbox);
     vm.runInContext(routerSrc, sandbox, { filename: ROUTER_JS_PATH });
@@ -208,6 +209,37 @@ describe('route parameter decoding', () => {
         assert.equal(seen.a, 'b c');
         assert.deepEqual(Array.from(seen.tag), ['x', 'y']);
         assert.equal(seen.plus, 'a b');
+    });
+});
+
+describe('location changes', () => {
+    function navigate(hash) {
+        sandbox.window.location.hash = hash;
+        sandbox._listeners.hashchange();
+    }
+
+    it('does not run the start route again when the hash is set to it', () => {
+        var app = new Application();
+        var calls = 0;
+        app.get('#/', function() { calls++; });
+        sandbox.window.location.hash = '';
+        app.run();
+        navigate('#/');
+        assert.equal(calls, 1);
+        app.unload();
+    });
+
+    it('runs the matching route on every hash change', () => {
+        var app = new Application();
+        var seen = [];
+        app.get('#/', function() { seen.push('overview'); });
+        app.get('#/queues', function() { seen.push('queues'); });
+        sandbox.window.location.hash = '#/';
+        app.run();
+        navigate('#/queues');
+        navigate('#/');
+        assert.deepEqual(seen, ['overview', 'queues', 'overview']);
+        app.unload();
     });
 });
 
