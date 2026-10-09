@@ -40,7 +40,9 @@ all() -> [
     consumer_tag_destination,
     consumer_tag_invalid,
     parse_valid_message_id,
-    parse_invalid_message_id
+    parse_invalid_message_id,
+    subscription_queue_name_matches_4_3,
+    subscription_queue_name_from_header
     ].
 
 
@@ -276,3 +278,25 @@ parse_valid_message_id(_) ->
 parse_invalid_message_id(_) ->
     {error, invalid_message_id} =
         rabbit_stomp_util:parse_message_id(<<"blah">>).
+
+subscription_queue_name_matches_4_3(_) ->
+    Frame = #stomp_frame{headers = #{}},
+    lists:foreach(
+      fun({Destination, Id, Expected}) ->
+              ?assertEqual(Expected,
+                           rabbit_stomp_util:subscription_queue_name(Destination, Id, Frame))
+      end,
+      [{<<"ascii">>, <<"d1">>, <<"stomp-subscription-XDrH2Y3c7_jz3DjSx7MIBA">>},
+       {<<"a/b">>, <<"d4">>, <<"stomp-subscription-V_WQzD3fcIsVt-6i0_pvfw">>},
+       {<<"日本"/utf8>>, <<"идентификатор"/utf8>>,
+        <<"stomp-subscription-FhsDeJnFyW6rGZ3dHA4aQA">>}]).
+
+subscription_queue_name_from_header(_) ->
+    Name = fun(Value) ->
+                   rabbit_stomp_util:subscription_queue_name(
+                     <<"dest">>, <<"id">>,
+                     #stomp_frame{headers = #{<<"x-queue-name">> => Value}})
+           end,
+    ?assertEqual(<<"queue-name">>, Name(<<"queue-\r\nname">>)),
+    ?assertMatch(<<"stomp-subscription-", _/binary>>, Name(<<>>)),
+    ?assertMatch(<<"stomp-subscription-", _/binary>>, Name(<<"\r\n">>)).

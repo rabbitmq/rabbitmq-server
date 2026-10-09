@@ -10,6 +10,7 @@
 
 -import(rabbit_misc, [pget/2]).
 
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -24,6 +25,7 @@ all() ->
         heartbeat,
         login_timeout,
         credential_expires,
+        authenticated_username_used_after_login,
         frame_size,
         frame_size_huge,
         unauthenticated_frame_size_limited,
@@ -212,6 +214,61 @@ credential_expires(Config) ->
         {error, closed} = gen_tcp:recv(Socket, 0, 30000)
     after
         ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [Mod])
+    end.
+
+authenticated_username_used_after_login(Config) ->
+    Username = <<"stomp-identity">>,
+    Rpc = fun(M, F, A) -> rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A) end,
+    ok = Rpc(rabbit_auth_backend_internal, add_user, [Username, Username, <<"acting-user">>]),
+    ok = Rpc(rabbit_auth_backend_internal, set_permissions,
+             [Username, <<"/">>, <<".*">>, <<".*">>, <<".*">>, <<"acting-user">>]),
+    {ok, TrackSource} = Rpc(application, get_env, [rabbit, track_auth_attempt_source]),
+    ok = Rpc(application, set_env, [rabbit, track_auth_attempt_source, true]),
+    ok = Rpc(rabbit_core_metrics, reset_auth_attempt_metrics, []),
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mocked = [rabbit_auth_backend_internal, rabbit_event],
+    try
+        lists:foreach(fun(Mod) -> ok = Rpc(meck, new, [Mod, [no_link, passthrough]]) end,
+                      Mocked),
+        ok = Rpc(meck, expect, [rabbit_auth_backend_internal, user_login_authentication, 2,
+                                {ok, #auth_user{username = Username, tags = [], impl = none}}]),
+        {ok, Client} = rabbit_stomp_client:connect("1.2", "login-header", "password",
+                                                   get_stomp_port(Config), []),
+        rabbit_stomp_client:send(
+          Client, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/identity">>},
+                                {<<"id">>, <<"identity">>}, {<<"receipt">>, <<"r">>},
+                                {<<"durable">>, <<"true">>}, {<<"auto-delete">>, <<"false">>}]),
+        {#stomp_frame{command = 'RECEIPT'}, Client1} = rabbit_stomp_client:recv(Client),
+        rabbit_stomp_client:send(
+          Client1, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/identity-refused">>},
+                                 {<<"id">>, <<"identity-refused">>},
+                                 {<<"durable">>, <<"true">>}, {<<"auto-delete">>, <<"false">>},
+                                 {<<"x-queue-type">>, <<"stream">>}, {<<"ack">>, <<"auto">>}]),
+        {#stomp_frame{command = 'ERROR'}, _} = rabbit_stomp_client:recv(Client1, 30_000),
+
+        Events = [binding_created, binding_deleted, queue_deleted],
+        ?awaitMatch(
+           [{binding_created, [Username]}, {binding_deleted, [Username]},
+            {queue_deleted, [Username]}],
+           [{Type, lists:usort(
+                     [proplists:get_value(user_who_performed_action, Props)
+                      || {_, {rabbit_event, notify, [T, Props | _]}, _}
+                             <- Rpc(meck, history, [rabbit_event]),
+                         T =:= Type])}
+            || Type <- Events],
+           30_000),
+        Attempts = [A || A <- Rpc(rabbit_core_metrics, get_auth_attempts_by_source, []),
+                         pget(protocol, A) =:= <<"stomp">>],
+        ?assertEqual([Username], lists:usort([pget(username, A) || A <- Attempts]))
+    after
+        lists:foreach(fun(Mod) -> _ = Rpc(meck, unload, [Mod]) end, Mocked),
+        _ = Rpc(rabbit_amqqueue, delete_with,
+                [rabbit_misc:r(<<"/">>, queue,
+                               rabbit_stomp_util:subscription_queue_name(
+                                 <<"identity">>, <<"identity">>, #stomp_frame{headers = #{}})),
+                 false, false, <<"acting-user">>]),
+        ok = Rpc(application, set_env, [rabbit, track_auth_attempt_source, TrackSource]),
+        _ = Rpc(rabbit_auth_backend_internal, delete_user, [Username, <<"acting-user">>])
     end.
 
 frame_size(Config) ->

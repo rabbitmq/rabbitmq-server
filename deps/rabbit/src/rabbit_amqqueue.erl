@@ -1895,7 +1895,7 @@ basic_get(Q, NoAck, LimiterPid, CTag, QStates) ->
     rabbit_queue_type:dequeue(Q, NoAck, LimiterPid, CTag, QStates).
 
 
--spec basic_consume(amqqueue:amqqueue(), boolean(), pid(), pid(), boolean(),
+-spec basic_consume(amqqueue:amqqueue(), boolean(), pid(), pid() | 'none', boolean(),
                     non_neg_integer(), rabbit_types:ctag(), boolean(),
                     rabbit_framing:amqp_table(), any(), rabbit_types:username(),
                     rabbit_queue_type:state()) ->
