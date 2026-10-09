@@ -68,7 +68,7 @@ function decodeParam(str) {
 }
 
 function addParam(params, key, value) {
-    if (params.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(params, key)) {
         if (!Array.isArray(params[key])) {
             params[key] = [params[key]];
         }
@@ -103,21 +103,7 @@ Application.prototype._runRoute = function(verb, fullPath, extraParams) {
         var route = routes[i];
         var match = route.regex.exec(path);
         if (match) {
-            var params = {};
-            var key;
-            if (extraParams) {
-                for (key in extraParams) {
-                    if (extraParams.hasOwnProperty(key)) {
-                        params[key] = extraParams[key];
-                    }
-                }
-            }
-            var queryParams = parseQueryString(query);
-            for (key in queryParams) {
-                if (queryParams.hasOwnProperty(key)) {
-                    params[key] = queryParams[key];
-                }
-            }
+            var params = Object.assign({}, extraParams, parseQueryString(query));
             var splat = [];
             for (var j = 1; j < match.length; j++) {
                 var name = route.paramNames[j - 1];
