@@ -105,6 +105,12 @@ describe('route callbacks', () => {
         assert.equal(arg.params.vhost, '/');
         assert.equal(arg.params.splat, undefined);
     });
+
+    it('let their exceptions propagate', () => {
+        var app = new Application();
+        app.get('#/queues', function() { throw new Error('route failed'); });
+        assert.throws(function() { app._runRoute('get', '#/queues'); }, /route failed/);
+    });
 });
 
 describe('literal routes', () => {
