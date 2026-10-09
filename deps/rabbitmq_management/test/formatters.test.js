@@ -174,3 +174,14 @@ describe('fmt_boolean', () => {
     assert.equal(sandbox.fmt_boolean(false), '&#9675;');
   });
 });
+
+describe('get_plugins_list', () => {
+  it('returns only the applications that are enabled plugins', () => {
+    const node = {
+      applications: [{ name: 'rabbit' }, { name: 'rabbitmq_management' }, { name: 'rabbitmq_shovel' }],
+      enabled_plugins: ['rabbitmq_shovel', 'rabbitmq_management']
+    };
+    assert.deepEqual(Array.from(sandbox.get_plugins_list(node), app => app.name),
+                     ['rabbitmq_management', 'rabbitmq_shovel']);
+  });
+});
