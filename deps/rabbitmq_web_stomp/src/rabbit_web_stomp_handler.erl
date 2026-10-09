@@ -499,9 +499,8 @@ maybe_block(State, _) ->
 stop(State) ->
     stop(State, 1000, "STOMP died").
 
-stop(State = #state{proc_state = ProcState}, CloseCode, Error0) ->
+stop(State, CloseCode, Error0) ->
     maybe_emit_stats(State),
-    _ = rabbit_stomp_processor:flush_and_die(ProcState),
     Error1 = rabbit_data_coercion:to_binary(Error0),
     {[{close, CloseCode, Error1}], State}.
 
