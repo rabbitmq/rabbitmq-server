@@ -5,6 +5,7 @@
 // Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 const SESSION_ID = 'session_id';
+const SESSION_ENDED_MESSAGE = 'session_ended_message';
 
 function get_session_id()     { return get_local_pref(SESSION_ID); }
 function store_session_id(id) { store_local_pref(SESSION_ID, id); }
@@ -99,6 +100,7 @@ function check_session() {
 function end_rejected_session() {
     stop_session_heartbeat();
     clear_auth();
+    store_local_pref(SESSION_ENDED_MESSAGE, 'Session terminated or expired');
     location.reload();
 }
 
