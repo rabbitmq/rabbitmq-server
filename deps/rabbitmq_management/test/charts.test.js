@@ -36,3 +36,14 @@ describe('chart_chrome', () => {
     assert.equal(sandbox.chart_chrome.xaxis.timezone, 'browser');
   });
 });
+
+describe('chart y-axis range', () => {
+  it('starts at zero for data far from zero', () => {
+    const range = { xmin: 1, xmax: 2, ymin: 1000, ymax: 1000 };
+    for (const hook of sandbox.chart_chrome.hooks.adjustSeriesDataRange) {
+      hook(null, {}, range);
+    }
+    assert.equal(range.ymin, 0);
+    assert.equal(range.ymax, 1000);
+  });
+});
