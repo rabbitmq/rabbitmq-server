@@ -159,6 +159,28 @@ init_per_group(Group, Config) ->
 end_per_group(_Group, Config) -> Config.
 
 init_per_testcase(TestCase, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() andalso
+         lists:member(TestCase, tests_with_new_behavior()) of
+        true ->
+            {skip, "Should not run in mixed version environments"};
+        false ->
+            init_per_testcase1(TestCase, Config)
+    end.
+
+tests_with_new_behavior() ->
+    [reserved_queue_names_are_refused,
+     queue_name_cr_lf_is_stripped,
+     malformed_headers_are_refused,
+     empty_queue_name_is_ignored_for_transient_subscription,
+     stream_offset_is_refused_for_classic_queue,
+     commit_of_failed_transaction_has_no_receipt,
+     send_unroutable_with_receipt,
+     global_counters_after_close,
+     consumer_counter_after_server_cancel,
+     stream_readers_closed_with_connection,
+     temp_queue_uses_amq_gen_prefix].
+
+init_per_testcase1(TestCase, Config) ->
     Version = ?config(version, Config),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, Connection} = amqp_connection:start(#amqp_params_direct{
