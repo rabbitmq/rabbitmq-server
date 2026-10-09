@@ -35,12 +35,27 @@ $(document).ready(function() {
       if (logout_error) {
         clear_pref('oauth-logout-error');
         renderWarningMessageInLoginStatus(oauth, logout_error);
+      } else {
+        var ended = get_local_pref('session_ended_message');
+        if (ended) {
+          clear_local_pref('session_ended_message');
+          renderWarningMessageInLoginStatus(oauth, fmt_escape_html(ended));
+        }
       }
     } else {
       startWithLoginPage();
-      }
+      show_session_ended_message();
+    }
   }
 });
+
+function show_session_ended_message() {
+  var message = get_local_pref('session_ended_message');
+  if (message) {
+    clear_local_pref('session_ended_message');
+    replace_content('login-status', '<p class="warning">' + fmt_escape_html(message) + '</p>');
+  }
+}
 
 function startWithLoginPage() {
   replace_content('outer', format('login', {}));
