@@ -170,6 +170,15 @@ describe('no match', () => {
     });
 });
 
+describe('unknown verbs', () => {
+    it('do not match any route', () => {
+        var app = new Application();
+        app.get('#/queues', function() { throw new Error('unexpected'); });
+        assert.equal(app._runRoute('patch', '#/queues'), undefined);
+        assert.equal(app._runRoute('constructor', '#/queues'), undefined);
+    });
+});
+
 describe('use', () => {
     it('is a no-op', () => {
         var app = new Application();

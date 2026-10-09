@@ -99,6 +99,9 @@ Application.prototype._runRoute = function(verb, fullPath, extraParams) {
     var path = queryStart === -1 ? fullPath : fullPath.substring(0, queryStart);
     var query = queryStart === -1 ? '' : fullPath.substring(queryStart + 1);
     var routes = this._routes[verb];
+    if (!Array.isArray(routes)) {
+        return;
+    }
     for (var i = 0; i < routes.length; i++) {
         var route = routes[i];
         var match = route.regex.exec(path);
