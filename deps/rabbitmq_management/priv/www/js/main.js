@@ -502,16 +502,22 @@ function render(reqs, template, highlight) {
     current_template = template;
     current_reqs = reqs;
     clear_postprocessors();
-    for (var i in outstanding_reqs) {
-        outstanding_reqs[i].abort();
-    }
-    outstanding_reqs = [];
+    abort_outstanding_reqs();
     current_highlight = highlight;
     if (old_template !== current_template) {
         window.scrollTo(0, 0);
     }
     update();
     notifyActivatedTab(current_highlight);
+}
+
+function abort_outstanding_reqs() {
+    for (var i = 0; i < outstanding_reqs.length; i++) {
+        // An aborted request is not a failure to connect.
+        outstanding_reqs[i].onreadystatechange = null;
+        outstanding_reqs[i].abort();
+    }
+    outstanding_reqs = [];
 }
 
 function reset_current_reqs() {
@@ -1500,9 +1506,11 @@ function update_status(status) {
         text = "Refreshed " + fmt_date(new Date());
     else if (status == 'error') {
         var next_try = new Date(new Date().getTime() + timer_interval);
-        text = "Error: could not connect to server since " +
-            fmt_date(last_successful_connect) + ". Will retry at " +
-            fmt_date(next_try) + ".";
+        text = "Error: could not connect to server";
+        if (last_successful_connect) {
+            text += " since " + fmt_date(last_successful_connect);
+        }
+        text += ". Will retry at " + fmt_date(next_try) + ".";
     }
     else
         throw("Unknown status " + status);
@@ -2092,10 +2100,7 @@ function change_own_password(sammy) {
 
     password_change_in_progress = true;
     pause_auto_refresh();
-    for (var i in outstanding_reqs) {
-        outstanding_reqs[i].abort();
-    }
-    outstanding_reqs = [];
+    abort_outstanding_reqs();
 
     function finish() {
         if (done) return;
