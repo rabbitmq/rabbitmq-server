@@ -275,6 +275,7 @@ div.warning button {
 .chart-small  { width: 400px; height: 100px; }
 .chart-medium { width: 600px; height: 200px; }
 .chart-large  { width: 800px; height: 300px; }
+.chart .flot-tick-label { fill: var(--chart-tick-label-text-color); font-size: 10px; }
 
 ul#global-counts { overflow: hidden; list-style-type: none; margin: 0; padding: 0; }
 ul#global-counts li { float: left; margin: 0 1em 0 0; }
