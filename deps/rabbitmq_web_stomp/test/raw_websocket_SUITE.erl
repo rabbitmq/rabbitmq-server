@@ -31,6 +31,7 @@ groups() ->
         pubsub,
         disconnect,
         disconnect_releases_counters,
+        error_releases_counters,
         credential_expires,
         http_auth
     ],
@@ -74,6 +75,13 @@ end_per_group(_Group, Config) ->
 init_per_testcase(http_auth, Config) ->
     rabbit_ws_test_util:update_app_env(Config, use_http_auth, true),
     Config;
+init_per_testcase(TestCase, Config)
+  when TestCase =:= disconnect_releases_counters;
+       TestCase =:= error_releases_counters ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false -> Config;
+        true  -> {skip, "Should not run in mixed version environments"}
+    end;
 init_per_testcase(_, Config) -> Config.
 
 end_per_testcase(http_auth, Config) ->
@@ -179,6 +187,30 @@ disconnect_releases_counters(Config) ->
     {<<"MESSAGE">>, _, <<"a">>} = raw_recv(WS),
     ok = raw_send(WS, "DISCONNECT", []),
     {close, {1000, _}} = rfc6455_client:recv(WS),
+    rabbit_ct_helpers:await_condition(fun() -> Counters() =:= Before end, 5_000).
+
+error_releases_counters(Config) ->
+    Counters = fun() ->
+                       C = maps:get(#{protocol => 'STOMP 1.0'},
+                                    rabbit_ct_broker_helpers:rpc(
+                                      Config, 0, rabbit_global_counters, overview, [])),
+                       {maps:get(publishers, C), maps:get(consumers, C)}
+               end,
+    Before = Counters(),
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
+    {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+    Dst = "/topic/test-" ++ stomp:list_to_hex(binary_to_list(crypto:strong_rand_bytes(8))),
+    ok = raw_send(WS, "SUBSCRIBE", [{"destination", Dst}, {"id", "s0"}]),
+    ok = raw_send(WS, "SEND", [{"destination", Dst}], <<"a">>),
+    {<<"MESSAGE">>, _, <<"a">>} = raw_recv(WS),
+    ok = raw_send(WS, "SUBSCRIBE", [{"destination", "/exchange/doesnotexist"},
+                                    {"id", "s1"}]),
+    {<<"ERROR">>, _, _} = raw_recv(WS),
+    {close, _} = rfc6455_client:recv(WS),
     rabbit_ct_helpers:await_condition(fun() -> Counters() =:= Before end, 5_000).
 
 credential_expires(Config) ->

@@ -217,6 +217,14 @@ credential_expires(Config) ->
     end.
 
 authenticated_username_used_after_login(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            authenticated_username_used_after_login0(Config);
+        true ->
+            {skip, "Should not run in mixed version environments"}
+    end.
+
+authenticated_username_used_after_login0(Config) ->
     Username = <<"stomp-identity">>,
     Rpc = fun(M, F, A) -> rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A) end,
     ok = Rpc(rabbit_auth_backend_internal, add_user, [Username, Username, <<"acting-user">>]),
