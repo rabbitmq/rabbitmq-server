@@ -1775,7 +1775,7 @@ send_error_frame(Message, ExtraHeaders, Detail, State) ->
                     <<"content-type">> => <<"text/plain">>,
                     <<"version">> => iolist_to_binary(string:join(?SUPPORTED_VERSIONS, ","))},
     Headers = maps:merge(BaseHeaders, maps:from_list(ExtraHeaders)),
-    send_frame('ERROR', Headers, iolist_to_binary(Detail), State).
+    send_frame('ERROR', Headers, unicode:characters_to_binary(Detail), State).
 
 send_error(Message, Detail, State) ->
     send_error_frame(Message, [], Detail, State).
