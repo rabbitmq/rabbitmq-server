@@ -210,3 +210,18 @@ describe('route parameter decoding', () => {
         assert.equal(seen.plus, 'a b');
     });
 });
+
+describe('Sammy removal', () => {
+    it('leaves no Sammy calls outside of the router', () => {
+        const deps = path.join(__dirname, '../..');
+        const offenders = fs.readdirSync(deps)
+            .map(dep => path.join(deps, dep, 'priv/www/js'))
+            .filter(dir => fs.existsSync(dir))
+            .flatMap(dir => fs.readdirSync(dir, { recursive: true })
+                .filter(file => file.endsWith('.js'))
+                .map(file => path.join(dir, file)))
+            .filter(file => file !== ROUTER_JS_PATH &&
+                    /\bSammy\./.test(fs.readFileSync(file, 'utf8')));
+        assert.deepEqual(offenders, []);
+    });
+});
