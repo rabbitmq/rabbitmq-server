@@ -258,7 +258,7 @@ var chart_chrome = {
     series: { lines: { show: true } },
     grid:   { borderWidth: 2, borderColor: "#aaa" },
     xaxis:  { tickColor: "#fff", mode: "time", timezone: "browser", timeBase: "milliseconds" },
-    yaxis:  { tickColor: "#eee", min: 0 },
+    yaxis:  { tickColor: "#eee", min: 0, ticks: chart_y_ticks },
     legend: { show: false },
     // Flot 4 ignores `yaxis.min` when it scales the axis to the data.
     hooks:  { adjustSeriesDataRange: [chart_y_range_from_zero] }
@@ -266,6 +266,11 @@ var chart_chrome = {
 
 function chart_y_range_from_zero(plot, series, range) {
     range.ymin = 0;
+}
+
+// An idle chart gets a 0 to 1 axis, which only needs its two ends labelled.
+function chart_y_ticks(axis) {
+    return axis.max == 1 ? [0, 1] : axis.tickGenerator(axis);
 }
 
 function chart_fill(mode, i) {
@@ -315,11 +320,6 @@ function render_chart(div) {
 
 function fmt_y_axis(fmt) {
     return function (val, axis) {
-        // axis.ticks seems to include the bottom value but not the top
-        if (axis.max == 1 && axis.ticks.length > 1) {
-            var newTicks = [axis.ticks[0]];
-            axis.ticks = newTicks;
-        }
         return fmt(val, axis.max);
     }
 }
