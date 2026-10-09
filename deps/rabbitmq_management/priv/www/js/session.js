@@ -65,7 +65,7 @@ function clear_session() {
     stop_session_heartbeat();
     var id = get_session_id();
     clear_local_pref(SESSION_ID);
-    if (id) {
+    if (id && authorization_header()) {
         session_req('DELETE', id);
     }
 }
@@ -100,8 +100,13 @@ function check_session() {
 function end_rejected_session() {
     stop_session_heartbeat();
     clear_auth();
+    clear_local_pref(SESSION_ID);
     store_local_pref(SESSION_ENDED_MESSAGE, 'Session terminated or expired');
-    location.reload();
+    if (oauth.enabled && oauth.sp_initiated) {
+        oauth_initiateLogout();
+    } else {
+        location.reload();
+    }
 }
 
 function _send_heartbeat(session_id) {

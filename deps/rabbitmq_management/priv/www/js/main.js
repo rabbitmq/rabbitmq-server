@@ -31,23 +31,24 @@ $(document).ready(function() {
   } else {
     if (oauth.enabled) {
       startWithOAuthLogin(oauth);
-      var logout_error = get_local_pref('oauth-logout-error');
-      if (logout_error) {
-        clear_pref('oauth-logout-error');
-        renderWarningMessageInLoginStatus(oauth, logout_error);
-      } else {
-        var ended = get_local_pref('session_ended_message');
-        if (ended) {
-          clear_local_pref('session_ended_message');
-          renderWarningMessageInLoginStatus(oauth, fmt_escape_html(ended));
-        }
-      }
     } else {
       startWithLoginPage();
       show_session_ended_message();
     }
   }
 });
+
+function pending_login_messages() {
+  var messages = [];
+  ['oauth-logout-error', 'session_ended_message'].forEach(function(key) {
+    var message = get_local_pref(key);
+    if (message) {
+      clear_local_pref(key);
+      messages.push(message);
+    }
+  });
+  return messages;
+}
 
 function show_session_ended_message() {
   var message = get_local_pref('session_ended_message');
@@ -74,7 +75,10 @@ function removeDuplicates(array){
 
 function startWithOAuthLogin (oauth) {
   if (!oauth.logged_in) {
-    hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => {  render_login_oauth(oauth, escaped_warnings); start_app_login(); })
+    hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => {
+      render_login_oauth(oauth, pending_login_messages().concat(escaped_warnings));
+      start_app_login();
+    })
   } else {
     start_app_login()
   }
