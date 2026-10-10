@@ -141,13 +141,14 @@
                  dependencies,     %% [atom()]
                  location,         %% string()
                  %% List of supported broker version ranges,
-                 %% e.g. ["4.3.0", "4.4.0"]
-                 broker_version_requirements, %% [string()]
+                 %% e.g. ["4.3.0", "^4.4.0"]
+                 broker_version_requirements = [] :: [rabbit_semver:version_string()],
                  %% Proplist of supported dependency versions,
                  %% e.g. [{rabbitmq_management, ["4.3.0", "4.4.0"]},
                  %%       {rabbitmq_federation, ["4.3.0", "4.4.0"]},
                  %%       {rabbitmq_email,      ["0.1.0"]}]
-                 dependency_version_requirements, %% [{atom(), [string()]}]
+                 dependency_version_requirements = [] ::
+                     [{atom(), [rabbit_semver:version_string()]}],
                  extra_dependencies %% string()
                 }).
 

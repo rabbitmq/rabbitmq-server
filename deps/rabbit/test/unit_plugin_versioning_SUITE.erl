@@ -8,6 +8,7 @@
 -module(unit_plugin_versioning_SUITE).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -20,7 +21,8 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           version_support,
-          plugin_validation
+          plugin_validation,
+          supported_release_series
         ]}
     ].
 
@@ -53,26 +55,72 @@ end_per_testcase(Testcase, Config) ->
 
 version_support(_Config) ->
     Examples = [
-     {[], "any version", true} %% anything goes
-    ,{[], "0.0.0", true}       %% ditto
-    ,{[], "3.5.6", true}       %% ditto
-    ,{["something"], "something", true}            %% equal values match
+     {[], "any version", true}
+    ,{[], "0.0.0", true}
+    ,{[], "3.5.6", true}
+    ,{["something"], "something", true}
     ,{["3.5.4"], "something", false}
-    ,{["3.4.5", "3.6.0"], "0.0.0", true}           %% zero version always match
-    ,{["3.4.5", "3.6.0"], "", true}                %% empty version always match
-    ,{["something", "3.5.6"], "3.5.7", true}       %% 3.5.7 matches ~> 3.5.6
-    ,{["3.4.0", "3.5.6"], "3.6.1", false}          %% 3.6.x isn't supported
-    ,{["3.5.2", "3.6.1", "3.7.1"], "3.5.2", true}  %% 3.5.2 matches ~> 3.5.2
-    ,{["3.5.2", "3.6.1", "3.7.1"], "3.5.1", false} %% lesser than the lower boundary
-    ,{["3.5.2", "3.6.1", "3.7.1"], "3.6.2", true}  %% 3.6.2 matches ~> 3.6.1
-    ,{["3.5.2", "3.6.1", "3.6.8"], "3.6.2", true}  %% 3.6.2 still matches ~> 3.6.1
-    ,{["3.5", "3.6", "3.7"], "3.5.1", true}        %% x.y values equal to x.y.0
-    ,{["3"], "3.5.1", false}                       %% x values are not supported
-    ,{["3.5.2", "3.6.1"], "3.6.2.999", true}       %% x.y.z.p values are supported
-    ,{["3.5.2", "3.6.2.333"], "3.6.2.999", true}   %% x.y.z.p values are supported
-    ,{["3.5.2", "3.6.2.333"], "3.6.2.222", false}  %% x.y.z.p values are supported
-    ,{["3.6.0", "3.7.0"], "3.6.3-alpha.1", true}   %% Pre-release versions handled like semver part
+    ,{["3.4.5", "3.6.0"], "0.0.0", true}
+    ,{["3.4.5", "3.6.0"], "", true}
+    ,{["3.4.5"], <<"0.0.0">>, true}
+    ,{["3.4.5"], <<>>, true}
+    ,{["3.4.5"], <<"3.4.5">>, true}
+    ,{["3.4.5"], <<"3.4.6">>, false}
+    ,{["something", "~3.5.6"], "3.5.7", true}
+    ,{["3.4.0", "3.5.6"], "3.6.1", false}
+    ,{["3.5.2", "3.6.1", "3.7.1"], "3.5.2", true}
+    ,{["3.5.2", "3.6.1", "3.7.1"], "3.5.1", false}
+    %% `X.Y.Z` is an exact version, not a series.
+    ,{["3.5.2", "3.6.1", "3.7.1"], "3.6.2", false}
+    ,{["3.5.2", "~3.6.1", "3.7.1"], "3.6.2", true}
+    %% `X.Y` is the whole `X.Y.x` series, `X` is the whole `X.x` series.
+    ,{["3.5", "3.6", "3.7"], "3.5.1", true}
+    ,{["3"], "3.5.1", true}
+    ,{["3.6.2.333"], "3.6.2.333", true}
+    ,{["3.6.2.333"], "3.6.2.334", false}
+    ,{["3.5.2", "~3.6.1"], "3.6.2.999", true}
+    ,{["3.6.0", "3.7.0"], "3.6.3-alpha.1", false}
+    ,{["~3.6.0", "3.7.0"], "3.6.3-alpha.1", true}
     ,{["3.6.0", "3.7.0"], "3.7.0-alpha.89", true}
+    ,{["^4.0.0"], "4.4.0", true}
+    ,{["^4.0.0"], "5.0.0", false}
+    ,{["~4.2.10"], "4.2.11", true}
+    ,{["~4.2.10"], "4.3.0", false}
+    ,{["~4.2"], "4.3.0", false}
+    ,{["~> 4.2"], "4.3.0", true}
+    ,{["~> 4.2"], "5.0.0", false}
+    ,{["~> 4.2.10"], "4.3.0", false}
+    ,{[">= 4.0.0 < 4.3.0"], "4.2.9", true}
+    ,{[">=4.0.0 <4.3.0"], "4.3.0", false}
+    ,{["4.0.0 - 4.2.0"], "4.2.0", true}
+    ,{["4.x"], "4.9.0", true}
+    ,{["*"], "4.0.0", true}
+    ,{["4.3.0", "^4.5.0"], "4.4.5", false}
+    ,{["4.3.0", "^4.5.0"], "4.6.0", true}
+    ,{["4.3.0 || ^4.5.0"], "4.3.0", true}
+    ,{["4.3.0 || ^4.5.0"], "4.3.21", false}
+    ,{["4.3.x || ^4.5.0"], "4.3.21", true}
+    ,{["4.3.x || ^4.5.0"], "4.4.5", false}
+    ,{["= 4.4.0"], "4.4.0", true}
+    ,{["= 4.4.0"], "4.4.1", false}
+    ,{[<<"^4.0.0">>], "4.4.0", true}
+    %% The broker version is compared without its pre-release suffix.
+    ,{["^4.0.0"], "4.4.0-alpha.1", true}
+    ,{["^4.0.0"], "5.0.0-alpha.1", false}
+    ,{["~> 4.3"], "tanzu+rabbitmq.v4.3.12.dev", true}
+    ,{["tanzu+rabbitmq.v4.3.12.dev"], "tanzu+rabbitmq.v4.3.12.dev", true}
+    ,{["tanzu+rabbitmq.v4.3.12.dev"], "4.3.13", false}
+    ,{["4.4.0-1"], "4.4.0-1", true}
+    ,{["4.4.0-1"], "4.4.1", false}
+    ,{["4.4.0"], "not.a.version", false}
+    ,{["not.a.version"], "not.a.version", true}
+    ,{["^^4.0.0", "~4.4.0"], "4.4.1", true}
+    ,{["^^4.0.0"], "4.4.1", false}
+    ,{[">= 4.0.0-beta"], "4.0.0", false}
+    ,{["4.4.0+abc123"], "4.4.0+abc123", true}
+    ,{["4.4.0-beta.1"], "4.4.0-beta.1", true}
+    ,{["4.4.0-beta.1"], "4.4.1", false}
+    ,{["=3.6.2"], "3.6.2.999", true}
     ],
 
     lists:foreach(
@@ -92,7 +140,7 @@ plugin_validation(_Config) ->
          rabbit_version = "3.7.1",
          plugins =
           [{plugin_a, "3.7.2", ["3.5.6", "3.7.1"], []},
-           {plugin_b, "3.7.2", ["3.7.0"], [{plugin_a, ["3.6.3", "3.7.1"]}]}],
+           {plugin_b, "3.7.2", ["~3.7.0"], [{plugin_a, ["3.6.3", "~3.7.1"]}]}],
          errors = [],
          valid = [plugin_a, plugin_b]},
 
@@ -100,7 +148,7 @@ plugin_validation(_Config) ->
          rabbit_version = "3.7.1",
          plugins =
           [{plugin_a, "3.7.1", ["3.7.6"], []},
-           {plugin_b, "3.7.2", ["3.7.0"], [{plugin_a, ["3.6.3", "3.7.0"]}]}],
+           {plugin_b, "3.7.2", ["~3.7.0"], [{plugin_a, ["3.6.3", "3.7.0"]}]}],
          errors =
           [{plugin_a, [{broker_version_mismatch, "3.7.1", ["3.7.6"]}]},
            {plugin_b, [{missing_dependency, plugin_a}]}],
@@ -111,8 +159,8 @@ plugin_validation(_Config) ->
          rabbit_version = "3.7.1",
          plugins =
           [{plugin_a, "3.7.1", ["3.7.6"], []},
-           {plugin_b, "3.7.2", ["3.7.0"], [{plugin_a, ["3.7.0"]}]},
-           {plugin_c, "3.7.2", ["3.7.0"], [{plugin_b, ["3.7.3"]}]}],
+           {plugin_b, "3.7.2", ["~3.7.0"], [{plugin_a, ["3.7.0"]}]},
+           {plugin_c, "3.7.2", ["~3.7.0"], [{plugin_b, ["3.7.3"]}]}],
          errors =
           [{plugin_a, [{broker_version_mismatch, "3.7.1", ["3.7.6"]}]},
            {plugin_b, [{missing_dependency, plugin_a}]},
@@ -124,18 +172,28 @@ plugin_validation(_Config) ->
          rabbit_version = "3.7.1",
          plugins =
           [{plugin_a, "3.7.1", ["3.7.1"], []},
-           {plugin_b, "3.7.2", ["3.7.0"], [{plugin_a, ["3.7.3"]}]},
-           {plugin_d, "3.7.2", ["3.7.0"], [{plugin_c, ["3.7.3"]}]}],
+           {plugin_b, "3.7.2", ["~3.7.0"], [{plugin_a, ["3.7.3"]}]},
+           {plugin_d, "3.7.2", ["~3.7.0"], [{plugin_c, ["3.7.3"]}]}],
          errors =
           [{plugin_b, [{{dependency_version_mismatch, "3.7.1", ["3.7.3"]}, plugin_a}]},
            {plugin_d, [{missing_dependency, plugin_c}]}],
          valid = [plugin_a]
         },
         #validation_example{
+         rabbit_version = "3.7.1",
+         plugins =
+          [{plugin_a, "3.7.1", ["^3.7.0"], []},
+           {plugin_b, "3.7.2", ["~3.7.0"], [{plugin_a, ["^3.8.0"]}]},
+           {plugin_c, "3.7.2", ["~3.7.0"], [{plugin_a, ["^3.7.0"]}]}],
+         errors =
+          [{plugin_b, [{{dependency_version_mismatch, "3.7.1", ["^3.8.0"]}, plugin_a}]}],
+         valid = [plugin_a, plugin_c]
+        },
+        #validation_example{
          rabbit_version = "0.0.0",
          plugins =
           [{plugin_a, "", ["3.7.1"], []},
-           {plugin_b, "3.7.2", ["3.7.0"], [{plugin_a, ["3.7.3"]}]}],
+           {plugin_b, "3.7.2", ["~3.7.0"], [{plugin_a, ["3.7.3"]}]}],
          errors = [],
          valid  = [plugin_a, plugin_b]
         }],
@@ -155,6 +213,75 @@ plugin_validation(_Config) ->
         end,
         Examples),
     ok.
+
+supported_release_series(_Config) ->
+    Versions = ["3.13.0", "3.13.7", "3.13.15", "3.13.21",
+                "4.0.0", "4.0.9", "4.0.26",
+                "4.1.0", "4.1.8", "4.1.17",
+                "4.2.0", "4.2.10", "4.2.12",
+                "4.3.0", "4.3.6", "4.3.7",
+                "4.4.0-alpha.1", "4.4.0",
+                "5.0.0-beta.1", "5.0.0", "5.0.3",
+                "5.1.0", "5.1.2"],
+    Examples =
+        [{["~3.13.0", "~4.1.0", "~4.2.0", "~4.3.0"],
+          ["3.13.0", "3.13.7", "3.13.15", "3.13.21",
+           "4.1.0", "4.1.8", "4.1.17",
+           "4.2.0", "4.2.10", "4.2.12",
+           "4.3.0", "4.3.6", "4.3.7"]},
+         {["~3.13.15", "~4.1.10", "~4.2.11", "~4.3.5"],
+          ["3.13.15", "3.13.21", "4.1.17", "4.2.11", "4.2.12", "4.3.6", "4.3.7"]},
+         {["~> 3.13", "^4.1.0"],
+          ["3.13.0", "3.13.7", "3.13.15", "3.13.21",
+           "4.1.0", "4.1.8", "4.1.17",
+           "4.2.0", "4.2.10", "4.2.12",
+           "4.3.0", "4.3.6", "4.3.7",
+           "4.4.0-alpha.1", "4.4.0"]},
+         {["^4.0.0 || ^5.0.0"],
+          ["4.0.0", "4.0.9", "4.0.26",
+           "4.1.0", "4.1.8", "4.1.17",
+           "4.2.0", "4.2.10", "4.2.12",
+           "4.3.0", "4.3.6", "4.3.7",
+           "4.4.0-alpha.1", "4.4.0",
+           "5.0.0-beta.1", "5.0.0", "5.0.3", "5.1.0", "5.1.2"]},
+         {[">= 4.2.0"],
+          ["4.2.0", "4.2.10", "4.2.12",
+           "4.3.0", "4.3.6", "4.3.7",
+           "4.4.0-alpha.1", "4.4.0",
+           "5.0.0-beta.1", "5.0.0", "5.0.3", "5.1.0", "5.1.2"]},
+         {[">= 4.1.0 < 5.1.0"],
+          ["4.1.0", "4.1.8", "4.1.17",
+           "4.2.0", "4.2.10", "4.2.12",
+           "4.3.0", "4.3.6", "4.3.7",
+           "4.4.0-alpha.1", "4.4.0",
+           "5.0.0-beta.1", "5.0.0", "5.0.3"]},
+         {["4.2.0 - 4.3"],
+          ["4.2.0", "4.2.10", "4.2.12", "4.3.0", "4.3.6", "4.3.7"]},
+         {["~4.3.6"], ["4.3.6", "4.3.7"]},
+         {["~> 4.3"], ["4.3.0", "4.3.6", "4.3.7", "4.4.0-alpha.1", "4.4.0"]},
+         {["4.x"],
+          ["4.0.0", "4.0.9", "4.0.26",
+           "4.1.0", "4.1.8", "4.1.17",
+           "4.2.0", "4.2.10", "4.2.12",
+           "4.3.0", "4.3.6", "4.3.7",
+           "4.4.0-alpha.1", "4.4.0"]},
+         {["5.0.x", "5.1.x"],
+          ["5.0.0-beta.1", "5.0.0", "5.0.3", "5.1.0", "5.1.2"]},
+         {["^5.1.0"], ["5.1.0", "5.1.2"]},
+         {["< 4.0.0"], ["3.13.0", "3.13.7", "3.13.15", "3.13.21"]},
+         {["4.0.0"], ["4.0.0"]},
+         {["~4.0.0"], ["4.0.0", "4.0.9", "4.0.26"]}],
+    lists:foreach(
+      fun({Requirements, Supported}) ->
+              lists:foreach(
+                fun(Version) ->
+                        Expected = lists:member(Version, Supported),
+                        ?assertEqual({Requirements, Version, Expected},
+                                     {Requirements, Version,
+                                      rabbit_plugins:is_version_supported(
+                                        Version, Requirements)})
+                end, Versions)
+      end, Examples).
 
 make_plugins(Plugins) ->
     lists:map(
