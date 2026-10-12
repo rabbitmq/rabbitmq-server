@@ -21,7 +21,7 @@ all() ->
      distinct_pids_not_deduplicated,
      new_name_has_reply_to_prefix,
      new_name_calls_gen_secure_not_gen,
-     new_name_values_differ_under_stub,
+     new_name_values_differ,
      new_name_key_not_derivable_from_predecessor
     ].
 
@@ -91,11 +91,8 @@ distinct_pids_not_deduplicated(Config) ->
     [exit(Pid, kill) || Pid <- Pids],
     ok.
 
-%% `gen_secure/0` needs the `rabbit_guid` gen_server, which this suite
-%% doesn't start, so stub it with a real random source instead.
-with_stubbed_gen_secure(Fun) ->
+with_mocked_guid(Fun) ->
     ok = meck:new(rabbit_guid, [passthrough]),
-    meck:expect(rabbit_guid, gen_secure, fun() -> crypto:strong_rand_bytes(16) end),
     try
         Fun()
     after
@@ -103,7 +100,7 @@ with_stubbed_gen_secure(Fun) ->
     end.
 
 new_name_has_reply_to_prefix(_Config) ->
-    with_stubbed_gen_secure(
+    with_mocked_guid(
       fun() ->
               Name = rabbit_volatile_queue:new_name(),
               ?assertMatch(<<"amq.rabbitmq.reply-to.", _/binary>>, Name)
@@ -111,7 +108,7 @@ new_name_has_reply_to_prefix(_Config) ->
 
 %% `gen/0`'s own docstring calls it predictable after the first call.
 new_name_calls_gen_secure_not_gen(_Config) ->
-    with_stubbed_gen_secure(
+    with_mocked_guid(
       fun() ->
               _ = rabbit_volatile_queue:new_name(),
               ?assert(meck:called(rabbit_guid, gen_secure, [])),
@@ -120,8 +117,8 @@ new_name_calls_gen_secure_not_gen(_Config) ->
 
 %% A smoke test, not a security check: `gen/0` never repeats a value
 %% either, so distinctness alone passes under both generators.
-new_name_values_differ_under_stub(_Config) ->
-    with_stubbed_gen_secure(
+new_name_values_differ(_Config) ->
+    with_mocked_guid(
       fun() ->
               N = 1000,
               Names = [rabbit_volatile_queue:new_name() || _ <- lists:seq(1, N)],
@@ -135,8 +132,7 @@ new_name_values_differ_under_stub(_Config) ->
 %% rules out a regression to `gen/0`; it says nothing about how hard
 %% `gen_secure/0` is to guess on its own.
 new_name_key_not_derivable_from_predecessor(_Config) ->
-    %% Both generators seed from the `rabbit_guid` server on first use;
-    %% `init([Serial])` takes it directly, bypassing the on-disk file.
+    %% The server allows a regression to `gen/0` to reach the assertions.
     {ok, Server} = gen_server:start({local, rabbit_guid}, rabbit_guid, [0], []),
     try
         Key1 = reply_to_suffix(rabbit_volatile_queue:new_name()),

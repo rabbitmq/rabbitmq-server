@@ -116,24 +116,11 @@ gen() ->
                      <<B1:32, B2:32, B3:32, B4:32>>
     end.
 
-%% generate a non-predictable GUID.
-%%
-%% The id is only unique within a single cluster and as long as the
-%% serial store hasn't been deleted.
-%%
-%% If you are not concerned with predictability, gen/0 is faster.
-
 -spec gen_secure() -> guid().
 
 gen_secure() ->
-    %% Here instead of hashing once we hash the GUID and the counter
-    %% each time, so that the GUID is not predictable.
-    G = case get(guid_secure) of
-            undefined -> {fresh(), 0};
-            {S, I}    -> {S, I+1}
-        end,
-    put(guid_secure, G),
-    erlang:md5(term_to_binary(G)).
+    <<A:48, _:4, B:12, _:2, C:62>> = crypto:strong_rand_bytes(16),
+    <<A:48, 4:4, B:12, 2:2, C:62>>.
 
 %% generate a readable string representation of a GUID.
 %%
