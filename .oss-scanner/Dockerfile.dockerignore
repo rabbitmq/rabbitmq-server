@@ -1,0 +1,1 @@
+# Takes precedence over the root `.dockerignore`, which excludes `deps/`.
