@@ -21,7 +21,8 @@
 -type comparator() :: {op(), version()}.
 -type range() :: [[comparator()]].
 
--type partial() :: {component() | any, component() | any, component() | any}.
+-type partial() :: {component() | any, component() | any, component() | any,
+                     component() | any}.
 -type prefix() :: none | eq | tilde | pessimistic | caret | gt | gte | lt | lte.
 
 -define(PREFIXES, [{"~>", pessimistic}, {">=", gte}, {"<=", lte},
@@ -86,7 +87,7 @@ parse_tokens([Token | Rest]) ->
 %% and it can carry a pre-release or build suffix.
 -spec strip_suffix(string()) -> string().
 strip_suffix(Version) ->
-    case re:run(Version, "^([0-9]+\\.[0-9]+\\.[0-9]+)(-[A-Za-z][0-9A-Za-z-]*(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$",
+    case re:run(Version, "^([0-9]+\\.[0-9]+\\.[0-9]+(?:\\.[0-9]+)?)(-[A-Za-z][0-9A-Za-z-]*(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$",
                 [{capture, [1], list}]) of
         {match, [Base]} -> Base;
         nomatch -> Version
@@ -106,16 +107,12 @@ split_prefix(Token, [{Str, Prefix} | Rest]) ->
 
 -spec parse_partial(string()) -> partial().
 parse_partial(Str) ->
-    Partial = case [parse_component(C) || C <- string:split(Str, ".", all)] of
-                  [Maj] -> {Maj, any, any};
-                  [Maj, Min] -> {Maj, Min, any};
-                  [Maj, Min, Patch] -> {Maj, Min, Patch};
-                  _ -> throw(invalid)
-              end,
-    case Partial of
-        {any, Min1, Patch1} when Min1 =/= any; Patch1 =/= any -> throw(invalid);
-        {_, any, Patch2} when Patch2 =/= any -> throw(invalid);
-        _ -> Partial
+    Components = [parse_component(C) || C <- string:split(Str, ".", all)],
+    {Numbers, Wildcards} = lists:splitwith(fun(C) -> C =/= any end, Components),
+    case lists:all(fun(C) -> C =:= any end, Wildcards) andalso
+         length(Components) =< 4 of
+        true -> list_to_tuple(Numbers ++ lists:duplicate(4 - length(Numbers), any));
+        false -> throw(invalid)
     end.
 
 -spec parse_component(string()) -> component() | any.
@@ -128,9 +125,9 @@ parse_component(C) ->
     end.
 
 -spec desugar(prefix(), partial()) -> [comparator()].
-desugar(Prefix, {any, any, any}) when Prefix =:= gt; Prefix =:= lt ->
+desugar(Prefix, {any, any, any, any}) when Prefix =:= gt; Prefix =:= lt ->
     throw(invalid);
-desugar(_, {any, any, any}) ->
+desugar(_, {any, any, any, any}) ->
     [];
 desugar(Prefix, Partial) when Prefix =:= none; Prefix =:= eq ->
     [{gte, lower(Partial)}, {lt, next(Partial)}];
@@ -142,15 +139,17 @@ desugar(lt, Partial) ->
     [{lt, lower(Partial)}];
 desugar(lte, Partial) ->
     [{lt, next(Partial)}];
-desugar(tilde, {Maj, any, any}) ->
+desugar(tilde, {Maj, any, any, any}) ->
     [{gte, {Maj, 0, 0, 0}}, {lt, {Maj + 1, 0, 0, 0}}];
-desugar(tilde, {Maj, Min, _} = Partial) ->
+desugar(tilde, {Maj, Min, _, _} = Partial) ->
     [{gte, lower(Partial)}, {lt, {Maj, Min + 1, 0, 0}}];
-desugar(pessimistic, {Maj, Min, any} = Partial) when Min =/= any ->
+desugar(pessimistic, {Maj, Min, any, any} = Partial) when Min =/= any ->
     [{gte, lower(Partial)}, {lt, {Maj + 1, 0, 0, 0}}];
+desugar(pessimistic, {Maj, Min, Patch, MinPatch} = Partial) when MinPatch =/= any ->
+    [{gte, lower(Partial)}, {lt, {Maj, Min, Patch + 1, 0}}];
 desugar(pessimistic, Partial) ->
     desugar(tilde, Partial);
-desugar(caret, {Maj, Min, Patch} = Partial) ->
+desugar(caret, {Maj, Min, Patch, _} = Partial) ->
     Upper = case {Maj, Min, Patch} of
                 {0, 0, P} when P =/= any -> {0, 0, P + 1, 0};
                 {0, M, _} when M =/= any -> {0, M + 1, 0, 0};
@@ -163,13 +162,14 @@ hyphen(Lower, Upper) ->
     desugar(gte, Lower) ++ desugar(lte, Upper).
 
 -spec lower(partial()) -> version().
-lower({Maj, Min, Patch}) ->
-    {Maj, zero(Min), zero(Patch), 0}.
+lower({Maj, Min, Patch, MinPatch}) ->
+    {Maj, zero(Min), zero(Patch), zero(MinPatch)}.
 
 -spec next(partial()) -> version().
-next({Maj, any, any}) -> {Maj + 1, 0, 0, 0};
-next({Maj, Min, any}) -> {Maj, Min + 1, 0, 0};
-next({Maj, Min, Patch}) -> {Maj, Min, Patch + 1, 0}.
+next({Maj, any, any, any}) -> {Maj + 1, 0, 0, 0};
+next({Maj, Min, any, any}) -> {Maj, Min + 1, 0, 0};
+next({Maj, Min, Patch, any}) -> {Maj, Min, Patch + 1, 0};
+next({Maj, Min, Patch, MinPatch}) -> {Maj, Min, Patch, MinPatch + 1}.
 
 zero(any) -> 0;
 zero(N) -> N.
