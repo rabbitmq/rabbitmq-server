@@ -27,6 +27,8 @@
          ensure_exchange_exists/3,
          check_user_id/2,
          collect_acks/3,
+         failure_reason/1,
+         failure_stacktrace/1,
          pending_ack/3,
          record_transaction_settlements/1,
          unknown_delivery_tag/2]).
@@ -900,7 +902,8 @@ do_subscribe(Destination, DestHdr, Frame,
                                 ensure_binding(QueueName, ExchangeAndKey, State)
                             catch Class0:Reason0:Stacktrace0 ->
                                     ok = maybe_delete_new_queue(Created, QueueName, State),
-                                    erlang:raise(Class0, Reason0, Stacktrace0)
+                                    subscription_failed(Class0, Reason0, Stacktrace0,
+                                                        Created, QueueName)
                             end,
                     State1 =
                         try
@@ -915,7 +918,7 @@ do_subscribe(Destination, DestHdr, Frame,
                         catch Class:Reason:Stacktrace ->
                                 ok = remove_added_binding(Added, State),
                                 ok = maybe_delete_new_queue(Created, QueueName, State),
-                                erlang:raise(Class, Reason, Stacktrace)
+                                subscription_failed(Class, Reason, Stacktrace, Created, QueueName)
                         end,
                     CTags1 = case maps:find(QueueName, QCons) of
                                  {ok, CTags} -> gb_sets:insert(ConsumerTag, CTags);
@@ -935,6 +938,43 @@ do_subscribe(Destination, DestHdr, Frame,
                     Err
             end
     end.
+
+-spec subscription_failed(atom(), term(), list(), new | existing | none,
+                          rabbit_amqqueue:name()) -> no_return().
+subscription_failed(exit, #amqp_error{} = Reason, Stacktrace, _Created, _QueueName) ->
+    erlang:raise(exit, Reason, Stacktrace);
+%% The deleted queue's late events would apply to a new queue with that name,
+%% so the connection is closed.
+subscription_failed(Class, Reason, Stacktrace, new, QueueName) ->
+    ?LOG_ERROR("STOMP: failed to subscribe to ~ts: ~tP:~tP~n~tP",
+               [rabbit_misc:rs(QueueName), Class, 10,
+                failure_reason(Reason), 10,
+                failure_stacktrace(Stacktrace), 30]),
+    rabbit_misc:protocol_error(internal_error, "failed to subscribe to ~ts",
+                               [rabbit_misc:rs(QueueName)]);
+subscription_failed(Class, Reason, Stacktrace, _Created, _QueueName) ->
+    erlang:raise(Class, Reason, Stacktrace).
+
+%% An exception reason or stacktrace can hold the connection state, message
+%% bodies and credentials, so only atoms and integers in small tuples are logged.
+-spec failure_reason(term()) -> term().
+failure_reason(Reason) ->
+    failure_reason(Reason, 4).
+
+failure_reason(Term, _Depth) when is_atom(Term); is_integer(Term) ->
+    Term;
+failure_reason(Term, Depth) when is_tuple(Term), tuple_size(Term) =< 8, Depth > 0 ->
+    list_to_tuple([failure_reason(E, Depth - 1) || E <- tuple_to_list(Term)]);
+failure_reason(_Term, _Depth) ->
+    '_'.
+
+-spec failure_stacktrace(list()) -> list().
+failure_stacktrace(Stacktrace) ->
+    [{M, F, arity(A), [L || {K, _} = L <- Location, K =:= file orelse K =:= line]}
+     || {M, F, A, Location} <- Stacktrace].
+
+arity(Args) when is_list(Args) -> length(Args);
+arity(Arity)                   -> Arity.
 
 maybe_delete_new_queue(new, QRes, #state{user = #user{username = Username}}) ->
     _ = try

@@ -119,6 +119,7 @@ groups() ->
                 malformed_durable_is_refused,
                 stream_subscription_with_auto_ack_creates_no_queue,
                 failed_subscription_deletes_only_its_own_queue,
+                failed_subscription_replies_and_cleanup,
                 failed_binding_deletes_new_queue,
                 malformed_auto_delete_is_ignored,
                 queue_limit_applies_to_new_queues_only,
@@ -2096,6 +2097,113 @@ failed_subscription_deletes_only_its_own_queue(Config) ->
               ?assertEqual([Existing],
                            rabbit_ct_broker_helpers:rpc(
                              Config, 0, rabbit_amqqueue, list_names, [VHost]))
+      end).
+
+failed_subscription_replies_and_cleanup(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              Topic = [{<<"x-queue-type">>, <<"stream">>}, {<<"auto-delete">>, <<"false">>}],
+              Stream = [{<<"destination">>, <<"/topic/failed-sub">>} | Topic],
+              Consumable = [{<<"ack">>, <<"client">>}, {<<"prefetch-count">>, <<"10">>}],
+              Durable = [{<<"durable">>, <<"true">>}, {<<"id">>, <<"durable-sub">>}],
+              Subscribe = fun(Headers) ->
+                                  C = declare_attempt(Config, VHost, 'SUBSCRIBE', Headers),
+                                  Reply = stomp_receive_any(C),
+                                  rabbit_stomp_client:disconnect(C),
+                                  case Reply of
+                                      {'ERROR', Hdrs} -> maps:get(<<"message">>, Hdrs);
+                                      {Command, _}    -> Command
+                                  end
+                          end,
+              Names = fun() ->
+                              [(amqqueue:get_name(Q))#resource.name
+                               || Q <- list_queues(Config, VHost)]
+                      end,
+              ?assertEqual('RECEIPT', Subscribe(Durable ++ Stream ++ Consumable)),
+              [Existing] = Names(),
+              Named = [{<<"x-queue-name">>, Existing}],
+
+              ?assertEqual(<<"precondition_failed">>, Subscribe(Stream)),
+              ?assertEqual(<<"not_implemented">>,
+                           Subscribe([{<<"prefetch-count">>, <<"10">>} | Stream])),
+              ?assertEqual(<<"precondition_failed">>,
+                           Subscribe(lists:keyreplace(<<"id">>, 1, Durable,
+                                                      {<<"id">>, <<"new-durable-sub">>})
+                                     ++ Stream)),
+              ?assertEqual(<<"precondition_failed">>,
+                           Subscribe([{<<"x-stream-offset">>, <<"offset=abc">>}
+                                      | Stream ++ Consumable])),
+              ?assertEqual(<<"precondition_failed">>, Subscribe(Named ++ Stream)),
+              ?assertEqual(<<"precondition_failed">>,
+                           Subscribe([{<<"destination">>, <<"/queue/failed-sub-q">>},
+                                      {<<"x-queue-type">>, <<"stream">>}])),
+              ?assertEqual(<<"precondition_failed">>,
+                           Subscribe([{<<"destination">>, <<"/amq/queue/", Existing/binary>>}])),
+              ?assertEqual([Existing], Names()),
+
+              Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+              {ok, Conn} = amqp_connection:start(#amqp_params_direct{node = Node,
+                                                                     virtual_host = VHost}),
+              {ok, Ch} = amqp_connection:open_channel(Conn),
+              #'exchange.declare_ok'{} =
+                  amqp_channel:call(Ch, #'exchange.declare'{exchange = <<"failed-sub-lr">>,
+                                                            type = <<"x-local-random">>}),
+              amqp_connection:close(Conn),
+              [begin
+                   ?assertEqual(Expected, Subscribe([{<<"destination">>, D} | Topic] ++ Consumable)),
+                   ?assertEqual([Existing], Names()),
+                   ?assertEqual(Expected,
+                                Subscribe([{<<"destination">>, D} | Named ++ Topic] ++ Consumable)),
+                   ?assertEqual([Existing], Names())
+               end || {D, Expected} <- [{<<"/exchange/failed-sub-missing">>, <<"not_found">>},
+                                        {<<"/exchange/failed-sub-lr/key">>,
+                                         <<"precondition_failed">>}]],
+
+              rabbit_ct_broker_helpers:setup_meck(Config),
+              [try
+                   ok = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, meck, new,
+                          [rabbit_exchange_type_direct, [no_link, passthrough]]),
+                   ok = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, meck, expect,
+                          [rabbit_exchange_type_direct, add_binding, 3,
+                           meck:raise(Class, refused)]),
+                   Direct = [{<<"destination">>,
+                              <<"/exchange/amq.direct/", (atom_to_binary(Class))/binary>>}
+                             | Topic] ++ Consumable,
+                   ?assertEqual({Class, <<"internal_error">>}, {Class, Subscribe(Direct)}),
+                   ?assertEqual([Existing], Names()),
+                   ?assertEqual({Class, <<"Processing error">>},
+                                {Class, Subscribe(Named ++ Direct)}),
+                   ?assertEqual([Existing], Names())
+               after
+                   ok = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, meck, unload, [rabbit_exchange_type_direct])
+               end || Class <- [error, throw, exit]],
+              try
+                  ok = rabbit_ct_broker_helpers:rpc(
+                         Config, 0, meck, new, [rabbit_stream_queue, [no_link, passthrough]]),
+                  ok = rabbit_ct_broker_helpers:rpc(
+                         Config, 0, meck, expect,
+                         [rabbit_stream_queue, consume, 3,
+                          {error, internal_error, "refused", []}]),
+                  ?assertEqual(<<"internal_error">>, Subscribe(Stream ++ Consumable))
+              after
+                  ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [rabbit_stream_queue])
+              end,
+              ?assert(lists:member(Existing, Names())),
+              [delete_queue_if_present(rabbit_misc:r(VHost, queue, N), Config)
+               || N <- Names(), N =/= Existing],
+
+              Dup = [{<<"id">>, <<"dup">>} | Stream ++ Consumable],
+              C = declare_attempt(Config, VHost, 'SUBSCRIBE', Dup),
+              ?assertMatch({'RECEIPT', _}, stomp_receive_any(C)),
+              rabbit_stomp_client:send(C, 'SUBSCRIBE', Dup),
+              ?assertMatch({'ERROR', #{<<"message">> := <<"Duplicated subscription identifier">>}},
+                           stomp_receive_any(C)),
+              ?assertEqual(2, length(Names())),
+              rabbit_stomp_client:disconnect(Client)
       end).
 
 failed_binding_deletes_new_queue(Config) ->
