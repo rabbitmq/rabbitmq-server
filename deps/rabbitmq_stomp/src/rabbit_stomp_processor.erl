@@ -1978,10 +1978,12 @@ handle_queue_actions(Actions, #state{} = State0) ->
 
 parse_endpoint(undefined) ->
     parse_endpoint(<<"/queue">>);
+%% Queue names are stripped of CR and LF here, as `rabbit_channel` does for
+%% `queue.declare`, so that the declare, the routing key and the consume agree.
 parse_endpoint(Destination) when is_binary(Destination) ->
     case binary:split(Destination, <<"/">>, [global]) of
         [Name] ->
-            {ok, {queue, unescape(Name)}};
+            {ok, {queue, rabbit_stomp_util:strip_cr_lf(unescape(Name))}};
         [<<>>, <<"exchange">> | Rest] ->
             parse_endpoint0(exchange, Rest);
         [<<>>, <<"queue">> | Rest] ->
@@ -2010,6 +2012,8 @@ parse_endpoint0(exchange, [Name, Pattern]) ->
     {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
 parse_endpoint0(queue,    []) ->
     {error, {invalid_destination, queue, []}};
+parse_endpoint0(queue,    [Name]) when Name =/= <<>> ->
+    {ok, {queue, rabbit_stomp_util:strip_cr_lf(unescape(Name))}};
 parse_endpoint0(Type,     [Name]) when Name =/= <<>> ->
     {ok, {Type, unescape(Name)}};
 parse_endpoint0(Type,     Rest) ->
@@ -2061,14 +2065,11 @@ util_ensure_endpoint(_, {reply_queue, Name}, _Params, State = #state{cfg = #cfg{
 util_ensure_endpoint(_Direction, _Endpoint, _Params, _State) ->
     {error, invalid_endpoint}.
 
+check_queue_name(<<"amq.", _/binary>> = Name) ->
+    rabbit_misc:protocol_error(
+      access_refused, "queue name '~ts' contains reserved prefix 'amq.*'", [Name]);
 check_queue_name(Name) ->
-    case rabbit_stomp_util:strip_cr_lf(Name) of
-        <<"amq.", _/binary>> = Stripped ->
-            rabbit_misc:protocol_error(
-              access_refused, "queue name '~ts' contains reserved prefix 'amq.*'", [Stripped]);
-        Stripped ->
-            Stripped
-    end.
+    Name.
 
 
 %% --------------------------------------------------------------------------

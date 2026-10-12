@@ -594,15 +594,26 @@ queue_name_cr_lf_is_stripped(Config) ->
     queue_name_cr_lf_is_stripped(?config(version, Config), Config).
 
 queue_name_cr_lf_is_stripped("1.2", Config) ->
-    Client = ?config(stomp_client, Config),
-    VHost = ?config(rmq_vhost, Config),
-    rabbit_stomp_client:send(
-      Client, 'SEND', [{<<"destination">>, <<"/queue/cr-lf-\r\nstripped">>},
-                       {<<"receipt">>, <<"r">>}], ["hello"]),
-    stomp_receive_receipt(Client, <<"r">>),
-    QName = rabbit_misc:r(VHost, queue, <<"cr-lf-stripped">>),
-    ?assertMatch({ok, _}, lookup_queue(QName, Config)),
-    delete_queue_if_present(QName, Config);
+    lists:foldl(
+      fun({Destination, Name, Id}, Client) ->
+              rabbit_stomp_client:send(
+                Client, 'SEND', [{<<"destination">>, Destination}, {<<"receipt">>, Id}],
+                ["hello"]),
+              Client1 = stomp_receive_receipt(Client, Id),
+              QName = rabbit_misc:r(?config(rmq_vhost, Config), queue, Name),
+              ?assertMatch({ok, _}, lookup_queue(QName, Config)),
+              rabbit_stomp_client:send(
+                Client1, 'SUBSCRIBE', [{<<"destination">>, Destination}, {<<"id">>, Id}]),
+              {ok, Client2, _, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
+              rabbit_stomp_client:send(Client2, 'UNSUBSCRIBE', [{<<"id">>, Id},
+                                                                {<<"receipt">>, Id}]),
+              Client3 = stomp_receive_receipt(Client2, Id),
+              delete_queue_if_present(QName, Config),
+              Client3
+      end, ?config(stomp_client, Config),
+      [{<<"/queue/cr-lf-\r\nstripped">>, <<"cr-lf-stripped">>, <<"queue">>},
+       {<<"cr-lf-\r\nbare">>, <<"cr-lf-bare">>, <<"bare">>}]),
+    ok;
 queue_name_cr_lf_is_stripped(_Version, _Config) ->
     ok.
 
