@@ -65,6 +65,7 @@ groups() ->
         error_frame_with_non_latin1_text_case1,
         error_frame_with_non_latin1_text_case2,
         error_frame_with_non_latin1_text_case3,
+        error_frame_with_utf8_encoded_text,
         empty_queue_name_is_ignored_for_transient_subscription,
         stream_offset_is_refused_for_classic_queue,
         subscribe_binding_failure_keeps_queue_messages,
@@ -178,6 +179,7 @@ tests_with_new_behavior() ->
      error_frame_with_non_latin1_text_case1,
      error_frame_with_non_latin1_text_case2,
      error_frame_with_non_latin1_text_case3,
+     error_frame_with_utf8_encoded_text,
      stream_offset_is_refused_for_classic_queue,
      commit_of_failed_transaction_has_no_receipt,
      send_unroutable_with_receipt,
@@ -659,6 +661,26 @@ error_frame_with_non_latin1_text(Config, Name) ->
     {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
     ?assertEqual(<<"not_found">>, maps:get(<<"message">>, Hdrs)),
     ?assertNotEqual(nomatch, binary:match(iolist_to_binary(Body), Exchange)).
+
+error_frame_with_utf8_encoded_text(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Channel = ?config(amqp_channel, Config),
+    Exchange = iolist_to_binary(["local-random-", Version]),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Channel, #'exchange.declare'{exchange = Exchange,
+                                                       type = <<"x-local-random">>,
+                                                       durable = true}),
+    Key = <<"日本"/utf8>>,
+    Destination = <<"/exchange/", Exchange/binary, "/", Key/binary>>,
+    {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, Destination}, {<<"id">>, <<"s">>}]),
+    {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+    ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Hdrs)),
+    ?assertNotEqual(nomatch, binary:match(iolist_to_binary(Body), <<"'", Key/binary, "'">>)),
+    #'exchange.delete_ok'{} =
+        amqp_channel:call(Channel, #'exchange.delete'{exchange = Exchange}).
 
 empty_queue_name_is_ignored_for_transient_subscription(Config) ->
     Version = ?config(version, Config),

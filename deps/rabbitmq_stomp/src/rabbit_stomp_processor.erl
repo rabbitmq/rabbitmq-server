@@ -1775,7 +1775,20 @@ send_error_frame(Message, ExtraHeaders, Detail, State) ->
                     <<"content-type">> => <<"text/plain">>,
                     <<"version">> => iolist_to_binary(string:join(?SUPPORTED_VERSIONS, ","))},
     Headers = maps:merge(BaseHeaders, maps:from_list(ExtraHeaders)),
-    send_frame('ERROR', Headers, unicode:characters_to_binary(Detail), State).
+    send_frame('ERROR', Headers, error_text(Detail), State).
+
+%% A text formatted with `~s` holds UTF-8 as bytes, one formatted with `~ts`
+%% holds code points.
+-spec error_text(unicode:chardata()) -> binary().
+error_text(Detail) ->
+    try iolist_to_binary(Detail) of
+        Bin -> utf8_or_latin1(Bin, unicode:characters_to_binary(Bin))
+    catch
+        error:badarg -> unicode:characters_to_binary(Detail)
+    end.
+
+utf8_or_latin1(Bin, Bin) -> Bin;
+utf8_or_latin1(Bin, _) -> unicode:characters_to_binary(Bin, latin1).
 
 send_error(Message, Detail, State) ->
     send_error_frame(Message, [], Detail, State).
