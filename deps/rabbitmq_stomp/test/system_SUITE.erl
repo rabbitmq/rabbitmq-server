@@ -120,6 +120,7 @@ groups() ->
                 stream_subscription_with_auto_ack_creates_no_queue,
                 failed_subscription_deletes_only_its_own_queue,
                 failed_subscription_replies_and_cleanup,
+                declare_with_invalid_arguments,
                 failed_binding_deletes_new_queue,
                 malformed_auto_delete_is_ignored,
                 queue_limit_applies_to_new_queues_only,
@@ -612,7 +613,16 @@ malformed_headers_are_refused(Config) ->
     Version = ?config(version, Config),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     Topic = iolist_to_binary(["/topic/malformed-headers-", Version]),
+    NewStream = iolist_to_binary(["malformed-headers-new-", Version]),
     Cases = [{'SEND', [{<<"destination">>, Topic}, {<<"x-message-ttl">>, <<"60s">>}],
+              <<"precondition_failed">>},
+             {'SUBSCRIBE', [{<<"destination">>, <<"/queue/malformed-headers">>},
+                            {<<"id">>, <<"s">>}, {<<"x-max-length">>, <<"abc">>}],
+              <<"precondition_failed">>},
+             {'SUBSCRIBE', [{<<"destination">>, <<"/queue/", NewStream/binary>>},
+                            {<<"id">>, <<"s">>}, {<<"x-queue-type">>, <<"stream">>},
+                            {<<"x-stream-offset">>, <<"timestamp=abc">>},
+                            {<<"ack">>, <<"client">>}, {<<"prefetch-count">>, <<"10">>}],
               <<"precondition_failed">>},
              {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"s">>},
                             {<<"x-priority">>, <<"abc">>}],
@@ -639,7 +649,9 @@ malformed_headers_are_refused(Config) ->
               {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
               ?assertEqual({Command, Headers, Expected},
                            {Command, Headers, maps:get(<<"message">>, Hdrs)})
-      end, Cases).
+      end, Cases),
+    ?assertEqual({error, not_found},
+                 lookup_queue(rabbit_misc:r(?config(rmq_vhost, Config), queue, NewStream), Config)).
 
 error_frame_with_non_latin1_text_case1(Config) ->
     error_frame_with_non_latin1_text(Config, "amériques.canada.québec").
@@ -2205,6 +2217,43 @@ failed_subscription_replies_and_cleanup(Config) ->
               ?assertEqual(2, length(Names())),
               rabbit_stomp_client:disconnect(Client)
       end).
+
+declare_with_invalid_arguments(Config) ->
+    Invalid = [{'SUBSCRIBE', <<"x-expires">>, <<"-1">>},
+               {'SUBSCRIBE', <<"x-expires">>, <<"0">>},
+               {'SUBSCRIBE', <<"x-expires">>, <<"999999999999999">>},
+               {'SUBSCRIBE', <<"x-message-ttl">>, <<"-1">>},
+               {'SUBSCRIBE', <<"x-max-length">>, <<"-1">>},
+               {'SUBSCRIBE', <<"x-max-length-bytes">>, <<"-1">>},
+               {'SUBSCRIBE', <<"x-max-priority">>, <<"1000">>},
+               {'SEND', <<"x-expires">>, <<"-1">>}],
+    VHost = ?config(rmq_vhost, Config),
+    InvalidQName = rabbit_misc:r(VHost, queue, <<"declare_with_invalid_arguments">>),
+    QName = rabbit_misc:r(VHost, queue, <<"declare_with_valid_arguments">>),
+    try
+        [begin
+             Client = declare_attempt(Config, <<"/">>, Command,
+                                      [{<<"destination">>,
+                                        <<"/queue/declare_with_invalid_arguments">>},
+                                       {Key, Value}]),
+             {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+             ?assertEqual({Command, Key, <<"precondition_failed">>},
+                          {Command, Key, maps:get(<<"message">>, Hdrs)}),
+             ?assertEqual({error, not_found}, lookup_queue(InvalidQName, Config))
+         end || {Command, Key, Value} <- Invalid],
+
+        Client = declare_attempt(Config, <<"/">>, 'SUBSCRIBE',
+                                 [{<<"destination">>, <<"/queue/declare_with_valid_arguments">>},
+                                  {<<"x-expires">>, <<"60000">>}]),
+        stomp_receive_receipt(Client, <<"r0">>),
+        {ok, Q} = lookup_queue(QName, Config),
+        ?assertEqual({long, 60000},
+                     rabbit_misc:table_lookup(amqqueue:get_arguments(Q), <<"x-expires">>)),
+        rabbit_stomp_client:disconnect(Client)
+    after
+        delete_queue_if_present(InvalidQName, Config),
+        delete_queue_if_present(QName, Config)
+    end.
 
 failed_binding_deletes_new_queue(Config) ->
     with_dqt_vhost(

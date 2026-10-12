@@ -288,6 +288,9 @@ subscription_queue_name_matches_4_3(_) ->
       end,
       [{<<"ascii">>, <<"d1">>, <<"stomp-subscription-XDrH2Y3c7_jz3DjSx7MIBA">>},
        {<<"a/b">>, <<"d4">>, <<"stomp-subscription-V_WQzD3fcIsVt-6i0_pvfw">>},
+       {<<"esc">>, <<"a:b\\c">>, <<"stomp-subscription-UOsSxy9_xThknKhn6XUB0g">>},
+       {<<"rk">>, <<"d5">>, <<"stomp-subscription-204HJnSiDVhzfJz6o0oSZw">>},
+       {<<>>, <<"d6">>, <<"stomp-subscription-gnQujKOVBH4ofxi0HkbeqQ">>},
        {<<"日本"/utf8>>, <<"идентификатор"/utf8>>,
         <<"stomp-subscription-FhsDeJnFyW6rGZ3dHA4aQA">>}]).
 
