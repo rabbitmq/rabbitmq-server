@@ -38,7 +38,8 @@ groups() ->
          behaviour_pending_count_delegation,
          amqp091_confirm_unknown_delivery_tag,
          amqp091_settle_multiple_in_order,
-         local_nack_in_order
+         local_nack_in_order,
+         local_coalesce_confirms_by_seq_no
         ]}
     ].
 
@@ -200,6 +201,26 @@ local_nack_in_order(_Config) ->
     ?assertEqual([1, 4, 6], [Tag || {pending_ack, Tag, _} <- lqueue:to_list(UAMQ1)]),
     ?assertEqual([[qref, {modify, true, false, #{}}, ctag, [102, 103, 105], qstates]],
                  [Args || {_Pid, {_Mod, settle, Args}, _} <- meck:history(rabbit_queue_type)]).
+
+local_coalesce_confirms_by_seq_no(_Config) ->
+    meck:new(rabbit_global_counters, [passthrough]),
+    meck:expect(rabbit_global_counters, messages_confirmed, fun(_, _) -> ok end),
+    meck:new(dummy_shovel_protocol, [passthrough]),
+    %% An AMQP 1.0 source's tags are delivery IDs, which wrap around.
+    UC = rabbit_shovel_confirms:insert(16#100000002, [qname], 1,
+                                       rabbit_shovel_confirms:init()),
+    State = #{source => #{module => dummy_shovel_protocol},
+              dest => #{confirmed => [[{16#100000003, 2}],
+                                      [{16#100000000, 16#ffffffff},
+                                       {16#100000001, 0}]],
+                        confirmed_count => 3,
+                        rejected => [],
+                        rejected_count => 0,
+                        unconfirmed => UC}},
+    _ = rabbit_local_shovel:handle_source(send_confirms_and_nacks, State),
+    ?assertEqual([[0, true], [2, false]],
+                 [[Tag, Multi] || {_Pid, {_Mod, ack, [Tag, Multi, _]}, _}
+                                      <- meck:history(dummy_shovel_protocol)]).
 
 receive_all() ->
     receive Msg -> [Msg | receive_all()]
