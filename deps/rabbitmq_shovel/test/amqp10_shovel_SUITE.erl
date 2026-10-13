@@ -28,7 +28,8 @@ all() ->
 all_tests() ->
     [
      amqp_encoded_data_list,
-     amqp_encoded_amqp_value
+     amqp_encoded_amqp_value,
+     settle_out_of_order
     ].
 
 groups() ->
@@ -102,5 +103,22 @@ amqp_encoded_amqp_value(_Config) ->
 
     ?assert(meck:validate(rabbit_shovel_behaviour)),
     ok.
+
+settle_out_of_order(_Config) ->
+    meck:new(amqp10_client_session, [passthrough]),
+    meck:expect(amqp10_client_session, disposition, fun(_, _, _, _, _) -> ok end),
+    State0 = #{source => #{module => rabbit_amqp10_shovel,
+                           current => #{link => link},
+                           last_acked_tag => -1}},
+    State1 = rabbit_amqp10_shovel:ack(5, false, State0),
+    State2 = rabbit_amqp10_shovel:nack(6, false, State1),
+    State3 = rabbit_amqp10_shovel:ack(4, true, State2),
+    _ = rabbit_amqp10_shovel:ack(8, true, State3),
+    ?assertEqual([[link, 5, 5, true, accepted],
+                  [link, 6, 6, true, rejected],
+                  [link, 0, 4, true, accepted],
+                  [link, 5, 8, true, accepted]],
+                 [Args || {_Pid, {_Mod, disposition, Args}, ok}
+                              <- meck:history(amqp10_client_session)]).
 
 %% Utility

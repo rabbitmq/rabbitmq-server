@@ -440,21 +440,23 @@ close_dest(#{dest := #{current := #{conn := Conn,
     ok;
 close_dest(_Config) -> ok.
 
+%% Only a multiple settlement advances `last_acked_tag` because
+%% destinations can confirm out of order.
 -spec ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 ack(Tag, true, State = #{source := #{current := #{link := LinkRef},
                                      last_acked_tag := LastTag} = Src}) ->
     First = LastTag + 1,
     ok = amqp10_client_session:disposition(LinkRef, First, Tag, true, accepted),
     State#{source => Src#{last_acked_tag => Tag}};
-ack(Tag, false, State = #{source := #{current := #{link := LinkRef}} = Src}) ->
+ack(Tag, false, State = #{source := #{current := #{link := LinkRef}}}) ->
     ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, accepted),
-    State#{source => Src#{last_acked_tag => Tag}}.
+    State.
 
 -spec nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
-nack(Tag, false, State = #{source := #{current := #{link := LinkRef}} = Src}) ->
+nack(Tag, false, State = #{source := #{current := #{link := LinkRef}}}) ->
     % the tag is the same as the deliveryid
     ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, rejected),
-    State#{source => Src#{last_acked_tag => Tag}};
+    State;
 nack(Tag, true, State = #{source := #{current := #{link := LinkRef},
                                       last_acked_tag := LastTag} = Src}) ->
     First = LastTag + 1,
