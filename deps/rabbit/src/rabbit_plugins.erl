@@ -26,6 +26,7 @@
 ]).
 
 -type plugin_name() :: atom().
+-type version_requirements() :: [rabbit_semver:version_string()].
 
 %%----------------------------------------------------------------------------
 
@@ -387,7 +388,7 @@ format_invalid_plugin_error({missing_dependency, Dep}) ->
 format_invalid_plugin_error({broker_version_mismatch, Version, Required}) ->
     io_lib:format("        Plugin doesn't support current server version."
                   " Actual broker version: ~tp, supported by the plugin: ~tp~n",
-                  [Version, format_required_versions(Required)]);
+                  [Version, Required]);
 %% one of dependencies of a plugin doesn't match its version requirements
 format_invalid_plugin_error({{dependency_version_mismatch, Version, Required}, Name}) ->
     io_lib:format("        Version '~tp' of dependency '~tp' is unsupported."
@@ -395,16 +396,6 @@ format_invalid_plugin_error({{dependency_version_mismatch, Version, Required}, N
                   [Version, Name, Required]);
 format_invalid_plugin_error(Err) ->
     io_lib:format("        Unknown error ~tp~n", [Err]).
-
-format_required_versions(Versions) ->
-    lists:map(fun(V) ->
-                      case re:run(V, "^[0-9]*\.[0-9]*\.", [{capture, all, list}]) of
-                          {match, [Sub]} ->
-                              lists:flatten(io_lib:format("~ts-~sx", [V, Sub]));
-                          _ ->
-                              V
-                      end
-              end, Versions).
 
 validate_plugins(Plugins) ->
     _ = application:load(rabbit),
@@ -421,7 +412,7 @@ validate_plugins(Plugins, BrokerVersion) ->
                       broker_version_requirements = BrokerVersionReqs,
                       dependency_version_requirements = DepsVersions} = Plugin,
               {Plugins0, Errors}) ->
-                  case is_version_supported(BrokerVersion, BrokerVersionReqs) of
+                  case is_version_supported(Name, BrokerVersion, BrokerVersionReqs) of
                       true  ->
                           case BrokerVersion of
                               "0.0.0" ->
@@ -452,7 +443,7 @@ check_plugins_versions(PluginName, AllPlugins, RequiredVersions) ->
             case proplists:get_value(Name, ExistingVersions) of
                 undefined -> [{missing_dependency, Name} | Acc];
                 Version   ->
-                    case is_version_supported(Version, Versions) of
+                    case is_version_supported(PluginName, Version, Versions) of
                         true  ->
                             case Version of
                                 "" ->
@@ -475,24 +466,64 @@ check_plugins_versions(PluginName, AllPlugins, RequiredVersions) ->
         _  -> {error, Problems}
     end.
 
-is_version_supported("", _)        -> true;
-is_version_supported("0.0.0", _)   -> true;
-is_version_supported(_Version, []) -> true;
-is_version_supported(VersionFull, ExpectedVersions) ->
+-spec is_version_supported(rabbit_semver:version_string(), version_requirements()) ->
+    boolean().
+is_version_supported(Version, Requirements) ->
+    is_version_supported(undefined, Version, Requirements).
+
+-spec is_version_supported(atom(), rabbit_semver:version_string(), version_requirements()) ->
+    boolean().
+is_version_supported(PluginName, Version, Requirements) when is_binary(Version) ->
+    is_version_supported(PluginName, binary_to_list(Version), Requirements);
+is_version_supported(_PluginName, "", _)        -> true;
+is_version_supported(_PluginName, "0.0.0", _)   -> true;
+is_version_supported(_PluginName, _Version, []) -> true;
+is_version_supported(PluginName, VersionFull, Requirements) ->
     %% Development and pre-release versions can be fairly complex,
-    %% such as "tanzu+rabbitmq.v3.13.12.dev".
-    %% Use rabbit_semver to extract the "base" X.Y.Z version
+    %% such as `tanzu+rabbitmq.v4.3.12.dev`.
+    %% Use `rabbit_semver` to extract the "base" `X.Y.Z` version
     %% before doing any comparisons.
-    Version = rabbit_semver:normalize_then_format(VersionFull),
-    case lists:any(fun(ExpectedVersion) ->
-                       rabbit_misc:strict_version_minor_equivalent(ExpectedVersion,
-                                                                   Version)
-                       andalso
-                       rabbit_misc:version_compare(ExpectedVersion, Version, lte)
-                   end,
-                   ExpectedVersions) of
-        true  -> true;
-        false -> false
+    Normalized = rabbit_semver:normalize_then_format(VersionFull),
+    Version = parse_broker_version(Normalized),
+    lists:any(fun(Requirement) ->
+                      requirement_matches(PluginName, Requirement, Version, Normalized)
+              end, Requirements).
+
+%% Packaging injects `PROJECT_VERSION` as the requirement of built-in plugins,
+%% which is not always a valid range, so a requirement can also match by equality.
+-spec requirement_matches(atom(), rabbit_semver:version_string(),
+                          {ok, rabbit_semver_range:version()} | error, binary()) ->
+    boolean().
+requirement_matches(PluginName, Requirement, Version, Normalized) ->
+    case {Version, rabbit_semver_range:parse(Requirement)} of
+        {{ok, V}, {ok, Range}} ->
+            rabbit_semver_range:matches(Range, V);
+        {error, _} ->
+            is_same_version(Requirement, Normalized);
+        {{ok, _}, {error, _}} ->
+            is_same_version(Requirement, Normalized) orelse
+                begin
+                    ?LOG_WARNING("Plugin ~tp has an invalid version requirement ~tp that "
+                                 "does not match any version",
+                                 [PluginName, Requirement]),
+                    false
+                end
+    end.
+
+-spec is_same_version(rabbit_semver:version_string(), binary()) -> boolean().
+is_same_version(Requirement, Normalized) ->
+    try rabbit_semver:normalize_then_format(Requirement) =:= Normalized
+    catch _:_ -> false
+    end.
+
+-spec parse_broker_version(binary()) -> {ok, rabbit_semver_range:version()} | error.
+parse_broker_version(Normalized) ->
+    try
+        [Maj, Min, Patch, MinPatch] =
+            [binary_to_integer(P) || P <- binary:split(Normalized, <<".">>, [global])],
+        {ok, {Maj, Min, Patch, MinPatch}}
+    catch
+        error:_ -> error
     end.
 
 clean_plugins(Plugins) ->
