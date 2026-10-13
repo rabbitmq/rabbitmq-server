@@ -61,10 +61,12 @@ groups() ->
         subscribe_error,
         reserved_queue_names_are_refused,
         queue_name_cr_lf_is_stripped,
+        queue_name_of_only_cr_lf_is_refused,
         malformed_headers_are_refused,
         error_frame_with_non_latin1_text_case1,
         error_frame_with_non_latin1_text_case2,
         error_frame_with_non_latin1_text_case3,
+        error_frame_with_utf8_encoded_text,
         empty_queue_name_is_ignored_for_transient_subscription,
         stream_offset_is_refused_for_classic_queue,
         subscribe_binding_failure_keeps_queue_messages,
@@ -173,11 +175,13 @@ init_per_testcase(TestCase, Config) ->
 tests_with_new_behavior() ->
     [reserved_queue_names_are_refused,
      queue_name_cr_lf_is_stripped,
+     queue_name_of_only_cr_lf_is_refused,
      malformed_headers_are_refused,
      empty_queue_name_is_ignored_for_transient_subscription,
      error_frame_with_non_latin1_text_case1,
      error_frame_with_non_latin1_text_case2,
      error_frame_with_non_latin1_text_case3,
+     error_frame_with_utf8_encoded_text,
      stream_offset_is_refused_for_classic_queue,
      commit_of_failed_transaction_has_no_receipt,
      send_unroutable_with_receipt,
@@ -596,14 +600,41 @@ queue_name_cr_lf_is_stripped(Config) ->
 queue_name_cr_lf_is_stripped("1.2", Config) ->
     Client = ?config(stomp_client, Config),
     VHost = ?config(rmq_vhost, Config),
-    rabbit_stomp_client:send(
-      Client, 'SEND', [{<<"destination">>, <<"/queue/cr-lf-\r\nstripped">>},
-                       {<<"receipt">>, <<"r">>}], ["hello"]),
-    stomp_receive_receipt(Client, <<"r">>),
-    QName = rabbit_misc:r(VHost, queue, <<"cr-lf-stripped">>),
-    ?assertMatch({ok, _}, lookup_queue(QName, Config)),
-    delete_queue_if_present(QName, Config);
+    [begin
+         rabbit_stomp_client:send(
+           Client, 'SEND', [{<<"destination">>, Dest},
+                            {<<"receipt">>, <<"r">>}], ["hello"]),
+         stomp_receive_receipt(Client, <<"r">>),
+         QName = rabbit_misc:r(VHost, queue, Stripped),
+         ?assertMatch({ok, _}, lookup_queue(QName, Config)),
+         rabbit_stomp_client:send(
+           Client, 'SUBSCRIBE', [{<<"destination">>, Dest},
+                                 {<<"id">>, Stripped}]),
+         {ok, _, _, Body} = stomp_receive(Client, 'MESSAGE'),
+         ?assertEqual(<<"hello">>, iolist_to_binary(lists:reverse(Body))),
+         rabbit_stomp_client:send(
+           Client, 'UNSUBSCRIBE', [{<<"id">>, Stripped},
+                                   {<<"receipt">>, <<"u">>}]),
+         stomp_receive_receipt(Client, <<"u">>),
+         delete_queue_if_present(QName, Config)
+     end || {Dest, Stripped} <- [{<<"/queue/cr-lf-\r\nstripped">>, <<"cr-lf-stripped">>},
+                                 {<<"cr-lf-\r\nbare">>, <<"cr-lf-bare">>}]],
+    ok;
 queue_name_cr_lf_is_stripped(_Version, _Config) ->
+    ok.
+
+queue_name_of_only_cr_lf_is_refused(Config) ->
+    queue_name_of_only_cr_lf_is_refused(?config(version, Config), Config).
+
+queue_name_of_only_cr_lf_is_refused("1.2", Config) ->
+    Client = ?config(stomp_client, Config),
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, <<"/queue/\r\n">>}], ["hello"]),
+    {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+    ?assertEqual(<<"Invalid destination">>, maps:get(<<"message">>, Hdrs)),
+    ?assertNotEqual(nomatch, binary:match(iolist_to_binary(lists:reverse(Body)),
+                                          <<"Destination cannot be blank">>));
+queue_name_of_only_cr_lf_is_refused(_Version, _Config) ->
     ok.
 
 malformed_headers_are_refused(Config) ->
@@ -659,6 +690,27 @@ error_frame_with_non_latin1_text(Config, Name) ->
     {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
     ?assertEqual(<<"not_found">>, maps:get(<<"message">>, Hdrs)),
     ?assertNotEqual(nomatch, binary:match(iolist_to_binary(Body), Exchange)).
+
+error_frame_with_utf8_encoded_text(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Channel = ?config(amqp_channel, Config),
+    Exchange = <<"lrx-utf8-", (list_to_binary(Version))/binary>>,
+    Key = unicode:characters_to_binary("日本"),
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Channel, #'exchange.declare'{exchange = Exchange,
+                                                              type = <<"x-local-random">>}),
+    try
+        {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+        rabbit_stomp_client:send(
+          Client, 'SUBSCRIBE', [{<<"destination">>, <<"/exchange/", Exchange/binary, "/", Key/binary>>},
+                                {<<"id">>, <<"s">>}]),
+        {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+        ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Hdrs)),
+        ?assertNotEqual(nomatch, binary:match(iolist_to_binary(lists:reverse(Body)), Key))
+    after
+        #'exchange.delete_ok'{} = amqp_channel:call(Channel, #'exchange.delete'{exchange = Exchange})
+    end.
 
 empty_queue_name_is_ignored_for_transient_subscription(Config) ->
     Version = ?config(version, Config),
