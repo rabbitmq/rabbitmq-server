@@ -284,6 +284,10 @@ target_v1_reply_to_queue(Config) ->
     after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     ?assertEqual(Count0, Count()),
+
+    {ok, DefaultExchange} = amqp10_client:attach_sender_link(
+                              OtherSession, <<"default exchange">>, <<"/queue">>),
+    ok = wait_for_credit(DefaultExchange),
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 target and source address
