@@ -36,6 +36,8 @@ groups() ->
           change_definition,
           simple_amqp10_dest,
           amqp091_to_amqp10_with_dead_lettering,
+          dest_rejects,
+          dest_releases,
           test_amqp10_delete_after_queue_length,
           delete_after_duration_validation,
           delete_after_duration_autodeletes,
@@ -136,6 +138,44 @@ amqp091_to_amqp10_with_dead_lettering(Config) ->
               test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp091">>, <<"src-queue">>),
               %% publish to tmp, it should be dead-lettered to src and then shovelled to dest
               _ = amqp10_publish_expect(Sess, TmpAddress, DstAddress, <<"hello">>, 1)
+      end).
+
+dest_rejects(Config) ->
+    Dest = ?config(destq, Config),
+    DeclareDest = fun(Sess) ->
+                          amqp10_declare_queue(
+                            Sess, Dest, #{<<"x-max-length">> => {ulong, 0},
+                                          <<"x-overflow">> => {utf8, <<"reject-publish">>}})
+                  end,
+    dest_does_not_accept(Config, DeclareDest, rabbitmq_amqp_address:queue(Dest)).
+
+dest_releases(Config) ->
+    DeclareDest = fun(_Sess) -> ok end,
+    DestAddress = rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"unroutable">>),
+    dest_does_not_accept(Config, DeclareDest, DestAddress).
+
+dest_does_not_accept(Config, DeclareDest, DestAddress) ->
+    Src = ?config(srcq, Config),
+    DLQ = <<Src/binary, "_dlq">>,
+    SrcAddress = rabbitmq_amqp_address:queue(Src),
+    with_amqp10_session(Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, DLQ, #{}),
+              amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                                <<"x-delivery-limit">> => {ulong, 0},
+                                                <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                <<"x-dead-letter-routing-key">> => {utf8, DLQ}}),
+              DeclareDest(Sess),
+              shovel_test_utils:set_param(Config, ?PARAM,
+                                          [{<<"src-protocol">>, <<"amqp10">>},
+                                           {<<"src-address">>, SrcAddress},
+                                           {<<"dest-protocol">>, <<"amqp10">>},
+                                           {<<"dest-address">>, DestAddress}]),
+              amqp10_publish(Sess, SrcAddress, <<"m">>, 3),
+              Msgs = amqp10_expect_count(Sess, rabbitmq_amqp_address:queue(DLQ), 3),
+              ?assertEqual([<<"m1">>, <<"m2">>, <<"m3">>],
+                           [amqp10_msg:body_bin(M) || M <- lists:reverse(Msgs)]),
+              amqp10_expect_empty(Sess, SrcAddress)
       end).
 
 test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->

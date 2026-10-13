@@ -372,7 +372,7 @@ handle_dest({amqp10_disposition, {Result, Tag}},
         case {Unacked, Result} of
             {#{Tag := IncomingTag}, accepted} ->
                 {1, rabbit_shovel_behaviour:ack(IncomingTag, false, State1)};
-            {#{Tag := IncomingTag}, rejected} ->
+            {#{Tag := IncomingTag}, _NotAccepted} ->
                 {1, rabbit_shovel_behaviour:nack(IncomingTag, false, State1)};
             _ -> % not found - this should ideally not happen
                 ?LOG_WARNING("Shovel ~ts amqp10 destination disposition tag not found: ~tp",
