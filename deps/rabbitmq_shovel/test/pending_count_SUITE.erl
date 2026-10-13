@@ -36,7 +36,9 @@ groups() ->
          local_pending_count_after_settle,
          behaviour_metrics_includes_pending,
          behaviour_pending_count_delegation,
-         amqp091_confirm_unknown_delivery_tag
+         amqp091_confirm_unknown_delivery_tag,
+         amqp091_settle_multiple_in_order,
+         local_nack_in_order
         ]}
     ].
 
@@ -157,3 +159,49 @@ amqp091_confirm_unknown_delivery_tag(_Config) ->
     ?assertEqual(State,
                  rabbit_amqp091_shovel:handle_dest(
                    #'basic.nack'{delivery_tag = 123, multiple = false, requeue = true}, State)).
+
+amqp091_settle_multiple_in_order(_Config) ->
+    Self = self(),
+    meck:new(amqp_channel, [passthrough]),
+    meck:expect(amqp_channel, cast, fun(chan, Method) -> Self ! Method, ok end),
+    Unacked = maps:from_list([{Seq, 1000 + Seq} || Seq <- lists:seq(1, 100)]),
+    State0 = #{name => <<"test-shovel">>,
+               ack_mode => on_confirm,
+               source => #{module => rabbit_amqp091_shovel,
+                           current => {conn, chan, uri},
+                           remaining => unlimited},
+               dest => #{unacked => Unacked}},
+    State1 = rabbit_amqp091_shovel:handle_dest(
+               #'basic.nack'{delivery_tag = 50, multiple = true}, State0),
+    ?assertEqual([#'basic.reject'{delivery_tag = 1000 + Seq, requeue = true}
+                  || Seq <- lists:seq(1, 50)],
+                 receive_all()),
+    #{dest := #{unacked := Unacked1}} = State1,
+    ?assertEqual(lists:seq(51, 100), lists:sort(maps:keys(Unacked1))),
+    #{dest := #{unacked := Unacked2}} = rabbit_amqp091_shovel:handle_dest(
+                                          #'basic.ack'{delivery_tag = 60, multiple = true}, State1),
+    ?assertEqual([#'basic.ack'{delivery_tag = 1060, multiple = true}], receive_all()),
+    ?assertEqual(lists:seq(61, 100), lists:sort(maps:keys(Unacked2))).
+
+local_nack_in_order(_Config) ->
+    meck:new(rabbit_queue_type, [passthrough]),
+    meck:expect(rabbit_queue_type, settle, fun(_, _, _, _, QStates) -> {ok, QStates, []} end),
+    UAMQ = lqueue:from_list([{pending_ack, Tag, 100 + Tag} || Tag <- lists:seq(1, 6)]),
+    State = #{source => #{queue_r => qref,
+                          credit => 10,
+                          max_link_credit => 10,
+                          delivery_count => 0,
+                          at_least_one_credit_req_in_flight => false,
+                          current => #{consumer_tag => ctag,
+                                       queue_states => qstates,
+                                       unacked_message_q => UAMQ}}},
+    #{source := #{current := #{unacked_message_q := UAMQ1}}} =
+        rabbit_local_shovel:nack([2, 3, 5], State),
+    ?assertEqual([1, 4, 6], [Tag || {pending_ack, Tag, _} <- lqueue:to_list(UAMQ1)]),
+    ?assertEqual([[qref, {modify, true, false, #{}}, ctag, [102, 103, 105], qstates]],
+                 [Args || {_Pid, {_Mod, settle, Args}, _} <- meck:history(rabbit_queue_type)]).
+
+receive_all() ->
+    receive Msg -> [Msg | receive_all()]
+    after 0 -> []
+    end.
