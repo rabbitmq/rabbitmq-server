@@ -92,6 +92,16 @@ describe('regular expression routes', () => {
         assert.equal(Array.prototype.join.call(seen.splat, ','), '/,my queue');
         assert.equal(seen.context.params.page, '2');
     });
+
+    it('match every time with the global flag', () => {
+        var app = new Application();
+        var runs = 0;
+        app.get(/#\/x\/(.*)/g, function() { runs++; });
+        for (var i = 0; i < 4; i++) {
+            app._runRoute('get', '#/x/abc');
+        }
+        assert.equal(runs, 4);
+    });
 });
 
 describe('route callbacks', () => {
