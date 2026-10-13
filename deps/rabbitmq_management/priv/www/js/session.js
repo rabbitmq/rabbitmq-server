@@ -120,7 +120,7 @@ function end_rejected_session(res) {
     stop_session_heartbeat();
     clear_auth();
     clear_local_pref(SESSION_ID);
-    store_local_pref(LOGIN_STATUS_MESSAGE, rejected_session_message(res));
+    store_login_status_message(rejected_session_message(res));
     Object.keys(session_ended_listeners).forEach(function(name) {
         try {
             session_ended_listeners[name]();

@@ -71,7 +71,7 @@ function loadSessionModule() {
     console,
     setInterval: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
     clearInterval: (id) => { clearedIntervals.push(id); },
-    LOGIN_STATUS_MESSAGE: 'login-status-message',
+    store_login_status_message: (m) => { localPrefs.status_message = m; },
     get_local_pref: (k) => localPrefs[k],
     store_local_pref: (k, v) => { localPrefs[k] = v; },
     clear_local_pref: (k) => { delete localPrefs[k]; },
@@ -425,7 +425,7 @@ describe('session.js', () => {
 
       tick();
 
-      assert.equal(localPrefs['login-status-message'], 'Session terminated or expired');
+      assert.equal(localPrefs.status_message, 'Session terminated or expired');
     });
 
     it('says the token expired when the server reports it', () => {
@@ -436,7 +436,7 @@ describe('session.js', () => {
 
       tick();
 
-      assert.equal(localPrefs['login-status-message'], 'Token expired');
+      assert.equal(localPrefs.status_message, 'Token expired');
     });
 
     it('stops notifying a listener that was unregistered', () => {
