@@ -445,7 +445,10 @@ close_dest(_Config) -> ok.
 -spec ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 ack(Tag, true, State = #{source := #{current := #{link := LinkRef},
                                      last_acked_tag := LastTag} = Src}) ->
-    First = LastTag + 1,
+    First = case LastTag of
+                -1 -> 0;
+                _ -> serial_number:add(LastTag, 1)
+            end,
     ok = amqp10_client_session:disposition(LinkRef, First, Tag, true, accepted),
     State#{source => Src#{last_acked_tag => Tag}};
 ack(Tag, false, State = #{source := #{current := #{link := LinkRef}}}) ->
