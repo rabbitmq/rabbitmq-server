@@ -204,12 +204,11 @@ describe('unknown verbs', () => {
     });
 });
 
-describe('use', () => {
-    it('is a no-op', () => {
+describe('unsupported Sammy functions', () => {
+    it('throw when called', () => {
         var app = new Application();
-        assert.doesNotThrow(function() {
-            app.use('Title');
-        });
+        assert.throws(function() { app.use('Title'); }, /use\(\) is not supported/);
+        assert.throws(function() { app.helper('foo', function() {}); }, /helper\(\) is not supported/);
     });
 });
 

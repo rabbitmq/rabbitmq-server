@@ -60,9 +60,11 @@ var Application = (function() {
     };
 
     Application.prototype.use = function(pluginName) {
+        throw new Error('Sammy use() is not supported');
     };
 
     Application.prototype.helper = function(name, fn) {
+        throw new Error('Sammy helper() is not supported');
     };
 
     function decodeParam(str) {
