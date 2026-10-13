@@ -36,7 +36,10 @@ groups() ->
          local_pending_count_after_settle,
          behaviour_metrics_includes_pending,
          behaviour_pending_count_delegation,
-         amqp091_confirm_unknown_delivery_tag
+         amqp091_confirm_unknown_delivery_tag,
+         amqp091_settle_multiple_in_order,
+         local_nack_in_order,
+         local_coalesce_confirms_by_seq_no
         ]}
     ].
 
@@ -157,3 +160,69 @@ amqp091_confirm_unknown_delivery_tag(_Config) ->
     ?assertEqual(State,
                  rabbit_amqp091_shovel:handle_dest(
                    #'basic.nack'{delivery_tag = 123, multiple = false, requeue = true}, State)).
+
+amqp091_settle_multiple_in_order(_Config) ->
+    Self = self(),
+    meck:new(amqp_channel, [passthrough]),
+    meck:expect(amqp_channel, cast, fun(chan, Method) -> Self ! Method, ok end),
+    Unacked = maps:from_list([{Seq, 1000 + Seq} || Seq <- lists:seq(1, 100)]),
+    State0 = #{name => <<"test-shovel">>,
+               ack_mode => on_confirm,
+               source => #{module => rabbit_amqp091_shovel,
+                           current => {conn, chan, uri},
+                           remaining => unlimited},
+               dest => #{unacked => Unacked}},
+    State1 = rabbit_amqp091_shovel:handle_dest(
+               #'basic.nack'{delivery_tag = 50, multiple = true}, State0),
+    ?assertEqual([#'basic.reject'{delivery_tag = 1000 + Seq, requeue = true}
+                  || Seq <- lists:seq(1, 50)],
+                 receive_all()),
+    #{dest := #{unacked := Unacked1}} = State1,
+    ?assertEqual(lists:seq(51, 100), lists:sort(maps:keys(Unacked1))),
+    #{dest := #{unacked := Unacked2}} = rabbit_amqp091_shovel:handle_dest(
+                                          #'basic.ack'{delivery_tag = 60, multiple = true}, State1),
+    ?assertEqual([#'basic.ack'{delivery_tag = 1060, multiple = true}], receive_all()),
+    ?assertEqual(lists:seq(61, 100), lists:sort(maps:keys(Unacked2))).
+
+local_nack_in_order(_Config) ->
+    meck:new(rabbit_queue_type, [passthrough]),
+    meck:expect(rabbit_queue_type, settle, fun(_, _, _, _, QStates) -> {ok, QStates, []} end),
+    UAMQ = lqueue:from_list([{pending_ack, Tag, 100 + Tag} || Tag <- lists:seq(1, 6)]),
+    State = #{source => #{queue_r => qref,
+                          credit => 10,
+                          max_link_credit => 10,
+                          delivery_count => 0,
+                          at_least_one_credit_req_in_flight => false,
+                          current => #{consumer_tag => ctag,
+                                       queue_states => qstates,
+                                       unacked_message_q => UAMQ}}},
+    #{source := #{current := #{unacked_message_q := UAMQ1}}} =
+        rabbit_local_shovel:nack([2, 3, 5], State),
+    ?assertEqual([1, 4, 6], [Tag || {pending_ack, Tag, _} <- lqueue:to_list(UAMQ1)]),
+    ?assertEqual([[qref, {modify, true, false, #{}}, ctag, [102, 103, 105], qstates]],
+                 [Args || {_Pid, {_Mod, settle, Args}, _} <- meck:history(rabbit_queue_type)]).
+
+local_coalesce_confirms_by_seq_no(_Config) ->
+    meck:new(rabbit_global_counters, [passthrough]),
+    meck:expect(rabbit_global_counters, messages_confirmed, fun(_, _) -> ok end),
+    meck:new(dummy_shovel_protocol, [passthrough]),
+    %% An AMQP 1.0 source's tags are delivery IDs, which wrap around.
+    UC = rabbit_shovel_confirms:insert(16#100000002, [qname], 1,
+                                       rabbit_shovel_confirms:init()),
+    State = #{source => #{module => dummy_shovel_protocol},
+              dest => #{confirmed => [[{16#100000003, 2}],
+                                      [{16#100000000, 16#ffffffff},
+                                       {16#100000001, 0}]],
+                        confirmed_count => 3,
+                        rejected => [],
+                        rejected_count => 0,
+                        unconfirmed => UC}},
+    _ = rabbit_local_shovel:handle_source(send_confirms_and_nacks, State),
+    ?assertEqual([[0, true], [2, false]],
+                 [[Tag, Multi] || {_Pid, {_Mod, ack, [Tag, Multi, _]}, _}
+                                      <- meck:history(dummy_shovel_protocol)]).
+
+receive_all() ->
+    receive Msg -> [Msg | receive_all()]
+    after 0 -> []
+    end.

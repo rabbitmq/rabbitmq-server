@@ -28,7 +28,10 @@ all() ->
 all_tests() ->
     [
      amqp_encoded_data_list,
-     amqp_encoded_amqp_value
+     amqp_encoded_amqp_value,
+     settle_out_of_order,
+     multiple_ack_wraps_around,
+     nack_in_ranges
     ].
 
 groups() ->
@@ -102,5 +105,51 @@ amqp_encoded_amqp_value(_Config) ->
 
     ?assert(meck:validate(rabbit_shovel_behaviour)),
     ok.
+
+settle_out_of_order(_Config) ->
+    meck:new(amqp10_client_session, [passthrough]),
+    meck:expect(amqp10_client_session, disposition, fun(_, _, _, _, _) -> ok end),
+    State0 = #{source => #{module => rabbit_amqp10_shovel,
+                           current => #{link => link},
+                           last_acked_tag => -1}},
+    State1 = rabbit_amqp10_shovel:ack(5, false, State0),
+    State2 = rabbit_amqp10_shovel:nack([6], State1),
+    State3 = rabbit_amqp10_shovel:ack(4, true, State2),
+    _ = rabbit_amqp10_shovel:ack(8, true, State3),
+    ?assertEqual([[link, 5, 5, true, accepted],
+                  [link, 6, 6, true, {modified, true, false, #{}}],
+                  [link, 0, 4, true, accepted],
+                  [link, 5, 8, true, accepted]],
+                 [Args || {_Pid, {_Mod, disposition, Args}, ok}
+                              <- meck:history(amqp10_client_session)]).
+
+multiple_ack_wraps_around(_Config) ->
+    meck:new(amqp10_client_session, [passthrough]),
+    meck:expect(amqp10_client_session, disposition, fun(_, _, _, _, _) -> ok end),
+    State0 = #{source => #{module => rabbit_amqp10_shovel,
+                           current => #{link => link},
+                           last_acked_tag => 16#fffffffe}},
+    State1 = rabbit_amqp10_shovel:ack(16#ffffffff, true, State0),
+    _ = rabbit_amqp10_shovel:ack(2, true, State1),
+    ?assertEqual([[link, 16#ffffffff, 16#ffffffff, true, accepted],
+                  [link, 0, 2, true, accepted]],
+                 [Args || {_Pid, {_Mod, disposition, Args}, ok}
+                              <- meck:history(amqp10_client_session)]).
+
+nack_in_ranges(_Config) ->
+    meck:new(amqp10_client_session, [passthrough]),
+    meck:expect(amqp10_client_session, disposition, fun(_, _, _, _, _) -> ok end),
+    State = #{source => #{module => rabbit_amqp10_shovel,
+                          current => #{link => link}}},
+    ?assertEqual(State, rabbit_amqp10_shovel:nack([1, 2, 3, 5, 6, 9], State)),
+    _ = rabbit_amqp10_shovel:nack([16#fffffffe, 16#ffffffff, 0, 1, 5], State),
+    Modified = {modified, true, false, #{}},
+    ?assertEqual([[link, 1, 3, true, Modified],
+                  [link, 5, 6, true, Modified],
+                  [link, 9, 9, true, Modified],
+                  [link, 16#fffffffe, 1, true, Modified],
+                  [link, 5, 5, true, Modified]],
+                 [Args || {_Pid, {_Mod, disposition, Args}, ok}
+                              <- meck:history(amqp10_client_session)]).
 
 %% Utility

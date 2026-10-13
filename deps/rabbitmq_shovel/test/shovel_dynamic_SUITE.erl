@@ -102,12 +102,8 @@ tests() ->
      autodelete_quorum_on_confirm_no_transfer,
      autodelete_classic_on_publish_no_transfer,
      autodelete_quorum_on_publish_no_transfer,
-     %% AMQP091 and local shovels requeue messages on reject
-     %% while AMQP10 discards messages on reject.
-     %% These two tests will remain commented out until a decision on
-     %% which behavior to adopt for both is made and implemented.
-     %% autodelete_classic_on_confirm_with_rejections,
-     %% autodelete_quorum_on_confirm_with_rejections,
+     autodelete_classic_on_confirm_with_rejections,
+     autodelete_quorum_on_confirm_with_rejections,
      autodelete_classic_on_publish_with_rejections,
      autodelete_quorum_on_publish_with_rejections,
      no_vhost_access,
@@ -116,7 +112,9 @@ tests() ->
      delete_src_queue,
      shovel_status,
      change_definition,
-     consumer_tag
+     consumer_tag,
+     dest_rejects_quorum_source,
+     dest_rejects_classic_source
     ].
 
 %% Only meaningful for a local source. With an AMQP 0-9-1 or AMQP 1.0
@@ -281,7 +279,7 @@ end_per_testcase(Testcase, Config) ->
     shovel_test_utils:clear_param(Config, ?config(param, Config)),
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
-    Queues = [rabbit_misc:r(<<"/">>, queue, Src), rabbit_misc:r(<<"/">>, queue, Dest)],
+    Queues = [rabbit_misc:r(<<"/">>, queue, Q) || Q <- [Src, Dest, dlq(Src)]],
     rabbit_ct_broker_helpers:rpc(Config, 0, shovel_test_utils, delete_queues, [Queues]),
     _ = rabbit_ct_broker_helpers:delete_vhost(Config, ?config(alt_vhost, Config)),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -791,6 +789,60 @@ consumer_tag(Config) ->
                                                     30_000)
                                 end
                         end).
+
+dest_rejects_quorum_source(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    DLQ = dlq(Src),
+    NumMsgs = 20,
+    with_amqp10_session(Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, DLQ, #{}),
+              amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                                <<"x-delivery-limit">> => {ulong, 2},
+                                                <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                <<"x-dead-letter-routing-key">> => {utf8, DLQ}}),
+              declare_full_queue(Sess, Dest),
+              set_param(Config, ?config(param, Config), ?config(shovel_args, Config)),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              amqp10_publish(Sess, SrcAddress, <<"m">>, NumMsgs),
+              Msgs = lists:reverse(
+                       amqp10_expect_count(Sess, rabbitmq_amqp_address:queue(DLQ), NumMsgs)),
+              ?assertEqual([<<"m", (integer_to_binary(I))/binary>> || I <- lists:seq(1, NumMsgs)],
+                           [amqp10_msg:body_bin(M) || M <- Msgs]),
+              [?assertMatch(#{<<"x-last-death-reason">> := <<"delivery_limit">>},
+                            amqp10_msg:message_annotations(M)) || M <- Msgs],
+              amqp10_expect_empty(Sess, SrcAddress)
+      end).
+
+dest_rejects_classic_source(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
+    with_amqp10_session(Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, <<"classic">>}}),
+              declare_full_queue(Sess, Dest),
+              set_param(Config, Param, ?config(shovel_args, Config)),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              amqp10_publish(Sess, SrcAddress, <<"m">>, 1),
+              ?awaitMatch({_, dynamic, {running, _}, #{forwarded := N}, _} when N >= 3,
+                          shovel_status(Config, {<<"/">>, Param}),
+                          30_000),
+              clear_param(Config, Param),
+              [Msg] = amqp10_expect_count(Sess, SrcAddress, 1),
+              ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg)),
+              #{delivery_count := DeliveryCount} = amqp10_msg:headers(Msg),
+              ?assert(DeliveryCount >= 2)
+      end).
+
+declare_full_queue(Sess, QName) ->
+    amqp10_declare_queue(Sess, QName, #{<<"x-queue-type">> => {utf8, <<"classic">>},
+                                        <<"x-max-length">> => {ulong, 0},
+                                        <<"x-overflow">> => {utf8, <<"reject-publish">>}}).
+
+dlq(Src) ->
+    <<Src/binary, "_dlq">>.
 
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->

@@ -62,7 +62,7 @@
          handle_source/2,
          handle_dest/2,
          ack/3,
-         nack/3,
+         nack/2,
          forward/3,
          status/1,
          pending_count/1
@@ -551,11 +551,19 @@ handle_dest({conserve_resources, Alarm, Conserve}, #{dest := #{alarms := Alarms0
 handle_dest(_Msg, State) ->
     State.
 
-ack(DeliveryTag, Multiple, State) ->
-    maybe_grant_credit(settle(complete, DeliveryTag, Multiple, State)).
+ack(DeliveryTag, Multiple,
+    #{source := #{current := #{unacked_message_q := UAMQ0}}} = State) ->
+    {MsgIds, UAMQ} = collect_acks(UAMQ0, DeliveryTag, Multiple),
+    maybe_grant_credit(settle(complete, MsgIds, UAMQ, State)).
 
-nack(DeliveryTag, Multiple, State) ->
-    maybe_grant_credit(settle(requeue, DeliveryTag, Multiple, State)).
+nack(DeliveryTags,
+     #{source := #{current := #{unacked_message_q := UAMQ0}}} = State) ->
+    {MsgIds, UAMQ} = lists:foldl(
+                       fun(DeliveryTag, {Acc, Q0}) ->
+                               {Ids, Q} = collect_acks(Q0, DeliveryTag, false),
+                               {Ids ++ Acc, Q}
+                       end, {[], UAMQ0}, DeliveryTags),
+    maybe_grant_credit(settle({modify, true, false, #{}}, MsgIds, UAMQ, State)).
 
 forward(Tag, Msg, State) ->
     case is_blocked(State) of
@@ -897,13 +905,11 @@ get_user_vhost_from_amqp_param(Uri) ->
             exit({shutdown, {access_refused, Username}})
     end.
 
-settle(Op, DeliveryTag, Multiple,
+settle(Op, MsgIds, UAMQ,
        #{source := #{queue_r := QRef,
                      current := Current = #{consumer_tag := CTag,
-                                            unacked_message_q := UAMQ0,
                                             queue_states := QState0}
                     } = Src} = State0) ->
-    {MsgIds, UAMQ} = collect_acks(UAMQ0, DeliveryTag, Multiple),
     case rabbit_queue_type:settle(QRef, Op, CTag, lists:reverse(MsgIds), QState0) of
         {ok, QState1, Actions} ->
             messages_acknowledged(Op, QRef, QState1, MsgIds),
@@ -1074,41 +1080,39 @@ confirm(MsgSeqNos, QRef, State = #{dest := Dst = #{unconfirmed := UC}}) ->
     {ConfirmMXs, UC1} = rabbit_shovel_confirms:confirm(MsgSeqNos, QRef, UC),
     record_confirms(ConfirmMXs, State#{dest => Dst#{unconfirmed => UC1}}).
 
-send_nacks([], _, State) ->
+send_nacks([], State) ->
     State;
-send_nacks(Rs, Cs, State) ->
-    coalesce_and_send(Rs, Cs,
-                      fun(MsgSeqNo, Multiple, StateX) ->
-                              rabbit_shovel_behaviour:nack(MsgSeqNo, Multiple, StateX)
-                      end, State).
+send_nacks(Rs, State) ->
+    rabbit_shovel_behaviour:nack(Rs, State).
 
 send_confirms([], _, State) ->
     State;
-send_confirms([MsgSeqNo], _, State) ->
+send_confirms([{_MsgSeqNo, Tag}], _, State) ->
     rabbit_global_counters:messages_confirmed(?PROTOCOL, 1),
-    rabbit_shovel_behaviour:ack(MsgSeqNo, false, State);
+    rabbit_shovel_behaviour:ack(Tag, false, State);
 send_confirms(Cs, Rs, State) ->
     rabbit_global_counters:messages_confirmed(?PROTOCOL, length(Cs)),
-    coalesce_and_send(Cs, Rs,
-                      fun(MsgSeqNo, Multiple, StateX) ->
-                              rabbit_shovel_behaviour:ack(MsgSeqNo, Multiple, StateX)
-                      end, State).
+    coalesce_and_send(Cs, Rs, State).
 
-coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun,
+%% Coalesces by sequence number because, unlike source tags, sequence
+%% numbers are comparable with the unconfirmed ones and never wrap around.
+coalesce_and_send(MXs, NegativeMsgSeqNos,
                   State = #{dest := #{unconfirmed := UC}}) ->
-    SMsgSeqNos = lists:usort(MsgSeqNos),
+    SMXs = lists:ukeysort(1, MXs),
     UnconfirmedCutoff = case rabbit_shovel_confirms:is_empty(UC) of
-                            true  -> lists:last(SMsgSeqNos) + 1;
+                            true  -> element(1, lists:last(SMXs)) + 1;
                             false -> rabbit_shovel_confirms:smallest(UC)
                         end,
     Cutoff = lists:min([UnconfirmedCutoff | NegativeMsgSeqNos]),
-    {Ms, Ss} = lists:splitwith(fun(X) -> X < Cutoff end, SMsgSeqNos),
+    {Ms, Ss} = lists:splitwith(fun({SeqNo, _}) -> SeqNo < Cutoff end, SMXs),
     State1 = case Ms of
                  [] -> State;
-                 _  -> MkMsgFun(lists:last(Ms), true, State)
+                 _  ->
+                     {_, LastTag} = lists:last(Ms),
+                     rabbit_shovel_behaviour:ack(LastTag, true, State)
              end,
-    lists:foldl(fun(SeqNo, S) ->
-                        MkMsgFun(SeqNo, false, S)
+    lists:foldl(fun({_, Tag}, S) ->
+                        rabbit_shovel_behaviour:ack(Tag, false, S)
                 end, State1, Ss).
 
 %% Todo remove XName from confirm/unconfirm as we don't need it for local
@@ -1118,16 +1122,14 @@ send_confirms_and_nacks(State = #{dest := #{confirmed := [],
 send_confirms_and_nacks(State = #{dest := Dst = #{confirmed := C,
                                                   rejected := R}}) ->
     Confirms = lists:append(C),
-    ConfirmTags = [Tag || {_, Tag} <- Confirms],
-    Rejects = lists:append(R),
+    Rejects = lists:keysort(1, lists:append(R)),
     RejectTags = [Tag || {_, Tag} <- Rejects],
     State1 = #{dest := Dst2}
-        = send_confirms(ConfirmTags,
-                        RejectTags,
+        = send_confirms(Confirms,
+                        [SeqNo || {SeqNo, _} <- Rejects],
                         State#{dest => Dst#{confirmed => [],
                                             confirmed_count => 0}}),
     send_nacks(RejectTags,
-               ConfirmTags,
                State1#{dest => Dst2#{rejected => [],
                                      rejected_count => 0}}).
 

@@ -36,7 +36,7 @@
          close_source/1,
          close_dest/1,
          ack/3,
-         nack/3,
+         nack/2,
          status/1,
          forward/3,
          pending_count/1
@@ -372,8 +372,8 @@ handle_dest({amqp10_disposition, {Result, Tag}},
         case {Unacked, Result} of
             {#{Tag := IncomingTag}, accepted} ->
                 {1, rabbit_shovel_behaviour:ack(IncomingTag, false, State1)};
-            {#{Tag := IncomingTag}, rejected} ->
-                {1, rabbit_shovel_behaviour:nack(IncomingTag, false, State1)};
+            {#{Tag := IncomingTag}, _NotAccepted} ->
+                {1, rabbit_shovel_behaviour:nack([IncomingTag], State1)};
             _ -> % not found - this should ideally not happen
                 ?LOG_WARNING("Shovel ~ts amqp10 destination disposition tag not found: ~tp",
                                           [Name, Tag]),
@@ -440,26 +440,30 @@ close_dest(#{dest := #{current := #{conn := Conn,
     ok;
 close_dest(_Config) -> ok.
 
+%% Only a multiple ack advances `last_acked_tag` because
+%% destinations can confirm out of order.
 -spec ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 ack(Tag, true, State = #{source := #{current := #{link := LinkRef},
                                      last_acked_tag := LastTag} = Src}) ->
-    First = LastTag + 1,
+    First = case LastTag of
+                -1 -> 0;
+                _ -> serial_number:add(LastTag, 1)
+            end,
     ok = amqp10_client_session:disposition(LinkRef, First, Tag, true, accepted),
     State#{source => Src#{last_acked_tag => Tag}};
-ack(Tag, false, State = #{source := #{current := #{link := LinkRef}} = Src}) ->
+ack(Tag, false, State = #{source := #{current := #{link := LinkRef}}}) ->
     ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, accepted),
-    State#{source => Src#{last_acked_tag => Tag}}.
+    State.
 
--spec nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
-nack(Tag, false, State = #{source := #{current := #{link := LinkRef}} = Src}) ->
+-spec nack([tag(), ...], state()) -> state().
+nack(Tags, State = #{source := #{current := #{link := LinkRef}}}) ->
     % the tag is the same as the deliveryid
-    ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, rejected),
-    State#{source => Src#{last_acked_tag => Tag}};
-nack(Tag, true, State = #{source := #{current := #{link := LinkRef},
-                                      last_acked_tag := LastTag} = Src}) ->
-    First = LastTag + 1,
-    ok = amqp10_client_session:disposition(LinkRef, First, Tag, true, rejected),
-    State#{source => Src#{last_acked_tag => Tag}}.
+    lists:foreach(fun({First, Last}) ->
+                          ok = amqp10_client_session:disposition(
+                                 LinkRef, First, Last, true,
+                                 {modified, true, false, #{}})
+                  end, serial_number:ranges(Tags)),
+    State.
 
 status(#{dest := #{current := #{link_state := attached}}}) ->
     flow;
