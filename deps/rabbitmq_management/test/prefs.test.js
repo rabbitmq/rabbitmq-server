@@ -96,3 +96,32 @@ describe('prefs.js set_auth listeners', () => {
     assert.equal(sandbox.get_auth_credentials(), 'x');
   });
 });
+
+describe('prefs.js login status message', () => {
+  beforeEach(loadPrefsModule);
+
+  it('returns the stored message', () => {
+    sandbox.store_login_status_message('Session terminated or expired');
+
+    assert.equal(sandbox.take_login_status_message(), 'Session terminated or expired');
+  });
+
+  it('returns a message only once', () => {
+    sandbox.store_login_status_message('first');
+
+    sandbox.take_login_status_message();
+
+    assert.equal(sandbox.take_login_status_message(), null);
+  });
+
+  it('keeps only the last stored message', () => {
+    sandbox.store_login_status_message('first');
+    sandbox.store_login_status_message('second');
+
+    assert.equal(sandbox.take_login_status_message(), 'second');
+  });
+
+  it('returns nothing when no message was stored', () => {
+    assert.equal(sandbox.take_login_status_message(), null);
+  });
+});

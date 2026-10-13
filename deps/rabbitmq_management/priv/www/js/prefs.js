@@ -77,6 +77,14 @@ function set_session_expiry_if_required(login_session_timeout) {
     date.setMinutes(date.getMinutes() + timeout);
     store_local_pref(SESSION_EXPIRY, date.getTime());
 }
+function store_login_status_message(message) {
+    store_local_pref(LOGIN_STATUS_MESSAGE, message)
+}
+function take_login_status_message() {
+    var message = get_local_pref(LOGIN_STATUS_MESSAGE)
+    clear_local_pref(LOGIN_STATUS_MESSAGE)
+    return message
+}
 function authorization_header() {
     if (has_auth_credentials()) {
         return get_auth_scheme() + ' ' + get_auth_credentials();

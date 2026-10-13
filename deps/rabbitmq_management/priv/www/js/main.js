@@ -46,9 +46,8 @@ $(document).ready(function() {
 
 function startWithLoginPage() {
   replace_content('outer', format('login', {}));
-  var message = get_local_pref(LOGIN_STATUS_MESSAGE);
+  var message = take_login_status_message();
   if (message) {
-    clear_local_pref(LOGIN_STATUS_MESSAGE);
     replace_content('login-status', '<p class="warning">' + fmt_escape_html(message) + '</p>');
   }
   start_app_login();
@@ -67,8 +66,7 @@ function removeDuplicates(array){
 function startWithOAuthLogin (oauth) {
   if (!oauth.logged_in) {
     hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => {
-      var message = get_local_pref(LOGIN_STATUS_MESSAGE);
-      clear_local_pref(LOGIN_STATUS_MESSAGE);
+      var message = take_login_status_message();
       render_login_oauth(oauth, (message ? [fmt_escape_html(message)] : []).concat(escaped_warnings));
       start_app_login();
     })
@@ -206,7 +204,7 @@ function login(username, password) {
 
 function oauth_logout_after_failure(message) {
   if (oauth.enabled && oauth.sp_initiated) {
-    store_pref(LOGIN_STATUS_MESSAGE, message);
+    store_login_status_message(message);
     oauth_initiateLogout();
   }
 }
