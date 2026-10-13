@@ -16,6 +16,13 @@ function format_error_response(response, reason) {
 }
 
 $(document).ready(function() {
+  register_session_ended_listener('app', function() {
+    if (oauth.enabled && oauth.sp_initiated) {
+      oauth_initiateLogout();
+    } else {
+      location.reload();
+    }
+  });
   setup_oauth_events_if_required();
   var url_string = window.location.href;
   var url = new URL(url_string);
@@ -33,33 +40,17 @@ $(document).ready(function() {
       startWithOAuthLogin(oauth);
     } else {
       startWithLoginPage();
-      show_session_ended_message();
     }
   }
 });
 
-function pending_login_messages() {
-  var messages = [];
-  ['oauth-logout-error', 'session_ended_message'].forEach(function(key) {
-    var message = get_local_pref(key);
-    if (message) {
-      clear_local_pref(key);
-      messages.push(message);
-    }
-  });
-  return messages;
-}
-
-function show_session_ended_message() {
-  var message = get_local_pref('session_ended_message');
-  if (message) {
-    clear_local_pref('session_ended_message');
-    replace_content('login-status', '<p class="warning">' + fmt_escape_html(message) + '</p>');
-  }
-}
-
 function startWithLoginPage() {
   replace_content('outer', format('login', {}));
+  var message = get_local_pref(LOGIN_STATUS_MESSAGE);
+  if (message) {
+    clear_local_pref(LOGIN_STATUS_MESSAGE);
+    replace_content('login-status', '<p class="warning">' + fmt_escape_html(message) + '</p>');
+  }
   start_app_login();
 }
 function removeDuplicates(array){
@@ -76,7 +67,9 @@ function removeDuplicates(array){
 function startWithOAuthLogin (oauth) {
   if (!oauth.logged_in) {
     hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => {
-      render_login_oauth(oauth, pending_login_messages().concat(escaped_warnings));
+      var message = get_local_pref(LOGIN_STATUS_MESSAGE);
+      clear_local_pref(LOGIN_STATUS_MESSAGE);
+      render_login_oauth(oauth, (message ? [fmt_escape_html(message)] : []).concat(escaped_warnings));
       start_app_login();
     })
   } else {
@@ -218,7 +211,7 @@ function login(username, password) {
 
 function oauth_logout_after_failure(message) {
   if (oauth.enabled && oauth.sp_initiated) {
-    store_pref('oauth-logout-error', message);
+    store_pref(LOGIN_STATUS_MESSAGE, message);
     oauth_initiateLogout();
   }
 }
@@ -235,7 +228,7 @@ function load_init_data_and_ui(user) {
     clear_auth();
     if (oauth.enabled) {
       renderWarningMessageInLoginStatus(oauth, fmt_escape_html(errMsg));
-      oauth_logout_after_failure(fmt_escape_html(errMsg));
+      oauth_logout_after_failure(errMsg);
     } else {
       replace_content('login-status', '<p class="warning">' + fmt_escape_html(errMsg) + '</p>');
     }

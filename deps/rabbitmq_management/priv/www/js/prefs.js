@@ -4,6 +4,7 @@ const CREDENTIALS = 'credentials'
 const AUTH_SCHEME = "auth-scheme"
 const SESSION_EXPIRY = 'session_expiry'
 const AUTH_RESOURCE = 'auth_resource'
+const LOGIN_STATUS_MESSAGE = 'login-status-message'
 
 const BASIC_AUTH_SCHEME = "Basic"
 const BEARER_AUTH_SCHEME = "Bearer"
