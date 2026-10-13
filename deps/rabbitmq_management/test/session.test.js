@@ -25,6 +25,7 @@ let requests;
 let responder;
 let clearAuthCalls;
 let reloadCalls;
+let setAuthListeners;
 let intervals;
 let clearedIntervals;
 let sandbox;
@@ -62,6 +63,7 @@ function loadSessionModule() {
   responder = () => ({ status: 0 });
   clearAuthCalls = 0;
   reloadCalls = 0;
+  setAuthListeners = {};
   intervals = [];
   clearedIntervals = [];
 
@@ -76,6 +78,8 @@ function loadSessionModule() {
     authorization_header: () => 'Basic dGVzdDp0ZXN0',
     clear_auth: () => { clearAuthCalls++; },
     location: { reload: () => { reloadCalls++; } },
+    register_set_auth_listener: (name, fn) => { setAuthListeners[name] = fn; },
+    unregister_set_auth_listener: (name) => { delete setAuthListeners[name]; },
     registerLoginProcessor: (_name, fn) => { sandbox.loginProcessor = fn; },
     registerInitFailedProcessor: (_name, fn) => { sandbox.initFailedProcessor = fn; },
     registerLogoutProcessor: (_name, fn) => { sandbox.logoutProcessor = fn; }
@@ -312,6 +316,41 @@ describe('session.js', () => {
 
       assert.equal(intervals.length, 2);
       assert.deepEqual(clearedIntervals, [1]);
+    });
+  });
+
+  describe('set_auth listener', () => {
+    it('is registered when the heartbeat starts', () => {
+      sandbox.start_session_heartbeat('abc-123', 30);
+
+      assert.equal(typeof setAuthListeners.session, 'function');
+    });
+
+    it('is removed when the heartbeat stops', () => {
+      sandbox.start_session_heartbeat('abc-123', 30);
+
+      sandbox.stop_session_heartbeat();
+
+      assert.equal(setAuthListeners.session, undefined);
+    });
+
+    it('sends a heartbeat for the stored session', () => {
+      localPrefs.session_id = 'abc-123';
+      sandbox.start_session_heartbeat('abc-123', 30);
+      responder = () => ({ status: 204 });
+
+      setAuthListeners.session();
+
+      assert.equal(requests.length, 1);
+      assertRequest(requests[0], 'PUT', 'api/session/abc-123');
+    });
+
+    it('does not send a heartbeat when there is no stored session', () => {
+      sandbox.start_session_heartbeat('abc-123', 30);
+
+      setAuthListeners.session();
+
+      assert.equal(requests.length, 0);
     });
   });
 

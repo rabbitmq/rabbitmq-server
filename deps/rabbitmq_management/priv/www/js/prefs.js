@@ -41,16 +41,29 @@ function clear_auth() {
     clear_local_pref(AUTH_SCHEME)
     clear_local_pref(SESSION_EXPIRY)
     clear_local_pref(AUTH_RESOURCE)
-    $.ajax({ async: false, type: 'DELETE', url: 'api/login' })
 }
 function set_token_auth(token) {
     set_auth("Bearer", token)
+}
+var set_auth_listeners = {}
+function register_set_auth_listener(name, fn) {
+    set_auth_listeners[name] = fn
+}
+function unregister_set_auth_listener(name) {
+    delete set_auth_listeners[name]
 }
 function set_auth(auth_scheme, credentials) {
     clear_local_pref(CREDENTIALS)
     clear_local_pref(AUTH_SCHEME)
     store_local_pref(CREDENTIALS, credentials)
     store_local_pref(AUTH_SCHEME, auth_scheme)
+    Object.keys(set_auth_listeners).forEach(function(name) {
+        try {
+            set_auth_listeners[name]()
+        } catch (e) {
+            console.error('set_auth listener "' + name + '" failed', e)
+        }
+    })
 }
 const DEFAULT_HARD_LOGIN_SESSION_TIMEOUT = 480; // 8 hours
 function set_session_expiry_if_required(login_session_timeout) {

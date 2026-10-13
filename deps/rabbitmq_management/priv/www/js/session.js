@@ -55,6 +55,7 @@ function is_session_rejected(res) {
 }
 
 function stop_session_heartbeat() {
+    unregister_set_auth_listener('session');
     if (_session_heartbeat_timer) {
         clearInterval(_session_heartbeat_timer);
         _session_heartbeat_timer = null;
@@ -126,11 +127,19 @@ function _send_heartbeat(session_id) {
     });
 }
 
+function send_heartbeat_for_stored_session() {
+    var id = get_session_id();
+    if (_session_heartbeat_timer && id) {
+        _send_heartbeat(id);
+    }
+}
+
 function start_session_heartbeat(session_id, interval_sec) {
     stop_session_heartbeat();
 
     var interval_ms = (typeof interval_sec === 'number' && interval_sec > 0) ? interval_sec * 1000 : 30000;
     _session_heartbeat_timer = setInterval(function() { _send_heartbeat(session_id); }, interval_ms);
+    register_set_auth_listener('session', send_heartbeat_for_stored_session);
 }
 
 window.get_session_id = get_session_id;
