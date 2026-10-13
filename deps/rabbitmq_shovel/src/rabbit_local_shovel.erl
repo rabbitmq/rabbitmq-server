@@ -1087,31 +1087,32 @@ send_nacks(Rs, State) ->
 
 send_confirms([], _, State) ->
     State;
-send_confirms([MsgSeqNo], _, State) ->
+send_confirms([{_MsgSeqNo, Tag}], _, State) ->
     rabbit_global_counters:messages_confirmed(?PROTOCOL, 1),
-    rabbit_shovel_behaviour:ack(MsgSeqNo, false, State);
+    rabbit_shovel_behaviour:ack(Tag, false, State);
 send_confirms(Cs, Rs, State) ->
     rabbit_global_counters:messages_confirmed(?PROTOCOL, length(Cs)),
-    coalesce_and_send(Cs, Rs,
-                      fun(MsgSeqNo, Multiple, StateX) ->
-                              rabbit_shovel_behaviour:ack(MsgSeqNo, Multiple, StateX)
-                      end, State).
+    coalesce_and_send(Cs, Rs, State).
 
-coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun,
+%% Coalesces by sequence number because, unlike source tags, sequence
+%% numbers are comparable with the unconfirmed ones and never wrap around.
+coalesce_and_send(MXs, NegativeMsgSeqNos,
                   State = #{dest := #{unconfirmed := UC}}) ->
-    SMsgSeqNos = lists:usort(MsgSeqNos),
+    SMXs = lists:ukeysort(1, MXs),
     UnconfirmedCutoff = case rabbit_shovel_confirms:is_empty(UC) of
-                            true  -> lists:last(SMsgSeqNos) + 1;
+                            true  -> element(1, lists:last(SMXs)) + 1;
                             false -> rabbit_shovel_confirms:smallest(UC)
                         end,
     Cutoff = lists:min([UnconfirmedCutoff | NegativeMsgSeqNos]),
-    {Ms, Ss} = lists:splitwith(fun(X) -> X < Cutoff end, SMsgSeqNos),
+    {Ms, Ss} = lists:splitwith(fun({SeqNo, _}) -> SeqNo < Cutoff end, SMXs),
     State1 = case Ms of
                  [] -> State;
-                 _  -> MkMsgFun(lists:last(Ms), true, State)
+                 _  ->
+                     {_, LastTag} = lists:last(Ms),
+                     rabbit_shovel_behaviour:ack(LastTag, true, State)
              end,
-    lists:foldl(fun(SeqNo, S) ->
-                        MkMsgFun(SeqNo, false, S)
+    lists:foldl(fun({_, Tag}, S) ->
+                        rabbit_shovel_behaviour:ack(Tag, false, S)
                 end, State1, Ss).
 
 %% Todo remove XName from confirm/unconfirm as we don't need it for local
@@ -1121,12 +1122,11 @@ send_confirms_and_nacks(State = #{dest := #{confirmed := [],
 send_confirms_and_nacks(State = #{dest := Dst = #{confirmed := C,
                                                   rejected := R}}) ->
     Confirms = lists:append(C),
-    ConfirmTags = [Tag || {_, Tag} <- Confirms],
     Rejects = lists:keysort(1, lists:append(R)),
     RejectTags = [Tag || {_, Tag} <- Rejects],
     State1 = #{dest := Dst2}
-        = send_confirms(ConfirmTags,
-                        RejectTags,
+        = send_confirms(Confirms,
+                        [SeqNo || {SeqNo, _} <- Rejects],
                         State#{dest => Dst#{confirmed => [],
                                             confirmed_count => 0}}),
     send_nacks(RejectTags,
