@@ -55,6 +55,15 @@ describe('chart y-axis range', () => {
     assert.equal(range.ymin, 0);
     assert.equal(range.ymax, 1000);
   });
+
+  it('treats an empty series as an idle one', () => {
+    const range = { xmin: Infinity, xmax: -Infinity, ymin: Infinity, ymax: -Infinity };
+    for (const hook of sandbox.chart_chrome.hooks.adjustSeriesDataRange) {
+      hook(null, {}, range);
+    }
+    assert.equal(range.ymin, 0);
+    assert.equal(range.ymax, 0);
+  });
 });
 
 describe('chart y-axis ticks', () => {

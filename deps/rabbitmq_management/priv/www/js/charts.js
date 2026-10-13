@@ -266,6 +266,9 @@ var chart_chrome = {
 
 function chart_y_range_from_zero(plot, series, range) {
     range.ymin = 0;
+    if (!isFinite(range.ymax)) {
+        range.ymax = 0;
+    }
 }
 
 // An idle chart gets a 0 to 1 axis, which only needs its two ends labelled.
