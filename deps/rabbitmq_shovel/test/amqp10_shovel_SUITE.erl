@@ -30,6 +30,7 @@ all_tests() ->
      amqp_encoded_data_list,
      amqp_encoded_amqp_value,
      settle_out_of_order,
+     multiple_ack_wraps_around,
      nack_in_ranges
     ].
 
@@ -119,6 +120,19 @@ settle_out_of_order(_Config) ->
                   [link, 6, 6, true, {modified, true, false, #{}}],
                   [link, 0, 4, true, accepted],
                   [link, 5, 8, true, accepted]],
+                 [Args || {_Pid, {_Mod, disposition, Args}, ok}
+                              <- meck:history(amqp10_client_session)]).
+
+multiple_ack_wraps_around(_Config) ->
+    meck:new(amqp10_client_session, [passthrough]),
+    meck:expect(amqp10_client_session, disposition, fun(_, _, _, _, _) -> ok end),
+    State0 = #{source => #{module => rabbit_amqp10_shovel,
+                           current => #{link => link},
+                           last_acked_tag => 16#fffffffe}},
+    State1 = rabbit_amqp10_shovel:ack(16#ffffffff, true, State0),
+    _ = rabbit_amqp10_shovel:ack(2, true, State1),
+    ?assertEqual([[link, 16#ffffffff, 16#ffffffff, true, accepted],
+                  [link, 0, 2, true, accepted]],
                  [Args || {_Pid, {_Mod, disposition, Args}, ok}
                               <- meck:history(amqp10_client_session)]).
 
