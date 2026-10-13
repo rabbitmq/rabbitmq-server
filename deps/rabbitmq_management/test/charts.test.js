@@ -35,6 +35,15 @@ describe('chart_chrome', () => {
     assert.equal(sandbox.chart_chrome.xaxis.mode, 'time');
     assert.equal(sandbox.chart_chrome.xaxis.timezone, 'browser');
   });
+
+  it('draws lines as thick as Flot 0.8 did by default', () => {
+    assert.equal(sandbox.chart_chrome.series.lines.lineWidth, 2);
+  });
+
+  it('leaves the grid line colour to the grid options', () => {
+    assert.equal(sandbox.chart_chrome.xaxis.tickColor, undefined);
+    assert.equal(sandbox.chart_chrome.yaxis.tickColor, undefined);
+  });
 });
 
 describe('chart y-axis range', () => {
