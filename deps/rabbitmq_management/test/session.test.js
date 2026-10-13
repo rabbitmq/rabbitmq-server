@@ -24,7 +24,7 @@ let localPrefs;
 let requests;
 let responder;
 let clearAuthCalls;
-let reloadCalls;
+let sessionEndedCalls;
 let setAuthListeners;
 let intervals;
 let clearedIntervals;
@@ -62,7 +62,7 @@ function loadSessionModule() {
   requests = [];
   responder = () => ({ status: 0 });
   clearAuthCalls = 0;
-  reloadCalls = 0;
+  sessionEndedCalls = 0;
   setAuthListeners = {};
   intervals = [];
   clearedIntervals = [];
@@ -71,13 +71,13 @@ function loadSessionModule() {
     console,
     setInterval: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
     clearInterval: (id) => { clearedIntervals.push(id); },
+    LOGIN_STATUS_MESSAGE: 'login-status-message',
     get_local_pref: (k) => localPrefs[k],
     store_local_pref: (k, v) => { localPrefs[k] = v; },
     clear_local_pref: (k) => { delete localPrefs[k]; },
     xmlHttpRequest: () => new FakeXhr(),
     authorization_header: () => 'Basic dGVzdDp0ZXN0',
     clear_auth: () => { clearAuthCalls++; },
-    location: { reload: () => { reloadCalls++; } },
     register_set_auth_listener: (name, fn) => { setAuthListeners[name] = fn; },
     unregister_set_auth_listener: (name) => { delete setAuthListeners[name]; },
     registerLoginProcessor: (_name, fn) => { sandbox.loginProcessor = fn; },
@@ -88,6 +88,7 @@ function loadSessionModule() {
 
   vm.createContext(sandbox);
   vm.runInContext(sessionSrc, sandbox, { filename: SESSION_JS_PATH });
+  sandbox.register_session_ended_listener('test', () => { sessionEndedCalls++; });
   return sandbox;
 }
 
@@ -388,12 +389,12 @@ describe('session.js', () => {
       assert.equal(requests.length, 1);
       assertRequest(requests[0], 'PUT', 'api/session/abc-123');
       assert.equal(requests[0].async, true);
-      assert.equal(reloadCalls, 0);
+      assert.equal(sessionEndedCalls, 0);
     });
 
-    it('stops, clears the credentials and reloads when the server rejects the session', () => {
-      for (const status of [401, 403, 404]) {
-        reloadCalls = 0;
+    it('stops, clears the credentials and notifies the listeners when the server rejects the session', () => {
+      for (const status of [401, 403]) {
+        sessionEndedCalls = 0;
         clearAuthCalls = 0;
         sandbox.start_session_heartbeat('abc-123', 30);
         tick = intervals[intervals.length - 1].fn;
@@ -402,13 +403,13 @@ describe('session.js', () => {
 
         tick();
 
-        assert.equal(reloadCalls, 1, `status ${status}`);
+        assert.equal(sessionEndedCalls, 1, `status ${status}`);
         assert.equal(clearAuthCalls, 1, `status ${status}`);
         assert.equal(clearedIntervals.length, 1, `status ${status}`);
       }
     });
 
-    it('keeps the stored id and does not send a DELETE when the session is rejected', () => {
+    it('forgets the stored id and does not send a DELETE when the session is rejected', () => {
       localPrefs.session_id = 'abc-123';
       responder = () => ({ status: 401 });
       requests.length = 0;
@@ -416,7 +417,45 @@ describe('session.js', () => {
       tick();
 
       assert.deepEqual(requests.map((r) => r.method), ['PUT']);
-      assert.equal(sandbox.get_session_id(), 'abc-123');
+      assert.equal(sandbox.get_session_id(), undefined);
+    });
+
+    it('leaves a message for the login page', () => {
+      responder = () => ({ status: 401, responseText: JSON.stringify({ reason: 'session_not_found' }) });
+
+      tick();
+
+      assert.equal(localPrefs['login-status-message'], 'Session terminated or expired');
+    });
+
+    it('says the token expired when the server reports it', () => {
+      responder = () => ({
+        status: 401,
+        responseText: JSON.stringify({ reason: 'Provided JWT token has expired at timestamp 1 (validated at 2)' })
+      });
+
+      tick();
+
+      assert.equal(localPrefs['login-status-message'], 'Token expired');
+    });
+
+    it('stops notifying a listener that was unregistered', () => {
+      sandbox.unregister_session_ended_listener('test');
+      responder = () => ({ status: 401 });
+
+      tick();
+
+      assert.equal(sessionEndedCalls, 0);
+    });
+
+    it('keeps notifying the other listeners when one throws', () => {
+      sandbox.console = { error: () => {} };
+      sandbox.register_session_ended_listener('bad', () => { throw new Error('boom'); });
+      responder = () => ({ status: 401 });
+
+      tick();
+
+      assert.equal(sessionEndedCalls, 1);
     });
 
     it('ignores failures that do not mean the session is gone', () => {
@@ -426,8 +465,34 @@ describe('session.js', () => {
         tick();
       }
 
-      assert.equal(reloadCalls, 0);
+      assert.equal(sessionEndedCalls, 0);
       assert.equal(clearAuthCalls, 0);
+    });
+
+    it('ignores a 404 and logs it at debug level', () => {
+      const debugMessages = [];
+      sandbox.console = { debug: (m) => debugMessages.push(m) };
+      localPrefs.session_id = 'abc-123';
+      responder = () => ({ status: 404 });
+
+      tick();
+
+      assert.equal(sessionEndedCalls, 0);
+      assert.equal(clearAuthCalls, 0);
+      assert.equal(sandbox.get_session_id(), 'abc-123');
+      assert.equal(debugMessages.length, 1);
+    });
+
+    it('keeps sending heartbeats after a 404', () => {
+      responder = () => ({ status: 404 });
+      tick();
+      responder = () => ({ status: 204 });
+      requests.length = 0;
+
+      tick();
+
+      assert.equal(requests.length, 1);
+      assert.equal(clearedIntervals.length, 0);
     });
 
     it('reads the credentials again on every beat', () => {

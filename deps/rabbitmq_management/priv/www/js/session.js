@@ -5,7 +5,6 @@
 // Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 const SESSION_ID = 'session_id';
-const SESSION_ENDED_MESSAGE = 'session_ended_message';
 
 function get_session_id()     { return get_local_pref(SESSION_ID); }
 function store_session_id(id) { store_local_pref(SESSION_ID, id); }
@@ -107,21 +106,35 @@ function rejected_session_message(res) {
     return 'Session terminated or expired';
 }
 
+var session_ended_listeners = {};
+
+function register_session_ended_listener(name, fn) {
+    session_ended_listeners[name] = fn;
+}
+
+function unregister_session_ended_listener(name) {
+    delete session_ended_listeners[name];
+}
+
 function end_rejected_session(res) {
     stop_session_heartbeat();
     clear_auth();
     clear_local_pref(SESSION_ID);
-    store_local_pref(SESSION_ENDED_MESSAGE, rejected_session_message(res));
-    if (oauth.enabled && oauth.sp_initiated) {
-        oauth_initiateLogout();
-    } else {
-        location.reload();
-    }
+    store_local_pref(LOGIN_STATUS_MESSAGE, rejected_session_message(res));
+    Object.keys(session_ended_listeners).forEach(function(name) {
+        try {
+            session_ended_listeners[name]();
+        } catch (e) {
+            console.error('session ended listener "' + name + '" failed', e);
+        }
+    });
 }
 
 function _send_heartbeat(session_id) {
     session_req('PUT', session_id, function(res) {
-        if (is_session_rejected(res)) {
+        if (res.http_status === 404) {
+            console.debug('Session heartbeat got a 404, the node does not serve the sessions endpoint');
+        } else if (is_session_rejected(res)) {
             end_rejected_session(res);
         }
     });
@@ -141,12 +154,6 @@ function start_session_heartbeat(session_id, interval_sec) {
     _session_heartbeat_timer = setInterval(function() { _send_heartbeat(session_id); }, interval_ms);
     register_set_auth_listener('session', send_heartbeat_for_stored_session);
 }
-
-window.get_session_id = get_session_id;
-window.check_session = check_session;
-window.clear_session = clear_session;
-window.stop_session_heartbeat = stop_session_heartbeat;
-window.start_session_heartbeat = start_session_heartbeat;
 
 if (typeof registerLoginProcessor === 'function') {
     registerLoginProcessor('session', function(context) {
