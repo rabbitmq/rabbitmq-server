@@ -62,7 +62,7 @@
          handle_source/2,
          handle_dest/2,
          ack/3,
-         nack/3,
+         nack/2,
          forward/3,
          status/1,
          pending_count/1
@@ -551,11 +551,19 @@ handle_dest({conserve_resources, Alarm, Conserve}, #{dest := #{alarms := Alarms0
 handle_dest(_Msg, State) ->
     State.
 
-ack(DeliveryTag, Multiple, State) ->
-    maybe_grant_credit(settle(complete, DeliveryTag, Multiple, State)).
+ack(DeliveryTag, Multiple,
+    #{source := #{current := #{unacked_message_q := UAMQ0}}} = State) ->
+    {MsgIds, UAMQ} = collect_acks(UAMQ0, DeliveryTag, Multiple),
+    maybe_grant_credit(settle(complete, MsgIds, UAMQ, State)).
 
-nack(DeliveryTag, Multiple, State) ->
-    maybe_grant_credit(settle(requeue, DeliveryTag, Multiple, State)).
+nack(DeliveryTags,
+     #{source := #{current := #{unacked_message_q := UAMQ0}}} = State) ->
+    {MsgIds, UAMQ} = lists:foldl(
+                       fun(DeliveryTag, {Acc, Q0}) ->
+                               {Ids, Q} = collect_acks(Q0, DeliveryTag, false),
+                               {Ids ++ Acc, Q}
+                       end, {[], UAMQ0}, DeliveryTags),
+    maybe_grant_credit(settle({modify, true, false, #{}}, MsgIds, UAMQ, State)).
 
 forward(Tag, Msg, State) ->
     case is_blocked(State) of
@@ -897,13 +905,11 @@ get_user_vhost_from_amqp_param(Uri) ->
             exit({shutdown, {access_refused, Username}})
     end.
 
-settle(Op, DeliveryTag, Multiple,
+settle(Op, MsgIds, UAMQ,
        #{source := #{queue_r := QRef,
                      current := Current = #{consumer_tag := CTag,
-                                            unacked_message_q := UAMQ0,
                                             queue_states := QState0}
                     } = Src} = State0) ->
-    {MsgIds, UAMQ} = collect_acks(UAMQ0, DeliveryTag, Multiple),
     case rabbit_queue_type:settle(QRef, Op, CTag, lists:reverse(MsgIds), QState0) of
         {ok, QState1, Actions} ->
             messages_acknowledged(Op, QRef, QState1, MsgIds),
@@ -1074,13 +1080,10 @@ confirm(MsgSeqNos, QRef, State = #{dest := Dst = #{unconfirmed := UC}}) ->
     {ConfirmMXs, UC1} = rabbit_shovel_confirms:confirm(MsgSeqNos, QRef, UC),
     record_confirms(ConfirmMXs, State#{dest => Dst#{unconfirmed => UC1}}).
 
-send_nacks([], _, State) ->
+send_nacks([], State) ->
     State;
-send_nacks(Rs, Cs, State) ->
-    coalesce_and_send(Rs, Cs,
-                      fun(MsgSeqNo, Multiple, StateX) ->
-                              rabbit_shovel_behaviour:nack(MsgSeqNo, Multiple, StateX)
-                      end, State).
+send_nacks(Rs, State) ->
+    rabbit_shovel_behaviour:nack(Rs, State).
 
 send_confirms([], _, State) ->
     State;
@@ -1119,7 +1122,7 @@ send_confirms_and_nacks(State = #{dest := Dst = #{confirmed := C,
                                                   rejected := R}}) ->
     Confirms = lists:append(C),
     ConfirmTags = [Tag || {_, Tag} <- Confirms],
-    Rejects = lists:append(R),
+    Rejects = lists:keysort(1, lists:append(R)),
     RejectTags = [Tag || {_, Tag} <- Rejects],
     State1 = #{dest := Dst2}
         = send_confirms(ConfirmTags,
@@ -1127,7 +1130,6 @@ send_confirms_and_nacks(State = #{dest := Dst = #{confirmed := C,
                         State#{dest => Dst#{confirmed => [],
                                             confirmed_count => 0}}),
     send_nacks(RejectTags,
-               ConfirmTags,
                State1#{dest => Dst2#{rejected => [],
                                      rejected_count => 0}}).
 
