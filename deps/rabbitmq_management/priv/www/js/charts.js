@@ -255,10 +255,10 @@ var chart_colors = {full: ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed'
                     node: ['#6ae26a', '#e24545']};
 
 var chart_chrome = {
-    series: { lines: { show: true } },
+    series: { lines: { show: true, lineWidth: 2 } },
     grid:   { borderWidth: 2, borderColor: "#aaa" },
-    xaxis:  { tickColor: "#fff", showTicks: false, mode: "time", timezone: "browser", timeBase: "milliseconds" },
-    yaxis:  { tickColor: "#eee", showTicks: false, min: 0, ticks: chart_y_ticks },
+    xaxis:  { showTicks: false, mode: "time", timezone: "browser", timeBase: "milliseconds" },
+    yaxis:  { showTicks: false, min: 0, ticks: chart_y_ticks },
     legend: { show: false },
     // Flot 4 ignores `yaxis.min` when it scales the axis to the data.
     hooks:  { adjustSeriesDataRange: [chart_y_range_from_zero] }
@@ -315,6 +315,8 @@ function render_chart(div) {
     chart_data[id] = {};
 
     chart_chrome.yaxis.tickFormatter = fmt_y_axis(fmt);
+    chart_chrome.grid.tickColor = getComputedStyle(document.documentElement)
+        .getPropertyValue('--chart-grid-color').trim();
     $.plot(div, out_data, chart_chrome);
 }
 
