@@ -106,6 +106,7 @@ var Application = (function() {
         }
         for (var i = 0; i < routes.length; i++) {
             var route = routes[i];
+            route.regex.lastIndex = 0;
             var match = route.regex.exec(path);
             if (match) {
                 var params = Object.assign({}, extraParams, parseQueryString(query));
