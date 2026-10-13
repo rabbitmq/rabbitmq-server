@@ -1860,16 +1860,16 @@ function put_parameter(sammy, mandatory_keys, num_keys, bool_keys,
                        arrayable_keys) {
     for (var i in sammy.params) {
         if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
-        if (sammy.params[i] == '' && mandatory_keys.indexOf(i) === -1) {
+        if (sammy.params[i] == '' && !has_key(mandatory_keys, i)) {
             delete sammy.params[i];
         }
-        else if (num_keys.indexOf(i) !== -1) {
+        else if (has_key(num_keys, i)) {
             sammy.params[i] = parseInt(sammy.params[i]);
         }
-        else if (bool_keys.indexOf(i) !== -1) {
+        else if (has_key(bool_keys, i)) {
             sammy.params[i] = sammy.params[i] == 'true';
         }
-        else if (arrayable_keys.indexOf(i) !== -1) {
+        else if (has_key(arrayable_keys, i)) {
             sammy.params[i] = sammy.params[i].split(' ');
             if (sammy.params[i].length == 1) {
                 sammy.params[i] = sammy.params[i][0];
@@ -1890,17 +1890,21 @@ function put_parameter(sammy, mandatory_keys, num_keys, bool_keys,
 function put_cast_params(sammy, path, mandatory_keys, num_keys, bool_keys) {
     for (var i in sammy.params) {
         if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
-        if (sammy.params[i] == '' && mandatory_keys.indexOf(i) === -1) {
+        if (sammy.params[i] == '' && !has_key(mandatory_keys, i)) {
             delete sammy.params[i];
         }
-        else if (num_keys.indexOf(i) !== -1) {
+        else if (has_key(num_keys, i)) {
             sammy.params[i] = parseInt(sammy.params[i]);
         }
-        else if (bool_keys.indexOf(i) !== -1) {
+        else if (has_key(bool_keys, i)) {
             sammy.params[i] = sammy.params[i] == 'true';
         }
     }
     if (sync_put(sammy, path)) update();
+}
+
+function has_key(keys, key) {
+    return keys != null && keys.indexOf(key) !== -1;
 }
 
 function update_column_options(sammy) {

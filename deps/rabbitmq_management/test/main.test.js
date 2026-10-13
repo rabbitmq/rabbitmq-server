@@ -99,3 +99,13 @@ describe('dispatcher', () => {
         assert.equal(consoleErrors.length, 1);
     });
 });
+
+describe('put_cast_params', () => {
+    it('accepts a missing list of keys', () => {
+        var put = null;
+        sandbox.sync_put = function(sammy, path) { put = sammy.params; return false; };
+        sandbox.put_cast_params({ params: { name: 'x', empty: '', count: '3' } },
+                                '/x', undefined, ['count'], undefined);
+        assert.deepEqual(Object.assign({}, put), { name: 'x', count: 3 });
+    });
+});
