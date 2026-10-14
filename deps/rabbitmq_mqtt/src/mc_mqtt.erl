@@ -23,6 +23,10 @@
          prepare/2
         ]).
 
+-ifdef(TEST).
+-export([amqp_to_utf8_string/1]).
+-endif.
+
 init(Msg = #mqtt_msg{qos = Qos,
                      props = Props}) ->
     Anns0 = #{?ANN_DURABLE => durable(Qos)},
@@ -98,7 +102,10 @@ convert_from(mc_amqp, Sections, Env) ->
              end,
     Props1 = case AmqpProps of
                  #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
-                     Props0#{'Correlation-Data' => correlation_id(Corr)};
+                     case correlation_id(Corr) of
+                         undefined -> Props0;
+                         CorrData -> Props0#{'Correlation-Data' => CorrData}
+                     end;
                  _ ->
                      Props0
              end,
@@ -119,8 +126,11 @@ convert_from(mc_amqp, Sections, Env) ->
                                         false
                                 end, MsgAnns),
     %% "The keys of this map are restricted to be of type string" [AMQP 1.0 3.2.5]
+    %% The decoder does not enforce this.
     UserProp1 = lists:filtermap(fun({{utf8, Key}, Val}) ->
-                                        filter_map_amqp_to_utf8_string(Key, Val)
+                                        filter_map_amqp_to_utf8_string(Key, Val);
+                                   (_) ->
+                                        false
                                 end, AppProps),
     Props = case UserProp0 ++ UserProp1 of
                 [] -> Props2;
@@ -152,10 +162,11 @@ convert_from(mc_amqpl, #content{properties = PBasic,
              undefined -> [];
              _ -> H0
          end,
+    %% A header with this name but the wrong type falls through to generic handling below.
     {P1, H3} = case lists:keytake(<<"x-reply-to-topic">>, 1, H1) of
                    {value, {_, longstr, Topic}, H2} ->
                        {P0#{'Response-Topic' => rabbit_mqtt_util:amqp_to_mqtt(Topic)}, H2};
-                   false ->
+                   _ ->
                        {P0, H1}
                end,
     {P2, H} = case is_binary(CorrId) of
@@ -165,7 +176,7 @@ convert_from(mc_amqpl, #content{properties = PBasic,
                       case lists:keytake(<<"x-correlation-id">>, 1, H3) of
                           {value, {_, longstr, Corr}, H4} ->
                               {P1#{'Correlation-Data' => Corr}, H4};
-                          false ->
+                          _ ->
                               {P1, H3}
                       end
               end,
@@ -525,8 +536,15 @@ prepare(_For, #mqtt_msg{} = Msg) ->
 
 correlation_id({uuid, UUID}) ->
     mc_util:uuid_to_urn_string(UUID);
-correlation_id({_T, Corr}) ->
-    rabbit_data_coercion:to_binary(Corr).
+correlation_id({ulong, N}) ->
+    integer_to_binary(N);
+correlation_id({T, Bin})
+  when T =:= binary;
+       T =:= utf8 ->
+    Bin;
+%% The AMQP 1.0 decoder does not enforce the `message-id` types.
+correlation_id(_) ->
+    undefined.
 
 %% Translates AMQP 0.9.1 headers to MQTT 5.0 User Properties if
 %% the value is convertible to a UTF-8 String.
@@ -558,11 +576,8 @@ amqpl_field_to_utf8_string_pair({K, void, _V}) ->
     {true, {K, <<>>}};
 amqpl_field_to_utf8_string_pair({K, bool, V}) ->
     {true, {K, atom_to_binary(V)}};
-amqpl_field_to_utf8_string_pair({_K, T, _V})
-  when T =:= array;
-       T =:= table;
-       %% Raw binary data is not UTF-8 encoded.
-       T =:= binary ->
+%% Catch-all for field types not representable as a UTF-8 string (array, table, binary, decimal, ...).
+amqpl_field_to_utf8_string_pair(_) ->
     false.
 
 filter_map_amqp_to_utf8_string(Key, TypeVal) ->
@@ -605,12 +620,8 @@ amqp_to_utf8_string(true) ->
     <<"true">>;
 amqp_to_utf8_string(false) ->
     <<"false">>;
-amqp_to_utf8_string({T, _Val})
-  when T =:= map;
-       T =:= list;
-       T =:= array;
-       %% Raw binary data is not UTF-8 encoded.
-       T =:= binary ->
+%% Catch-all for primitive types not worth representing as a UTF-8 string (uuid, char, arrays, ...).
+amqp_to_utf8_string(_Other) ->
     cannot_convert.
 
 durable(?QOS_0) -> false;
