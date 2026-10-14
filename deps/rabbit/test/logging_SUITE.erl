@@ -34,6 +34,7 @@
          logging_to_user_log_category_works/1,
          setting_log_levels_in_config_with_output_overridden_in_env_works/1,
          setting_message_format_works/1,
+         node_in_message_format_works/1,
          setting_level_format_works/1,
          setting_time_format_works/1,
          logging_as_single_line_works/1,
@@ -81,6 +82,7 @@ groups() ->
        logging_to_user_log_category_works,
        setting_log_levels_in_config_with_output_overridden_in_env_works,
        setting_message_format_works,
+       node_in_message_format_works,
        setting_level_format_works,
        setting_time_format_works,
        logging_as_single_line_works,
@@ -616,6 +618,32 @@ setting_message_format_works(Config) ->
          "unknown_field_spotted ",
          "unknown_field=<unknown unknown_field> ",
          "msg=", RandomMsgBin/binary>>,
+       Line).
+
+node_in_message_format_works(Config) ->
+    Context = default_context(Config),
+    Var = "log.file.formatter",
+    Conf = [{["log", "file", "formatter"], plaintext},
+            {["log", "file", "formatter", "time_format"], rfc3339_space},
+            {["log", "file", "formatter", "level_format"], lc},
+            {["log", "file", "formatter", "single_line"], true},
+            {["log", "file", "formatter", "plaintext", "format"], "$node [$level] $msg"}],
+    {rabbit_logger_text_fmt, FormatterConfig} =
+        rabbit_prelaunch_early_logging:translate_formatter_conf(Var, Conf),
+    ok = application:set_env(
+           rabbit, log,
+           [{file, [{formatter, {rabbit_logger_text_fmt, FormatterConfig}}]}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    {RandomMsg, Line} = log_and_return_line(Context, #{}),
+
+    NodeStr = atom_to_list(node()),
+    NodeBin = list_to_binary(NodeStr),
+    RandomMsgBin = list_to_binary(RandomMsg),
+    ?assertEqual(
+       <<NodeBin/binary, " [warning] ", RandomMsgBin/binary>>,
        Line).
 
 setting_level_format_works(Config) ->

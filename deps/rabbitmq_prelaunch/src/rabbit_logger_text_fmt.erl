@@ -46,6 +46,8 @@ format_var(level, #{level := Level}, Config) ->
     rabbit_logger_fmt_helpers:format_level(Level, Config);
 format_var(time, #{meta := #{time := Timestamp}}, Config) ->
     rabbit_logger_fmt_helpers:format_time(Timestamp, Config);
+format_var(node, _LogEvent, _Config) ->
+    io_lib:format("~ts", [node()]);
 format_var(Var, #{meta := Meta}, _) ->
     case maps:get(Var, Meta, undefined) of
         undefined ->
