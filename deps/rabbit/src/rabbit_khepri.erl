@@ -867,6 +867,11 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
          end of
         error ->
             {error, not_found};
+        {ok, {badrpc, _Reason}} ->
+            %% The peer is reachable but not ready to answer yet (e.g. its
+            %% `rabbit` application hasn't finished loading during a
+            %% concurrent multi-node boot) -- not a real inconsistency.
+            {error, not_found};
         {ok, {_OTP, _Rabbit, {error, _Reason}}} ->
             {error, not_found};
         {ok, {_OTP, _Rabbit, {ok, Status}}} when CheckNodesConsistency ->
@@ -885,7 +890,7 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
 
 -spec remote_node_info(Node) -> Info when
       Node :: node(),
-      Info :: {OtpVersion, RabbitMQVersion, ClusterStatus},
+      Info :: {OtpVersion, RabbitMQVersion, ClusterStatus} | {badrpc, any()},
       OtpVersion :: string(),
       RabbitMQVersion :: string(),
       ClusterStatus :: {ok, {All, Running}} | {error, any()},
@@ -893,6 +898,9 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
       Running :: [node()].
 %% @private
 
+%% rpc:call/4 returns {badrpc, Reason} -- not an exception -- when Node is
+%% reachable but node_info/0 itself fails there, e.g. during a concurrent
+%% multi-node boot where `rabbit` hasn't finished loading on Node yet.
 remote_node_info(Node) ->
     rpc:call(Node, ?MODULE, node_info, []).
 
