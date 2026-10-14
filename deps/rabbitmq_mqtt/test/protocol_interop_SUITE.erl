@@ -38,8 +38,11 @@ groups() ->
       [
        mqtt_amqpl_mqtt,
        amqpl_mqtt_gh_12707,
+       amqpl_mqtt_unconvertible_properties,
        mqtt_amqp_mqtt,
        amqp_mqtt_amqp,
+       amqp_mqtt_unconvertible_properties,
+       amqp_mqtt_topic_name_limit,
        mqtt_stomp_mqtt,
        mqtt_stream
       ]},
@@ -318,6 +321,33 @@ mqtt_amqp_mqtt(Config) ->
     end,
     ok = emqtt:disconnect(C).
 
+amqpl_mqtt_unconvertible_properties(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, <<"my/topic">>, qos1),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    TooLong = binary:copy(<<"a">>, 65_536),
+    Publish = fun(Payload, Headers) ->
+                      amqp_channel:call(Ch,
+                                        #'basic.publish'{exchange = <<"amq.topic">>,
+                                                         routing_key = <<"my.topic">>},
+                                        #amqp_msg{payload = Payload,
+                                                  props = #'P_basic'{headers = Headers}})
+              end,
+    Publish(<<"m1">>, [{<<"k1">>, longstr, <<"v1">>},
+                       {<<"k2">>, longstr, TooLong},
+                       {<<"k3">>, decimal, {2, 12345}}]),
+    Publish(<<"m2">>, [{<<"x-correlation-id">>, longstr, TooLong}]),
+    Publish(<<"m3">>, [{<<"x-reply-to-topic">>, longstr, TooLong}]),
+
+    receive_mqtt_publish(C, <<"m1">>, #{'User-Property' => [{<<"k1">>, <<"v1">>}]}),
+    receive_mqtt_publish(C, <<"m2">>, #{}),
+    receive_mqtt_publish(C, <<"m3">>, #{}),
+
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+    ok = emqtt:disconnect(C).
+
 amqp_mqtt_amqp(Config) ->
     Correlation = QName = ClientId = Container = atom_to_binary(?FUNCTION_NAME),
 
@@ -384,6 +414,74 @@ amqp_mqtt_amqp(Config) ->
     ok = emqtt:disconnect(C),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
+
+amqp_mqtt_unconvertible_properties(Config) ->
+    ClientId = Container = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, <<"my/topic">>, qos1),
+
+    {Connection, Session, Sender} = amqp_open_sender(
+                                      Container,
+                                      rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"my.topic">>),
+                                      Config),
+    TooLong = binary:copy(<<"a">>, 65_536),
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp_msg_from_sections(
+             [#'v1_0.properties'{correlation_id = {double, 1.5},
+                                 reply_to = {utf8, <<"/exchanges/amq.topic/", TooLong/binary>>}},
+              #'v1_0.application_properties'{
+                 content = [{{utf8, <<"k1">>}, {utf8, <<"v1">>}},
+                            {{utf8, <<"k2">>}, {utf8, TooLong}},
+                            {{utf8, <<"k3">>}, {uuid, <<0:128>>}},
+                            {{utf8, <<"k4">>}, {utf8, <<"a", 0>>}},
+                            {{utf8, <<"k5">>}, {utf8, <<255>>}},
+                            {{symbol, <<"k6">>}, {utf8, <<"v6">>}}]},
+              #'v1_0.data'{content = <<"m1">>}])),
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp_msg_from_sections(
+             [#'v1_0.properties'{correlation_id = {binary, TooLong},
+                                 content_type = {symbol, TooLong}},
+              #'v1_0.data'{content = <<"m2">>}])),
+
+    receive_mqtt_publish(C, <<"m1">>, #{'User-Property' => [{<<"k1">>, <<"v1">>}]}),
+    receive_mqtt_publish(C, <<"m2">>, #{}),
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok = emqtt:disconnect(C).
+
+amqp_mqtt_topic_name_limit(Config) ->
+    ClientId = Container = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, <<"#">>, qos1),
+
+    {Connection, Session, Sender} = amqp_open_sender(Container, null, Config),
+    AtLimit = binary:copy(<<"a">>, 65_535),
+    TooLong = binary:copy(<<"a">>, 65_536),
+    [ok = amqp10_client:send_msg(
+            Sender,
+            amqp10_msg:set_properties(
+              #{to => rabbitmq_amqp_address:exchange(<<"amq.topic">>, RoutingKey)},
+              amqp10_msg:new(<<>>, Payload, true)))
+     || {RoutingKey, Payload} <- [{AtLimit, <<"m1">>},
+                                  {TooLong, <<"m2">>},
+                                  {<<"my.topic">>, <<"m3">>}]],
+
+    receive {publish, #{client_pid := C, payload := <<"m1">>, topic := Topic1}} ->
+                ?assertEqual(AtLimit, Topic1)
+    after ?TIMEOUT -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{client_pid := C, payload := Payload3, topic := Topic3}} ->
+                ?assertEqual(<<"m3">>, Payload3),
+                ?assertEqual(<<"my/topic">>, Topic3)
+    after ?TIMEOUT -> ct:fail({missing_publish, ?LINE})
+    end,
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok = emqtt:disconnect(C).
 
 %% Send messages with different AMQP body sections and
 %% consume via MQTT 5.0 with a QoS 0 subscription.
@@ -678,6 +776,32 @@ mqtt_stream(Config) ->
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
+
+amqp_open_sender(Container, Address, Config) ->
+    OpnConf = #{address => ?config(rmq_hostname, Config),
+                port => rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+                container_id => Container,
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    receive {amqp10_event, {link, Sender, credited}} -> ok
+    after ?TIMEOUT -> ct:fail(credited_timeout)
+    end,
+    {Connection, Session, Sender}.
+
+amqp_msg_from_sections(Sections) ->
+    amqp10_msg:from_amqp_records(
+      [#'v1_0.transfer'{delivery_tag = {binary, <<>>},
+                        settled = true,
+                        message_format = {uint, 0}} | Sections]).
+
+receive_mqtt_publish(C, ExpectedPayload, ExpectedProps) ->
+    receive {publish, #{client_pid := C, payload := Payload, properties := Props}} ->
+                ?assertEqual(ExpectedPayload, Payload),
+                ?assertEqual(ExpectedProps, Props)
+    after ?TIMEOUT -> ct:fail({missing_publish, ExpectedPayload})
+    end.
 
 delete_queues() ->
     [{ok, 0} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>) || Q <- rabbit_amqqueue:list()].
