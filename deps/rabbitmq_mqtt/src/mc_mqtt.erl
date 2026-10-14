@@ -149,7 +149,7 @@ convert_from(mc_amqp, Sections, Env) ->
     #mqtt_msg{retain = false,
               qos = Qos,
               dup = false,
-              props = drop_oversized_properties(Props),
+              props = drop_invalid_properties(Props),
               payload = Payload};
 convert_from(mc_amqpl, #content{properties = PBasic,
                                 payload_fragments_rev = PFR},
@@ -206,30 +206,30 @@ convert_from(mc_amqpl, #content{properties = PBasic,
               qos = Qos,
               dup = false,
               payload = lists:reverse(PFR),
-              props = drop_oversized_properties(P)};
+              props = drop_invalid_properties(P)};
 convert_from(_SourceProto, _, _) ->
     not_implemented.
 
-%% AMQP correlation IDs, property values and headers have no size limit, but
-%% MQTT Binary Data and UTF-8 strings are capped at 65,535 bytes [v5 1.5.4, 1.5.6].
-%% Drop whatever doesn't fit rather than reach the MQTT serialiser with it.
--spec drop_oversized_properties(properties()) -> properties().
-drop_oversized_properties(Props) ->
-    maps:filtermap(fun drop_oversized_property/2, Props).
+%% MQTT limits Binary Data and UTF-8 strings to 65,535 bytes, and UTF-8 strings
+%% must be well-formed without U+0000 [v5 1.5.4, 1.5.6]. AMQP enforces neither.
+-spec drop_invalid_properties(properties()) -> properties().
+drop_invalid_properties(Props) ->
+    maps:filtermap(fun drop_invalid_property/2, Props).
 
-drop_oversized_property(Key, Val)
-  when Key =:= 'Correlation-Data';
-       Key =:= 'Content-Type';
-       Key =:= 'Response-Topic' ->
+drop_invalid_property('Correlation-Data', Val) ->
     byte_size(Val) =< ?TWO_BYTE_INTEGER_MAX;
-drop_oversized_property('User-Property', Pairs) ->
+drop_invalid_property(Key, Val)
+  when Key =:= 'Content-Type';
+       Key =:= 'Response-Topic' ->
+    is_valid_utf8_string(Val);
+drop_invalid_property('User-Property', Pairs) ->
     case [Pair || {Name, Val} = Pair <- Pairs,
                   byte_size(Name) =< ?TWO_BYTE_INTEGER_MAX,
                   byte_size(Val) =< ?TWO_BYTE_INTEGER_MAX] of
         [] -> false;
         Kept -> {true, Kept}
     end;
-drop_oversized_property(_Key, _Val) ->
+drop_invalid_property(_Key, _Val) ->
     true.
 
 convert_to(?MODULE, Msg, _Env) ->
@@ -526,11 +526,14 @@ correlation_id(_) ->
     undefined.
 
 %% Translates AMQP 0.9.1 headers to MQTT 5.0 User Properties if
-%% the value is convertible to a UTF-8 String.
+%% both the name and the value are convertible to a UTF-8 String.
 -spec amqpl_header_to_user_property(rabbit_framing:amqp_table()) ->
     user_property().
 amqpl_header_to_user_property(Table) ->
-    lists:filtermap(fun amqpl_field_to_utf8_string_pair/1, Table).
+    lists:filtermap(fun({K, _T, _V} = Field) ->
+                            mc_util:is_utf8_no_null(K) andalso
+                            amqpl_field_to_utf8_string_pair(Field)
+                    end, Table).
 
 amqpl_field_to_utf8_string_pair({K, longstr, V}) ->
     case mc_util:is_utf8_no_null(V) of
@@ -559,20 +562,30 @@ amqpl_field_to_utf8_string_pair({K, bool, V}) ->
 amqpl_field_to_utf8_string_pair(_) ->
     false.
 
+%% A value over the MQTT limit is dropped anyway; check the cheap bound first.
+-spec is_valid_utf8_string(binary()) -> boolean().
+is_valid_utf8_string(Bin) ->
+    byte_size(Bin) =< ?TWO_BYTE_INTEGER_MAX andalso mc_util:is_utf8_no_null(Bin).
+
+%% A User Property name is itself a UTF-8 Encoded String [MQTT-1.5.4-1/-2].
 filter_map_amqp_to_utf8_string(Key, TypeVal) ->
-    case amqp_to_utf8_string(TypeVal) of
-        cannot_convert ->
-            false;
-        String ->
-            {true, {Key, String}}
+    case is_valid_utf8_string(Key) of
+        true ->
+            case amqp_to_utf8_string(TypeVal) of
+                cannot_convert -> false;
+                String -> {true, {Key, String}}
+            end;
+        false ->
+            false
     end.
 
-amqp_to_utf8_string({utf8, Val})
-  when is_binary(Val) ->
-    Val;
-amqp_to_utf8_string({symbol, Val})
-  when is_binary(Val) ->
-    Val;
+%% The AMQP 1.0 decoder does not validate `utf8`/`symbol` content.
+amqp_to_utf8_string({T, Val})
+  when (T =:= utf8 orelse T =:= symbol) andalso is_binary(Val) ->
+    case is_valid_utf8_string(Val) of
+        true -> Val;
+        false -> cannot_convert
+    end;
 amqp_to_utf8_string(Val)
   when Val =:= null;
        Val =:= undefined ->
