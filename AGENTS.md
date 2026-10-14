@@ -343,7 +343,8 @@ to all prose: comments, commit messages, pull request descriptions, design docs 
 
 The currently developed community-supported branches are:
 
- * `main` (becomes 4.4.0)
+ * `main` (becomes 5.0.0)
+ * `v4.4.x`
  * `v4.3.x`
 
 ### Backporting
