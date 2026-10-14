@@ -123,6 +123,10 @@ groups() ->
                 failed_subscription_deletes_only_its_own_queue,
                 failed_binding_deletes_new_queue,
                 malformed_auto_delete_is_ignored,
+                exclusive_queue_is_not_durable,
+                exclusive_quorum_queue_is_durable_and_not_exclusive,
+                declare_matches_amqp_0_9_1,
+                declare_with_valid_expires_applies_it,
                 queue_limit_applies_to_new_queues_only,
                 existing_queue_of_disabled_type_is_usable,
                 temp_queue_is_classic_with_quorum_default,
@@ -641,6 +645,8 @@ malformed_headers_are_refused(Config) ->
     Version = ?config(version, Config),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     Topic = iolist_to_binary(["/topic/malformed-headers-", Version]),
+    StreamQueueName = iolist_to_binary(["malformed-headers-stream-", Version]),
+    StreamQueue = <<"/queue/", StreamQueueName/binary>>,
     Cases = [{'SEND', [{<<"destination">>, Topic}, {<<"x-message-ttl">>, <<"60s">>}],
               <<"precondition_failed">>},
              {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"s">>},
@@ -659,6 +665,12 @@ malformed_headers_are_refused(Config) ->
               <<"Invalid x-queue-name">>},
              {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"/temp-queue/x">>}],
               <<"Invalid id">>},
+             {'SUBSCRIBE', [{<<"destination">>, StreamQueue}, {<<"id">>, <<"s">>},
+                            {<<"ack">>, <<"client">>}, {<<"prefetch-count">>, <<"10">>},
+                            {<<"durable">>, <<"true">>}, {<<"auto-delete">>, <<"false">>},
+                            {<<"x-queue-type">>, <<"stream">>},
+                            {<<"x-stream-offset">>, <<"offset=abc">>}],
+              <<"precondition_failed">>},
              {'UNSUBSCRIBE', [{<<"destination">>, Topic}, {<<"durable">>, <<"True">>}],
               <<"Missing Header">>}],
     lists:foreach(
@@ -668,7 +680,11 @@ malformed_headers_are_refused(Config) ->
               {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
               ?assertEqual({Command, Headers, Expected},
                            {Command, Headers, maps:get(<<"message">>, Hdrs)})
-      end, Cases).
+      end, Cases),
+    ?assertEqual({error, not_found},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, rabbit_amqqueue, lookup,
+                   [rabbit_misc:r(<<"/">>, queue, StreamQueueName)])).
 
 error_frame_with_non_latin1_text_case1(Config) ->
     error_frame_with_non_latin1_text(Config, "amériques.canada.québec").
@@ -2175,6 +2191,79 @@ malformed_auto_delete_is_ignored(Config) ->
               ?assertNot(amqqueue:is_auto_delete(Q))
       end).
 
+exclusive_queue_is_not_durable(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              send_with_headers(Client, <<"/queue/dqt-q">>,
+                                [{<<"durable">>, <<"true">>},
+                                 {<<"exclusive">>, <<"true">>},
+                                 {<<"auto-delete">>, <<"false">>}]),
+              ?assertEqual({false, true, false}, queue_properties(Config, VHost, <<"dqt-q">>))
+      end).
+
+exclusive_quorum_queue_is_durable_and_not_exclusive(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              send_with_headers(Client, <<"/queue/dqt-q">>,
+                                [{<<"durable">>, <<"true">>},
+                                 {<<"exclusive">>, <<"true">>},
+                                 {<<"auto-delete">>, <<"false">>},
+                                 {<<"x-queue-type">>, <<"quorum">>}]),
+              ?assertEqual({true, false, false}, queue_properties(Config, VHost, <<"dqt-q">>))
+      end).
+
+declare_matches_amqp_0_9_1(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
+              {ok, Ch} = amqp_connection:open_channel(Conn),
+              Cases = [{[{<<"durable">>, <<"true">>}, {<<"exclusive">>, <<"true">>},
+                         {<<"auto-delete">>, <<"false">>}],
+                        {true, true, false}},
+                       {[{<<"durable">>, <<"true">>}, {<<"exclusive">>, <<"true">>},
+                         {<<"auto-delete">>, <<"true">>}],
+                        {true, true, true}},
+                       {[{<<"durable">>, <<"true">>}, {<<"exclusive">>, <<"false">>},
+                         {<<"auto-delete">>, <<"false">>}],
+                        {true, false, false}},
+                       {[{<<"durable">>, <<"true">>}, {<<"exclusive">>, <<"false">>},
+                         {<<"auto-delete">>, <<"true">>}],
+                        {true, false, true}},
+                       {[], {true, false, false}}],
+              lists:foreach(
+                fun({I, {Headers, {Durable, Exclusive, AutoDelete}}}) ->
+                        Suffix = integer_to_binary(I),
+                        StompName = <<"stomp-", Suffix/binary>>,
+                        AmqpName = <<"amqp-", Suffix/binary>>,
+                        send_with_headers(Client, <<"/queue/", StompName/binary>>, Headers),
+                        #'queue.declare_ok'{} =
+                            amqp_channel:call(Ch, #'queue.declare'{queue = AmqpName,
+                                                                   durable = Durable,
+                                                                   exclusive = Exclusive,
+                                                                   auto_delete = AutoDelete}),
+                        ?assertEqual({Headers, queue_properties(Config, VHost, AmqpName)},
+                                     {Headers, queue_properties(Config, VHost, StompName)})
+                end, lists:enumerate(Cases)),
+              rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch)
+      end).
+
+declare_with_valid_expires_applies_it(Config) ->
+    with_dqt_vhost(
+      Config, ?FUNCTION_NAME, <<"classic">>,
+      fun(Client, VHost) ->
+              {ok, _, _, _} = dqt_subscribe(Client, [{<<"destination">>, <<"/queue/dqt-q">>},
+                                                     {<<"id">>, <<"0">>},
+                                                     {<<"x-expires">>, <<"600000">>}]),
+              {ok, Q} = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, rabbit_amqqueue, lookup,
+                          [rabbit_misc:r(VHost, queue, <<"dqt-q">>)]),
+              ?assertEqual({long, 600000},
+                           rabbit_misc:table_lookup(amqqueue:get_arguments(Q), <<"x-expires">>))
+      end).
+
 queue_limit_applies_to_new_queues_only(Config) ->
     with_dqt_vhost(
       Config, ?FUNCTION_NAME, <<"classic">>,
@@ -2290,6 +2379,19 @@ dqt_subscribe(Client, Headers) ->
     rabbit_stomp_client:send(
       Client, 'SUBSCRIBE', [{<<"receipt">>, <<"r">>} | Headers]),
     stomp_receive(Client, 'RECEIPT', 30_000).
+
+send_with_headers(Client, Destination, Headers) ->
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, Destination},
+                       {<<"receipt">>, <<"r">>} | Headers], ["hello"]),
+    {ok, _, _, _} = stomp_receive(Client, 'RECEIPT').
+
+queue_properties(Config, VHost, Name) ->
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(
+                Config, 0, rabbit_amqqueue, lookup, [rabbit_misc:r(VHost, queue, Name)]),
+    {amqqueue:is_durable(Q),
+     amqqueue:get_exclusive_owner(Q) =/= none,
+     amqqueue:is_auto_delete(Q)}.
 
 queue_churn(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
