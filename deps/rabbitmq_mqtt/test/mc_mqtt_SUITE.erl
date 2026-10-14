@@ -35,11 +35,17 @@ groups() ->
        amqpl_to_mqtt_oversized_response_topic,
        amqpl_to_mqtt_oversized_user_property,
        amqp_to_utf8_string_drops_unrepresentable_primitives,
+       amqp_to_utf8_string_drops_invalid_utf8_and_null,
+       amqp_to_mqtt_invalid_utf8_user_property_value_dropped,
+       amqp_to_mqtt_invalid_utf8_user_property_key_dropped,
        amqp_to_mqtt_correlation_id,
        amqp_to_mqtt_unconvertible_correlation_id_dropped,
        amqp_to_mqtt_unconvertible_property_types_dropped,
        amqp_to_mqtt_non_utf8_app_property_key_dropped,
        amqpl_to_mqtt_header_type_confusion_dropped,
+       amqp_to_mqtt_invalid_utf8_content_type_dropped,
+       amqp_to_mqtt_invalid_utf8_response_topic_dropped,
+       amqpl_to_mqtt_invalid_utf8_dropped,
        amqp_to_mqtt_footer,
        mqtt_amqpl,
        mqtt_amqpl_alt,
@@ -448,6 +454,45 @@ amqp_to_utf8_string_drops_unrepresentable_primitives(_Config) ->
     ?assertEqual(cannot_convert, mc_mqtt:amqp_to_utf8_string({list, []})),
     ?assertEqual(cannot_convert, mc_mqtt:amqp_to_utf8_string({binary, <<0, 1>>})).
 
+amqp_to_utf8_string_drops_invalid_utf8_and_null(_Config) ->
+    ?assertEqual(cannot_convert, mc_mqtt:amqp_to_utf8_string({utf8, <<0>>})),
+    ?assertEqual(cannot_convert, mc_mqtt:amqp_to_utf8_string({utf8, <<255, 255>>})),
+    ?assertEqual(cannot_convert, mc_mqtt:amqp_to_utf8_string({symbol, <<0>>})),
+    ?assertEqual(cannot_convert, mc_mqtt:amqp_to_utf8_string({symbol, <<255, 255>>})),
+    ?assertEqual(<<"ok">>, mc_mqtt:amqp_to_utf8_string({utf8, <<"ok">>})),
+    AtLimit = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX),
+    OverLimit = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX + 1),
+    ?assertEqual(AtLimit, mc_mqtt:amqp_to_utf8_string({utf8, AtLimit})),
+    ?assertEqual(cannot_convert, mc_mqtt:amqp_to_utf8_string({utf8, OverLimit})).
+
+amqp_to_mqtt_invalid_utf8_user_property_value_dropped(_Config) ->
+    AP = #'v1_0.application_properties'{
+            content = [{{utf8, <<"keep">>}, {utf8, <<"ok">>}},
+                       {{utf8, <<"bad">>}, {utf8, <<0>>}}]},
+    D = #'v1_0.data'{content = <<"payload">>},
+    #mqtt_msg{props = Props} = amqp_to_mqtt([AP, D]),
+    {ok, UserProp} = maps:find('User-Property', Props),
+    ?assertEqual({<<"keep">>, <<"ok">>}, lists:keyfind(<<"keep">>, 1, UserProp)),
+    ?assertNot(lists:keymember(<<"bad">>, 1, UserProp)).
+
+%% A User Property name is a UTF-8 Encoded String too, for both the
+%% application-properties and the x-prefixed message-annotations path.
+amqp_to_mqtt_invalid_utf8_user_property_key_dropped(_Config) ->
+    MA = #'v1_0.message_annotations'{
+            content = [{{symbol, <<"x-keep">>}, {utf8, <<"ok">>}},
+                       {{symbol, <<"x-bad", 0>>}, {utf8, <<"v">>}}]},
+    AP = #'v1_0.application_properties'{
+            content = [{{utf8, <<"keep">>}, {utf8, <<"ok">>}},
+                       {{utf8, <<"bad", 0>>}, {utf8, <<"v">>}}]},
+    D = #'v1_0.data'{content = <<"payload">>},
+    #mqtt_msg{props = Props} = amqp_to_mqtt([MA, AP, D]),
+    {ok, UserProp} = maps:find('User-Property', Props),
+    ?assertEqual(2, length(UserProp)),
+    ?assertEqual({<<"x-keep">>, <<"ok">>}, lists:keyfind(<<"x-keep">>, 1, UserProp)),
+    ?assertEqual({<<"keep">>, <<"ok">>}, lists:keyfind(<<"keep">>, 1, UserProp)),
+    ?assertNot(lists:keymember(<<"x-bad", 0>>, 1, UserProp)),
+    ?assertNot(lists:keymember(<<"bad", 0>>, 1, UserProp)).
+
 amqp_to_mqtt_unconvertible_property_types_dropped(_Config) ->
     AP = #'v1_0.application_properties'{
             content = [{{utf8, <<"keep">>}, {utf8, <<"ok">>}},
@@ -493,6 +538,36 @@ amqpl_to_mqtt_header_type_confusion_dropped(_Config) ->
     ?assertEqual({<<"x-correlation-id">>, <<"43">>},
                  lists:keyfind(<<"x-correlation-id">>, 1, UserProp)),
     ?assertNot(lists:keymember(<<"a-decimal">>, 1, UserProp)).
+
+amqp_to_mqtt_invalid_utf8_content_type_dropped(_Config) ->
+    D = #'v1_0.data'{content = <<"payload">>},
+    [begin
+         #mqtt_msg{props = Props} =
+             amqp_to_mqtt([#'v1_0.properties'{content_type = {symbol, ContentType}}, D]),
+         ?assertEqual(error, maps:find('Content-Type', Props))
+     end || ContentType <- [<<"text/plain", 0>>, <<255>>]].
+
+amqp_to_mqtt_invalid_utf8_response_topic_dropped(_Config) ->
+    D = #'v1_0.data'{content = <<"payload">>},
+    [begin
+         #mqtt_msg{props = Props} =
+             amqp_to_mqtt([#'v1_0.properties'{reply_to = {utf8, Address}}, D]),
+         ?assertEqual(error, maps:find('Response-Topic', Props))
+     end || Address <- [<<"/exchanges/amq.topic/a%00">>,
+                        <<"/exchanges/amq.topic/a%FF">>]].
+
+amqpl_to_mqtt_invalid_utf8_dropped(_Config) ->
+    Content = #content{properties = #'P_basic'{
+                                        content_type = <<255>>,
+                                        headers = [{<<"x-reply-to-topic">>, longstr, <<"a", 0>>},
+                                                   {<<"k", 0>>, longstr, <<"v">>},
+                                                   {<<255>>, signedint, 1},
+                                                   {<<"keep">>, longstr, <<"val">>}]},
+                       payload_fragments_rev = [<<"payload">>]},
+    Anns = #{?ANN_ROUTING_KEYS => [<<"dummy">>]},
+    #mqtt_msg{props = Props} =
+        mc:protocol_state(mc:convert(mc_mqtt, mc:init(mc_amqpl, Content, Anns))),
+    ?assertEqual(#{'User-Property' => [{<<"keep">>, <<"val">>}]}, Props).
 
 amqp_to_mqtt_footer(_Config) ->
     Body = <<"hey">>,
