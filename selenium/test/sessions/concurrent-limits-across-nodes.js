@@ -11,7 +11,7 @@ const management_password = process.env.MANAGEMENT_PASSWORD || 'guest'
 const rabbitmq_url_1 = process.env.RABBITMQ_URL_1 || process.env.RABBITMQ_URL || 'http://localhost:15672/'
 const rabbitmq_url_2 = process.env.RABBITMQ_URL_2 || process.env.RABBITMQ_URL || 'http://localhost:15672/'
 
-describe('Distributed Conflict Resolution', function () {
+describe('Concurrent Sessions Limits across the cluster', function () {
   let driver1
   let driver2
   let login1, login2
@@ -61,7 +61,7 @@ describe('Distributed Conflict Resolution', function () {
       const { getManagementUrl, basicAuthorization, deleteUserSessions } = require('../mgt-api')
       const adminAuth = basicAuthorization('guest', 'guest') // Assuming guest is admin
       await deleteUserSessions(getManagementUrl(), adminAuth, management_username)
-      await new Promise(r => setTimeout(r, 1000)) // Give cluster gossip time to propagate
+      await new Promise(r => setTimeout(r, 1000))
     } catch (e) {
       console.error("Failed to clean up sessions before test:", e)
     }
