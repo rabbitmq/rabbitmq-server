@@ -50,7 +50,11 @@ function is_success(res) {
 }
 
 function is_session_rejected(res) {
-    return res.http_status === 401 || res.http_status === 403 || res.http_status === 404;
+    return res.http_status === 401 || res.http_status === 403;
+}
+
+function is_endpoint_not_served(res) {
+    return res.http_status === 404 || res.http_status === 405;
 }
 
 function stop_session_heartbeat() {
@@ -146,8 +150,8 @@ function end_rejected_session(res) {
 
 function _send_heartbeat(session_id) {
     session_req('PUT', session_id, function(res) {
-        if (res.http_status === 404) {
-            console.debug('Session heartbeat got a 404, the node does not serve the sessions endpoint');
+        if (is_endpoint_not_served(res)) {
+            console.debug('Session heartbeat got a ' + res.http_status + ': the node does not serve the sessions endpoint');
         } else if (is_session_rejected(res)) {
             end_rejected_session(res);
         }
