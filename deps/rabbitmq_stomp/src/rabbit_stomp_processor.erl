@@ -2146,8 +2146,9 @@ new_amqqueue(QNameBin0, Type, Params0, _State = #state{user = #user{username = U
             true ->
                 {true, false};
             false ->
-                {proplists:get_value(durable, Params, false),
-                 proplists:get_value(exclusive, Params, false)}
+                Exclusive0 = proplists:get_value(exclusive, Params, false),
+                {proplists:get_value(durable, Params, false) andalso not Exclusive0,
+                 Exclusive0}
         end,
     AutoDelete = proplists:get_value(auto_delete, Params, false),
     Args = rabbit_amqqueue:augment_declare_args(
