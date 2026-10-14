@@ -130,7 +130,7 @@ convert_from(mc_amqp, Sections, Env) ->
     #mqtt_msg{retain = false,
               qos = Qos,
               dup = false,
-              props = Props,
+              props = drop_oversized_properties(Props),
               payload = Payload};
 convert_from(mc_amqpl, #content{properties = PBasic,
                                 payload_fragments_rev = PFR},
@@ -186,9 +186,31 @@ convert_from(mc_amqpl, #content{properties = PBasic,
               qos = Qos,
               dup = false,
               payload = lists:reverse(PFR),
-              props = P};
+              props = drop_oversized_properties(P)};
 convert_from(_SourceProto, _, _) ->
     not_implemented.
+
+%% AMQP correlation IDs, property values and headers have no size limit, but
+%% MQTT Binary Data and UTF-8 strings are capped at 65,535 bytes [v5 1.5.4, 1.5.6].
+%% Drop whatever doesn't fit rather than reach the MQTT serialiser with it.
+-spec drop_oversized_properties(properties()) -> properties().
+drop_oversized_properties(Props) ->
+    maps:filtermap(fun drop_oversized_property/2, Props).
+
+drop_oversized_property(Key, Val)
+  when Key =:= 'Correlation-Data';
+       Key =:= 'Content-Type';
+       Key =:= 'Response-Topic' ->
+    byte_size(Val) =< ?TWO_BYTE_INTEGER_MAX;
+drop_oversized_property('User-Property', Pairs) ->
+    case [Pair || {Name, Val} = Pair <- Pairs,
+                  byte_size(Name) =< ?TWO_BYTE_INTEGER_MAX,
+                  byte_size(Val) =< ?TWO_BYTE_INTEGER_MAX] of
+        [] -> false;
+        Kept -> {true, Kept}
+    end;
+drop_oversized_property(_Key, _Val) ->
+    true.
 
 amqp_response_topic(Address, MsgAnns, Env) ->
     case is_jms_reply_to_topic(MsgAnns) of
