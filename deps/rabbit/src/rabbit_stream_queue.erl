@@ -1476,10 +1476,7 @@ chunk_iterator(#stream{credit = Credit,
                       false ->
                           Str0#stream{log = Log}
                   end,
-            {end_of_stream, Str};
-        {error, Err} ->
-            ?LOG_INFO("stream client: failed to create chunk iterator ~p", [Err]),
-            exit(Err)
+            {end_of_stream, Str}
     end.
 
 %% Deliver each record of an uncompressed sub batch individually.
