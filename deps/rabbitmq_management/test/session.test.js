@@ -197,6 +197,38 @@ describe('session.js', () => {
       assert.deepEqual(requests, []);
     });
 
+    it('keeps the local id when the DELETE fails for a reason that can be retried', () => {
+      for (const status of [0, 500, 503]) {
+        localPrefs.session_id = 'abc-123';
+        responder = () => status === 0 ? 'network-error' : { status };
+
+        sandbox.clear_session();
+
+        assert.equal(localPrefs.session_id, 'abc-123', `status ${status}`);
+      }
+    });
+
+    it('forgets the local id when the server says the session is gone or unusable', () => {
+      for (const status of [204, 401, 403, 404]) {
+        localPrefs.session_id = 'abc-123';
+        responder = () => ({ status });
+
+        sandbox.clear_session();
+
+        assert.equal(localPrefs.session_id, undefined, `status ${status}`);
+      }
+    });
+
+    it('sends one DELETE and keeps the id when a retryable failure triggers another logout', () => {
+      localPrefs.session_id = 'abc-123';
+      responder = () => { sandbox.clear_session(); return { status: 503 }; };
+
+      sandbox.clear_session();
+
+      assert.equal(requests.length, 1);
+      assert.equal(localPrefs.session_id, 'abc-123');
+    });
+
     it('sends one DELETE when the request itself triggers another logout', () => {
       localPrefs.session_id = 'abc-123';
       responder = () => { sandbox.clear_session(); return { status: 401 }; };
