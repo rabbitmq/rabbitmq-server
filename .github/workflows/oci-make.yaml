@@ -141,3 +141,16 @@ jobs:
           build-args: |
             OTP_VERSION=${{ matrix.otp_version }}
             RABBITMQ_VERSION=${{ env.VERSION }}
+      - name: Summarize published images
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          {
+            printf '### Published images\n\n```shell\n'
+            while IFS= read -r image; do
+              if [ -n "$image" ]; then
+                printf 'docker pull docker.io/%s\n' "$image"
+              fi
+            done <<< "$IMAGE_TAGS"
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
