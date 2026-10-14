@@ -82,7 +82,7 @@ delete_resource(ReqData, Context) ->
 
 build_metadata(Req) ->
     {IP, _Port} = cowboy_req:peer(Req),
-    Base = #{<<"ip">> => list_to_binary(inet:ntoa(IP))},
+    Base = #{<<"ip">> => list_to_binary(rabbit_misc:ntoa(IP))},
     lists:foldl(fun({Header, Key}, Acc) ->
         case metadata_value(cowboy_req:header(Header, Req, undefined)) of
             undefined -> Acc;
