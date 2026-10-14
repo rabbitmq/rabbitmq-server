@@ -56,6 +56,7 @@
 %% Anns are merged into the replicated Ra machine state, so an unbounded
 %% number of keys would let a consumer grow that state without limit.
 -define(MAX_MSG_ANNS_SIZE, 32).
+-define(MAX_TIMER_MS, 31_536_000_000).
 %% The deferral token is exempt from ?MAX_MSG_ANNS_SIZE: should_delay/5
 %% records it in #delayed.deferred from the raw, client-supplied Anns
 %% regardless of the cap, and that entry can only be cleaned up by reading
@@ -3416,7 +3417,7 @@ timer_effect(#?STATE{messages_total = 0,
 timer_effect(#?STATE{messages_total = 0,
                      delayed = #delayed{next = {NextDelayedTs, _, _}}},
              Effects) ->
-    [{timer, expire_msgs, NextDelayedTs, {abs, true}} | Effects];
+    [expire_msgs_timer(NextDelayedTs) | Effects];
 timer_effect(#?STATE{returns = Returns,
                      messages = Messages,
                      delayed = Delayed}, Effects) ->
@@ -3475,8 +3476,15 @@ timer_effect(#?STATE{returns = Returns,
         undefined ->
             Effects;
         Timeout ->
-            [{timer, expire_msgs, Timeout, {abs, true}} | Effects]
+            [expire_msgs_timer(Timeout) | Effects]
     end.
+
+%% A timeout more than about 292 years ahead crashes the Ra server process. A
+%% later timeout is capped, the timer fires early and `timer_effect/2` sets it
+%% again.
+expire_msgs_timer(Timeout) ->
+    Max = erlang:system_time(millisecond) + ?MAX_TIMER_MS,
+    {timer, expire_msgs, min(Timeout, Max), {abs, true}}.
 
 update_or_remove_con(Meta, ConsumerKey,
                      #consumer{cfg = #consumer_cfg{lifetime = once},
