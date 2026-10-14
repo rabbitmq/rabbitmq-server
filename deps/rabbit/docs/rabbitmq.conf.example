@@ -838,8 +838,6 @@
 ## Enables deprecated non-durable (transient) exclusive queues
 ## (disabled by default as of RabbitMQ `4.3.0`)
 # deprecated_features.permit.transient_nonexcl_queues = true
-## Enables deprecated AMQP 1.0 addressing scheme v1
-# deprecated_features.permit.amqp_address_v1 = true
 
 ## Size in bytes below which to embed messages in the queue index.
 ## Relevant doc guide: https://www.rabbitmq.com/docs/persistence-conf

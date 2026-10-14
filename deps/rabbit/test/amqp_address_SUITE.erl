@@ -29,44 +29,36 @@
 
 all() ->
     [
-     {group, v1_permitted},
-     {group, v1_denied}
+     {group, address_v2}
     ].
 
 groups() ->
     [
-     {v1_permitted, [shuffle],
-      common_tests()
-     },
-     {v1_denied, [shuffle],
+     {address_v2, [shuffle],
       [
        target_queue_absent,
        source_queue_absent,
        target_bad_v2_address,
-       source_bad_v2_address
-      ] ++ common_tests()
+       source_bad_v2_address,
+       target_exchange_routing_key,
+       target_exchange_routing_key_with_slash,
+       target_exchange_routing_key_empty,
+       target_exchange,
+       target_exchange_absent,
+       queue,
+       queue_with_slash,
+       target_per_message_exchange_routing_key,
+       target_per_message_exchange,
+       target_per_message_queue,
+       target_per_message_unset_to_address,
+       target_per_message_bad_to_address,
+       target_per_message_exchange_absent_settled,
+       target_per_message_exchange_absent_unsettled,
+       target_bad_address,
+       source_bad_address,
+       source_undefined_address
+      ]
      }
-    ].
-
-common_tests() ->
-    [
-     target_exchange_routing_key,
-     target_exchange_routing_key_with_slash,
-     target_exchange_routing_key_empty,
-     target_exchange,
-     target_exchange_absent,
-     queue,
-     queue_with_slash,
-     target_per_message_exchange_routing_key,
-     target_per_message_exchange,
-     target_per_message_queue,
-     target_per_message_unset_to_address,
-     target_per_message_bad_to_address,
-     target_per_message_exchange_absent_settled,
-     target_per_message_exchange_absent_unsettled,
-     target_bad_address,
-     source_bad_address,
-     source_undefined_address
     ].
 
 init_per_suite(Config) ->
@@ -77,18 +69,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(Group, Config0) ->
-    PermitV1 = case Group of
-                   v1_permitted -> true;
-                   v1_denied -> false
-               end,
-    Config = rabbit_ct_helpers:merge_app_env(
-               Config0,
-               {rabbit,
-                [{permit_deprecated_features,
-                  #{amqp_address_v1 => PermitV1}
-                 }]
-               }),
+init_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_setup_steps(
       Config,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -135,7 +116,8 @@ target_exchange_routing_key0(XName, RKey, Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
     ok = wait_for_credit(Sender),
     Body = <<"body">>,
-    Msg0 = amqp10_msg:new(<<"tag">>, Body, true),
+    Msg0 = amqp10_msg:set_properties(
+             #{subject => <<"ignored">>}, amqp10_msg:new(<<"tag">>, Body, true)),
     %% Although mc_amqp:essential_properties/1 parses these annotations, they should be ignored.
     Msg1 = amqp10_msg:set_message_annotations(
              #{<<"x-exchange">> => <<"ignored">>,
@@ -154,20 +136,21 @@ target_exchange_routing_key0(XName, RKey, Config) ->
 %% /exchanges/:exchange/
 %% Routing key is empty.
 target_exchange_routing_key_empty(Config) ->
-    XName = <<"amq.fanout">>,
+    XName = <<"amq.direct">>,
     TargetAddr = rabbitmq_amqp_address:exchange(XName, <<>>),
     QName = atom_to_binary(?FUNCTION_NAME),
 
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
-    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, XName, <<"ignored">>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, XName, <<>>, #{}),
     SrcAddr = rabbitmq_amqp_address:queue(QName),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, SrcAddr),
 
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
     ok = wait_for_credit(Sender),
     Body = <<"body">>,
-    Msg0 = amqp10_msg:new(<<"tag">>, Body, true),
+    Msg0 = amqp10_msg:set_properties(
+             #{subject => <<"ignored">>}, amqp10_msg:new(<<"tag">>, Body, true)),
     ok = amqp10_client:send_msg(Sender, Msg0),
 
     {ok, Msg} = amqp10_client:get_msg(Receiver),
@@ -180,20 +163,21 @@ target_exchange_routing_key_empty(Config) ->
 %% /exchanges/:exchange
 %% Routing key is empty.
 target_exchange(Config) ->
-    XName = <<"amq.fanout">>,
+    XName = <<"amq.direct">>,
     TargetAddr = rabbitmq_amqp_address:exchange(XName),
     QName = atom_to_binary(?FUNCTION_NAME),
 
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
-    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, XName, <<"ignored">>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, XName, <<>>, #{}),
     SrcAddr = rabbitmq_amqp_address:queue(QName),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, SrcAddr),
 
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
     ok = wait_for_credit(Sender),
     Body = <<"body">>,
-    Msg0 = amqp10_msg:new(<<"tag">>, Body, true),
+    Msg0 = amqp10_msg:set_properties(
+             #{subject => <<"ignored">>}, amqp10_msg:new(<<"tag">>, Body, true)),
     ok = amqp10_client:send_msg(Sender, Msg0),
 
     {ok, Msg} = amqp10_client:get_msg(Receiver),
@@ -423,11 +407,13 @@ target_per_message_unset_to_address(Config) ->
 
 bad_v2_addresses() ->
     [
-     %% valid v1, but bad v2 target addresses
      <<"/topic/mytopic">>,
      <<"/amq/queue/myqueue">>,
+     <<"/queue/myqueue">>,
      <<"myqueue">>,
      <<"/queue">>,
+     <<"/exchange/amq.direct/mykey">>,
+     <<"/exchange/amq.direct">>,
      %% bad v2 target addresses
      <<>>,
      <<0>>,
@@ -559,7 +545,6 @@ target_per_message_exchange_absent_unsettled(Config) ->
     ok = cleanup(Init).
 
 target_bad_address(Config) ->
-    %% bad v1 and bad v2 target address
     TargetAddr = <<"/qqq/🎈"/utf8>>,
     target_bad_address0(TargetAddr, Config).
 
@@ -616,15 +601,15 @@ source_queue_absent(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 source_bad_address(Config) ->
-    %% bad v1 and bad v2 source address
     SourceAddr = <<"/qqq/🎈"/utf8>>,
     source_bad_address0(SourceAddr, Config).
 
 source_bad_v2_address(Config) ->
-    %% valid v1, but bad v2 source addresses
     SourceAddresses = [<<"/exchange/myroutingkey">>,
+                       <<"/exchange/amq.direct/mykey">>,
                        <<"/topic/mytopic">>,
                        <<"/amq/queue/myqueue">>,
+                       <<"/queue/myqueue">>,
                        <<"myqueue">>],
     lists:foreach(fun(Addr) ->
                           ok = source_bad_address0(Addr, Config)

@@ -21,7 +21,6 @@ all() ->
       amqp_uri_accepts_string_and_binaries,
       amqp_uri_remove_credentials,
       uri_parser_accepts_string_and_binaries,
-      route_destination_parsing,
       rabbit_channel_build_topic_variable_map,
       main_reader_rejects_oversized_frame,
       main_reader_rejects_oversized_frame_with_split_header,
@@ -270,93 +269,6 @@ uri_parser_accepts_string_and_binaries(_Config) ->
 
 string_binaries_uris() ->
     ["amqp://user:pass@host:10000/vhost?heartbeat=5", <<"amqp://user:pass@host:10000/vhost?heartbeat=5">>].
-
-%% -------------------------------------------------------------------
-%% Route destination parsing.
-%% -------------------------------------------------------------------
-
-route_destination_parsing(_Config) ->
-    %% valid queue
-    ?assertMatch({ok, {queue, "test"}}, parse_dest("/queue/test")),
-
-    %% valid topic
-    ?assertMatch({ok, {topic, "test"}}, parse_dest("/topic/test")),
-
-    %% valid exchange
-    ?assertMatch({ok, {exchange, {"test", undefined}}}, parse_dest("/exchange/test")),
-
-    %% valid temp queue
-    ?assertMatch({ok, {temp_queue, "test"}}, parse_dest("/temp-queue/test")),
-
-    %% valid reply queue
-    ?assertMatch({ok, {reply_queue, "test"}}, parse_dest("/reply-queue/test")),
-    ?assertMatch({ok, {reply_queue, "test/2"}}, parse_dest("/reply-queue/test/2")),
-
-    %% valid exchange with pattern
-    ?assertMatch({ok, {exchange, {"test", "pattern"}}},
-        parse_dest("/exchange/test/pattern")),
-
-    %% valid pre-declared queue
-    ?assertMatch({ok, {amqqueue, "test"}}, parse_dest("/amq/queue/test")),
-
-    %% queue without name
-    ?assertMatch({error, {invalid_destination, queue, ""}}, parse_dest("/queue")),
-    ?assertMatch({ok, {queue, undefined}}, parse_dest("/queue", true)),
-
-    %% topic without name
-    ?assertMatch({error, {invalid_destination, topic, ""}}, parse_dest("/topic")),
-
-    %% exchange without name
-    ?assertMatch({error, {invalid_destination, exchange, ""}},
-        parse_dest("/exchange")),
-
-    %% exchange default name
-    ?assertMatch({error, {invalid_destination, exchange, "//foo"}},
-        parse_dest("/exchange//foo")),
-
-    %% amqqueue without name
-    ?assertMatch({error, {invalid_destination, amqqueue, ""}},
-        parse_dest("/amq/queue")),
-
-    %% queue without name with trailing slash
-    ?assertMatch({error, {invalid_destination, queue, "/"}}, parse_dest("/queue/")),
-
-    %% topic without name with trailing slash
-    ?assertMatch({error, {invalid_destination, topic, "/"}}, parse_dest("/topic/")),
-
-    %% exchange without name with trailing slash
-    ?assertMatch({error, {invalid_destination, exchange, "/"}},
-        parse_dest("/exchange/")),
-
-    %% queue with invalid name
-    ?assertMatch({error, {invalid_destination, queue, "/foo/bar"}},
-        parse_dest("/queue/foo/bar")),
-
-    %% topic with invalid name
-    ?assertMatch({error, {invalid_destination, topic, "/foo/bar"}},
-        parse_dest("/topic/foo/bar")),
-
-    %% exchange with invalid name
-    ?assertMatch({error, {invalid_destination, exchange, "/foo/bar/baz"}},
-        parse_dest("/exchange/foo/bar/baz")),
-
-    %% unknown destination
-    ?assertMatch({error, {unknown_destination, "/blah/boo"}},
-        parse_dest("/blah/boo")),
-
-    %% queue with escaped name
-    ?assertMatch({ok, {queue, "te/st"}}, parse_dest("/queue/te%2Fst")),
-
-    %% valid exchange with escaped name and pattern
-    ?assertMatch({ok, {exchange, {"te/st", "pa/tt/ern"}}},
-        parse_dest("/exchange/te%2Fst/pa%2Ftt%2Fern")),
-
-    ok.
-
-parse_dest(Destination, Params) ->
-    rabbit_routing_parser:parse_endpoint(Destination, Params).
-parse_dest(Destination) ->
-    rabbit_routing_parser:parse_endpoint(Destination).
 
 %% -------------------------------------------------------------------
 %% Topic variable map

@@ -20,14 +20,11 @@
 
 -rabbit_deprecated_feature(
    {amqp_address_v1,
-    #{deprecation_phase => denied_by_default,
+    #{deprecation_phase => removed,
       doc_url => "https://www.rabbitmq.com/docs/amqp#addresses",
       messages =>
-      #{when_permitted =>
-        "RabbitMQ AMQP address version 1 is deprecated. "
-        "Clients should use RabbitMQ AMQP address version 2.",
-        when_denied =>
-        "RabbitMQ AMQP address version 1 is unsupported. "
+      #{when_removed =>
+        "RabbitMQ AMQP address version 1 has been removed. "
         "Clients must use RabbitMQ AMQP address version 2."
        }}
    }).
@@ -180,9 +177,9 @@
           exchange :: rabbit_types:exchange() | rabbit_exchange:name() | to,
           %% The routing key is either defined in the ATTACH frame and static for
           %% the life time of the link or dynamically provided in each message's
-          %% "to" field (address v2) or "subject" field (address v1).
+          %% "to" field.
           %% (A publisher can set additional routing keys via the x-cc message annotation.)
-          routing_key :: rabbit_types:routing_key() | to | subject,
+          routing_key :: rabbit_types:routing_key() | to,
           %% queue_name_bin is only set if the link target address refers to a queue.
           queue_name_bin :: undefined | rabbit_misc:resource_name(),
           dynamic :: boolean(),
@@ -2796,19 +2793,8 @@ lookup_anonymous_target(XName, RKey, Mc, User, PermCache0) ->
     end.
 
 lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
-                   RKey0, Mc0, AnonTerm, PermCache) ->
+                   RKey, Mc0, AnonTerm, PermCache) ->
     Mc1 = mc:set_annotation(?ANN_EXCHANGE, XNameBin, Mc0),
-    RKey = case RKey0 of
-               subject ->
-                   case mc:property(subject, Mc0) of
-                       {utf8, Subject} ->
-                           Subject;
-                       undefined ->
-                           <<>>
-                   end;
-               _ when is_binary(RKey0) ->
-                   RKey0
-           end,
     case mc:x_header(<<"x-cc">>, Mc0) of
         undefined ->
             RKeys = [RKey],
@@ -2984,8 +2970,7 @@ ensure_source(#'v1_0.source'{
     end;
 ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _) ->
     exit_not_implemented("Dynamic source not supported: ~tp", [Source]);
-ensure_source(Source0 = #'v1_0.source'{address = Address,
-                                       durable = Durable},
+ensure_source(Source0 = #'v1_0.source'{address = Address},
               _SndSettle,  LinkName,
               #cfg{container_id = ContainerId,
                    reader_pid = ConnPid,
@@ -3020,19 +3005,6 @@ ensure_source(Source0 = #'v1_0.source'{address = Address,
                     catch error:_ ->
                               {error, {bad_address, Address}}
                     end;
-                {utf8, SourceAddr} ->
-                    case address_v1_permitted() of
-                        true ->
-                            case ensure_source_v1(SourceAddr, Vhost, User, Durable,
-                                                  PermCache, TopicPermCache) of
-                                {ok, QName, PermCache1, TopicPermCache1} ->
-                                    {ok, QName, Source, PermCache1, TopicPermCache1};
-                                Err ->
-                                    Err
-                            end;
-                        false ->
-                            {error, {amqp_address_v1_not_permitted, Address}}
-                    end;
                 _ ->
                     {error, {bad_address, Address}}
             end
@@ -3055,53 +3027,10 @@ ensure_source(undefined, _, _, _, _, _) ->
     %% We don't support "Figure 2.36: Recovering a Link"
     {error, source_required}.
 
-ensure_source_v1(Address,
-                 Vhost,
-                 User = #user{username = Username},
-                 Durable,
-                 PermCache0,
-                 TopicPermCache0) ->
-    case rabbit_routing_parser:parse_endpoint(Address, false) of
-        {ok, Src} ->
-            {QNameBin, PermCache1} = ensure_terminus(source, Src, Vhost, User, Durable, PermCache0),
-            case rabbit_routing_parser:parse_routing(Src) of
-                {"", QNameList} ->
-                    true = string:equal(QNameList, QNameBin),
-                    QName = queue_resource(Vhost, QNameBin),
-                    {ok, QName, PermCache1, TopicPermCache0};
-                {XNameList, RoutingKeyList} ->
-                    RoutingKey = unicode:characters_to_binary(RoutingKeyList),
-                    XNameBin = unicode:characters_to_binary(XNameList),
-                    XName = exchange_resource(Vhost, XNameBin),
-                    QName = queue_resource(Vhost, QNameBin),
-                    case rabbit_volatile_queue:is(QNameBin) of
-                        true ->
-                            {error, {volatile_queue_not_bindable, QNameBin}};
-                        false ->
-                            Binding = #binding{source = XName,
-                                               destination = QName,
-                                               key = RoutingKey},
-                            PermCache2 = check_resource_access(QName, write, User, PermCache1),
-                            PermCache = check_resource_access(XName, read, User, PermCache2),
-                            {ok, X} = rabbit_exchange:lookup(XName),
-                            TopicPermCache = check_read_permitted_on_topic(
-                                               X, User, RoutingKey, TopicPermCache0),
-                            case rabbit_binding:add(Binding, Username) of
-                                ok ->
-                                    {ok, QName, PermCache, TopicPermCache};
-                                {error, _} = Err ->
-                                    Err
-                            end
-                    end
-            end;
-        {error, _} = Err ->
-            Err
-    end.
-
 -spec ensure_target(#'v1_0.target'{}, binary(), #cfg{}, permission_cache()) ->
     {ok,
      rabbit_types:exchange() | rabbit_exchange:name() | to,
-     rabbit_types:routing_key() | to | subject,
+     rabbit_types:routing_key() | to,
      rabbit_misc:resource_name() | undefined,
      #'v1_0.target'{},
      permission_cache()} |
@@ -3151,8 +3080,7 @@ ensure_target(#'v1_0.target'{
     end;
 ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _) ->
     exit_not_implemented("Dynamic target not supported: ~p", [Target]);
-ensure_target(Target = #'v1_0.target'{address = Address,
-                                      durable = Durable},
+ensure_target(Target = #'v1_0.target'{address = Address},
               _LinkName,
               #cfg{user = User,
                    vhost = Vhost,
@@ -3168,32 +3096,15 @@ ensure_target(Target = #'v1_0.target'{address = Address,
                     Result
             end;
         false ->
-            case target_address_version(Address) of
-                2 ->
-                    case ensure_target_v2(Address, Vhost) of
-                        {ok, to, RKey, QNameBin} ->
-                            {ok, to, RKey, QNameBin, Target, PermCache0};
-                        {ok, XNameBin, RKey, QNameBin} ->
-                            {ok, Exchange, PermCache} = check_exchange(XNameBin, User,
-                                                                       Vhost, PermCache0),
-                            {ok, Exchange, RKey, QNameBin, Target, PermCache};
-                        {error, _} = Err ->
-                            Err
-                    end;
-                1 ->
-                    case address_v1_permitted() of
-                        true ->
-                            case ensure_target_v1(Address, Vhost, User, Durable, PermCache0) of
-                                {ok, XNameBin, RKey, QNameBin, PermCache1} ->
-                                    {ok, Exchange, PermCache} = check_exchange(XNameBin, User,
-                                                                               Vhost, PermCache1),
-                                    {ok, Exchange, RKey, QNameBin, Target, PermCache};
-                                {error, _} = Err ->
-                                    Err
-                            end;
-                        false ->
-                            {error, {amqp_address_v1_not_permitted, Address}}
-                    end
+            case ensure_target_v2(Address, Vhost) of
+                {ok, to, RKey, QNameBin} ->
+                    {ok, to, RKey, QNameBin, Target, PermCache0};
+                {ok, XNameBin, RKey, QNameBin} ->
+                    {ok, Exchange, PermCache} = check_exchange(XNameBin, User,
+                                                               Vhost, PermCache0),
+                    {ok, Exchange, RKey, QNameBin, Target, PermCache};
+                {error, _} = Err ->
+                    Err
             end
     end.
 
@@ -3216,20 +3127,6 @@ check_exchange(XNameBin, User, Vhost, PermCache0) ->
             link_error_not_found(XName)
     end.
 
-address_v1_permitted() ->
-    rabbit_deprecated_features:is_permitted(amqp_address_v1).
-
-target_address_version({utf8, <<"/exchanges/", _/binary>>}) ->
-    2;
-target_address_version({utf8, <<"/queues/", _/binary>>}) ->
-    2;
-target_address_version(undefined) ->
-    %% anonymous terminus
-    %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
-    2;
-target_address_version(_Address) ->
-    1.
-
 %% The possible v2 target address formats are:
 %%  /exchanges/:exchange/:routing-key
 %%  /exchanges/:exchange
@@ -3240,7 +3137,7 @@ ensure_target_v2({utf8, String}, Vhost) ->
         {ok, _XNameBin, _RKey, undefined} = Ok ->
             Ok;
         {ok, _XNameBin, _RKey, QNameBin} = Ok ->
-            ok = error_if_absent(queue, Vhost, QNameBin),
+            ok = error_if_absent(queue_resource(Vhost, QNameBin)),
             Ok;
         {error, bad_address} ->
             {error, {bad_address_string, String}}
@@ -3248,7 +3145,9 @@ ensure_target_v2({utf8, String}, Vhost) ->
 ensure_target_v2(undefined, _) ->
     %% anonymous terminus
     %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
-    {ok, to, to, undefined}.
+    {ok, to, to, undefined};
+ensure_target_v2(Address, _) ->
+    {error, {bad_address, Address}}.
 
 parse_target_v2_string(String) ->
     try parse_target_v2_string0(String)
@@ -3286,25 +3185,6 @@ parse_target_v2_string0(<<"/queues/", QNameBinQuoted/binary>>) ->
     {ok, ?DEFAULT_EXCHANGE_NAME, QNameBin, QNameBin};
 parse_target_v2_string0(_) ->
     {error, bad_address}.
-
-ensure_target_v1({utf8, Address}, Vhost, User, Durable, PermCache0) ->
-    case rabbit_routing_parser:parse_endpoint(Address, true) of
-        {ok, Dest} ->
-            {QNameBin, PermCache} = ensure_terminus(
-                                      target, Dest, Vhost, User, Durable, PermCache0),
-            {XNameList1, RK} = rabbit_routing_parser:parse_routing(Dest),
-            XNameBin = unicode:characters_to_binary(XNameList1),
-            RoutingKey = case RK of
-                             undefined -> subject;
-                             []        -> subject;
-                             _         -> unicode:characters_to_binary(RK)
-                         end,
-            {ok, XNameBin, RoutingKey, QNameBin, PermCache};
-        {error, _} = Err ->
-            Err
-    end;
-ensure_target_v1(Address, _, _, _, _) ->
-    {error, {bad_address, Address}}.
 
 handle_outgoing_mgmt_link_flow_control(
   #management_link{delivery_count = DeliveryCountSnd} = Link0,
@@ -3786,59 +3666,11 @@ validate_deferral_token_size(Token) ->
       "deferral token must be at most ~b bytes, got: ~b",
       [?MAX_DEFERRAL_TOKEN_SIZE, byte_size(Token)]).
 
--spec ensure_terminus(source | target,
-                      term(),
-                      rabbit_types:vhost(),
-                      rabbit_types:user(),
-                      {uint, 0..2},
-                      permission_cache()) ->
-    {undefined | rabbit_misc:resource_name(),
-     permission_cache()}.
-ensure_terminus(Type, {exchange, {XNameList, _RoutingKey}}, Vhost, User, Durability, PermCache) ->
-    ok = error_if_absent(exchange, Vhost, XNameList),
-    case Type of
-        target -> {undefined, PermCache};
-        source -> declare_queue_v1(generate_queue_name_v1(), Vhost, User, Durability, PermCache)
-    end;
-ensure_terminus(target, {topic, _bindingkey}, _, _, _, PermCache) ->
-    %% exchange amq.topic exists
-    {undefined, PermCache};
-ensure_terminus(source, {topic, _BindingKey}, Vhost, User, Durability, PermCache) ->
-    %% exchange amq.topic exists
-    declare_queue_v1(generate_queue_name_v1(), Vhost, User, Durability, PermCache);
-ensure_terminus(target, {queue, undefined}, _, _, _, PermCache) ->
-    %% Target "/queue" means publish to default exchange with message subject as routing key.
-    %% Default exchange exists.
-    {undefined, PermCache};
-ensure_terminus(_, {queue, QNameList}, Vhost, User, Durability, PermCache) ->
-    declare_queue_v1(unicode:characters_to_binary(QNameList), Vhost, User, Durability, PermCache);
-ensure_terminus(_, {amqqueue, QNameList}, Vhost, _, _, PermCache) ->
-    %% Target "/amq/queue/" is handled specially due to AMQP legacy:
-    %% "Queue names starting with "amq." are reserved for pre-declared and
-    %% standardised queues. The client MAY declare a queue starting with "amq."
-    %% if the passive option is set, or the queue already exists."
-    QNameBin = unicode:characters_to_binary(QNameList),
-    ok = error_if_absent(queue, Vhost, QNameBin),
-    {QNameBin, PermCache}.
-
-error_if_absent(Kind, Vhost, Name) when is_list(Name) ->
-    error_if_absent(Kind, Vhost, unicode:characters_to_binary(Name));
-error_if_absent(Kind, Vhost, Name) when is_binary(Name) ->
-    error_if_absent(rabbit_misc:r(Vhost, Kind, Name)).
-
-error_if_absent(#resource{kind = exchange} = Name) ->
-    case rabbit_exchange:exists(Name) of
-        true -> ok;
-        false -> link_error_not_found(Name)
-    end;
 error_if_absent(#resource{kind = queue} = Name) ->
     case rabbit_amqqueue:exists(Name) of
         true -> ok;
         false -> link_error_not_found(Name)
     end.
-
-generate_queue_name_v1() ->
-    rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.gen").
 
 %% "The generated name of the address SHOULD include the link name and the
 %% container-id of the remote container to allow for ease of identification." [3.5.4]
@@ -3851,25 +3683,18 @@ generate_queue_name_dynamic(ContainerId, LinkName)
 generate_queue_name_dynamic(_, _) ->
     rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.dyn.gen").
 
-declare_queue_v1(QNameBin, Vhost, User, TerminusDurability, PermCache0) ->
-    Durable = queue_is_durable(TerminusDurability),
-    {ok, PermCache} = declare_queue(QNameBin, Vhost, User, Durable, none, PermCache0),
-    {QNameBin, PermCache}.
-
-declare_queue(QNameBin,
-              Vhost,
-              User = #user{username = Username},
-              Durable,
-              QOwner,
-              PermCache0) ->
+declare_exclusive_queue(ContainerId, LinkName, Vhost,
+                        User = #user{username = Username}, ConnPid, PermCache0) ->
+    QNameBin = generate_queue_name_dynamic(ContainerId, LinkName),
+    Address = queue_address(QNameBin),
     QName = queue_resource(Vhost, QNameBin),
     PermCache = check_resource_access(QName, configure, User, PermCache0),
     rabbit_core_metrics:queue_declared(QName),
     Q0 = amqqueue:new(QName,
                       _Pid = none,
-                      Durable,
+                      _Durable = true,
                       _AutoDelete = false,
-                      QOwner,
+                      ConnPid,
                       _QArgs = [],
                       Vhost,
                       #{user => Username},
@@ -3888,12 +3713,6 @@ declare_queue(QNameBin,
                        "Failed to declare ~s: ~p",
                        [rabbit_misc:rs(QName), Other])
     end,
-    {ok, PermCache}.
-
-declare_exclusive_queue(ContainerId, LinkName, Vhost, User, ConnPid, PermCache0) ->
-    QNameBin = generate_queue_name_dynamic(ContainerId, LinkName),
-    Address = queue_address(QNameBin),
-    {ok, PermCache} = declare_queue(QNameBin, Vhost, User, true, ConnPid, PermCache0),
     {QNameBin, Address, PermCache}.
 
 -spec queue_address(unicode:unicode_binary()) ->
@@ -3953,17 +3772,6 @@ handle_to_ctag(Handle) ->
 -spec ctag_to_handle(rabbit_types:ctag()) -> link_handle().
 ctag_to_handle(Ctag) ->
     binary_to_integer(Ctag).
-
-queue_is_durable(?V_1_0_TERMINUS_DURABILITY_NONE) ->
-    false;
-queue_is_durable(?V_1_0_TERMINUS_DURABILITY_CONFIGURATION) ->
-    true;
-queue_is_durable(?V_1_0_TERMINUS_DURABILITY_UNSETTLED_STATE) ->
-    true;
-queue_is_durable(undefined) ->
-    %% <field name="durable" type="terminus-durability" default="none"/>
-    %% [3.5.3]
-    queue_is_durable(?V_1_0_TERMINUS_DURABILITY_NONE).
 
 -spec remove_outgoing_link(link_handle() | rabbit_types:ctag(), Map, queue:queue()) ->
     {Map, queue:queue()}
