@@ -143,7 +143,7 @@ delete_session(SessionId, undefined) ->
     PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
     case rabbit_khepri:get_many(PathPattern) of
         {ok, Map} when map_size(Map) > 0 ->
-            lists:foreach(fun rabbit_khepri:delete/1, maps:keys(Map)),
+            lists:foreach(fun delete_path/1, maps:keys(Map)),
             ok;
         _ ->
             {error, not_found}
@@ -152,7 +152,7 @@ delete_session(SessionId, Username) ->
     SessionPath = ?KHEPRI_SESSION_PATH(Username, SessionId),
     case rabbit_khepri:get(SessionPath) of
         {ok, Session} when is_map(Session) ->
-            _ = rabbit_khepri:delete(SessionPath),
+            delete_path(SessionPath),
             ok;
         _ ->
             PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
@@ -222,7 +222,7 @@ list_sessions(Page, PageSize, UsernameFilter) ->
 terminate_sessions(undefined) ->
     ok;
 terminate_sessions(Username) ->
-    _ = rabbit_khepri:delete([rabbitmq, mgmt_sessions, Username]),
+    delete_path([rabbitmq, mgmt_sessions, Username]),
     ?LOG_DEBUG("Terminated all sessions for user ~ts", [Username]),
     ok.
 
@@ -288,11 +288,19 @@ sweep_expired_sessions_in_khepri() ->
                 [] ->
                     0;
                 _ ->
-                    lists:foreach(fun rabbit_khepri:delete/1, ExpiredPaths),
-                    length(ExpiredPaths)
+                    length([P || P <- ExpiredPaths, delete_path(P) =:= ok])
             end;
         _ ->
             0
+    end.
+
+delete_path(Path) ->
+    case rabbit_khepri:delete(Path) of
+        {error, Reason} ->
+            ?LOG_WARNING("Failed to delete Management UI session path ~tp: ~tp", [Path, Reason]),
+            error;
+        _ ->
+            ok
     end.
 
 is_active(S, Now) ->
