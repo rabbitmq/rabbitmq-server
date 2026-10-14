@@ -157,7 +157,6 @@ module.exports = {
     module.exports.log("goToHome on " + d.baseUrl)
     try {
       await d.driver.get(d.baseUrl)
-      await d.driver.sleep(2000)
       module.exports.log("goToHome completed for " + d.baseUrl)
     } catch (e) {
       module.exports.error("goToHome failed for " + d.baseUrl + ": " + e.message)
