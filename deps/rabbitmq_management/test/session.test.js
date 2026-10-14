@@ -208,8 +208,8 @@ describe('session.js', () => {
       }
     });
 
-    it('forgets the local id when the server says the session is gone or unusable', () => {
-      for (const status of [204, 401, 403, 404]) {
+    it('forgets the local id when the server says the session is gone, unusable or not served', () => {
+      for (const status of [204, 401, 403, 404, 405]) {
         localPrefs.session_id = 'abc-123';
         responder = () => ({ status });
 
@@ -262,13 +262,23 @@ describe('session.js', () => {
       assert.equal(sandbox.get_session_id(), 'new-id');
     });
 
-    it('also replaces a session that belongs to another user (403) or is gone (404)', () => {
-      for (const status of [403, 404]) {
-        localPrefs.session_id = 'stale-id';
-        responder = (method) => method === 'PUT' ? { status } : created('new-id');
+    it('also replaces a session that belongs to another user (403)', () => {
+      localPrefs.session_id = 'stale-id';
+      responder = (method) => method === 'PUT' ? { status: 403 } : created('new-id');
 
-        assert.equal(sandbox.check_session(), 'ok');
-        assert.equal(sandbox.get_session_id(), 'new-id');
+      assert.equal(sandbox.check_session(), 'ok');
+      assert.equal(sandbox.get_session_id(), 'new-id');
+    });
+
+    it('keeps the stored id and returns error when the node does not serve the sessions endpoint (404, 405)', () => {
+      for (const status of [404, 405]) {
+        localPrefs.session_id = 'abc-123';
+        responder = () => ({ status });
+        requests.length = 0;
+
+        assert.equal(sandbox.check_session(), 'error', `status ${status}`);
+        assert.equal(sandbox.get_session_id(), 'abc-123', `status ${status}`);
+        assert.deepEqual(requests.map((r) => r.method), ['PUT'], `status ${status}`);
       }
     });
 
@@ -501,30 +511,34 @@ describe('session.js', () => {
       assert.equal(clearAuthCalls, 0);
     });
 
-    it('ignores a 404 and logs it at debug level', () => {
-      const debugMessages = [];
-      sandbox.console = { debug: (m) => debugMessages.push(m) };
-      localPrefs.session_id = 'abc-123';
-      responder = () => ({ status: 404 });
+    it('ignores a 404 or 405 and logs it at debug level', () => {
+      for (const status of [404, 405]) {
+        const debugMessages = [];
+        sandbox.console = { debug: (m) => debugMessages.push(m) };
+        localPrefs.session_id = 'abc-123';
+        responder = () => ({ status });
 
-      tick();
+        tick();
 
-      assert.equal(sessionEndedCalls, 0);
-      assert.equal(clearAuthCalls, 0);
-      assert.equal(sandbox.get_session_id(), 'abc-123');
-      assert.equal(debugMessages.length, 1);
+        assert.equal(sessionEndedCalls, 0, `status ${status}`);
+        assert.equal(clearAuthCalls, 0, `status ${status}`);
+        assert.equal(sandbox.get_session_id(), 'abc-123', `status ${status}`);
+        assert.equal(debugMessages.length, 1, `status ${status}`);
+      }
     });
 
-    it('keeps sending heartbeats after a 404', () => {
-      responder = () => ({ status: 404 });
-      tick();
-      responder = () => ({ status: 204 });
-      requests.length = 0;
+    it('keeps sending heartbeats after a 404 or 405', () => {
+      for (const status of [404, 405]) {
+        responder = () => ({ status });
+        tick();
+        responder = () => ({ status: 204 });
+        requests.length = 0;
 
-      tick();
+        tick();
 
-      assert.equal(requests.length, 1);
-      assert.equal(clearedIntervals.length, 0);
+        assert.equal(requests.length, 1, `status ${status}`);
+        assert.equal(clearedIntervals.length, 0, `status ${status}`);
+      }
     });
 
     it('reads the credentials again on every beat', () => {
