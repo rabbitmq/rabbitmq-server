@@ -1579,7 +1579,7 @@ function update_status(status) {
 
 
 
-function with_req(method, path, body, fun, error_fun) {
+function with_req(method, path, body, fun, on404fun) {
     if (password_change_in_progress) {
         return;
     }
@@ -1601,7 +1601,7 @@ function with_req(method, path, body, fun, error_fun) {
             if (ix != -1) {
                 outstanding_reqs.splice(ix, 1);
             }
-            if (check_bad_response(req, !error_fun, error_fun)) {
+            if (check_bad_response(req, !on404fun, on404fun)) {
                 last_successful_connect = new Date();
                 fun(req);
             }
@@ -1698,20 +1698,16 @@ function initiate_logout(oauth, error = "") {
  * Handle bad http response
  * @param {*} req
  * @param {*} full_page_404 In case of 404, reload entire html page with the error message
- * @param {*} error_fun Custom error handler function (receives req)
+ * @param {*} on404fun In case of 404, call this function or else show a popup error message
  * @returns true if there was no bad response
  */
-function check_bad_response(req, full_page_404, error_fun) {
+function check_bad_response(req, full_page_404, on404fun) {
     // 1223 == 204 - see https://www.enhanceie.com/ie/bugs.asp
     // MSIE7 and 8 appear to do this in response to HTTP 204.
     if ((req.status >= 200 && req.status < 300) || req.status == 1223) {
         return true;
     }
     else if (password_change_in_progress) {
-        return false;
-    }
-    else if (error_fun && (typeof error_fun === 'function')) {
-        error_fun(req);
         return false;
     }
     else if (req.status == 404 && full_page_404) {
