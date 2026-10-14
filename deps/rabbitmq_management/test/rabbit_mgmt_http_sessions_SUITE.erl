@@ -60,7 +60,22 @@ end_per_suite(Config) ->
     inets:stop(),
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(Testcase, Config)
+  when Testcase == distributed_conflict_resolution_test;
+       Testcase == distributed_session_counting_test;
+       Testcase == session_expiry_test;
+       Testcase == auto_resume_orphaned_session_test;
+       Testcase == delete_user_sessions_test ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            init_per_testcase0(Testcase, Config)
+    end;
 init_per_testcase(Testcase, Config) ->
+    init_per_testcase0(Testcase, Config).
+
+init_per_testcase0(Testcase, Config) ->
     rabbit_ct_helpers:await_condition(fun() ->
         try
             rabbit_mgmt_test_util:http_get(Config, "/overview"),
