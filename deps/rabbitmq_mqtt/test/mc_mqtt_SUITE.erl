@@ -27,6 +27,13 @@ groups() ->
        roundtrip_amqpl_user_property,
        roundtrip_amqp_content_type,
        amqp_to_mqtt_reply_to,
+       amqp_to_mqtt_oversized_correlation_data,
+       amqp_to_mqtt_oversized_content_type,
+       amqp_to_mqtt_oversized_response_topic,
+       amqp_to_mqtt_oversized_user_property,
+       amqpl_to_mqtt_oversized_correlation_data,
+       amqpl_to_mqtt_oversized_response_topic,
+       amqpl_to_mqtt_oversized_user_property,
        amqp_to_mqtt_footer,
        mqtt_amqpl,
        mqtt_amqpl_alt,
@@ -279,6 +286,113 @@ amqp_to_mqtt_reply_to(_Config) ->
     #mqtt_msg{props = Props4} = amqp_to_mqtt([AmqpProps4, Val], Env),
     ?assertEqual(error,
                  maps:find('Response-Topic', Props4)).
+
+%% MQTT 5.0 Binary Data and UTF-8 encoded strings are limited to 65,535
+%% bytes. AMQP has no equivalent limit, so a Correlation-Data that doesn't
+%% fit must be dropped instead of reaching the MQTT serialiser.
+amqp_to_mqtt_oversized_correlation_data(_Config) ->
+    AtLimit = binary:copy(<<0>>, ?TWO_BYTE_INTEGER_MAX),
+    OverLimit = binary:copy(<<0>>, ?TWO_BYTE_INTEGER_MAX + 1),
+    D = #'v1_0.data'{content = <<"payload">>},
+
+    #mqtt_msg{props = Props1} =
+        amqp_to_mqtt([#'v1_0.properties'{correlation_id = {binary, AtLimit}}, D]),
+    ?assertEqual({ok, AtLimit}, maps:find('Correlation-Data', Props1)),
+
+    #mqtt_msg{props = Props2} =
+        amqp_to_mqtt([#'v1_0.properties'{correlation_id = {binary, OverLimit}}, D]),
+    ?assertEqual(error, maps:find('Correlation-Data', Props2)).
+
+amqp_to_mqtt_oversized_content_type(_Config) ->
+    AtLimit = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX),
+    OverLimit = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX + 1),
+    D = #'v1_0.data'{content = <<"payload">>},
+
+    #mqtt_msg{props = Props1} =
+        amqp_to_mqtt([#'v1_0.properties'{content_type = {symbol, AtLimit}}, D]),
+    ?assertEqual({ok, AtLimit}, maps:find('Content-Type', Props1)),
+
+    #mqtt_msg{props = Props2} =
+        amqp_to_mqtt([#'v1_0.properties'{content_type = {symbol, OverLimit}}, D]),
+    ?assertEqual(error, maps:find('Content-Type', Props2)).
+
+amqp_to_mqtt_oversized_response_topic(_Config) ->
+    Env = #{mqtt_x => <<"mqtt-topic-exchange">>},
+    D = #'v1_0.data'{content = <<"payload">>},
+    AtLimit = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX),
+    OverLimit = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX + 1),
+
+    AmqpProps1 = #'v1_0.properties'{
+                    reply_to = {utf8, <<"/exchanges/mqtt-topic-exchange/", AtLimit/binary>>}},
+    #mqtt_msg{props = Props1} = amqp_to_mqtt([AmqpProps1, D], Env),
+    ?assertEqual({ok, AtLimit}, maps:find('Response-Topic', Props1)),
+
+    AmqpProps2 = #'v1_0.properties'{
+                    reply_to = {utf8, <<"/exchanges/mqtt-topic-exchange/", OverLimit/binary>>}},
+    #mqtt_msg{props = Props2} = amqp_to_mqtt([AmqpProps2, D], Env),
+    ?assertEqual(error, maps:find('Response-Topic', Props2)).
+
+amqp_to_mqtt_oversized_user_property(_Config) ->
+    OverLimitKey = binary:copy(<<"k">>, ?TWO_BYTE_INTEGER_MAX + 1),
+    OverLimitVal = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX + 1),
+    D = #'v1_0.data'{content = <<"payload">>},
+
+    AP1 = #'v1_0.application_properties'{
+             content = [{{utf8, <<"keep">>}, {utf8, <<"val">>}},
+                        {{utf8, <<"big-value">>}, {utf8, OverLimitVal}},
+                        {{utf8, OverLimitKey}, {utf8, <<"val">>}}]},
+    #mqtt_msg{props = Props1} = amqp_to_mqtt([AP1, D]),
+    ?assertEqual({ok, [{<<"keep">>, <<"val">>}]}, maps:find('User-Property', Props1)),
+
+    %% The whole 'User-Property' entry disappears once no pair is left.
+    AP2 = #'v1_0.application_properties'{
+             content = [{{utf8, <<"big-value">>}, {utf8, OverLimitVal}}]},
+    #mqtt_msg{props = Props2} = amqp_to_mqtt([AP2, D]),
+    ?assertEqual(error, maps:find('User-Property', Props2)).
+
+amqpl_to_mqtt_oversized_correlation_data(_Config) ->
+    AtLimit = binary:copy(<<0>>, ?TWO_BYTE_INTEGER_MAX),
+    OverLimit = binary:copy(<<0>>, ?TWO_BYTE_INTEGER_MAX + 1),
+    Anns = #{?ANN_ROUTING_KEYS => [<<"dummy">>]},
+
+    Content1 = #content{properties = #'P_basic'{headers = [{<<"x-correlation-id">>, longstr, AtLimit}]},
+                        payload_fragments_rev = [<<"payload">>]},
+    #mqtt_msg{props = Props1} =
+        mc:protocol_state(mc:convert(mc_mqtt, mc:init(mc_amqpl, Content1, Anns))),
+    ?assertEqual({ok, AtLimit}, maps:find('Correlation-Data', Props1)),
+
+    Content2 = #content{properties = #'P_basic'{headers = [{<<"x-correlation-id">>, longstr, OverLimit}]},
+                        payload_fragments_rev = [<<"payload">>]},
+    #mqtt_msg{props = Props2} =
+        mc:protocol_state(mc:convert(mc_mqtt, mc:init(mc_amqpl, Content2, Anns))),
+    ?assertEqual(error, maps:find('Correlation-Data', Props2)).
+
+amqpl_to_mqtt_oversized_response_topic(_Config) ->
+    AtLimit = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX),
+    OverLimit = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX + 1),
+    Anns = #{?ANN_ROUTING_KEYS => [<<"dummy">>]},
+
+    Content1 = #content{properties = #'P_basic'{headers = [{<<"x-reply-to-topic">>, longstr, AtLimit}]},
+                        payload_fragments_rev = [<<"payload">>]},
+    #mqtt_msg{props = Props1} =
+        mc:protocol_state(mc:convert(mc_mqtt, mc:init(mc_amqpl, Content1, Anns))),
+    ?assertEqual({ok, AtLimit}, maps:find('Response-Topic', Props1)),
+
+    Content2 = #content{properties = #'P_basic'{headers = [{<<"x-reply-to-topic">>, longstr, OverLimit}]},
+                        payload_fragments_rev = [<<"payload">>]},
+    #mqtt_msg{props = Props2} =
+        mc:protocol_state(mc:convert(mc_mqtt, mc:init(mc_amqpl, Content2, Anns))),
+    ?assertEqual(error, maps:find('Response-Topic', Props2)).
+
+amqpl_to_mqtt_oversized_user_property(_Config) ->
+    OverLimitVal = binary:copy(<<"a">>, ?TWO_BYTE_INTEGER_MAX + 1),
+    Anns = #{?ANN_ROUTING_KEYS => [<<"dummy">>]},
+    Content = #content{properties = #'P_basic'{headers = [{<<"keep">>, longstr, <<"val">>},
+                                                          {<<"big">>, longstr, OverLimitVal}]},
+                       payload_fragments_rev = [<<"payload">>]},
+    #mqtt_msg{props = Props} =
+        mc:protocol_state(mc:convert(mc_mqtt, mc:init(mc_amqpl, Content, Anns))),
+    ?assertEqual({ok, [{<<"keep">>, <<"val">>}]}, maps:find('User-Property', Props)).
 
 amqp_to_mqtt_footer(_Config) ->
     Body = <<"hey">>,
