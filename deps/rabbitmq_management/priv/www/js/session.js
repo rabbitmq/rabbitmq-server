@@ -61,12 +61,26 @@ function stop_session_heartbeat() {
     }
 }
 
+var _session_delete_in_progress = false;
+
 function clear_session() {
     stop_session_heartbeat();
     var id = get_session_id();
-    clear_local_pref(SESSION_ID);
-    if (id && authorization_header()) {
-        session_req('DELETE', id);
+    if (!id || _session_delete_in_progress) {
+        return;
+    }
+    if (!authorization_header()) {
+        clear_local_pref(SESSION_ID);
+        return;
+    }
+    _session_delete_in_progress = true;
+    try {
+        var res = session_req('DELETE', id);
+        if (res.http_status !== 0 && res.http_status < 500) {
+            clear_local_pref(SESSION_ID);
+        }
+    } finally {
+        _session_delete_in_progress = false;
     }
 }
 
