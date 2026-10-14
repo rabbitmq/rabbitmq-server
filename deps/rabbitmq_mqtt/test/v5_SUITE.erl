@@ -128,6 +128,8 @@ cluster_size_1_tests() ->
      topic_alias_disallowed,
      topic_alias_retained_message,
      topic_alias_disallowed_retained_message,
+     topic_alias_max_packet_size,
+     topic_alias_max_packet_size_retained_message,
      extended_auth,
      headers_exchange,
      consistent_hash_exchange
@@ -2217,6 +2219,38 @@ topic_alias_in_retained_message0(Config, TopicAliasMax, TopicAlias, ExpectedProp
     after ?TIMEOUT -> ct:fail("Did not receive retained message")
     end,
     ok = emqtt:disconnect(C).
+
+topic_alias_max_packet_size(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    MaxPacketSize = 500,
+    C = connect(ClientId, Config, [{properties, #{'Topic-Alias-Maximum' => 1,
+                                                 'Maximum-Packet-Size' => MaxPacketSize}}]),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, binary:copy(<<"x">>, MaxPacketSize + 1), qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"m2">>, qos1),
+    assert_first_topic_alias(Topic, <<"m2">>),
+    ok = emqtt:disconnect(C).
+
+topic_alias_max_packet_size_retained_message(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    MaxPacketSize = 500,
+    C = connect(ClientId, Config, [{properties, #{'Topic-Alias-Maximum' => 1,
+                                                 'Maximum-Packet-Size' => MaxPacketSize}}]),
+    {ok, _} = emqtt:publish(C, Topic, binary:copy(<<"x">>, MaxPacketSize + 1),
+                            [{retain, true}, {qos, 1}]),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"m2">>, qos1),
+    assert_first_topic_alias(Topic, <<"m2">>),
+    {ok, _} = emqtt:publish(C, Topic, <<>>, [{retain, true}, {qos, 1}]),
+    ok = emqtt:disconnect(C).
+
+assert_first_topic_alias(Topic, Payload) ->
+    receive {publish, #{payload := Payload} = Publish} ->
+                ?assertMatch(#{topic := Topic,
+                               properties := #{'Topic-Alias' := 1}},
+                             Publish)
+    after ?TIMEOUT -> ct:fail({missing_publish, Payload})
+    end.
 
 extended_auth(Config) ->
     {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,

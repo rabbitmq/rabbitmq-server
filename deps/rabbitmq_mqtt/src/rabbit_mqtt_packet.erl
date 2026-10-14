@@ -13,6 +13,10 @@
 -export([init_state/0, parse/2, serialise/2]).
 -export_type([state/0]).
 
+-ifdef(TEST).
+-export([serialise_variable_byte_integer/1]).
+-endif.
+
 -opaque state() :: unauthenticated |
                    protocol_version() |
                    More :: fun().
@@ -523,18 +527,20 @@ serialise_fixed(#mqtt_packet_fixed{type = Type,
 -spec serialise_binary(binary()) -> iodata().
 serialise_binary(Bin) ->
     Len = byte_size(Bin),
-    true = (Len =< 16#ffff),
+    Len =< 16#ffff orelse throw(mqtt_binary_too_large),
     LenBin = <<Len:16>>,
     [LenBin, Bin].
 
--spec serialise_variable_byte_integer(0..?VARIABLE_BYTE_INTEGER_MAX) -> iodata().
+-spec serialise_variable_byte_integer(non_neg_integer()) -> iodata().
 serialise_variable_byte_integer(N)
   when N =< ?LOWBITS ->
     %% Optimisation: Prevent binary construction.
     [N];
 serialise_variable_byte_integer(N)
   when N =< ?VARIABLE_BYTE_INTEGER_MAX ->
-    serialise_variable_byte_integer0(N).
+    serialise_variable_byte_integer0(N);
+serialise_variable_byte_integer(_N) ->
+    throw(mqtt_remaining_length_too_large).
 
 -spec serialise_variable_byte_integer0(non_neg_integer()) -> binary().
 serialise_variable_byte_integer0(N)
