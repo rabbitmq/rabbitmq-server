@@ -31,7 +31,7 @@
 
 -rabbit_deprecated_feature(
    {amqp_filter_set_bug,
-    #{deprecation_phase => denied_by_default,
+    #{deprecation_phase => removed,
       doc_url => "https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set"
      }}).
 
@@ -3492,14 +3492,6 @@ parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-
   when is_boolean(Match) ->
     Arg = {<<"x-stream-match-unfiltered">>, bool, Match},
     {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
-parse_filters({Symbol = {symbol, <<"rabbitmq:stream-", _/binary>>}, Value}, QType, Acc)
-  when element(1, Value) =/= described ->
-    case rabbit_deprecated_features:is_permitted(amqp_filter_set_bug) of
-        true ->
-            parse_filters({Symbol, {described, Symbol, Value}}, QType, Acc);
-        false ->
-            Acc
-    end;
 parse_filters(Filter = {{symbol, ?FILTER_NAME_SQL}, Value},
               _QType,
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
