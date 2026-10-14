@@ -36,7 +36,7 @@ all() ->
 groups() ->
     [
      {v1_permitted, [shuffle],
-      common_tests()
+      [target_v1_reply_to_queue] ++ common_tests()
      },
      {v1_denied, [shuffle],
       [
@@ -233,6 +233,61 @@ target_exchange_absent(Config) ->
     end,
 
     ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+target_v1_reply_to_queue(Config) ->
+    Count = fun() -> rpc(Config, rabbit_amqqueue, count, [<<"/">>]) end,
+    Count0 = Count(),
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf#{notify_with_performative => true}),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, OtherSession} = amqp10_client:begin_session_sync(Connection),
+    Source = #{address => undefined,
+               durable => none,
+               expiry_policy => <<"link-detach">>,
+               dynamic => true,
+               capabilities => [<<"rabbitmq:volatile-queue">>]},
+    {ok, Receiver} = amqp10_client:attach_link(Session, #{name => <<"receiver">>,
+                                                          role => {receiver, Source, self()},
+                                                          snd_settle_mode => settled,
+                                                          rcv_settle_mode => first}),
+    QName = receive {amqp10_event, {link, Receiver, {attached, Attach}}} ->
+                        #'v1_0.attach'{
+                           source = #'v1_0.source'{
+                                       address = {utf8, <<"/queues/", Quoted/binary>>}}} = Attach,
+                        uri_string:percent_decode(Quoted)
+            after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+            end,
+    ok = amqp10_client:flow_link_credit(Receiver, 4, never),
+    Escaped = binary:replace(QName, <<"/">>, <<"%2F">>, [global]),
+    lists:foreach(
+      fun({S, Prefix}) ->
+              Target = <<Prefix/binary, Escaped/binary>>,
+              {ok, Sender} = amqp10_client:attach_sender_link(S, <<"sender">>, Target, settled),
+              ok = wait_for_credit(Sender),
+              ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t">>, <<"reply">>, true)),
+              receive {amqp10_msg, Receiver, Msg} ->
+                          ?assertEqual(<<"reply">>, amqp10_msg:body_bin(Msg))
+              after ?TIMEOUT -> ct:fail({missing_msg, ?LINE})
+              end,
+              ok = amqp10_client:detach_link(Sender),
+              receive {amqp10_event, {link, Sender, {detached, _}}} -> ok
+              after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+              end
+      end, [{S, P} || S <- [Session, OtherSession], P <- [<<"/queue/">>, <<"/amq/queue/">>]]),
+    ?assertEqual(Count0, Count()),
+
+    {ok, Unknown} = amqp10_client:attach_sender_link(
+                      OtherSession, <<"unknown">>, <<"/queue/amq.rabbitmq.reply-to.abc">>),
+    receive {amqp10_event, {link, Unknown, {detached, #'v1_0.detach'{error = Error}}}} ->
+                ?assertMatch(#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_NOT_FOUND}, Error)
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+    ?assertEqual(Count0, Count()),
+
+    {ok, DefaultExchange} = amqp10_client:attach_sender_link(
+                              OtherSession, <<"default exchange">>, <<"/queue">>),
+    ok = wait_for_credit(DefaultExchange),
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 target and source address

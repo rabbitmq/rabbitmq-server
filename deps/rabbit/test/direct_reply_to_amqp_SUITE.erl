@@ -40,7 +40,8 @@ groups() ->
        many_replies,
        many_volatile_queues_same_session,
        failure_multiple_consumers_same_session_same_queue,
-       failure_multiple_consumers_different_session_same_queue
+       failure_multiple_consumers_different_session_same_queue,
+       requester_sends_to_own_volatile_queue
       ]},
      {cluster_size_3, [shuffle],
       [
@@ -665,6 +666,28 @@ rpc(RequesterNode, ResponderNode, Config) ->
 
     ok = close_connection_sync(ConnResponder),
     ok = close_connection_sync(ConnRequester).
+
+requester_sends_to_own_volatile_queue(Config) ->
+    OpnConf0 = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf0#{notify_with_performative => true}),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Receiver} = amqp10_client:attach_link(Session, attach_args()),
+    Address = receive {amqp10_event, {link, Receiver, {attached, Attach}}} ->
+                          #'v1_0.attach'{source = #'v1_0.source'{address = {utf8, A}}} = Attach,
+                          A
+              after 9000 -> ct:fail({missing_event, ?LINE})
+              end,
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address, settled),
+    receive {amqp10_event, {link, Sender, credited}} -> ok;
+            {amqp10_event, {link, Sender, {detached, Error}}} -> ct:fail({detached, Error})
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t">>, <<"reply">>, true)),
+    receive {amqp10_msg, Receiver, Msg} -> ?assertEqual(<<"reply">>, amqp10_msg:body_bin(Msg))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    ok = close_connection_sync(Connection).
 
 attach_args() ->
     attach_args(<<"receiver requester">>).

@@ -1516,8 +1516,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                             },
               State0 = #state{incoming_links = IncomingLinks0,
                               permission_cache = PermCache0,
+                              queue_states = QStates,
                               cfg = #cfg{max_link_credit = MaxLinkCredit} = Cfg}) ->
-    case ensure_target(Target0, LinkNameBin, Cfg, PermCache0) of
+    case ensure_target(Target0, LinkNameBin, Cfg, QStates, PermCache0) of
         {ok, Exchange, RoutingKey, QNameBin, Target, PermCache} ->
             SndSettleMode = snd_settle_mode(MaybeSndSettleMode),
             MaxMessageSize = persistent_term:get(max_message_size),
@@ -3098,7 +3099,8 @@ ensure_source_v1(Address,
             Err
     end.
 
--spec ensure_target(#'v1_0.target'{}, binary(), #cfg{}, permission_cache()) ->
+-spec ensure_target(#'v1_0.target'{}, binary(), #cfg{}, rabbit_queue_type:state(),
+                    permission_cache()) ->
     {ok,
      rabbit_types:exchange() | rabbit_exchange:name() | to,
      rabbit_types:routing_key() | to | subject,
@@ -3119,6 +3121,7 @@ ensure_target(#'v1_0.target'{
                    user = User,
                    vhost = Vhost,
                    is_jms = IsJms},
+              _QStates,
               PermCache0) ->
     case maps:from_keys(Caps, ok) of
         #{{symbol, ?CAP_TEMPORARY_QUEUE} := ok} ->
@@ -3149,7 +3152,7 @@ ensure_target(#'v1_0.target'{
         _ ->
             exit_not_implemented("Dynamic target not supported: ~p", [Target0])
     end;
-ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _) ->
+ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _, _) ->
     exit_not_implemented("Dynamic target not supported: ~p", [Target]);
 ensure_target(Target = #'v1_0.target'{address = Address,
                                       durable = Durable},
@@ -3157,6 +3160,7 @@ ensure_target(Target = #'v1_0.target'{address = Address,
               #cfg{user = User,
                    vhost = Vhost,
                    is_jms = IsJms},
+              QStates,
               PermCache0) ->
     case is_jms_topic_terminus(IsJms, Target) of
         true ->
@@ -3170,7 +3174,7 @@ ensure_target(Target = #'v1_0.target'{address = Address,
         false ->
             case target_address_version(Address) of
                 2 ->
-                    case ensure_target_v2(Address, Vhost) of
+                    case ensure_target_v2(Address, Vhost, QStates) of
                         {ok, to, RKey, QNameBin} ->
                             {ok, to, RKey, QNameBin, Target, PermCache0};
                         {ok, XNameBin, RKey, QNameBin} ->
@@ -3183,7 +3187,8 @@ ensure_target(Target = #'v1_0.target'{address = Address,
                 1 ->
                     case address_v1_permitted() of
                         true ->
-                            case ensure_target_v1(Address, Vhost, User, Durable, PermCache0) of
+                            case ensure_target_v1(Address, Vhost, User, Durable, QStates,
+                                                  PermCache0) of
                                 {ok, XNameBin, RKey, QNameBin, PermCache1} ->
                                     {ok, Exchange, PermCache} = check_exchange(XNameBin, User,
                                                                                Vhost, PermCache1),
@@ -3235,17 +3240,17 @@ target_address_version(_Address) ->
 %%  /exchanges/:exchange
 %%  /queues/:queue
 %%  <null>
-ensure_target_v2({utf8, String}, Vhost) ->
+ensure_target_v2({utf8, String}, Vhost, QStates) ->
     case parse_target_v2_string(String) of
         {ok, _XNameBin, _RKey, undefined} = Ok ->
             Ok;
         {ok, _XNameBin, _RKey, QNameBin} = Ok ->
-            ok = error_if_absent(queue, Vhost, QNameBin),
+            ok = error_if_target_absent(queue_resource(Vhost, QNameBin), QStates),
             Ok;
         {error, bad_address} ->
             {error, {bad_address_string, String}}
     end;
-ensure_target_v2(undefined, _) ->
+ensure_target_v2(undefined, _, _) ->
     %% anonymous terminus
     %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
     {ok, to, to, undefined}.
@@ -3287,11 +3292,11 @@ parse_target_v2_string0(<<"/queues/", QNameBinQuoted/binary>>) ->
 parse_target_v2_string0(_) ->
     {error, bad_address}.
 
-ensure_target_v1({utf8, Address}, Vhost, User, Durable, PermCache0) ->
+ensure_target_v1({utf8, Address}, Vhost, User, Durable, QStates, PermCache0) ->
     case rabbit_routing_parser:parse_endpoint(Address, true) of
         {ok, Dest} ->
-            {QNameBin, PermCache} = ensure_terminus(
-                                      target, Dest, Vhost, User, Durable, PermCache0),
+            {QNameBin, PermCache} = ensure_target_terminus(
+                                      Dest, Vhost, User, Durable, QStates, PermCache0),
             {XNameList1, RK} = rabbit_routing_parser:parse_routing(Dest),
             XNameBin = unicode:characters_to_binary(XNameList1),
             RoutingKey = case RK of
@@ -3303,7 +3308,7 @@ ensure_target_v1({utf8, Address}, Vhost, User, Durable, PermCache0) ->
         {error, _} = Err ->
             Err
     end;
-ensure_target_v1(Address, _, _, _, _) ->
+ensure_target_v1(Address, _, _, _, _, _) ->
     {error, {bad_address, Address}}.
 
 handle_outgoing_mgmt_link_flow_control(
@@ -3820,6 +3825,34 @@ ensure_terminus(_, {amqqueue, QNameList}, Vhost, _, _, PermCache) ->
     QNameBin = unicode:characters_to_binary(QNameList),
     ok = error_if_absent(queue, Vhost, QNameBin),
     {QNameBin, PermCache}.
+
+%% A classic queue with a reply-to name is unreachable: lookups and routing
+%% resolve the name to the volatile queue.
+-spec ensure_target_terminus(term(), rabbit_types:vhost(), rabbit_types:user(), {uint, 0..2},
+                             rabbit_queue_type:state(), permission_cache()) ->
+    {rabbit_misc:resource_name() | undefined, permission_cache()}.
+ensure_target_terminus({Kind, QNameList} = Dest, Vhost, User, Durable, QStates, PermCache)
+  when (Kind =:= queue orelse Kind =:= amqqueue) andalso is_list(QNameList) ->
+    QNameBin = unicode:characters_to_binary(QNameList),
+    case rabbit_volatile_queue:is(QNameBin) of
+        true ->
+            ok = error_if_target_absent(queue_resource(Vhost, QNameBin), QStates),
+            {QNameBin, PermCache};
+        false ->
+            ensure_terminus(target, Dest, Vhost, User, Durable, PermCache)
+    end;
+ensure_target_terminus(Dest, Vhost, User, Durable, _QStates, PermCache) ->
+    ensure_terminus(target, Dest, Vhost, User, Durable, PermCache).
+
+%% `rabbit_volatile_queue:exists/1` asks the queue's owner, which cannot
+%% answer when the owner is this session.
+-spec error_if_target_absent(rabbit_amqqueue:name(), rabbit_queue_type:state()) -> ok.
+error_if_target_absent(#resource{name = QNameBin} = QName, QStates) ->
+    case rabbit_volatile_queue:is(QNameBin) andalso
+         rabbit_queue_type:module(QName, QStates) =:= {ok, rabbit_volatile_queue} of
+        true -> ok;
+        false -> error_if_absent(QName)
+    end.
 
 error_if_absent(Kind, Vhost, Name) when is_list(Name) ->
     error_if_absent(Kind, Vhost, unicode:characters_to_binary(Name));
