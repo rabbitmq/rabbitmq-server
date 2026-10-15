@@ -34,6 +34,7 @@
          logging_to_user_log_category_works/1,
          setting_log_levels_in_config_with_output_overridden_in_env_works/1,
          setting_message_format_works/1,
+         setting_message_format_with_conditionals_after_msg_works/1,
          setting_level_format_works/1,
          setting_time_format_works/1,
          logging_as_single_line_works/1,
@@ -81,6 +82,7 @@ groups() ->
        logging_to_user_log_category_works,
        setting_log_levels_in_config_with_output_overridden_in_env_works,
        setting_message_format_works,
+       setting_message_format_with_conditionals_after_msg_works,
        setting_level_format_works,
        setting_time_format_works,
        logging_as_single_line_works,
@@ -616,6 +618,36 @@ setting_message_format_works(Config) ->
          "unknown_field_spotted ",
          "unknown_field=<unknown unknown_field> ",
          "msg=", RandomMsgBin/binary>>,
+       Line).
+
+setting_message_format_with_conditionals_after_msg_works(Config) ->
+    Context = default_context(Config),
+    Format = ["level=", level, " ",
+              "msg=", msg, " ",
+              {md_key, ["known_md_key=", md_key], []}, " ",
+              {unknown_field,
+               ["unknown_field=", unknown_field],
+               ["unknown_field_spotted"]}],
+    {PrefixFormat, LineFormat} =
+    rabbit_prelaunch_early_logging:determine_prefix(Format),
+    ok = application:set_env(
+           rabbit, log,
+           [{file, [{formatter, {rabbit_logger_text_fmt,
+                                 #{prefix_format => PrefixFormat,
+                                   line_format => LineFormat}}}]}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    Metadata = #{md_key => "md_value"},
+    {RandomMsg, Line} = log_and_return_line(Context, Metadata),
+
+    RandomMsgBin = list_to_binary(RandomMsg),
+    ?assertEqual(
+       <<"level=warning ",
+         "msg=", RandomMsgBin/binary, " ",
+         "known_md_key=md_value ",
+         "unknown_field_spotted">>,
        Line).
 
 setting_level_format_works(Config) ->
