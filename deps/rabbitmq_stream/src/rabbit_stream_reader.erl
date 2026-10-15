@@ -3403,7 +3403,10 @@ handle_subscription(Transport,#stream_connection{
                                        properties = Properties,
                                        active = Active,
                                        credit_unit = CreditUnit},
-            SendLimit = Credit div 2,
+            SendLimit = case CreditUnit of
+                            chunks -> Credit div 2;
+                            bytes -> 0
+                        end,
             ConsumerState =
             #consumer{configuration = ConsumerConfiguration,
                       log = Log,

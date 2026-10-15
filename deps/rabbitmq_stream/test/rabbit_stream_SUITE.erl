@@ -100,6 +100,7 @@ groups() ->
        client_tune_response_with_zero_frame_max_is_unlimited,
        test_stream_test_utils,
        subscribe_v2_byte_credit_spans_chunks,
+       subscribe_v2_resumes_below_half_window,
        subscribe_v2_overshoot_single_chunk,
        subscribe_v2_chunk_larger_than_window,
        subscribe_v2_filtered_chunks_cost_no_credit,
@@ -737,6 +738,38 @@ subscribe_v2_byte_credit_spans_chunks(Config) ->
     {ok, C11} = stream_test_utils:delete_publisher(S, C10, PubId),
     {ok, C12} = stream_test_utils:delete_stream(S, C11, Stream),
     {ok, _} = stream_test_utils:close(S, C12),
+    ok.
+
+subscribe_v2_resumes_below_half_window(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+    PubId = 1,
+    {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PubId),
+    Body = <<"hello">>,
+    ChunkCost = chunk_cost(Body),
+    {ok, C3} = publish_one_chunk_per_message(S, C2, PubId, [Body]),
+
+    {ok, ConsumerSocket, ConsumerC0} = stream_test_utils:connect(Config, 0),
+    SubId = 1,
+    {ok, ConsumerC1} = stream_test_utils:subscribe_v2(
+                            ConsumerSocket, ConsumerC0, Stream, SubId,
+                            ChunkCost + 1, #{}, first),
+    {{deliver_v2, SubId, _, Chunk}, ConsumerC2} =
+        receive_commands(ConsumerSocket, ConsumerC1),
+    ?assertEqual(ChunkCost, byte_size(Chunk)),
+    ConsumerC3 = assert_no_deliver(gen_tcp, ConsumerSocket, ConsumerC2, 500),
+
+    Message = publish_message(2, Body),
+    {ok, _, C4} = stream_test_utils:publish_entries(S, C3, PubId, 1, [Message]),
+    {{deliver_v2, SubId, _, _}, ConsumerC4} =
+        receive_commands(ConsumerSocket, ConsumerC3),
+
+    {ok, ConsumerC5} = stream_test_utils:unsubscribe(ConsumerSocket, ConsumerC4, SubId),
+    {ok, _} = stream_test_utils:close(ConsumerSocket, ConsumerC5),
+    {ok, C5} = stream_test_utils:delete_publisher(S, C4, PubId),
+    {ok, C6} = stream_test_utils:delete_stream(S, C5, Stream),
+    {ok, _} = stream_test_utils:close(S, C6),
     ok.
 
 subscribe_v2_overshoot_single_chunk(Config) ->
