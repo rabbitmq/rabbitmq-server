@@ -31,6 +31,7 @@ groups() ->
           parse_amqp10_mixed,
           parse_local,
           parse_delete_after,
+          validate_uri_error_has_no_credentials,
           source_without_declarations_is_arity_compatible,
           source_with_declarations_is_arity_compatible,
           destination_without_declarations_is_arity_compatible,
@@ -212,6 +213,17 @@ parse_delete_after(_Config) ->
     ?assertError(function_clause,
                  rabbit_shovel_util:parse_delete_after(Unexpected)),
     ?assertError(badarg, binary_to_existing_atom(Unexpected, utf8)),
+    ok.
+
+validate_uri_error_has_no_credentials(_Config) ->
+    Validate = rabbit_shovel_util:validate_uri_fun(none),
+    [begin
+         {error, Fmt, Args} = Validate(<<"src-uri">>, Uri),
+         Msg = lists:flatten(io_lib:format(Fmt, Args)),
+         ?assertEqual(nomatch, string:find(Msg, "s3cret"))
+     end || Uri <- [<<"amqp://alice:s3cret@:::">>,
+                    <<"amqps://alice:s3cret@host/?depth=x&password=s3cret">>,
+                    <<"amqp://alice:s3cret%zz@host">>]],
     ok.
 
 %% Regression: an empty argument list resolved to a lower, non-existent arity
