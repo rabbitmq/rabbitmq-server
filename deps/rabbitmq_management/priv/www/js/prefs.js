@@ -4,6 +4,7 @@ const CREDENTIALS = 'credentials'
 const AUTH_SCHEME = "auth-scheme"
 const SESSION_EXPIRY = 'session_expiry'
 const AUTH_RESOURCE = 'auth_resource'
+const LOGIN_STATUS_MESSAGE = 'login-status-message'
 
 const BASIC_AUTH_SCHEME = "Basic"
 const BEARER_AUTH_SCHEME = "Bearer"
@@ -41,16 +42,29 @@ function clear_auth() {
     clear_local_pref(AUTH_SCHEME)
     clear_local_pref(SESSION_EXPIRY)
     clear_local_pref(AUTH_RESOURCE)
-    $.ajax({ async: false, type: 'DELETE', url: 'api/login' })
 }
 function set_token_auth(token) {
     set_auth("Bearer", token)
+}
+var set_auth_listeners = {}
+function register_set_auth_listener(name, fn) {
+    set_auth_listeners[name] = fn
+}
+function unregister_set_auth_listener(name) {
+    delete set_auth_listeners[name]
 }
 function set_auth(auth_scheme, credentials) {
     clear_local_pref(CREDENTIALS)
     clear_local_pref(AUTH_SCHEME)
     store_local_pref(CREDENTIALS, credentials)
     store_local_pref(AUTH_SCHEME, auth_scheme)
+    Object.keys(set_auth_listeners).forEach(function(name) {
+        try {
+            set_auth_listeners[name]()
+        } catch (e) {
+            console.error('set_auth listener "' + name + '" failed', e)
+        }
+    })
 }
 const DEFAULT_HARD_LOGIN_SESSION_TIMEOUT = 480; // 8 hours
 function set_session_expiry_if_required(login_session_timeout) {
@@ -62,6 +76,14 @@ function set_session_expiry_if_required(login_session_timeout) {
     var date = new Date();
     date.setMinutes(date.getMinutes() + timeout);
     store_local_pref(SESSION_EXPIRY, date.getTime());
+}
+function store_login_status_message(message) {
+    store_local_pref(LOGIN_STATUS_MESSAGE, message)
+}
+function take_login_status_message() {
+    var message = get_local_pref(LOGIN_STATUS_MESSAGE)
+    clear_local_pref(LOGIN_STATUS_MESSAGE)
+    return message
 }
 function authorization_header() {
     if (has_auth_credentials()) {
