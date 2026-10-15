@@ -114,5 +114,16 @@ format_line([], _, _, _, Line) ->
     remove_trailing_whitespaces(Line).
 
 remove_trailing_whitespaces([Tail | Line]) ->
+<<<<<<< HEAD
     Tail1 = string:strip(Tail, right),
     lists:reverse([Tail1 | Line]).
+=======
+    case string:trim(Tail, trailing) of
+        [] ->
+            remove_trailing_whitespaces(Line);
+        Tail1 ->
+            lists:reverse([Tail1 | Line])
+    end;
+remove_trailing_whitespaces([]) ->
+    [].
+>>>>>>> 01f8082 (rabbit_logger_text_fmt: trim the whole trailing whitespace run)
