@@ -102,6 +102,14 @@ format_line([Var | Rest], Msg, LogEvent, Config, Line)
   when is_atom(Var) ->
     String = format_var(Var, LogEvent, Config),
     format_line(Rest, Msg, LogEvent, Config, [String | Line]);
+format_line([{Var, Then, Else} | Rest], Msg, #{meta := Meta} = LogEvent,
+            Config, Line)
+  when is_atom(Var) ->
+    Branch = case maps:get(Var, Meta, undefined) of
+                 undefined -> Else;
+                 _Value -> Then
+             end,
+    format_line(Branch ++ Rest, Msg, LogEvent, Config, Line);
 format_line([], _, _, _, Line) ->
     remove_trailing_whitespaces(Line).
 
