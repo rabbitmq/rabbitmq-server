@@ -296,7 +296,8 @@ process_received_bytes(Bytes,
                         {stop, Reason, NewProcState} ->
                             {stop, Reason,
                              processor_state(NewProcState, State)}
-                    catch exit:{send_failed, closed} ->
+                    catch exit:{send_failed, Reason} when Reason =:= closed;
+                                                          Reason =:= einval ->
                               {stop, normal, State};
                           exit:{send_failed, Reason} ->
                               {stop, Reason, State}
