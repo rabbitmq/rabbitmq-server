@@ -867,7 +867,6 @@ parse_request(<<?REQUEST:1,
                 ?STRING(StreamSize, Stream),
                 OffsetType:16/signed,
                 OffsetCreditProperties/binary>>) ->
-    %% version 1 parses credit as signed, kept as is for backwards compatibility.
     {OffsetSpec, Credit, PropsBin} =
         parse_offset_spec_credit(OffsetType, 16, OffsetCreditProperties),
     request(CorrelationId,
@@ -1060,16 +1059,9 @@ parse_request(<<?REQUEST:1,
 parse_request(Bin) ->
     {unknown, Bin}.
 
-%% Credit is signed in version 1 and unsigned in version 2, so the size (a
-%% runtime value) cannot carry the sign (a literal binary segment modifier);
-%% hence the two clauses instead of one parameterised by CreditSize.
-parse_offset_spec_credit(OffsetType, 16, Bin) ->
+parse_offset_spec_credit(OffsetType, CreditSize, Bin) ->
     {OffsetSpec, Rest} = parse_offset_spec(OffsetType, Bin),
-    <<Credit:16/signed, PropsBin/binary>> = Rest,
-    {OffsetSpec, Credit, PropsBin};
-parse_offset_spec_credit(OffsetType, 32, Bin) ->
-    {OffsetSpec, Rest} = parse_offset_spec(OffsetType, Bin),
-    <<Credit:32/unsigned, PropsBin/binary>> = Rest,
+    <<Credit:CreditSize/unsigned, PropsBin/binary>> = Rest,
     {OffsetSpec, Credit, PropsBin}.
 
 parse_offset_spec(OffsetType, Bin) ->
