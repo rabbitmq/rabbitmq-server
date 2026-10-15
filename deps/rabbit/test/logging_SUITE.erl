@@ -627,7 +627,9 @@ setting_message_format_with_conditionals_after_msg_works(Config) ->
               {md_key, ["known_md_key=", md_key], []}, " ",
               {unknown_field,
                ["unknown_field=", unknown_field],
-               ["unknown_field_spotted"]}],
+               ["unknown_field_spotted"]}, " ",
+              %% An empty trailing branch must still leave the space trimmed.
+              {missing_field, ["missing_field=", missing_field], []}],
     {PrefixFormat, LineFormat} =
     rabbit_prelaunch_early_logging:determine_prefix(Format),
     ok = application:set_env(
