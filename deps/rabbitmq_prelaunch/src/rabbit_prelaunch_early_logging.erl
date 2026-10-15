@@ -322,7 +322,7 @@ prepare_fmt_format(Format) ->
     prepare_fmt_format(Format, []).
 
 prepare_fmt_format([$$ | Rest], Parsed) ->
-    {match, [Var, Rest1]} = re:run(Rest, "^([a-zA_Z0-9_]+)(.*)",
+    {match, [Var, Rest1]} = re:run(Rest, "^([a-zA-Z0-9_]+)(.*)",
                                    [{capture, all_but_first, list}]),
     Var1 = list_to_atom(Var),
     prepare_fmt_format(Rest1, [Var1 | Parsed]);
