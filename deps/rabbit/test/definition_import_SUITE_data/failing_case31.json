@@ -1,0 +1,27 @@
+{
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "x_demo_31",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false
+    }
+  ],
+  "bindings": [
+    {
+      "source": "x_demo_31",
+      "vhost": "/",
+      "destination": "q_demo_31_missing",
+      "destination_type": "queue",
+      "routing_key": "k31",
+      "arguments": {}
+    }
+  ]
+}
