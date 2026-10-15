@@ -46,6 +46,7 @@ convert_from_legacy(Config) ->
     PubFields = proplists:get_value(publish_fields, Config, []),
     PubProps = proplists:get_value(publish_properties, Config, []),
     AFH = proplists:get_value(add_forward_headers, Config, false),
+    AFHLimit = proplists:get_value(add_forward_headers_limit, Config, undefined),
     ATH = proplists:get_value(add_timestamp_header, Config, false),
     SourceDecls = proplists:get_value(declarations, S, []),
     validate_list(SourceDecls),
@@ -64,6 +65,7 @@ convert_from_legacy(Config) ->
                     {publish_properties, PubProps},
                     {publish_fields, PubFields},
                     {add_forward_headers, AFH},
+                    {add_forward_headers_limit, AFHLimit},
                     {add_timestamp_header, ATH}]},
      {ack_mode, AckMode},
      {reconnect_delay, RD}].

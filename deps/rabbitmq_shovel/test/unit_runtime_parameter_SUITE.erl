@@ -30,6 +30,7 @@ groups() ->
       {tests, [parallel], [
           parse_amqp091_maps,
           parse_amqp091_proplists,
+          validate_forward_headers_limit,
           parse_amqp091_empty_maps,
           parse_amqp091_empty_proplists,
           parse_amqp10,
@@ -137,6 +138,16 @@ parse_amqp091_proplists_0() ->
          {<<"dest-queue">>, <<"a-dest-queue">>}
         ],
     test_parse_amqp091(Params).
+
+validate_forward_headers_limit(_Config) ->
+    ?assertEqual(ok, rabbit_shovel_util:validate_forward_headers_limit(<<"n">>, 1)),
+    ?assertMatch({error, _, _},
+                 rabbit_shovel_util:validate_forward_headers_limit(<<"n">>, 0)),
+    ?assertMatch({error, _, _},
+                 rabbit_shovel_util:validate_forward_headers_limit(<<"n">>, -1)),
+    ?assertMatch({error, _, _},
+                 rabbit_shovel_util:validate_forward_headers_limit(<<"n">>, <<"2">>)),
+    ok.
 
 parse_amqp091_empty_maps(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_amqp091_empty_maps_0, []).
