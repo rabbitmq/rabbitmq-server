@@ -1,0 +1,17 @@
+{
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "bindings": [
+    {
+      "source": "x_demo_32_missing",
+      "vhost": "/",
+      "destination": "amq.gen-case32",
+      "destination_type": "queue",
+      "routing_key": "k32",
+      "arguments": {}
+    }
+  ]
+}
