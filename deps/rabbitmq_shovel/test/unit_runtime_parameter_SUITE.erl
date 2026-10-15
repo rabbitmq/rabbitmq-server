@@ -30,7 +30,7 @@ groups() ->
       {tests, [parallel], [
           parse_amqp091_maps,
           parse_amqp091_proplists,
-          validate_forward_headers_limit,
+          validate_forward_headers_depth,
           parse_amqp091_empty_maps,
           parse_amqp091_empty_proplists,
           parse_amqp10,
@@ -139,14 +139,14 @@ parse_amqp091_proplists_0() ->
         ],
     test_parse_amqp091(Params).
 
-validate_forward_headers_limit(_Config) ->
-    ?assertEqual(ok, rabbit_shovel_util:validate_forward_headers_limit(<<"n">>, 1)),
+validate_forward_headers_depth(_Config) ->
+    ?assertEqual(ok, rabbit_shovel_util:validate_forward_headers_depth(<<"n">>, 1)),
     ?assertMatch({error, _, _},
-                 rabbit_shovel_util:validate_forward_headers_limit(<<"n">>, 0)),
+                 rabbit_shovel_util:validate_forward_headers_depth(<<"n">>, 0)),
     ?assertMatch({error, _, _},
-                 rabbit_shovel_util:validate_forward_headers_limit(<<"n">>, -1)),
+                 rabbit_shovel_util:validate_forward_headers_depth(<<"n">>, -1)),
     ?assertMatch({error, _, _},
-                 rabbit_shovel_util:validate_forward_headers_limit(<<"n">>, <<"2">>)),
+                 rabbit_shovel_util:validate_forward_headers_depth(<<"n">>, <<"2">>)),
     ok.
 
 parse_amqp091_empty_maps(Config) ->

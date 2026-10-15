@@ -29,8 +29,8 @@ groups() ->
     [
       {tests, [parallel], [
           parse_amqp091,
-          parse_amqp091_forward_headers_limit,
-          parse_amqp091_forward_headers_limit_rejects_invalid_value,
+          parse_amqp091_forward_headers_depth,
+          parse_amqp091_forward_headers_depth_rejects_invalid_value,
           forward_headers_count_header_resets_on_corruption,
           parse_amqp10_mixed,
           parse_local,
@@ -112,7 +112,7 @@ parse_amqp091(_Config) ->
                            ["ampq://myhost:5672"]),
     ok.
 
-parse_amqp091_forward_headers_limit(_Config) ->
+parse_amqp091_forward_headers_depth(_Config) ->
     Amqp091Src = {source, [{protocol, amqp091},
                            {uris, ["ampq://myhost:5672/vhost"]},
                            {declarations, []},
@@ -123,13 +123,13 @@ parse_amqp091_forward_headers_limit(_Config) ->
                                 {publish_properties, []},
                                 {publish_fields, []},
                                 {add_forward_headers, true},
-                                {add_forward_headers_limit, 2}]},
+                                {add_forward_headers_depth, 2}]},
     In = [Amqp091Src,
           Amqp091Dst,
           {ack_mode, on_confirm},
           {reconnect_delay, 2}],
 
-    {ok, #{dest := #{add_forward_headers_limit := 2,
+    {ok, #{dest := #{add_forward_headers_depth := 2,
                      props_fun := {M, F, Args}}}} =
         rabbit_shovel_config:parse(my_shovel, In),
 
@@ -147,7 +147,7 @@ parse_amqp091_forward_headers_limit(_Config) ->
                  lists:keyfind(<<"x-shovelled-count">>, 1, Headers)),
     ok.
 
-parse_amqp091_forward_headers_limit_rejects_invalid_value(_Config) ->
+parse_amqp091_forward_headers_depth_rejects_invalid_value(_Config) ->
     Amqp091Src = {source, [{protocol, amqp091},
                            {uris, ["ampq://myhost:5672/vhost"]},
                            {declarations, []},
@@ -158,7 +158,7 @@ parse_amqp091_forward_headers_limit_rejects_invalid_value(_Config) ->
                                 {publish_properties, []},
                                 {publish_fields, []},
                                 {add_forward_headers, true},
-                                {add_forward_headers_limit, -1}]},
+                                {add_forward_headers_depth, -1}]},
     In = [Amqp091Src,
           Amqp091Dst,
           {ack_mode, on_confirm},
@@ -166,7 +166,7 @@ parse_amqp091_forward_headers_limit_rejects_invalid_value(_Config) ->
 
     ?assertMatch(
        {error, {invalid_shovel_configuration, my_shovel,
-                {invalid_parameter_value, add_forward_headers_limit, _}}},
+                {invalid_parameter_value, add_forward_headers_depth, _}}},
        rabbit_shovel_config:parse(my_shovel, In)),
     ok.
 

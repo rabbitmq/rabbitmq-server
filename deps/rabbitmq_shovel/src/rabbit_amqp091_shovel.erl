@@ -106,10 +106,10 @@ parse(Name, {destination, Dest}) ->
     PubFields = proplists:get_value(publish_fields, Dest, []),
     PubFieldsFun = try_make_parse_publish(publish_fields, PubFields),
     AFH = proplists:get_value(add_forward_headers, Dest, false),
-    AFHLimit = parse_parameter(add_forward_headers_limit, fun parse_forward_headers_limit/1,
-                               proplists:get_value(add_forward_headers_limit, Dest, undefined)),
+    AFHDepth = parse_parameter(add_forward_headers_depth, fun parse_forward_headers_depth/1,
+                               proplists:get_value(add_forward_headers_depth, Dest, undefined)),
     ATH = proplists:get_value(add_timestamp_header, Dest, false),
-    PropsFun1 = add_forward_headers_fun(Name, AFH, AFHLimit, PropsFun),
+    PropsFun1 = add_forward_headers_fun(Name, AFH, AFHDepth, PropsFun),
     PropsFun2 = add_timestamp_header_fun(ATH, PropsFun1),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Dest),
@@ -117,7 +117,7 @@ parse(Name, {destination, Dest}) ->
       props_fun => PropsFun2,
       fields_fun => PubFieldsFun,
       add_forward_headers => AFH,
-      add_forward_headers_limit => AFHLimit,
+      add_forward_headers_depth => AFHDepth,
       add_timestamp_header => ATH}.
 
 parse_source(Def) ->
@@ -188,7 +188,7 @@ parse_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
                         V =/= none],
     AddHeadersLegacy = pget(<<"add-forward-headers">>, Def, false),
     AddHeaders = pget(<<"dest-add-forward-headers">>, Def, AddHeadersLegacy),
-    AddHeadersLimit = pget(<<"dest-add-forward-headers-limit">>, Def, undefined),
+    AddHeadersDepth = pget(<<"dest-add-forward-headers-depth">>, Def, undefined),
     Table0 = [{<<"shovelled-by">>, ClusterName},
               {<<"shovel-type">>,  <<"dynamic">>},
               {<<"shovel-name">>,  Name},
@@ -210,7 +210,7 @@ parse_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
                  resource_decl => DestDeclFun,
                  fields_fun => {?MODULE, fields_fun, [X, Key]},
                  props_fun => {?MODULE, props_fun, [Table0, Table2, SetProps,
-                                                    AddHeaders, AddHeadersLimit,
+                                                    AddHeaders, AddHeadersDepth,
                                                     SourceHeaders,
                                                     AddTimestampHeader]}
                 }, Details).
@@ -263,7 +263,7 @@ validate_dest_funs(_Def, User) ->
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
-     {<<"dest-add-forward-headers-limit">>, fun rabbit_shovel_util:validate_forward_headers_limit/2,optional},
+     {<<"dest-add-forward-headers-depth">>, fun rabbit_shovel_util:validate_forward_headers_depth/2,optional},
      {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"publish-properties">>, fun validate_properties/2,  optional},
      {<<"dest-publish-properties">>, fun validate_properties/2,  optional},
@@ -708,17 +708,17 @@ field_map(Fields, Idx0) ->
 -spec fail(term()) -> no_return().
 fail(Reason) -> throw({error, Reason}).
 
-add_forward_headers_fun(Name, true, Limit, PubProps) ->
-   {?MODULE, props_fun_forward_header, [Name, Limit, PubProps]};
-add_forward_headers_fun(_Name, false, _Limit, PubProps) ->
+add_forward_headers_fun(Name, true, Depth, PubProps) ->
+   {?MODULE, props_fun_forward_header, [Name, Depth, PubProps]};
+add_forward_headers_fun(_Name, false, _Depth, PubProps) ->
     PubProps.
 
-props_fun_forward_header(Name, Limit, {M, F, Args}, SrcUri, DestUri, Props) ->
+props_fun_forward_header(Name, Depth, {M, F, Args}, SrcUri, DestUri, Props) ->
     rabbit_shovel_util:update_headers(
       [{<<"shovelled-by">>, rabbit_nodes:cluster_name()},
        {<<"shovel-type">>,  <<"static">>},
        {<<"shovel-name">>,  list_to_binary(atom_to_list(Name))}],
-      [], SrcUri, DestUri, Limit, apply(M, F, Args ++ [SrcUri, DestUri, Props])).
+      [], SrcUri, DestUri, Depth, apply(M, F, Args ++ [SrcUri, DestUri, Props])).
 
 add_timestamp_header_fun(true, PubProps) ->
     {?MODULE, props_fun_timestamp_header, [PubProps]};
@@ -750,11 +750,11 @@ parse_non_negative_integer(N) when is_integer(N) andalso N >= 0 ->
 parse_non_negative_integer(N) ->
     fail({require_non_negative_integer, N}).
 
-parse_forward_headers_limit(undefined) ->
+parse_forward_headers_depth(undefined) ->
     undefined;
-parse_forward_headers_limit(N) when is_integer(N) andalso N >= 1 ->
+parse_forward_headers_depth(N) when is_integer(N) andalso N >= 1 ->
     N;
-parse_forward_headers_limit(N) ->
+parse_forward_headers_depth(N) ->
     fail({require_positive_integer, N}).
 
 parse_binary(Binary) when is_binary(Binary) ->
@@ -834,13 +834,13 @@ fields_fun(X, Key, _SrcURI, _DestURI, P0) ->
         _    -> P1#'basic.publish'{routing_key = Key}
     end.
 
-props_fun(Table0, Table2, SetProps, AddHeaders, Limit, SourceHeaders, AddTimestampHeader,
+props_fun(Table0, Table2, SetProps, AddHeaders, Depth, SourceHeaders, AddTimestampHeader,
           SrcURI, DestURI, P0) ->
     P  = set_properties(P0, SetProps),
     P1 = case AddHeaders of
              true -> rabbit_shovel_util:update_headers(
                        Table0, SourceHeaders ++ Table2,
-                       SrcURI, DestURI, Limit, P);
+                       SrcURI, DestURI, Depth, P);
              false -> P
          end,
     case AddTimestampHeader of

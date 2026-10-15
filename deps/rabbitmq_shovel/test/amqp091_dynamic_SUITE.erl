@@ -38,7 +38,7 @@ groups() ->
           set_empty_properties_using_proplist,
           set_empty_properties_using_map,
           headers,
-          headers_limit,
+          headers_depth,
           restart,
           validation,
           runtime_parse_failure,
@@ -255,7 +255,7 @@ headers(Config) ->
 
         end).
 
-headers_limit(Config) ->
+headers_depth(Config) ->
     with_amqp091_ch(Config,
         fun(Ch) ->
             shovel_test_utils:set_param(Config,
@@ -263,7 +263,7 @@ headers_limit(Config) ->
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>},
                  {<<"dest-add-forward-headers">>, true},
-                 {<<"dest-add-forward-headers-limit">>, 2}]),
+                 {<<"dest-add-forward-headers-depth">>, 2}]),
 
             PriorHeaders = [{<<"x-shovelled">>, array,
                             [{table, [{<<"shovel-name">>, longstr, <<"hop1">>}]},

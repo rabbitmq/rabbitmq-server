@@ -20,7 +20,7 @@
          validate_consumer_args/2,
          validate_delete_after/2,
          validate_delete_after_duration/2,
-         validate_forward_headers_limit/2,
+         validate_forward_headers_depth/2,
          parse_delete_after/1,
          sched_expire_after_duration/2,
          cancel_expire_after_duration/1,
@@ -49,7 +49,7 @@
 dynamic_shovel_supervisor_mod() ->
     rabbit_shovel_dyn_worker_sup_sup.
 
-update_headers(Prefix, Suffix, SrcURI, DestURI, Limit,
+update_headers(Prefix, Suffix, SrcURI, DestURI, Depth,
                Props = #'P_basic'{headers = Headers}) ->
     Table = Prefix ++ [{<<"src-uri">>,  SrcURI},
                        {<<"dest-uri">>, DestURI}] ++ Suffix,
@@ -57,7 +57,7 @@ update_headers(Prefix, Suffix, SrcURI, DestURI, Limit,
                  ?ROUTING_HEADER, [{K, longstr, V} || {K, V} <- Table],
                  Headers),
     Headers2 = incr_count_header(Headers1),
-    Headers3 = truncate_routing_header(Limit, Headers2),
+    Headers3 = truncate_routing_header(Depth, Headers2),
     Props#'P_basic'{headers = Headers3}.
 
 incr_count_header(Headers) ->
@@ -71,11 +71,11 @@ incr_count_header(Headers) ->
 
 truncate_routing_header(undefined, Headers) ->
     Headers;
-truncate_routing_header(Limit, Headers) ->
+truncate_routing_header(Depth, Headers) ->
     case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
-        {array, Entries} when length(Entries) > Limit ->
+        {array, Entries} when length(Entries) > Depth ->
             rabbit_misc:set_table_value(Headers, ?ROUTING_HEADER, array,
-                                        lists:sublist(Entries, Limit));
+                                        lists:sublist(Entries, Depth));
         _ ->
             Headers
     end.
@@ -296,9 +296,9 @@ validate_delete_after(Name,  Term) ->
      "~tp", [Name, Term]}.
 
 
-validate_forward_headers_limit(_Name, N) when is_integer(N), N >= 1 ->
+validate_forward_headers_depth(_Name, N) when is_integer(N), N >= 1 ->
     ok;
-validate_forward_headers_limit(Name, Term) ->
+validate_forward_headers_depth(Name, Term) ->
     {error, "~ts should be a positive integer, actually was ~tp", [Name, Term]}.
 
 parse_delete_after(<<"never">>) -> never;
