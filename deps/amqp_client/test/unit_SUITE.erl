@@ -20,6 +20,7 @@ all() ->
       amqp_uri_parsing,
       amqp_uri_accepts_string_and_binaries,
       amqp_uri_remove_credentials,
+      amqp_uri_remove_credentials_malformed,
       amqp_uri_error_info_has_no_user_input,
       uri_parser_accepts_string_and_binaries,
       rabbit_channel_build_topic_variable_map,
@@ -254,6 +255,32 @@ amqp_uri_remove_credentials(_Config) ->
     Sanitized = amqp_uri:remove_credentials("amqp://alice:s3cret@:::"),
     ?assertEqual(nomatch, string:find(Sanitized, "s3cret")),
     ?assertEqual(nomatch, string:find(Sanitized, "alice")),
+    ok.
+
+amqp_uri_remove_credentials_malformed(_Config) ->
+    [?assertEqual(Expected, amqp_uri:remove_credentials(Uri))
+     || {Uri, Expected} <-
+            [{"amqp://alice:s3cret@:::",
+              "amqp://<redacted>@:::"},
+             {"amqp://alice:s3@cret@host:::",
+              "amqp://<redacted>@host:::"},
+             {"amqp://alice:s3/cret@host:::",
+              "amqp://<redacted>@host:::"},
+             {"amqp://alice:s3?c#ret@host:::",
+              "amqp://<redacted>@host:::"},
+             {"amqp://host:::?password=s3cret&heartbeat=5",
+              "amqp://host:::"},
+             {"amqp://alice:s3cret@host:::?password=s3cret",
+              "amqp://<redacted>@host:::"},
+             {"amqp://host:::#s3cret",
+              "amqp://host:::"},
+             {<<"amqp://alice:s3cret@:::">>,
+              "amqp://<redacted>@:::"},
+             {"amqp://alice:s3cret@" ++ [16#301] ++ "host",
+              "<redacted>"},
+             {"amqp://host/" ++ [16#20AC] ++ "?password=s3cret",
+              "<redacted>"},
+             {"", "<redacted>"}]],
     ok.
 
 amqp_uri_error_info_has_no_user_input(_Config) ->
