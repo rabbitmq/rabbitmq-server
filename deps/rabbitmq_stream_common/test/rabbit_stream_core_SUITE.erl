@@ -99,13 +99,14 @@ roundtrip(_Config) ->
                      <<"stream_name">>}}),
     test_roundtrip({request, 99, {delete_publisher, 42}}),
     [test_roundtrip({request, 99,
-                     {subscribe, 53, <<"stream_name">>, Spec, 12, #{}}})
+                     {subscribe, 53, <<"stream_name">>, Spec, Credit, #{}}})
      || Spec
             <- [last,
                 next,
                 first,
                 65432,
-                {timestamp, erlang:system_time(millisecond)}]],
+                {timestamp, erlang:system_time(millisecond)}],
+        Credit <- [0, 12, 32767, 32768, 65535]],
     [test_roundtrip({request, 99,
                      {subscribe_v2, 53, <<"stream_name">>, Spec, 1048576, #{}}})
      || Spec
