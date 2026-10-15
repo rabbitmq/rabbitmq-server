@@ -20,16 +20,18 @@
 -spec remove_credentials(URI :: string() | binary()) -> string().
 remove_credentials(URI) ->
     UriString = rabbit_data_coercion:to_list(URI),
+    try
+        redact(UriString)
+    catch
+        _:_ -> "<redacted>"
+    end.
+
+redact(UriString) ->
     case uri_parser:parse(UriString,
                           [{host, undefined}, {path, undefined},
                            {port, undefined}, {'query', []}]) of
         {error, _} ->
-            %% `uri_parser:parse/2` cannot parse a structurally malformed URI.
-            %% Since this function is used to sanitize a URI before logging it,
-            %% and is therefore routinely called on invalid input, fall back to
-            %% a best-effort strip of the `user:password@` userinfo rather than
-            %% crashing.
-            re:replace(UriString, "://[^@/]*@", "://", [{return, list}]);
+            redact_unparsable(UriString);
         Props ->
             PortPart = case proplists:get_value(port, Props) of
                            undefined -> "";
@@ -44,6 +46,28 @@ remove_credentials(URI) ->
               "~ts://~ts~ts~ts", [proplists:get_value(scheme, Props), PGet(host, Props),
                               PortPart,                           PGet(path, Props)])
     end.
+
+%% Used when `uri_parser:parse/2` rejects the URI. Without `scheme://` nothing
+%% can be told apart reliably, so the whole value is redacted.
+redact_unparsable(UriString) ->
+    case re:run(UriString, "^([A-Za-z][A-Za-z0-9+.-]*)://(.*)$",
+                [dotall, {capture, all_but_first, list}]) of
+        {match, [Scheme, Rest]} ->
+            Scheme ++ "://" ++ drop_query_and_fragment(redact_userinfo(Rest));
+        nomatch ->
+            "<redacted>"
+    end.
+
+%% The password may contain unescaped `@`, `/`, `?` and `#`, so everything up
+%% to the last `@` is redacted.
+redact_userinfo(Rest) ->
+    case lists:splitwith(fun(C) -> C =/= $@ end, lists:reverse(Rest)) of
+        {_, []}       -> Rest;
+        {RevAfter, _} -> "<redacted>@" ++ lists:reverse(RevAfter)
+    end.
+
+drop_query_and_fragment(Rest) ->
+    lists:takewhile(fun(C) -> C =/= $? andalso C =/= $# end, Rest).
 
 %% @spec (Uri) -> {ok, #amqp_params_network{} | #amqp_params_direct{}} |
 %%                {error, {Info, Uri}}
