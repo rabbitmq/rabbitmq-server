@@ -8,7 +8,7 @@
 
 -export([register/0, deregister_cleanup/1, collect_mf/2]).
 
--import(prometheus_model_helpers, [create_mf/4, untyped_metric/1]).
+-import(prometheus_model_helpers, [create_mf/4, gauge_metric/1]).
 
 -include_lib("prometheus/include/prometheus.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -44,12 +44,12 @@ collect_mf(_Registry, Callback) ->
 
         Callback(create_mf(?METRIC_NAME(<<"free_disk_space_watermark">>),
                            <<"is 1 if free disk space watermark alarm is in effect">>,
-                           untyped,
-                           [untyped_metric(maps:get(disk_limit, ActiveAlarms, 0))])),
+                           gauge,
+                           [gauge_metric(maps:get(disk_limit, ActiveAlarms, 0))])),
         Callback(create_mf(?METRIC_NAME(<<"memory_used_watermark">>),
                            <<"is 1 if VM memory watermark alarm is in effect">>,
-                           untyped,
-                           [untyped_metric(maps:get(memory_limit, ActiveAlarms, 0))])),
+                           gauge,
+                           [gauge_metric(maps:get(memory_limit, ActiveAlarms, 0))])),
         ok
     catch
         exit:{timeout, _} ->
