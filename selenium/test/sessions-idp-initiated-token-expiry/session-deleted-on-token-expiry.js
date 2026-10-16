@@ -46,9 +46,9 @@ describe('When the token of a user logged in via IDP-initiated login expires', f
     assert.equal(await sessionCount(), 0)
   })
 
-  it('the user is shown that the token has expired', async function () {
+  it('the user is shown that the session has expired', async function () {
     assert.ok(await homePage.isWarningVisible(20000), 'A warning should be visible on the login page')
-    assert.match(await homePage.getWarning(), /token.*expired/i)
+    assert.match(await homePage.getWarning(), /session.*expired/i)
   })
 
   after(async function () {
