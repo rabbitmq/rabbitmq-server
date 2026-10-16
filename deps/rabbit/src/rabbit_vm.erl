@@ -22,7 +22,7 @@ memory() ->
     %% example for existing info keys:
     %% [{queue_procs,          queue_sups()},
     %%  {quorum_queue_procs,   [ra_server_sup_sup]},
-    %%  {quorum_queue_dlx_procs, [rabbit_fifo_dlx_sup]},
+    %%  {quorum_queue_dlx_procs, [rabbit_fifo_dlx_sup_sup]},
     %%  {stream_queue_procs,   [osiris_server_sup]},
     %%  {stream_queue_replica_reader_procs,  [osiris_replica_reader_sup]},
     %%  {stream_queue_coordinator_procs, [rabbit_stream_coordinator]}]
