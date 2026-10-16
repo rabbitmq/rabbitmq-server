@@ -12,7 +12,7 @@
 -compile([export_all, nowarn_export_all]).
 
 all() ->
-    [{group, units}].
+    [{group, units}, {group, config_override}].
 
 groups() ->
     [{units, [parallel],
@@ -41,7 +41,10 @@ groups() ->
        escaped_value_matches_itself,
        escaped_value_cannot_form_range_inside_char_class,
        escaped_caret_cannot_negate_char_class,
-       escaped_bracket_cannot_terminate_char_class]}].
+       escaped_bracket_cannot_terminate_char_class]},
+     {config_override, [],
+      [max_pattern_length_env_override,
+       match_limit_env_override]}].
 
 %% Tests
 
@@ -155,6 +158,34 @@ match_limit_constant(_Config) ->
 max_pattern_length_constant(_Config) ->
     Len = rabbit_re:max_pattern_length(),
     true = is_integer(Len) andalso Len > 0,
+    ok.
+
+max_pattern_length_env_override(_Config) ->
+    Default = rabbit_re:max_pattern_length(),
+    CustomCap = Default + 2048,
+    try
+        ok = application:set_env(rabbit, regex_max_pattern_length, CustomCap),
+        CustomCap = rabbit_re:max_pattern_length(),
+        PatAtCap = binary:copy(<<"a">>, CustomCap),
+        {ok, _} = rabbit_re:compile(PatAtCap),
+        PatOverCap = binary:copy(<<"a">>, CustomCap + 1),
+        {error, pattern_too_long} = rabbit_re:compile(PatOverCap)
+    after
+        ok = application:unset_env(rabbit, regex_max_pattern_length)
+    end,
+    Default = rabbit_re:max_pattern_length(),
+    ok.
+
+match_limit_env_override(_Config) ->
+    Default = rabbit_re:match_limit(),
+    CustomLimit = 75_000,
+    try
+        ok = application:set_env(rabbit, regex_match_limit, CustomLimit),
+        CustomLimit = rabbit_re:match_limit()
+    after
+        ok = application:unset_env(rabbit, regex_match_limit)
+    end,
+    Default = rabbit_re:match_limit(),
     ok.
 
 escape_leaves_plain_text_unchanged(_Config) ->

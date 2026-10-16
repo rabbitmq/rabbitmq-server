@@ -1599,6 +1599,23 @@ end}.
     {datatype, {enum, [notify_consumer, close_channel]}}
 ]}.
 
+%% Maximum length in bytes of regular expression patterns compiled by rabbit_re
+%% (used for user permissions, topic permissions, policies, and filters).
+%%
+%% {regex_max_pattern_length, 4096},
+
+{mapping, "regex_max_pattern_length", "rabbit.regex_max_pattern_length", [
+    {datatype, {integer, positive}}
+]}.
+
+%% Maximum PCRE2 backtracking iterations per regular expression match attempt.
+%%
+%% {regex_match_limit, 50000},
+
+{mapping, "regex_match_limit", "rabbit.regex_match_limit", [
+    {datatype, {integer, positive}}
+]}.
+
 %% Product name & version overrides.
 
 {mapping, "product.name", "rabbit.product_name", [

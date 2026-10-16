@@ -1074,6 +1074,20 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {rabbit_regex_max_pattern_length,
+   "regex_max_pattern_length = 8192",
+   [{rabbit, [
+      {regex_max_pattern_length, 8192}
+     ]}],
+   []},
+
+  {rabbit_regex_match_limit,
+   "regex_match_limit = 75000",
+   [{rabbit, [
+      {regex_match_limit, 75000}
+     ]}],
+   []},
+
   {rabbit_msg_store_shutdown_timeout,
    "message_store_shutdown_timeout = 600000",
    [{rabbit, [

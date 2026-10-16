@@ -15,13 +15,25 @@
          max_pattern_length/0]).
 
 -define(MATCH_LIMIT, 50_000).
--define(MAX_PATTERN_LENGTH, 1024).
+-define(MAX_PATTERN_LENGTH, 4096).
 
 -spec match_limit() -> pos_integer().
-match_limit() -> ?MATCH_LIMIT.
+match_limit() ->
+    case application:get_env(rabbit, regex_match_limit) of
+        {ok, Val} when is_integer(Val), Val > 0 ->
+            Val;
+        _ ->
+            application:get_env(rabbit_common, regex_match_limit, ?MATCH_LIMIT)
+    end.
 
 -spec max_pattern_length() -> pos_integer().
-max_pattern_length() -> ?MAX_PATTERN_LENGTH.
+max_pattern_length() ->
+    case application:get_env(rabbit, regex_max_pattern_length) of
+        {ok, Val} when is_integer(Val), Val > 0 ->
+            Val;
+        _ ->
+            application:get_env(rabbit_common, regex_max_pattern_length, ?MAX_PATTERN_LENGTH)
+    end.
 
 -spec run(iodata() | unicode:charlist(), re:mp() | iodata()) ->
     match | nomatch | {error, term()}.
@@ -36,10 +48,11 @@ run(Subject, Pattern) ->
   | nomatch
   | {error, term()}.
 run(Subject, Pattern, Opts) ->
+    Limit = match_limit(),
     try
         re:run(Subject, Pattern,
-               [{match_limit, ?MATCH_LIMIT},
-                {match_limit_recursion, ?MATCH_LIMIT}
+               [{match_limit, Limit},
+                {match_limit_recursion, Limit}
                 | Opts])
     catch
         %% `re:run/3` raises on malformed patterns and other shape errors.
@@ -89,11 +102,15 @@ compile(Pattern) ->
 
 -spec compile(iodata(), re:compile_options()) ->
     {ok, re:mp()} | {error, term()}.
-compile(Pattern, _Opts) when is_binary(Pattern),
-                             byte_size(Pattern) > ?MAX_PATTERN_LENGTH ->
-    {error, pattern_too_long};
-compile(Pattern, _Opts) when is_list(Pattern),
-                             length(Pattern) > ?MAX_PATTERN_LENGTH ->
-    {error, pattern_too_long};
+compile(Pattern, Opts) when is_binary(Pattern) ->
+    case byte_size(Pattern) > max_pattern_length() of
+        true  -> {error, pattern_too_long};
+        false -> re:compile(Pattern, Opts)
+    end;
+compile(Pattern, Opts) when is_list(Pattern) ->
+    case length(Pattern) > max_pattern_length() of
+        true  -> {error, pattern_too_long};
+        false -> re:compile(Pattern, Opts)
+    end;
 compile(Pattern, Opts) ->
     re:compile(Pattern, Opts).
