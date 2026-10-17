@@ -76,6 +76,7 @@ groups() ->
            select_nodes_with_least_replicas,
            recover_after_leader_and_coordinator_kill,
            restart_stream,
+           leader_change_deletes_core_metrics,
            format,
            rebalance
           ]},
@@ -1618,6 +1619,44 @@ restart_stream(Config) ->
     publish_confirm(Ch, Q, [<<"msg2">>]),
     rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]),
     ok.
+
+leader_change_deletes_core_metrics(Config) ->
+    Nodes = [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, Q),
+    [ok = rabbit_ct_broker_helpers:rpc(Config, N, sys, suspend,
+                                       [rabbit_core_metrics_gc])
+     || N <- Nodes],
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-initial-cluster-size">>, long, 3}])),
+    check_leader_and_replicas(Config, Nodes),
+    publish_confirm(Ch, Q, [<<"msg">>]),
+    HasMetrics = fun(N) ->
+                         [] =/= rabbit_ct_broker_helpers:rpc(
+                                  Config, N, ets, lookup,
+                                  [queue_coarse_metrics, QName])
+                 end,
+    rabbit_ct_helpers:await_condition(fun() -> HasMetrics(Server1) end, 30000),
+
+    ?assertMatch({ok, _},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, Server1, rabbit_stream_coordinator, restart_stream,
+                   [QName, #{preferred_leader_node => lists:last(Nodes)}])),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Info = find_queue_info(Config, Server1, [leader]),
+              proplists:get_value(leader, Info) =/= Server1
+      end, 30000),
+    Info = find_queue_info(Config, Server1, [leader]),
+    NewLeader = proplists:get_value(leader, Info),
+    rabbit_ct_helpers:await_condition(fun() -> HasMetrics(NewLeader) end, 30000),
+    rabbit_ct_helpers:await_condition(fun() -> not HasMetrics(Server1) end, 30000),
+    [ok = rabbit_ct_broker_helpers:rpc(Config, N, sys, resume,
+                                       [rabbit_core_metrics_gc])
+     || N <- Nodes],
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 format(Config) ->
     %% tests rabbit_stream_queue:format/2
