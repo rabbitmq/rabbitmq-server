@@ -7,7 +7,7 @@
 
 -module(rabbit_shovel_util).
 
--export([update_headers/5,
+-export([update_headers/6,
          add_timestamp_header/1,
          delete_shovel/3,
          restart_shovel/2,
@@ -20,6 +20,7 @@
          validate_consumer_args/2,
          validate_delete_after/2,
          validate_delete_after_duration/2,
+         validate_forward_headers_depth/2,
          parse_delete_after/1,
          sched_expire_after_duration/2,
          cancel_expire_after_duration/1,
@@ -41,20 +42,43 @@
 
 -define(APP, rabbitmq_shovel).
 -define(ROUTING_HEADER, <<"x-shovelled">>).
+-define(COUNT_HEADER, <<"x-shovelled-count">>).
 -define(TIMESTAMP_HEADER, <<"x-shovelled-timestamp">>).
 
 -spec dynamic_shovel_supervisor_mod() -> module().
 dynamic_shovel_supervisor_mod() ->
     rabbit_shovel_dyn_worker_sup_sup.
 
-update_headers(Prefix, Suffix, SrcURI, DestURI,
+update_headers(Prefix, Suffix, SrcURI, DestURI, Depth,
                Props = #'P_basic'{headers = Headers}) ->
     Table = Prefix ++ [{<<"src-uri">>,  SrcURI},
                        {<<"dest-uri">>, DestURI}] ++ Suffix,
-    Headers2 = rabbit_basic:prepend_table_header(
+    Headers1 = rabbit_basic:prepend_table_header(
                  ?ROUTING_HEADER, [{K, longstr, V} || {K, V} <- Table],
                  Headers),
-    Props#'P_basic'{headers = Headers2}.
+    Headers2 = incr_count_header(Headers1),
+    Headers3 = truncate_routing_header(Depth, Headers2),
+    Props#'P_basic'{headers = Headers3}.
+
+incr_count_header(Headers) ->
+    %% The existing value is client-controlled, so anything other than an
+    %% integer (a re-typed or forged header) is treated as absent.
+    Count = case rabbit_misc:table_lookup(Headers, ?COUNT_HEADER) of
+                {_, N} when is_integer(N) -> N + 1;
+                _ -> 1
+            end,
+    rabbit_misc:set_table_value(Headers, ?COUNT_HEADER, long, Count).
+
+truncate_routing_header(undefined, Headers) ->
+    Headers;
+truncate_routing_header(Depth, Headers) ->
+    case rabbit_misc:table_lookup(Headers, ?ROUTING_HEADER) of
+        {array, Entries} when length(Entries) > Depth ->
+            rabbit_misc:set_table_value(Headers, ?ROUTING_HEADER, array,
+                                        lists:sublist(Entries, Depth));
+        _ ->
+            Headers
+    end.
 
 add_timestamp_header(Props = #'P_basic'{headers = undefined}) ->
     add_timestamp_header(Props#'P_basic'{headers = []});
@@ -273,6 +297,11 @@ validate_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
      "~tp", [Name, Term]}.
 
+
+validate_forward_headers_depth(_Name, N) when is_integer(N), N >= 1 ->
+    ok;
+validate_forward_headers_depth(Name, Term) ->
+    {error, "~ts should be a positive integer, actually was ~tp", [Name, Term]}.
 
 parse_delete_after(<<"never">>) -> never;
 parse_delete_after(<<"queue-length">>) -> 'queue-length';
