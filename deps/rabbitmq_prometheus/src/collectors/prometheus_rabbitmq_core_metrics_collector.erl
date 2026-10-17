@@ -385,7 +385,7 @@ build_info() ->
                  end,
     {
         build_info,
-        untyped,
+        gauge,
         "RabbitMQ & Erlang/OTP version info",
         [{
             Properties,
@@ -396,7 +396,7 @@ build_info() ->
 identity_info(Endpoint) ->
     {
         identity_info,
-        untyped,
+        gauge,
         "RabbitMQ node & cluster identity info",
         [{
             [
@@ -613,13 +613,13 @@ metric(boolean, Labels, Value0) ->
                 false -> 0;
                 undefined -> undefined
             end,
-    untyped_metric(Labels, Value).
+    gauge_metric(Labels, Value).
 
 %%====================================================================
 %% Private Parts
 %%====================================================================
 catch_boolean(boolean) ->
-        untyped;
+        gauge;
 catch_boolean(T) ->
         T.
 
