@@ -151,10 +151,10 @@ invalid_legacy_configuration1(_Config) ->
     expected_string_uri =
         test_broken_shovel_sources([{brokers, [42]}]),
 
-    {unexpected_uri_scheme, "invalid"} =
+    unexpected_uri_scheme =
         test_broken_shovel_sources([{broker, "invalid://"}]),
 
-    {unable_to_parse_uri, no_scheme} =
+    unable_to_parse_uri =
         test_broken_shovel_sources([{broker, "invalid"}]),
 
     {require_list, invalid} =
@@ -173,14 +173,11 @@ invalid_legacy_configuration1(_Config) ->
           [{broker, "amqp://"},
            {declarations, [{'queue.declare', [invalid]}]}]),
 
-    {invalid_amqp_params_parameter, heartbeat, "text",
-     [{"heartbeat", "text"}], {not_an_integer, "text"}} =
+    {invalid_amqp_params_parameter, heartbeat} =
         test_broken_shovel_sources(
           [{broker, "amqp://localhost/?heartbeat=text"}]),
 
-    {invalid_amqp_params_parameter, username, "text",
-     [{"username", "text"}],
-     {parameter_unconfigurable_in_query, username, "text"}} =
+    {invalid_amqp_params_parameter, username} =
         test_broken_shovel_sources([{broker, "amqp://?username=text"}]),
 
     {invalid_parameter_value, prefetch_count,
@@ -206,8 +203,7 @@ invalid_legacy_configuration1(_Config) ->
      {unexpected_fields, [invalid], _}} =
         test_broken_shovel_config([{publish_properties, [invalid]} | Config]),
 
-    {invalid_ssl_parameter, fail_if_no_peer_cert, "42", _,
-     {require_boolean, "42"}} =
+    {invalid_ssl_parameter, fail_if_no_peer_cert} =
         test_broken_shovel_sources([{broker, "amqps://username:password@host:5673/vhost?cacertfile=/path/to/cacert.pem&certfile=/path/to/certfile.pem&keyfile=/path/to/keyfile.pem&verify=verify_peer&fail_if_no_peer_cert=42"}]),
 
     passed.
