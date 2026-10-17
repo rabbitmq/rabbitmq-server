@@ -11,6 +11,7 @@ on:
     - plugins.mk
     - rabbitmq-components.mk
     - .github/workflows/test-upgrades.yaml
+    - .github/workflows/test-upgrades.sh
   pull_request:
 
 concurrency:
@@ -95,6 +96,7 @@ jobs:
         scenario:
           - durable_queue
           - transient_queue
+          - transient_nonexclusive_queue
           - 10k_queues_import
           - topic_bindings_import
         node_count:
