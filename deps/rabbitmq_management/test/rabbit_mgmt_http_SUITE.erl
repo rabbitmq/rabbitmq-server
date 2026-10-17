@@ -106,6 +106,7 @@ definitions_group2_tests() ->
 definitions_group3_tests() ->
     [
         definitions_server_named_queue_test,
+        definitions_queue_bindings_round_trip_test,
         definitions_with_charset_test,
         definitions_large_streamed_test
     ].
@@ -362,6 +363,10 @@ end_per_testcase0(T, Config)
     Config;
 end_per_testcase0(definitions_password_test, Config) ->
     rpc(Config, application, unset_env, [rabbit, password_hashing_module]),
+    Config;
+end_per_testcase0(definitions_queue_bindings_round_trip_test, Config) ->
+    rpc(Config, rabbit_amqqueue, delete_with,
+        [rabbit_misc:r(<<"/">>, queue, <<"definitions-regular-q">>), false, false, <<"CT tests">>]),
     Config;
 end_per_testcase0(queues_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"downvhost">>),
@@ -2774,6 +2779,42 @@ definitions_server_named_queue_test(Config) ->
     %% amq.* entities are not imported
     http_get(Config, Path, ?NOT_FOUND),
     passed.
+
+definitions_queue_bindings_round_trip_test(Config) ->
+    {Conn, Ch} = open_connection_and_channel(Config),
+    ExclusiveQ = <<"definitions-exclusive-q">>,
+    RegularQ = <<"definitions-regular-q">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = ExclusiveQ, exclusive = true}),
+    #'queue.declare_ok'{queue = ServerNamedQ} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = <<"">>, durable = true}),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = RegularQ, durable = true}),
+    [#'queue.bind_ok'{} =
+         amqp_channel:call(Ch, #'queue.bind'{queue = Q, exchange = <<"amq.direct">>,
+                                             routing_key = <<"definitions-test">>})
+     || Q <- [ExclusiveQ, ServerNamedQ, RegularQ]],
+
+    Expected = lists:sort([ServerNamedQ, RegularQ]),
+    Definitions = http_get(Config, "/definitions", ?OK),
+    ?assertEqual(Expected, amq_direct_binding_destinations(Definitions)),
+    ?assertEqual(Expected, amq_direct_binding_destinations(http_get(Config, "/definitions/%2F", ?OK))),
+    close_channel(Ch),
+    close_connection(Conn),
+
+    ServerNamedPath = "/queues/%2F/" ++ rabbit_http_util:quote_plus(ServerNamedQ),
+    RegularPath = "/queues/%2F/" ++ binary_to_list(RegularQ),
+    http_delete(Config, ServerNamedPath, {group, '2xx'}),
+    http_delete(Config, RegularPath, {group, '2xx'}),
+    http_post(Config, "/definitions", Definitions, {group, '2xx'}),
+    http_get(Config, ServerNamedPath, ?NOT_FOUND),
+    [_] = http_get(Config, "/bindings/%2F/e/amq.direct/q/" ++ binary_to_list(RegularQ), ?OK),
+    passed.
+
+amq_direct_binding_destinations(Definitions) ->
+    lists:sort([D || #{source := <<"amq.direct">>,
+                       routing_key := <<"definitions-test">>,
+                       destination := D} <- maps:get(bindings, Definitions)]).
 
 definitions_with_charset_test(Config) ->
     Path = "/definitions",

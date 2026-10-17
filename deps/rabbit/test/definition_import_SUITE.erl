@@ -86,7 +86,7 @@ groups() ->
             export_import_round_trip_multiple_operator_policies,
             export_import_round_trip_mixed_parameters,
             export_excludes_internal_runtime_parameters,
-            export_excludes_bindings_to_exclusive_queues
+            export_import_round_trip_exclusive_queue_bindings
         ]},
 
         {skip_if_unchanged, [], [
@@ -196,14 +196,14 @@ init_per_group(Group, Config) ->
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(export_excludes_bindings_to_exclusive_queues = Testcase, Config) ->
+init_per_testcase(export_import_round_trip_exclusive_queue_bindings = Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    %% Start the channels manager.
     rabbit_ct_helpers:run_steps(Config1, rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-end_per_testcase(export_excludes_bindings_to_exclusive_queues = Testcase, Config) ->
+end_per_testcase(export_import_round_trip_exclusive_queue_bindings = Testcase, Config) ->
+    delete_queue(Config, <<"/">>, <<"regular.q.bindings.test">>),
     Config1 = rabbit_ct_helpers:run_steps(Config, rabbit_ct_client_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(Testcase, Config) ->
@@ -376,7 +376,7 @@ import_case30(Config) ->
     ?assertEqual({error, not_found}, queue_lookup(Config, VHost, <<"amq.gen-case30">>)),
     Bindings = [{D, K} || #{<<"source">> := <<"x_demo_30">>,
                             <<"destination">> := D,
-                            <<"routing_key">> := K} <- export_bindings(Config)],
+                            <<"routing_key">> := K} <- maps:get(bindings, export(Config))],
     ?assertEqual([{<<"q_demo_30">>, <<"k30">>}], Bindings),
     ok.
 
@@ -448,7 +448,7 @@ export_import_round_trip_case2(Config) ->
         {skip, "Should not run in mixed version environments"}
     end.
 
-export_excludes_bindings_to_exclusive_queues(Config) ->
+export_import_round_trip_exclusive_queue_bindings(Config) ->
     run_if_not_mixed_versions(fun() ->
         {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
         ExclusiveQ = <<"exclusive.q.bindings.test">>,
@@ -467,18 +467,22 @@ export_excludes_bindings_to_exclusive_queues(Config) ->
                                                            routing_key = <<"bindings.test">>})
           end, [ExclusiveQ, ServerNamedQ, RegularQ]),
 
-        Destinations = [D || #{<<"destination">> := D} <- export_bindings(Config)],
+        Defs = export(Config),
+        Destinations = binding_destinations(Defs),
         ?assert(lists:member(RegularQ, Destinations)),
         ?assertNot(lists:member(ExclusiveQ, Destinations)),
         ?assertNot(lists:member(ServerNamedQ, Destinations)),
 
         #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = RegularQ}),
         rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+
+        import_raw(Config, rabbit_json:encode(Defs)),
+        ?assert(lists:member(RegularQ, binding_destinations(export(Config)))),
         ok
     end).
 
-export_bindings(Config) ->
-    maps:get(bindings, export(Config)).
+binding_destinations(Defs) ->
+    [D || #{<<"destination">> := D} <- maps:get(bindings, Defs)].
 
 run_if_not_mixed_versions(Fun) ->
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -780,6 +784,10 @@ vhost_lookup(Config, VHost) ->
 
 user_lookup(Config, User) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, lookup_user, [User]).
+
+delete_queue(Config, VHost, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete_with,
+                                 [rabbit_misc:r(VHost, queue, Name), false, false, <<"CT tests">>]).
 
 delete_vhost(Config, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, delete, [VHost, <<"CT tests">>]).

@@ -330,7 +330,7 @@ fold_queues(Scope, Fun, Acc) ->
 fold_bindings(Scope, Fun, Acc) ->
     rabbit_db_binding:fold_projection(
       fun(#binding{source = #resource{virtual_host = VHost}} = Binding, Acc0) ->
-              case is_exportable_binding(Binding) andalso in_scope(Scope, VHost) of
+              case in_scope(Scope, VHost) andalso is_exportable_binding(Binding) of
                   true  -> Fun(binding_definition(Binding), Acc0);
                   false -> Acc0
               end
@@ -1161,14 +1161,13 @@ queue_definition(Q) ->
     }.
 
 list_bindings() ->
-    [binding_definition(B) || B <- rabbit_binding:list_explicit(),
-                              is_exportable_binding(B)].
+    lists:reverse(fold_bindings(all, fun(B, Acc) -> [B | Acc] end, [])).
 
-%% Exclusive queues are not exported, so bindings to them cannot be restored.
+%% Bindings to exclusive or concurrently deleted queues cannot be restored.
 is_exportable_binding(#binding{destination = #resource{kind = queue} = Dst}) ->
     case rabbit_amqqueue:lookup(Dst) of
         {ok, Q} -> amqqueue:get_exclusive_owner(Q) =:= none;
-        {error, not_found} -> true
+        {error, not_found} -> false
     end;
 is_exportable_binding(_) ->
     true.
