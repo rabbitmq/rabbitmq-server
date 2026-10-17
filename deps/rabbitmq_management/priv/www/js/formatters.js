@@ -472,7 +472,7 @@ function fmt_plugins_small(node) {
     var plugins = [];
     for (var i = 0; i < node.applications.length; i++) {
         var application = node.applications[i];
-        if (jQuery.inArray(application.name, node.enabled_plugins) != -1 ) {
+        if (node.enabled_plugins.indexOf(application.name) !== -1) {
             plugins.push(fmt_escape_html_one_line(application.name));
         }
     }
@@ -484,7 +484,7 @@ function get_plugins_list(node) {
     var result = [];
     for (var i = 0; i < node.applications.length; i++) {
         var application = node.applications[i];
-        if (jQuery.inArray(application.name, node.enabled_plugins) != -1 ) {
+        if (node.enabled_plugins.indexOf(application.name) !== -1) {
             result.push(application);
         }
     }
