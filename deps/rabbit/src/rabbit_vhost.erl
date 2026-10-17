@@ -15,7 +15,7 @@
 -export([add/2, add/3, add/4, delete/2, delete_ignoring_protection/2, exists/1, assert/1,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
--export([parse_tags/1, update_tags/3]).
+-export([parse_tags/1, parse_tags_with_limit_enforcement/1, update_tags/3]).
 -export([update_metadata/3, pick_known_metadata/1,
          enable_protection_from_deletion/1, disable_protection_from_deletion/1]).
 -export([lookup/1, default_name/0]).
@@ -137,28 +137,44 @@ read_config(VHost) ->
 
 -define(INFO_KEYS, vhost:info_keys()).
 
+%% Tags are converted to atoms, which are not garbage collected.
+-define(MAX_VHOST_TAGS, 32).
+
 -spec parse_tags(binary() | string() | atom()) -> [atom()].
-parse_tags(undefined) ->
+parse_tags(Val) ->
+    [trim_tag(Tag) || Tag <- split_tags(Val)].
+
+-spec parse_tags_with_limit_enforcement(binary() | string() | atom()) ->
+    {'ok', [atom()]} | {'error', {'too_many_tags', pos_integer()}}.
+parse_tags_with_limit_enforcement(Val) ->
+    case split_tags(Val) of
+        Tags when length(Tags) =< ?MAX_VHOST_TAGS ->
+            {ok, [trim_tag(Tag) || Tag <- Tags]};
+        _ ->
+            {error, {too_many_tags, ?MAX_VHOST_TAGS}}
+    end.
+
+split_tags(undefined) ->
     [];
-parse_tags(<<"">>) ->
+split_tags(<<"">>) ->
     [];
-parse_tags([]) ->
+split_tags([]) ->
     [];
-parse_tags(Val) when is_binary(Val) ->
+split_tags(Val) when is_binary(Val) ->
     ValUnicode = rabbit_data_coercion:to_unicode_charlist(Val),
-    [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])];
-parse_tags(Val) when is_list(Val) ->
+    re:split(ValUnicode, ",", [unicode, {return, list}]);
+split_tags(Val) when is_list(Val) ->
     case hd(Val) of
       Bin when is_binary(Bin) ->
         %% this is a list of binaries
-        [trim_tag(Tag) || Tag <- Val];
+        Val;
       Atom when is_atom(Atom) ->
         %% this is a list of atoms
-        [trim_tag(Tag) || Tag <- Val];
+        Val;
       Int when is_integer(Int) ->
         %% this is a string/charlist
         ValUnicode = rabbit_data_coercion:to_unicode_charlist(Val),
-        [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])]
+        re:split(ValUnicode, ",", [unicode, {return, list}])
     end.
 
 -spec add(vhost:name(), rabbit_types:username()) ->
@@ -455,8 +471,15 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
       "null"      -> <<"">>;
       Other       -> Other
     end,
-    ParsedTags = parse_tags(Tags),
-    ?LOG_DEBUG("Parsed virtual host tags ~tp to ~tp", [Tags, ParsedTags]),
+    case parse_tags_with_limit_enforcement(Tags) of
+        {ok, ParsedTags} ->
+            ?LOG_DEBUG("Parsed virtual host tags ~tp to ~tp", [Tags, ParsedTags]),
+            do_put_vhost(Name, Description, ParsedTags, DefaultQueueType, Trace, Username);
+        {error, _} = Err ->
+            Err
+    end.
+
+do_put_vhost(Name, Description, ParsedTags, DefaultQueueType, Trace, Username) ->
     Result = case exists(Name) of
                  true  ->
                      update(Name, Description, ParsedTags, DefaultQueueType, Username);

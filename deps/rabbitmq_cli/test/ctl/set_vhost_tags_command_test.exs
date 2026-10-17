@@ -35,6 +35,17 @@ defmodule SetVhostTagsCommandTest do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
   end
 
+  test "validate: rejects more than 32 tags" do
+    tags = Enum.map(1..33, &"t#{&1}")
+
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate([@vhost | tags], %{})
+           )
+
+    assert @command.validate([@vhost | Enum.take(tags, 32)], %{}) == :ok
+  end
+
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     opts = %{node: :jake@thedog, timeout: 200}
 

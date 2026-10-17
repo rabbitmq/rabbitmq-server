@@ -15,6 +15,7 @@
 -compile(export_all).
 
 -define(AWAIT_TIMEOUT, 30000).
+-define(MAX_VHOST_TAGS, 32).
 
 all() ->
     [
@@ -36,7 +37,8 @@ groups() ->
         vhost_update_idempotency,
         vhost_update_default_queue_type_undefined,
         vhost_deletion,
-        parse_tags
+        parse_tags,
+        vhost_tag_limit
     ],
     ClusterSize2Tests = [
         cluster_vhost_deletion_forces_connection_closure,
@@ -554,6 +556,35 @@ parse_tags1(_Config) ->
     ?assertEqual([a, b], rabbit_vhost:parse_tags(<<"a,b">>)),
     ?assertEqual([a3, b3], rabbit_vhost:parse_tags("a3,b3")),
     ?assertEqual([tag1, tag2], rabbit_vhost:parse_tags([<<"tag1">>, <<"tag2">>])).
+
+vhost_tag_limit(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, vhost_tag_limit1, [Config]).
+
+vhost_tag_limit1(_Config) ->
+    Over = tag_names(?MAX_VHOST_TAGS + 1),
+    TooMany = {error, {too_many_tags, ?MAX_VHOST_TAGS}},
+    ?assertEqual(TooMany, rabbit_vhost:parse_tags_with_limit_enforcement(Over)),
+    ?assertEqual(TooMany, rabbit_vhost:parse_tags_with_limit_enforcement(join_tags(Over))),
+    ?assertEqual(TooMany, rabbit_vhost:parse_tags_with_limit_enforcement(
+                            binary_to_list(join_tags(Over)))),
+    ?assertError(badarg, binary_to_existing_atom(lists:last(Over))),
+
+    VHost = <<"vhost-tag-limit">>,
+    ?assertEqual(TooMany, rabbit_vhost:put_vhost(VHost, <<>>, join_tags(Over),
+                                                 undefined, false, <<"acting-user">>)),
+    ?assertNot(rabbit_vhost:exists(VHost)),
+
+    AtLimit = tag_names(?MAX_VHOST_TAGS),
+    ?assertEqual(ok, rabbit_vhost:put_vhost(VHost, <<>>, join_tags(AtLimit),
+                                            undefined, false, <<"acting-user">>)),
+    ?assertEqual(?MAX_VHOST_TAGS, length(vhost:get_tags(rabbit_vhost:lookup(VHost)))),
+    ok = rabbit_vhost:delete(VHost, <<"acting-user">>).
+
+tag_names(N) ->
+    [<<"vhost-tag-limit-", (integer_to_binary(I))/binary>> || I <- lists:seq(1, N)].
+
+join_tags(Tags) ->
+    iolist_to_binary(lists:join(<<",">>, Tags)).
 
 %% -------------------------------------------------------------------
 %% Helpers
