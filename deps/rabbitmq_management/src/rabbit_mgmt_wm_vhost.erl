@@ -86,6 +86,9 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
                                                 ok -> <<"invalid default_queue_type">>
                                             end,
                               rabbit_mgmt_util:bad_request(BackstopMsg, ReqData, Context);
+                          {error, {too_many_tags, Max}} ->
+                              Msg = rabbit_misc:format("A virtual host can have at most ~b tags", [Max]),
+                              rabbit_mgmt_util:bad_request(list_to_binary(Msg), ReqData, Context);
                           {error, E} ->
                               Reason = iolist_to_binary(
                                          io_lib:format(
