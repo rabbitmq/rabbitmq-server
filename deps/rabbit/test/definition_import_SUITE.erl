@@ -62,7 +62,8 @@ groups() ->
                                import_case29,
                                import_case30,
                                import_case31,
-                               import_case32
+                               import_case32,
+                               import_case33
                               ]},
 
         {boot_time_import_using_classic_source, [], [
@@ -391,6 +392,13 @@ import_case32(Config) ->
     ?assert(binary:match(iolist_to_binary(io_lib:format("~tp", [Msg])),
                          <<"resources_missing">>) =/= nomatch),
     ok.
+
+import_case33(Config) ->
+    Msg = import_invalid_file_case_returning_message(Config, "failing_case33"),
+    ?assert(binary:match(iolist_to_binary(io_lib:format("~tp", [Msg])),
+                         <<"too_many_tags">>) =/= nomatch),
+    VHost = <<"vhost_demo_33">>,
+    ?assertEqual({error, {no_such_vhost, VHost}}, vhost_lookup(Config, VHost)).
 
 import_case22(Config) ->
     import_file_case(Config, "case22"),

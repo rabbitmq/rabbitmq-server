@@ -9,10 +9,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostTagsCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  # Must match ?MAX_VHOST_TAGS in rabbit_vhost.
+  @max_vhost_tags 32
+
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([], _) do
     {:validation_failure, :not_enough_args}
+  end
+
+  def validate([_vhost | tags], _) when length(tags) > @max_vhost_tags do
+    {:validation_failure,
+     {:bad_argument,
+      "A virtual host can have at most #{@max_vhost_tags} tags (received #{length(tags)})"}}
   end
 
   def validate(_, _), do: :ok
