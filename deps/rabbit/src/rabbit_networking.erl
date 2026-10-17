@@ -33,6 +33,7 @@
          close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, handshake/3, tcp_host/1,
+         is_trusted_proxy_source/1, trusted_proxies_configured/0,
          ranch_ref/1, ranch_ref/2, ranch_refs_of_protocol/1, ranch_ref_to_protocol/1,
          listener_ip_addresses/1, listener_per_ip_address/1,
          listeners_of_protocol/1, stop_ranch_listeners_of_protocol/1,
@@ -647,6 +648,7 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
                     failed_to_recv_proxy_header(Ref, Error);
                 {ok, ProxyInfo} ->
                     {ok, Sock} = ranch_handshake(Ref),
+                    ok = check_proxy_protocol_trusted_source(Ref, Sock),
                     ok = tune_buffer_size(Sock, BufferStrategy),
                     {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
@@ -655,6 +657,127 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
             ok = tune_buffer_size(Sock, BufferStrategy),
             {ok, Sock}
     end.
+
+%% The PROXY header is not part of the TLS/TCP handshake: it is read off
+%% the wire from whoever connected to the listener, so `ProxyInfo` above
+%% carries a source address the immediately-connecting peer can claim to
+%% be anything. Only honour it when that immediate peer (the real
+%% underlying TCP/TLS peer, obtained via the now-completed handshake, not
+%% the claimed PROXY source) is itself a configured trusted proxy;
+%% otherwise the header is a straightforward IP-spoofing/loopback-bypass
+%% vector.
+check_proxy_protocol_trusted_source(Ref, Sock) ->
+    case rabbit_net:peername(Sock) of
+        {ok, {PeerAddress, _PeerPort}} ->
+            case trusted_proxies_configured() of
+                false ->
+                    %% Temporary leniency so existing proxy_protocol
+                    %% deployments don't break on upgrade; a future release
+                    %% will require proxy_protocol_trusted_proxies to be set.
+                    ?LOG_WARNING(
+                       "Accepting PROXY protocol header from ~ts even though "
+                       "proxy_protocol_trusted_proxies is not configured; "
+                       "configure it to restrict which peers may use the "
+                       "PROXY protocol header",
+                       [rabbit_misc:ntoa(PeerAddress)]);
+                true ->
+                    case is_trusted_proxy_source(PeerAddress) of
+                        true ->
+                            ok;
+                        false ->
+                            ?LOG_WARNING(
+                               "Rejecting PROXY protocol header from ~ts: not a "
+                               "configured proxy_protocol_trusted_proxies entry",
+                               [rabbit_misc:ntoa(PeerAddress)]),
+                            _ = rabbit_net:fast_close(Sock),
+                            exit({shutdown, {proxy_protocol_untrusted_source, Ref}})
+                    end
+            end;
+        {error, Reason} ->
+            _ = rabbit_net:fast_close(Sock),
+            exit({shutdown, {proxy_protocol_peername_error, Reason}})
+    end.
+
+-spec trusted_proxies_configured() -> boolean().
+trusted_proxies_configured() ->
+    application:get_env(rabbit, proxy_protocol_trusted_proxies, []) =/= [].
+
+-spec is_trusted_proxy_source(inet:ip_address()) -> boolean().
+is_trusted_proxy_source(PeerAddress0) ->
+    %% A dual-stack listener may report a peer that connected over IPv4 as
+    %% an IPv4-mapped IPv6 address (e.g. `::ffff:127.0.0.1`); normalise it
+    %% the same way rabbit_net:is_loopback/1 does so a plain IPv4 entry in
+    %% the allowlist still matches.
+    PeerAddress = unmap_ipv4(PeerAddress0),
+    TrustedProxies = application:get_env(rabbit, proxy_protocol_trusted_proxies, []),
+    lists:any(fun(Entry) -> address_matches_entry(PeerAddress, Entry) end,
+              TrustedProxies).
+
+unmap_ipv4({0, 0, 0, 0, 0, 65535, AB, CD}) ->
+    {AB bsr 8, AB band 255, CD bsr 8, CD band 255};
+unmap_ipv4(Address) ->
+    Address.
+
+%% A malformed entry (e.g. an out-of-range or wrong-arity tuple set via
+%% advanced.config, which rabbit_data_coercion:to_list/1 has no catch-all
+%% for) must not crash the reader process handling every connection on
+%% this listener: fail this one entry closed instead.
+address_matches_entry(PeerAddress, Entry) ->
+    try
+        address_matches_entry0(PeerAddress, Entry)
+    catch
+        _:_ ->
+            false
+    end.
+
+address_matches_entry0(PeerAddress, Entry) ->
+    case string:split(rabbit_data_coercion:to_list(Entry), "/") of
+        [AddrStr] ->
+            case inet:parse_address(AddrStr) of
+                {ok, Addr} -> Addr =:= PeerAddress;
+                {error, _} -> false
+            end;
+        [AddrStr, PrefixLenStr] ->
+            case {inet:parse_address(AddrStr), string_to_prefix_len(PrefixLenStr)} of
+                {{ok, NetAddr}, {ok, PrefixLen}} ->
+                    address_in_cidr(PeerAddress, NetAddr, PrefixLen);
+                _ ->
+                    false
+            end;
+        _ ->
+            false
+    end.
+
+string_to_prefix_len(Str) ->
+    case string:to_integer(Str) of
+        {PrefixLen, ""} when PrefixLen >= 0 -> {ok, PrefixLen};
+        _ -> {error, invalid_prefix_length}
+    end.
+
+address_in_cidr(Address, Network, PrefixLen)
+  when tuple_size(Address) =:= 4, tuple_size(Network) =:= 4,
+       PrefixLen >= 0, PrefixLen =< 32 ->
+    <<AddressBits:32>> = list_to_binary(tuple_to_list(Address)),
+    <<NetworkBits:32>> = list_to_binary(tuple_to_list(Network)),
+    Mask = mask(PrefixLen, 32),
+    (AddressBits band Mask) =:= (NetworkBits band Mask);
+address_in_cidr(Address, Network, PrefixLen)
+  when tuple_size(Address) =:= 8, tuple_size(Network) =:= 8,
+       PrefixLen >= 0, PrefixLen =< 128 ->
+    AddressBits = ipv6_to_int(Address),
+    NetworkBits = ipv6_to_int(Network),
+    Mask = mask(PrefixLen, 128),
+    (AddressBits band Mask) =:= (NetworkBits band Mask);
+address_in_cidr(_Address, _Network, _PrefixLen) ->
+    %% address family mismatch (IPv4 peer vs IPv6 entry or vice versa)
+    false.
+
+mask(PrefixLen, Width) ->
+    ((1 bsl Width) - 1) bxor ((1 bsl (Width - PrefixLen)) - 1).
+
+ipv6_to_int({A, B, C, D, E, F, G, H}) ->
+    (A bsl 112) bor (B bsl 96) bor (C bsl 80) bor (D bsl 64) bor
+    (E bsl 48) bor (F bsl 32) bor (G bsl 16) bor H.
 
 ranch_handshake(Ref) ->
     try ranch:handshake(Ref) catch
