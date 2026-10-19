@@ -55,6 +55,12 @@ jobs:
           https://builds.hex.pm
           https://cdn.jsdelivr.net/hex
 
+    - name: SETUP NODE
+      if: inputs.make_target == 'tests'
+      uses: actions/setup-node@v6
+      with:
+        node-version: '24'
+
     - name: MIXED CLUSTERS - FETCH SIGNING KEYS
       uses: dsaltares/fetch-gh-release-asset@1.1.2
       if: inputs.mixed_clusters
@@ -125,7 +131,7 @@ jobs:
       run: |
         sudo netstat -ntp
         set -o pipefail
-        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} NON_DETERMINISTIC=1 2>&1 | sed "s/src\//deps\/${{ inputs.plugin }}\/src\//" | sed "s/test\//deps\/${{ inputs.plugin }}\/test\//" | sed "s/src\/enough\.erl:22:2:/IGNORED src\/enough.erl:22:2:/"
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} NON_DETERMINISTIC=1 REQUIRE_NPM_TESTS=1 2>&1 | sed "s/src\//deps\/${{ inputs.plugin }}\/src\//" | sed "s/test\//deps\/${{ inputs.plugin }}\/test\//" | sed "s/src\/enough\.erl:22:2:/IGNORED src\/enough.erl:22:2:/"
 
     - name: CACHE ACTIVEMQ
       uses: actions/cache/save@v6
