@@ -10,6 +10,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   def scopes(), do: [:queues]
 
+  @max_value_length 120
+
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   use RabbitMQ.CLI.Core.MergesDefaultVirtualHost
@@ -92,7 +94,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
   end
 
   def output({:ok, msg}, _) do
-    res = Enum.map(msg, fn {k, v} -> [{"keys", k}, {"values", v}] end)
+    res = Enum.map(msg, fn {k, v} -> [{"keys", k}, {"values", truncate_value(v)}] end)
     {:stream, res}
   end
 
@@ -122,4 +124,26 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
 
   def banner([name, pos], %{node: node_name}),
     do: "Peeking at quorum queue #{name} at position #{pos} on node #{node_name} ..."
+
+  defp truncate_value(value) when is_binary(value) do
+    prefix =
+      case String.valid?(value) do
+        true -> String.slice(value, 0, @max_value_length)
+        false -> binary_part(value, 0, min(byte_size(value), @max_value_length))
+      end
+
+    case prefix == value do
+      true -> value
+      false -> "#{prefix}... (#{byte_size(value)} bytes)"
+    end
+  end
+
+  defp truncate_value(value) do
+    formatted = IO.chardata_to_string(:io_lib.format(~c"~0p", [value]))
+
+    case String.length(formatted) > @max_value_length do
+      true -> "#{String.slice(formatted, 0, @max_value_length)}..."
+      false -> value
+    end
+  end
 end

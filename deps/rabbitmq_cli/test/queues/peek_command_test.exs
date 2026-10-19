@@ -62,4 +62,55 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommandTest do
              )
            )
   end
+
+  test "output: short values are displayed as is" do
+    msg = [{"exchange", ""}, {"header.x-count", 5}, {"routing_keys", ["qq"]}]
+
+    assert @command.output({:ok, msg}, %{}) ==
+             {:stream,
+              [
+                [{"keys", "exchange"}, {"values", ""}],
+                [{"keys", "header.x-count"}, {"values", 5}],
+                [{"keys", "routing_keys"}, {"values", ["qq"]}]
+              ]}
+  end
+
+  test "output: long binary values are truncated to 120 characters and include their size" do
+    value = String.duplicate("a", 2048)
+
+    assert @command.output({:ok, [{"header.x-token", value}]}, %{}) ==
+             {:stream,
+              [
+                [
+                  {"keys", "header.x-token"},
+                  {"values", String.duplicate("a", 120) <> "... (2048 bytes)"}
+                ]
+              ]}
+  end
+
+  test "output: long multi-byte UTF-8 values are truncated on character boundaries" do
+    value = String.duplicate("é", 200)
+
+    {:stream, [[_, {"values", truncated}]]} =
+      @command.output({:ok, [{"header.x-text", value}]}, %{})
+
+    assert truncated == String.duplicate("é", 120) <> "... (400 bytes)"
+  end
+
+  test "output: long nested values are truncated to 120 characters" do
+    value = for n <- 1..50, do: {"key-#{n}", :longstr, "value-#{n}"}
+
+    {:stream, [[_, {"values", truncated}]]} =
+      @command.output({:ok, [{"header.x-table", value}]}, %{})
+
+    assert String.length(truncated) == 123
+    assert String.ends_with?(truncated, "...")
+  end
+
+  test "output: values are not truncated with the JSON formatter" do
+    value = String.duplicate("a", 2048)
+
+    assert @command.output({:ok, [{"header.x-token", value}]}, %{formatter: "json"}) ==
+             {:ok, %{"result" => "ok", "message" => %{"header.x-token" => value}}}
+  end
 end
