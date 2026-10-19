@@ -106,12 +106,13 @@ isLike(undefined, _Patt) -> undefined;
 isLike(L, {regex, MP}) -> patt_match(L, MP);
 isLike(L, {Patt, Esc}) -> patt_match(L, pattern_of(Patt, Esc)).
 
-patt_match(L, MP) ->
+patt_match(L, MP) when is_binary(L) ->
   BS = byte_size(L),
   case rabbit_re:run(L, MP, [{capture, first}]) of
     {match, [{0, BS}]} -> true;
     _                  -> false
-  end.
+  end;
+patt_match(_, _) -> error.
 
 isIn(_L, []   ) -> false;
 isIn( L, [L|_]) -> true;
