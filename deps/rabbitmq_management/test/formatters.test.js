@@ -184,4 +184,23 @@ describe('get_plugins_list', () => {
     assert.deepEqual(Array.from(sandbox.get_plugins_list(node), app => app.name),
                      ['rabbitmq_management', 'rabbitmq_shovel']);
   });
+
+  // `/nodes` lists a node that is down with neither key.
+  it('returns nothing for a node that was never augmented', () => {
+    const node = { name: 'rabbit@down', running: false };
+    assert.equal(sandbox.get_plugins_list(node).length, 0);
+    assert.equal(sandbox.fmt_plugins_small(node), '');
+  });
+
+  it('returns nothing for a null plugin list', () => {
+    const node = { applications: [{ name: 'rabbit' }], enabled_plugins: null };
+    assert.equal(sandbox.get_plugins_list(node).length, 0);
+    assert.equal(sandbox.fmt_plugins_small(node), '');
+  });
+
+  it('returns nothing when only the application list is present', () => {
+    const node = { applications: [{ name: 'rabbit' }] };
+    assert.equal(sandbox.get_plugins_list(node).length, 0);
+    assert.equal(sandbox.fmt_plugins_small(node), '');
+  });
 });
