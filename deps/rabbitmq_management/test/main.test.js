@@ -36,7 +36,8 @@ const sandbox = {
     document: {},
     console: { error: function() { consoleErrors.push(arguments); } },
     COMPILED_TEMPLATES: { status: function(model) { return model.text; } },
-    timer_interval: 5000
+    timer_interval: 5000,
+    QUEUE_TYPE: { quorum: { params: {} } }
 };
 vm.createContext(sandbox);
 load(sandbox, 'formatters.js');
@@ -107,5 +108,24 @@ describe('put_cast_params', () => {
         sandbox.put_cast_params({ params: { name: 'x', empty: '', count: '3' } },
                                 '/x', undefined, ['count'], undefined);
         assert.deepEqual(Object.assign({}, put), { name: 'x', count: 3 });
+    });
+
+    // `router.test.js` asserts a parameter can be named `hasOwnProperty`.
+    it('casts parameters that shadow a method on Object.prototype', () => {
+        var put = null;
+        sandbox.sync_put = function(sammy, path) { put = sammy.params; return false; };
+        sandbox.put_cast_params({ params: { hasOwnProperty: 'x', count: '3' } },
+                                '/x', undefined, ['count'], undefined);
+        assert.deepEqual(Object.assign({}, put),
+                         { hasOwnProperty: 'x', count: 3 });
+    });
+});
+
+describe('collapse_multifields', () => {
+    it('reads a queue type out of parameters that shadow a method', () => {
+        const params = sandbox.collapse_multifields(
+            { hasOwnProperty: 'x', queuetype: 'quorum' });
+        assert.equal(params['arguments']['x-queue-type'], 'quorum');
+        assert.equal(params.queuetype, undefined);
     });
 });
