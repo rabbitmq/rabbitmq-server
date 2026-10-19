@@ -1812,7 +1812,7 @@ function collapse_multifields(params0) {
             }
         }
     }
-    if (params.hasOwnProperty('queuetype')) {
+    if (has_own_key(params, 'queuetype')) {
         var the_queue_type = params['queuetype'];
         delete params['queuetype'];
         if (the_queue_type != 'default') {
@@ -1859,7 +1859,7 @@ function maybe_remove_fields(params) {
 function put_parameter(sammy, mandatory_keys, num_keys, bool_keys,
                        arrayable_keys) {
     for (var i in sammy.params) {
-        if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
+        if (i === 'length' || !has_own_key(sammy.params, i)) continue;
         if (sammy.params[i] == '' && !has_key(mandatory_keys, i)) {
             delete sammy.params[i];
         }
@@ -1889,7 +1889,7 @@ function put_parameter(sammy, mandatory_keys, num_keys, bool_keys,
 
 function put_cast_params(sammy, path, mandatory_keys, num_keys, bool_keys) {
     for (var i in sammy.params) {
-        if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
+        if (i === 'length' || !has_own_key(sammy.params, i)) continue;
         if (sammy.params[i] == '' && !has_key(mandatory_keys, i)) {
             delete sammy.params[i];
         }
@@ -1905,6 +1905,12 @@ function put_cast_params(sammy, path, mandatory_keys, num_keys, bool_keys) {
 
 function has_key(keys, key) {
     return keys != null && keys.indexOf(key) !== -1;
+}
+
+// A query string or form field can name a parameter `hasOwnProperty`,
+// which shadows the method on the map being read.
+function has_own_key(params, key) {
+    return Object.prototype.hasOwnProperty.call(params, key);
 }
 
 function update_column_options(sammy) {
