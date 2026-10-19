@@ -6,12 +6,10 @@
 
 dispatcher_add(function(sammy) {
     sammy.get('#/top', function() {
-            var nodes = JSON.parse(sync_get('/nodes'));
-            go_to('#/top/' + nodes[0].name + "/20");
+            go_to_first_node('#/top/');
         });
     sammy.get('#/top/ets', function() {
-            var nodes = JSON.parse(sync_get('/nodes'));
-            go_to('#/top/ets/' + nodes[0].name + "/20");
+            go_to_first_node('#/top/ets/');
         });
     sammy.get('#/top/:node/:row_count', function() {
             render({'top':   {path:    '/top/' + esc(this.params['node']),
@@ -57,6 +55,16 @@ $(document).on('change', 'select#row-count', function() {
 $(document).on('change', 'select#row-count-ets', function() {
     go_to('#/top/ets/' + $('select#top-node-ets').val() + "/" + $(this).val());
 });
+
+// `sync_get` answers false for a failed request.
+function go_to_first_node(prefix) {
+    var nodes = JSON.parse(sync_get('/nodes') || '[]');
+    if (nodes.length > 0) {
+        go_to(prefix + nodes[0].name + "/20");
+    } else {
+        console.warn('Cannot list the nodes, so staying put');
+    }
+}
 
 function link_pid(name) {
     return _link_to(name, '#/process/' + esc(name));
