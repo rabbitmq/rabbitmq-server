@@ -38,6 +38,7 @@ groups() ->
       {non_parallel_tests, [], [
                                 basic_evaluate_test,
                                 arithmetic_type_mismatch_test,
+                                like_type_mismatch_test,
                                 arithmetic_overflow_test,
                                 arithmetic_bignum_overflow_test,
                                 between_error_propagation_test
@@ -139,6 +140,28 @@ arithmetic_type_mismatch_test(_Config) ->
     ?assertEqual(error, eval(Hs, {'>=',    {'+', {'ident', <<"amount">>}, 1}, 100})),
     ?assertEqual(error, eval(Hs, {'<>',    {'+', {'ident', <<"amount">>}, 1}, 100})),
     ?assertEqual(error, eval(Hs, {'not_in', {'+', {'ident', <<"amount">>}, 1}, [100]})).
+
+like_type_mismatch_test(_Config) ->
+    {ok, Regex} = rabbit_re:compile(<<"x">>),
+    lists:foreach(
+      fun({Pattern, Escape}) ->
+          Like = {like, {ident, <<"p">>}, Pattern, Escape},
+          NotLike = {not_like, {ident, <<"p">>}, Pattern, Escape},
+          lists:foreach(
+            fun({Type, Value}) ->
+                Headers = [{<<"p">>, Type, Value}],
+                ?assertEqual(error, evaluate(Like, Headers)),
+                ?assertEqual(undefined, evaluate(NotLike, Headers))
+            end,
+            [{signedint, 1}, {double, 1.0}, {bool, true}]),
+          ?assertEqual(undefined, evaluate(Like, [])),
+          ?assertEqual(undefined, evaluate(NotLike, [])),
+          ?assertEqual(true, evaluate(Like, [{<<"p">>, longstr, <<"x">>}])),
+          ?assertEqual(false, evaluate(NotLike, [{<<"p">>, longstr, <<"x">>}])),
+          ?assertEqual(false, evaluate(Like, [{<<"p">>, longstr, <<"y">>}])),
+          ?assertEqual(true, evaluate(NotLike, [{<<"p">>, longstr, <<"y">>}]))
+      end,
+      [{<<"x">>, no_escape}, {regex, Regex}]).
 
 %% Float arithmetic that would overflow to infinity raises `badarith`.
 arithmetic_overflow_test(_Config) ->
