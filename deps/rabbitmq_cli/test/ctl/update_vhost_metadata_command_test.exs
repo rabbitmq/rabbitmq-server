@@ -33,6 +33,17 @@ defmodule UpdateVhostMetadataCommandTest do
     assert @command.validate(["a-vhost"], %{}) == {:validation_failure, :not_enough_args}
   end
 
+  test "validate: rejects more than 32 tags" do
+    tags = fn n -> Enum.map_join(1..n, ",", &"t#{&1}") end
+
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(["a-vhost"], %{tags: tags.(33)})
+           )
+
+    assert @command.validate(["a-vhost"], %{tags: tags.(32)}) == :ok
+  end
+
   test "validate: virtual host name and one or more metadata options succeeds" do
     assert @command.validate(["a-vhost"], %{description: "Used by team A"}) == :ok
 

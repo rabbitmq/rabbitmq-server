@@ -7,6 +7,9 @@ defmodule RabbitMQ.CLI.Core.VirtualHosts do
   @known_queue_types ["quorum", "stream", "classic"]
   @empty_default_queue_type_message "Default queue type must not be an empty string"
 
+  # Must match ?MAX_VHOST_TAGS in rabbit_vhost.
+  @max_vhost_tags 32
+
   def parse_tags(tags) do
     case tags do
       nil ->
@@ -18,6 +21,20 @@ defmodule RabbitMQ.CLI.Core.VirtualHosts do
         |> Enum.map(&String.to_atom/1)
     end
   end
+
+  def validate_tags(tags) when is_binary(tags) do
+    validate_tag_count(String.split(tags, ",", trim: true))
+  end
+
+  def validate_tags(_), do: :ok
+
+  def validate_tag_count(tags) when length(tags) > @max_vhost_tags do
+    {:validation_failure,
+     {:bad_argument,
+      "A virtual host can have at most #{@max_vhost_tags} tags (received #{length(tags)})"}}
+  end
+
+  def validate_tag_count(_), do: :ok
 
   def invalid_queue_type_message(""), do: @empty_default_queue_type_message
   def invalid_queue_type_message(dqt) when is_binary(dqt), do: "#{dqt} is not a valid queue type"
