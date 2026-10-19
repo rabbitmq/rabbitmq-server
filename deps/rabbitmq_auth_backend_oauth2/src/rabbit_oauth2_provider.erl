@@ -116,8 +116,8 @@ do_replace_signing_keys(SigningKeys, OauthProviderId) ->
 
     OauthProviders = maps:put(OauthProviderId, OauthProvider, OauthProviders0),
     set_env(oauth_providers, OauthProviders),
-    ?LOG_DEBUG("Replacing signing keys for ~p -> ~p with ~p keys",
-        [OauthProviderId, OauthProvider, maps:size(SigningKeys)]),
+    ?LOG_DEBUG("Replacing signing keys for ~p with ~p keys",
+        [OauthProviderId, maps:size(SigningKeys)]),
     SigningKeys.
 
 
