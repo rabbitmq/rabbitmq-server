@@ -3132,7 +3132,20 @@ rebalance(Config) ->
                                                 NodeData)
                               end, Summary)
                 end, 30000),
+
+    %% Replicas still starting when the group ends crash on node shutdown
+    ?awaitMatch(true,
+                lists:all(fun(Q) -> all_members_running(Config, Q) end,
+                          [Q1, Q2, Q3, Q4, Q5]),
+                30000),
     ok.
+
+all_members_running(Config, Q) ->
+    QName = rabbit_misc:r(<<"/">>, queue, Q),
+    StreamId = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_stream_id, [QName]),
+    {ok, Members} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stream_coordinator,
+                                                 members, [StreamId]),
+    lists:all(fun({Pid, _Role}) -> is_pid(Pid) end, maps:values(Members)).
 
 member_offsets(Config, Server, Q) ->
     Status = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue, status,
