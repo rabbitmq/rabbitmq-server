@@ -218,6 +218,7 @@ do_add(Name, Metadata0, ActingUser) ->
 
     Description = maps:get(description, Metadata, undefined),
     Tags = maps:get(tags, Metadata, []),
+    ok = enforce_tag_limit(Tags),
 
     case Metadata of
         #{default_queue_type := DQT} ->
@@ -353,11 +354,33 @@ update_metadata(Name, Metadata0, ActingUser) ->
             Metadata1
     end,
 
-    case validate_metadata_default_queue_type(Metadata) of
+    case validate_metadata(Metadata) of
         ok ->
             persist_metadata_update(Name, Metadata, ActingUser);
+        {error, _} = Err ->
+            Err;
         {error, _, _} = Err ->
             Err
+    end.
+
+-spec validate_metadata(vhost:metadata()) ->
+    'ok' | {'error', any()} | {'error', 'invalid_queue_type', any()}.
+validate_metadata(Metadata) ->
+    case validate_tag_count(maps:get(tags, Metadata, [])) of
+        ok  -> validate_metadata_default_queue_type(Metadata);
+        Err -> Err
+    end.
+
+-spec validate_tag_count(term()) -> 'ok' | {'error', {'too_many_tags', pos_integer()}}.
+validate_tag_count(Tags) when is_list(Tags), length(Tags) > ?MAX_VHOST_TAGS ->
+    {error, {too_many_tags, ?MAX_VHOST_TAGS}};
+validate_tag_count(_) ->
+    ok.
+
+enforce_tag_limit(Tags) ->
+    case validate_tag_count(Tags) of
+        ok -> ok;
+        {error, _} = Err -> throw(Err)
     end.
 
 -spec validate_metadata_default_queue_type(vhost:metadata()) ->
@@ -716,6 +739,7 @@ are_different(L1, L2) ->
 -spec update_tags(vhost:name(), [vhost_tag()], rabbit_types:username()) -> vhost:vhost().
 update_tags(VHostName, Tags, ActingUser) ->
     try
+        ok = enforce_tag_limit(Tags),
         CurrentTags = case rabbit_db_vhost:get(VHostName) of
                           undefined -> [];
                           V -> vhost:get_tags(V)
