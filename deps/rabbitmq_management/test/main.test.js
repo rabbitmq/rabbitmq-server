@@ -81,6 +81,18 @@ describe('update_status', () => {
         sandbox.update_status('error');
         assert.match(replaced['#status'], /^Error: could not connect to server since 2026-01-02 03:04:05\. /);
     });
+
+    // `check_bad_response` passes this for HTTP 408.
+    it('reports a request that timed out', () => {
+        sandbox.update_status('timeout');
+        assert.match(replaced['#status'],
+                     /^Error: timed out talking to the server\. Will retry at /);
+    });
+
+    it('still rejects a status it has no text for', () => {
+        assert.throws(function() { sandbox.update_status('bogus'); },
+                      /Unknown status bogus/);
+    });
 });
 
 describe('dispatcher', () => {

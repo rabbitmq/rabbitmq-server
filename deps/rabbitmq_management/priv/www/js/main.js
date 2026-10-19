@@ -1516,6 +1516,11 @@ function update_status(status) {
         }
         text += ". Will retry at " + fmt_date(next_try) + ".";
     }
+    else if (status == 'timeout') {
+        var retry_at = new Date(new Date().getTime() + timer_interval);
+        text = "Error: timed out talking to the server. Will retry at " +
+            fmt_date(retry_at) + ".";
+    }
     else
         throw("Unknown status " + status);
 
