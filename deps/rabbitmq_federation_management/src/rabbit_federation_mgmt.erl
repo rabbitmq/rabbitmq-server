@@ -15,6 +15,7 @@
 
 -import(rabbit_misc, [pget/2]).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 dispatcher() -> [{"/federation-links", ?MODULE, [all]},
@@ -46,7 +47,7 @@ resource_exists(ReqData, Context) ->
                           none -> true;
                           %% Restarting a link
                           Id ->
-                              lookup(Id, ReqData)
+                              lookup(Id, ReqData) =/= not_found
                       end
      end, ReqData, Context}.
 
@@ -138,26 +139,26 @@ print(Fmt, Val) ->
 lookup(Id, ReqData) ->
     case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
         {ok, Node} ->
+            VHost = rabbit_mgmt_util:vhost(ReqData),
             case rpc:call(Node, rabbit_federation_status, lookup, [Id], infinity) of
-                {badrpc, _}  -> false;
-                not_found -> false;
-                _ -> true
+                Obj when is_list(Obj) ->
+                    case pget(key, Obj) of
+                        {#resource{virtual_host = VHost}, _, _} -> {ok, Node, Obj};
+                        _ -> not_found
+                    end;
+                _ -> not_found
             end;
         {error, _} ->
-            false
+            not_found
     end.
 
 restart(Id, ReqData) ->
-    case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
-        {ok, Node} ->
-            case rpc:call(Node, rabbit_federation_status, lookup, [Id], infinity) of
-                not_found -> false;
-                Obj ->
-                    Upstream = proplists:get_value(upstream, Obj),
-                    Supervisor = proplists:get_value(supervisor, Obj),
-                    rpc:call(Node, rabbit_federation_link_sup, restart, [Supervisor, Upstream], infinity),
-                    true
-            end;
-        {error, _} ->
+    case lookup(Id, ReqData) of
+        {ok, Node, Obj} ->
+            Upstream = proplists:get_value(upstream, Obj),
+            Supervisor = proplists:get_value(supervisor, Obj),
+            rpc:call(Node, rabbit_federation_link_sup, restart, [Supervisor, Upstream], infinity),
+            true;
+        not_found ->
             false
     end.
