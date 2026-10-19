@@ -245,7 +245,14 @@ function rates_text(items, stats, mode, fmt, chart_rates) {
 //
 
 function render_charts() {
-    $('.chart').map(function() {
+    var charts = $('.chart');
+    if (charts.length === 0) {
+        return;
+    }
+    chart_chrome.grid.tickColor =
+        getComputedStyle(document.documentElement)
+            .getPropertyValue('--chart-grid-color').trim() || "#aaa";
+    charts.map(function() {
         render_chart($(this));
     });
 }
@@ -257,8 +264,13 @@ var chart_colors = {full: ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed'
 var chart_chrome = {
     series: { lines: { show: true, lineWidth: 2 } },
     grid:   { borderWidth: 2, borderColor: "#aaa" },
-    xaxis:  { showTicks: false, mode: "time", timezone: "browser", timeBase: "milliseconds" },
-    yaxis:  { showTicks: false, min: 0, ticks: chart_y_ticks },
+    // Flot 4 draws grid lines for the innermost axis of each direction.
+    xaxis:  { showTicks: false, gridLines: false, mode: "time",
+              timezone: "browser", timeBase: "milliseconds" },
+    // `major`, the default, leaves the first and last tick labels
+    // unmeasured, so a two-tick axis reserves no room for them.
+    yaxis:  { showTicks: false, showTickLabels: "all", min: 0,
+              ticks: chart_y_ticks },
     legend: { show: false },
     // Flot 4 ignores `yaxis.min` when it scales the axis to the data.
     hooks:  { adjustSeriesDataRange: [chart_y_range_from_zero] }
@@ -271,9 +283,10 @@ function chart_y_range_from_zero(plot, series, range) {
     }
 }
 
-// An idle chart gets a 0 to 1 axis, which only needs its two ends labelled.
+// `setEndpointTicks` adds the axis ends itself, so an idle chart asks for
+// no ticks of its own rather than a duplicate pair.
 function chart_y_ticks(axis) {
-    return axis.max == 1 ? [0, 1] : axis.tickGenerator(axis);
+    return axis.max == 1 ? [] : axis.tickGenerator(axis);
 }
 
 function chart_fill(mode, i) {
@@ -318,8 +331,6 @@ function render_chart(div) {
     chart_data[id] = {};
 
     chart_chrome.yaxis.tickFormatter = fmt_y_axis(fmt);
-    chart_chrome.grid.tickColor = getComputedStyle(document.documentElement)
-        .getPropertyValue('--chart-grid-color').trim();
     $.plot(div, out_data, chart_chrome);
 }
 
