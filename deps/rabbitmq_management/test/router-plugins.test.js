@@ -100,7 +100,8 @@ function submitForm(plugin, method, action, fields) {
         },
         _fields: fields
     };
-    plugin.sandbox._docHandlers['submit form']({ target: form, preventDefault: function() {} });
+    plugin.sandbox._docHandlers['submit form'](
+        { target: form, currentTarget: form, preventDefault: function() {} });
 }
 
 describe('stream management routes', () => {

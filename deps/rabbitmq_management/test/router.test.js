@@ -22,18 +22,36 @@ function makeSandbox() {
     var listeners = {};
     var docHandlers = {};
     var documentStub = { title: '' };
+    // Keyed by event name, `docHandlers` and `listeners` cannot show a
+    // handler bound twice, so the bindings are also counted.
+    var bindings = [];
+    var warnings = [];
+    function unbind(fn) {
+        for (var i = bindings.length - 1; i >= 0; i--) {
+            if (bindings[i] === fn) bindings.splice(i, 1);
+        }
+    }
     var windowStub = {
         location: { hash: '', toString: function() { return 'http://localhost/' + this.hash; } },
-        addEventListener: function(name, fn) { listeners[name] = fn; },
-        removeEventListener: function(name, fn) { if (listeners[name] === fn) delete listeners[name]; }
+        addEventListener: function(name, fn) { listeners[name] = fn; bindings.push(fn); },
+        removeEventListener: function(name, fn) {
+            if (listeners[name] === fn) delete listeners[name];
+            unbind(fn);
+        }
     };
     // $(document) is used for submit delegation; every other call is
     // $(form), used to read the submitted fields.
     var jqStub = function(target) {
         if (target === documentStub) {
             return {
-                on: function(event, selector, fn) { docHandlers[event] = fn; },
-                off: function(event, selector, fn) { if (docHandlers[event] === fn) delete docHandlers[event]; }
+                on: function(event, selector, fn) {
+                    docHandlers[event] = fn;
+                    bindings.push(fn);
+                },
+                off: function(event, selector, fn) {
+                    if (docHandlers[event] === fn) delete docHandlers[event];
+                    unbind(fn);
+                }
             };
         }
         return {
@@ -47,9 +65,17 @@ function makeSandbox() {
         document: documentStub,
         $: jqStub,
         jQuery: jqStub,
-        console: console,
+        console: {
+            log: console.log,
+            error: console.error,
+            warn: function() {
+                warnings.push(Array.prototype.slice.call(arguments).join(' '));
+            }
+        },
         _docHandlers: docHandlers,
-        _listeners: listeners
+        _listeners: listeners,
+        _bindings: bindings,
+        _warnings: warnings
     };
     vm.createContext(sandbox);
     vm.runInContext(routerSrc, sandbox, { filename: ROUTER_JS_PATH });
@@ -204,6 +230,93 @@ describe('unknown verbs', () => {
     });
 });
 
+describe('running an application twice', () => {
+    it('binds each handler once, so unload leaves nothing behind', () => {
+        var box = makeSandbox();
+        var app = new box.Application();
+        app.run();
+        assert.equal(box._bindings.length, 2);
+        app.run();
+        assert.equal(box._bindings.length, 2);
+        app.unload();
+        assert.equal(box._bindings.length, 0);
+    });
+});
+
+describe('a submit raised on a field inside the form', () => {
+    it('reads the form that matched, not the event target', () => {
+        var box = makeSandbox();
+        var app = new box.Application();
+        var seen = null;
+        app.put('#/queues', function() { seen = this.params; });
+        app.run();
+        var prevented = false;
+        box._docHandlers.submit({
+            target: { getAttribute: function() { return null; } },
+            currentTarget: {
+                getAttribute: function(name) {
+                    return name === 'action' ? '#/queues' : 'put';
+                },
+                _fields: [{ name: 'name', value: 'q1' }]
+            },
+            preventDefault: function() { prevented = true; }
+        });
+        assert.equal(prevented, true, 'the submit was left to the browser');
+        assert.equal(seen.name, 'q1');
+        app.unload();
+    });
+});
+
+describe('a form method with surrounding whitespace', () => {
+    it('still reaches the del route table', () => {
+        var box = makeSandbox();
+        var app = new box.Application();
+        var ran = false;
+        app.del('#/queues/:name', function() { ran = true; });
+        app.run();
+        var form = {
+            getAttribute: function(name) {
+                return name === 'action' ? '#/queues/q1' : ' DELETE ';
+            },
+            _fields: []
+        };
+        box._docHandlers.submit({ target: form, currentTarget: form,
+                                  preventDefault: function() {} });
+        assert.equal(ran, true);
+        app.unload();
+    });
+});
+
+describe('a malformed escape in the hash', () => {
+    it('reaches the route undecoded rather than raising', () => {
+        var app = new Application();
+        var seen = null;
+        app.get('#/queues/:vhost/:name', function() { seen = this.params; });
+        app._runRoute('get', '#/queues/%2F/%E0%A4%A');
+        assert.equal(seen.vhost, '/');
+        assert.equal(seen.name, '%E0%A4%A');
+    });
+
+    it('reaches the route undecoded from a query string', () => {
+        var app = new Application();
+        var seen = null;
+        app.get('#/queues', function() { seen = this.params; });
+        app._runRoute('get', '#/queues?name=100%');
+        assert.equal(seen.name, '100%');
+    });
+});
+
+describe('an action with no route', () => {
+    it('is reported rather than discarded silently', () => {
+        var box = makeSandbox();
+        var app = new box.Application();
+        app.del('#/queues/:name', function() {});
+        app._runRoute('del', '#/queeus/q1');
+        assert.deepEqual(Array.from(box._warnings),
+                         ['404 Not Found del #/queeus/q1']);
+    });
+});
+
 describe('unsupported Sammy functions', () => {
     it('throw when called', () => {
         var app = new Application();
@@ -231,7 +344,8 @@ describe('form submission', () => {
             },
             _fields: [{ name: 'name', value: 'q1' }, { name: 'tag', value: 'a' }, { name: 'tag', value: 'b' }]
         };
-        sandbox._docHandlers.submit({ target: form, preventDefault: function() { prevented = true; } });
+        sandbox._docHandlers.submit({ target: form, currentTarget: form,
+                                      preventDefault: function() { prevented = true; } });
 
         assert.equal(prevented, true);
         assert.equal(seenParams.name, 'q1');
@@ -251,7 +365,8 @@ describe('form submission without a method', () => {
             getAttribute: function(name) { return name === 'action' ? action : null; },
             _qs: qs
         };
-        sandbox._docHandlers.submit({ target: form, preventDefault: function() { prevented = true; } });
+        sandbox._docHandlers.submit({ target: form, currentTarget: form,
+                                      preventDefault: function() { prevented = true; } });
         return prevented;
     }
 

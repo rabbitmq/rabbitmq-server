@@ -68,7 +68,15 @@ var Application = (function() {
     };
 
     function decodeParam(str) {
-        return decodeURIComponent((str || '').replace(/\+/g, ' '));
+        var raw = (str || '').replace(/\+/g, ' ');
+        try {
+            return decodeURIComponent(raw);
+        } catch (e) {
+            // A hash can carry a malformed escape, and `decodeURIComponent`
+            // raises `URIError` rather than returning it unchanged.
+            console.warn('Could not decode', raw, e);
+            return raw;
+        }
     }
 
     function addParam(params, key, value) {
@@ -102,9 +110,11 @@ var Application = (function() {
         var queryStart = fullPath.indexOf('?');
         var path = queryStart === -1 ? fullPath : fullPath.substring(0, queryStart);
         var query = queryStart === -1 ? '' : fullPath.substring(queryStart + 1);
+        // `verb` comes from a form's `method`, so it can name a property
+        // of `Object.prototype` rather than a route table.
         var routes = this._routes[verb];
         if (!Array.isArray(routes)) {
-            return;
+            routes = [];
         }
         for (var i = 0; i < routes.length; i++) {
             var route = routes[i];
@@ -128,6 +138,7 @@ var Application = (function() {
                 return route.callback.apply(context, [context].concat(splat));
             }
         }
+        console.warn('404 Not Found', verb, fullPath);
     };
 
     Application.prototype._checkLocation = function() {
@@ -139,6 +150,9 @@ var Application = (function() {
     };
 
     Application.prototype.run = function() {
+        if (this._hashchange_handler) {
+            return;
+        }
         var app = this;
 
         this._hashchange_handler = function() {
@@ -147,8 +161,9 @@ var Application = (function() {
         window.addEventListener('hashchange', this._hashchange_handler);
 
         this._submit_handler = function(e) {
-            var form = e.target;
-            var verb = (form.getAttribute('method') || 'get').toLowerCase();
+            var form = e.currentTarget;
+            var verb =
+                (form.getAttribute('method') || 'get').trim().toLowerCase();
             var path = form.getAttribute('action');
             if (!path) {
                 return;
