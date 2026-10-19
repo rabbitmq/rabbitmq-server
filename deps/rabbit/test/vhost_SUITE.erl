@@ -578,7 +578,17 @@ vhost_tag_limit1(_Config) ->
     ?assertEqual(ok, rabbit_vhost:put_vhost(VHost, <<>>, join_tags(AtLimit),
                                             undefined, false, <<"acting-user">>)),
     ?assertEqual(?MAX_VHOST_TAGS, length(vhost:get_tags(rabbit_vhost:lookup(VHost)))),
-    ok = rabbit_vhost:delete(VHost, <<"acting-user">>).
+
+    OverAtoms = [list_to_atom("vhost_tag_limit_" ++ integer_to_list(I))
+                 || I <- lists:seq(1, ?MAX_VHOST_TAGS + 1)],
+    ?assertEqual(TooMany, rabbit_vhost:update_metadata(VHost, #{tags => OverAtoms},
+                                                       <<"acting-user">>)),
+    ?assertThrow(TooMany, rabbit_vhost:update_tags(VHost, OverAtoms, <<"acting-user">>)),
+    ?assertEqual(?MAX_VHOST_TAGS, length(vhost:get_tags(rabbit_vhost:lookup(VHost)))),
+    ok = rabbit_vhost:delete(VHost, <<"acting-user">>),
+
+    ?assertEqual(TooMany, rabbit_vhost:add(VHost, <<>>, OverAtoms, <<"acting-user">>)),
+    ?assertNot(rabbit_vhost:exists(VHost)).
 
 tag_names(N) ->
     [<<"vhost-tag-limit-", (integer_to_binary(I))/binary>> || I <- lists:seq(1, N)].
