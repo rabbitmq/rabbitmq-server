@@ -15,7 +15,8 @@
 -export([add/2, add/3, add/4, delete/2, delete_ignoring_protection/2, exists/1, assert/1,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
--export([parse_tags/1, parse_tags_with_limit_enforcement/1, update_tags/3]).
+-export([parse_tags/1, parse_tags_with_limit_enforcement/1, validate_tag_count/1,
+         update_tags/3]).
 -export([update_metadata/3, pick_known_metadata/1,
          enable_protection_from_deletion/1, disable_protection_from_deletion/1]).
 -export([lookup/1, default_name/0]).
