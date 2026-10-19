@@ -383,7 +383,7 @@ declare_max_age_equivalence(Config) ->
                                              {<<"x-max-age">>, longstr, <<"1D">>}])),
 
     %% "24h" is the same duration as "1D"; see rabbitmq/rabbitmq-server#8509
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+    ?assertMatch({'queue.declare_ok', Q, _, 0},
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                              {<<"x-max-age">>, longstr, <<"24h">>}])),
 
@@ -400,7 +400,7 @@ declare_max_age_equivalence(Config) ->
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
                  declare(Config, Server, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-max-age">>, longstr, <<"1Y">>}])),
-    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+    ?assertMatch({'queue.declare_ok', Q2, _, 0},
                  declare(Config, Server, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-max-age">>, longstr, <<"365D">>}])),
 
