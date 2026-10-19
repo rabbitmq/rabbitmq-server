@@ -78,9 +78,12 @@ handle_cast(_, State = #state{}) ->
 
 handle_info(gc, State = #state{}) ->
     Now = erlang:system_time(milli_seconds),
-    MatchSpec = [{{'$1', '$2'}, [{'<', '$1', {const, Now}}], ['$2']}],
+    MatchSpec = [{{'$1', '$2'}, [{'<', '$1', {const, Now}}], ['$_']}],
     Expired = ets:select(?SEGMENT_TABLE, MatchSpec),
-    [ets:delete(Table) || Table <- Expired],
+    [begin
+         ets:delete(?SEGMENT_TABLE, Boundary),
+         ets:delete(Table)
+     end || {Boundary, Table} <- Expired],
     {noreply, State};
 handle_info(_Msg, State) ->
     {noreply, State}.
