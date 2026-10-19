@@ -1,7 +1,12 @@
 dispatcher_add(function(sammy) {
     sammy.get('#/traces', function() {
-            var nodes = JSON.parse(sync_get('/nodes'));
-            go_to('#/traces/' + nodes[0].name);
+            // `sync_get` answers false for a failed request.
+            var nodes = JSON.parse(sync_get('/nodes') || '[]');
+            if (nodes.length > 0) {
+                go_to('#/traces/' + nodes[0].name);
+            } else {
+                console.warn('Cannot list the nodes, so staying put');
+            }
         });
     sammy.get('#/traces/:node', function() {
             render({'traces': '/traces/node/' + esc(this.params['node']),

@@ -16,7 +16,7 @@ const ROUTER_JS =
     path.join(__dirname, '../../rabbitmq_management/priv/www/js/router.js');
 const TOP_JS = path.join(__dirname, '../priv/www/js/top.js');
 
-function loadPlugin(pluginPath) {
+function loadPlugin(pluginPath, nodesJson) {
     var calls = [];
     var docHandlers = {};
     var documentStub = { title: '' };
@@ -65,7 +65,11 @@ function loadPlugin(pluginPath) {
             calls.push({ fn: 'render', reqs: reqs, template: template, redirect: redirect });
         },
         go_to: function(url) { calls.push({ fn: 'go_to', url: url }); },
-        sync_get: function() { return JSON.stringify([{ name: 'rabbit@host1' }]); },
+        sync_get: function() {
+            return nodesJson === undefined
+                ? JSON.stringify([{ name: 'rabbit@host1' }])
+                : nodesJson;
+        },
         put_cast_params: function(sammy, p, mandatory, numeric, boolean) {
             calls.push({
                 fn: 'put_cast_params',
@@ -142,6 +146,24 @@ describe('top routes', () => {
         var plugin = loadPlugin(TOP_JS);
         plugin.app._runRoute('get', '#/top/rabbit%40host1/20?x=1');
         assert.equal(plugin.calls[0].reqs.top.options.row_count, '20');
+    });
+
+    it('does not navigate when the node list cannot be fetched', () => {
+        var plugin = loadPlugin(TOP_JS, false);
+        plugin.app._runRoute('get', '#/top');
+        assert.deepEqual(Array.from(plugin.calls), []);
+    });
+
+    it('does not navigate when the node list is an empty body', () => {
+        var plugin = loadPlugin(TOP_JS, '');
+        plugin.app._runRoute('get', '#/top');
+        assert.deepEqual(Array.from(plugin.calls), []);
+    });
+
+    it('does not navigate when no node is listed', () => {
+        var plugin = loadPlugin(TOP_JS, '[]');
+        plugin.app._runRoute('get', '#/top/ets');
+        assert.deepEqual(Array.from(plugin.calls), []);
     });
 
     it('registers its change handlers on the document', () => {
