@@ -570,6 +570,9 @@ vhost_tag_limit1(_Config) ->
                             binary_to_list(join_tags(Over)))),
     ?assertError(badarg, binary_to_existing_atom(lists:last(Over))),
 
+    [?assertEqual({error, invalid_tags}, rabbit_vhost:parse_tags_with_limit_enforcement(Invalid))
+     || Invalid <- [5, true, #{}, [1.5], [<<"a">>, 1], [#{}]]],
+
     VHost = <<"vhost-tag-limit">>,
     ?assertEqual(TooMany, rabbit_vhost:put_vhost(VHost, <<>>, join_tags(Over),
                                                  undefined, false, <<"acting-user">>)),

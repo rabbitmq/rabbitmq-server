@@ -151,6 +151,7 @@ all_tests() -> [
     vhosts_default_queue_type_update_empty_string_rejected_test,
     vhosts_default_queue_type_update_unknown_rejected_test,
     vhosts_with_too_many_tags_rejected_test,
+    vhosts_with_invalid_tags_rejected_test,
     users_legacy_administrator_test,
     adding_a_user_with_password_test,
     adding_a_user_with_password_hash_test,
@@ -685,6 +686,13 @@ vhosts_with_too_many_tags_rejected_test(Config) ->
     #{tags := Tags} = http_get(Config, Path),
     ?assertEqual(32, length(Tags)),
     http_delete(Config, Path, {group, '2xx'}),
+    passed.
+
+vhosts_with_invalid_tags_rejected_test(Config) ->
+    Path = "/vhosts/invalid-tags-vhost",
+    [http_put(Config, Path, [{tags, Invalid}], ?BAD_REQUEST)
+     || Invalid <- [5, true, [<<"a">>, 1], [[<<"a">>], 1]]],
+    http_get(Config, Path, ?NOT_FOUND),
     passed.
 
 users_test(Config) ->

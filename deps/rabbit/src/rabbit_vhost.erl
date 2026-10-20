@@ -144,13 +144,17 @@ parse_tags(Val) ->
     [trim_tag(Tag) || Tag <- split_tags(Val)].
 
 -spec parse_tags_with_limit_enforcement(vhost:unparsed_tags()) ->
-    {'ok', [vhost:tag()]} | {'error', {'too_many_tags', pos_integer()}}.
+    {'ok', [vhost:tag()]} | {'error', {'too_many_tags', pos_integer()}} | {'error', 'invalid_tags'}.
 parse_tags_with_limit_enforcement(Val) ->
-    case split_tags(Val) of
-        Tags when length(Tags) =< ?MAX_VHOST_TAGS ->
-            {ok, [trim_tag(Tag) || Tag <- Tags]};
-        _ ->
-            {error, {too_many_tags, ?MAX_VHOST_TAGS}}
+    try
+        case split_tags(Val) of
+            Tags when length(Tags) =< ?MAX_VHOST_TAGS ->
+                {ok, [trim_tag(Tag) || Tag <- Tags]};
+            _ ->
+                {error, {too_many_tags, ?MAX_VHOST_TAGS}}
+        end
+    catch
+        error:_ -> {error, invalid_tags}
     end.
 
 split_tags(undefined) ->
