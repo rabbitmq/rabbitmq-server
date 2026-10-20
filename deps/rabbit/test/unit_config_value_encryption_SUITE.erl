@@ -31,6 +31,9 @@ groups() ->
           decrypt_start_app_wrong_passphrase,
           decrypt_config,
           decrypt_config_map,
+          decrypt_config_tuple,
+          decrypt_config_tuple_unchanged,
+          decrypt_config_tuple_missing_passphrase,
           rabbitmqctl_encode
         ]}
     ].
@@ -131,6 +134,38 @@ do_decrypt_config_map({C, H, I, P} = Algo) ->
     {ok, Decrypted} = application:get_env(rabbit, test_map_decrypt),
     Secret = proplists:get_value(oauth_client_secret, maps:get(<<"server">>, Decrypted)),
     application:unset_env(rabbit, test_map_decrypt),
+    ok.
+
+%% As used by e.g. `auth_ldap.dn_lookup_bind.password`.
+decrypt_config_tuple(_Config) ->
+    {C, H, I, P} = Algo = {rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(),
+                           rabbit_pbe:default_iterations(), crypto:strong_rand_bytes(16)},
+    Secret = <<"test_bind_password">>,
+    Encrypted = rabbit_pbe:encrypt_term(C, H, I, P, Secret),
+    application:set_env(rabbit, test_tuple_decrypt, {"cn=user", Encrypted}),
+    rabbit_prelaunch_conf:decrypt_config([rabbit], Algo),
+    {ok, {"cn=user", Secret}} = application:get_env(rabbit, test_tuple_decrypt),
+    application:unset_env(rabbit, test_tuple_decrypt),
+    ok.
+
+decrypt_config_tuple_unchanged(_Config) ->
+    Algo = {rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(),
+            rabbit_pbe:default_iterations(), crypto:strong_rand_bytes(16)},
+    Value = {"cn=user", <<"plain_password">>},
+    application:set_env(rabbit, test_tuple_unchanged, Value),
+    rabbit_prelaunch_conf:decrypt_config([rabbit], Algo),
+    {ok, Value} = application:get_env(rabbit, test_tuple_unchanged),
+    application:unset_env(rabbit, test_tuple_unchanged),
+    ok.
+
+decrypt_config_tuple_missing_passphrase(_Config) ->
+    {C, H, I, P} = {rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(),
+                    rabbit_pbe:default_iterations(), crypto:strong_rand_bytes(16)},
+    Encrypted = rabbit_pbe:encrypt_term(C, H, I, P, <<"test_bind_password">>),
+    application:set_env(rabbit, test_tuple_no_passphrase, {"cn=user", Encrypted}),
+    ?assertThrow({bad_config_entry_decoder, missing_passphrase},
+                 rabbit_prelaunch_conf:decrypt_config([rabbit], [])),
+    application:unset_env(rabbit, test_tuple_no_passphrase),
     ok.
 
 encrypt_value(Key, {C, H, I, P}) ->
