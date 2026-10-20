@@ -57,7 +57,7 @@
 -type(description() :: binary()).
 -type(tag() :: binary()).
 -type(tags() :: [tag()]).
--type(unparsed_tags() :: binary() | string() | atom()).
+-type(unparsed_tags() :: undefined | binary() | string() | [atom() | binary() | string()]).
 
 -type vhost() :: vhost_v2().
 
