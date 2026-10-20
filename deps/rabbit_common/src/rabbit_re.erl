@@ -15,7 +15,7 @@
          max_pattern_length/0]).
 
 -define(MATCH_LIMIT, 50_000).
--define(MAX_PATTERN_LENGTH, 1024).
+-define(MAX_PATTERN_LENGTH, 4096).
 
 -spec match_limit() -> pos_integer().
 match_limit() -> ?MATCH_LIMIT.
