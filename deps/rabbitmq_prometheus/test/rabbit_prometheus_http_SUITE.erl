@@ -525,6 +525,7 @@ memory_breakdown_metrics_test(Config) ->
 
 build_info_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
+    ?assertEqual(match, re:run(Body, "^# TYPE rabbitmq_build_info gauge$", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_build_info{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "rabbitmq_version=\"", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "prometheus_plugin_version=\"", [{capture, none}])),
@@ -540,6 +541,7 @@ build_info_product_test(Config) ->
 
 identity_info_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
+    ?assertEqual(match, re:run(Body, "^# TYPE rabbitmq_identity_info gauge$", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_identity_info{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "rabbitmq_node=", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_cluster=", [{capture, none}])),
