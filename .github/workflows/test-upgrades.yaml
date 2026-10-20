@@ -4,6 +4,8 @@ on:
   push:
     branches:
     - main
+    - v4.4.x
+    - v4.3.x
     paths:
     - deps/**
     - scripts/**
@@ -37,7 +39,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          ref: 'v4.2.x'
+          ref: 'v4.3.x'
           fetch-tags: true
 
       - name: Build
