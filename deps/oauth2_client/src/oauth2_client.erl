@@ -493,7 +493,6 @@ get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes)
                        [OAuthProviderId, Error0]),
             Error0;
         Config ->
-            ?LOG_DEBUG("Found oauth_provider configuration ~p", [Config]),
             OAuthProvider = map_to_oauth_provider(Config),
             ?LOG_DEBUG("Resolved oauth_provider ~p", [format_oauth_provider(OAuthProvider)]),
             case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
