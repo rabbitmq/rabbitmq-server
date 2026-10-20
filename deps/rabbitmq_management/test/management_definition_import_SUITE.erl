@@ -53,5 +53,5 @@ import_on_boot(Config) ->
     ?assertMatch({ok, _}, rabbit_ct_broker_helpers:rpc(
                             Config, 0, rabbit_amqqueue, lookup, [Queue])),
     ?assertEqual([Queue], rabbit_ct_broker_helpers:rpc(
-                            Config, 0, rabbit_db_binding, match_routing_key,
+                            Config, 0, rabbit_router, match_routing_key,
                             [Exchange, [<<"key">>]])).
