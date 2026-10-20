@@ -1046,8 +1046,10 @@ send_retained_message(TopicFilter0, SubscribeQos,
                                       props = Props
                                      },
                         payload = Payload},
-            _ = send(Packet, State),
-            State
+            case send(Packet, State) of
+                ok -> State;
+                {error, packet_too_large} -> State0
+            end
     end.
 
 clear_will_msg(#state{cfg = #cfg{vhost = Vhost,
@@ -1808,23 +1810,34 @@ send(Packet, #state{cfg = #cfg{proto_ver = ProtoVer,
 -spec send(mqtt_packet(), protocol_version(), send_fun(), max_packet_size()) ->
     ok | {error, packet_too_large}.
 send(Packet, ProtoVer, SendFun, MaxPacketSize) ->
-    Data = rabbit_mqtt_packet:serialise(Packet, ProtoVer),
-    PacketSize = iolist_size(Data),
-    if PacketSize =< MaxPacketSize ->
-           ok = SendFun(Data);
-       true ->
-           %% "Where a Packet is too large to send, the Server MUST discard it without sending it
-           %% and then behave as if it had completed sending that Application Message [MQTT-3.1.2-25]."
-           case Packet#mqtt_packet.fixed#mqtt_packet_fixed.type of
-               T when T =/= ?PUBLISH andalso
-                      T =/= ?PUBACK ->
-                   ?LOG_DEBUG("Dropping MQTT packet (type ~b). Packet size "
-                              "(~b bytes) exceeds maximum packet size (~b bytes)",
-                              [T, PacketSize, MaxPacketSize]);
-               _ ->
-                   ok
-           end,
-           {error, packet_too_large}
+    try rabbit_mqtt_packet:serialise(Packet, ProtoVer) of
+        Data ->
+            PacketSize = iolist_size(Data),
+            if PacketSize =< MaxPacketSize ->
+                   ok = SendFun(Data);
+               true ->
+                   %% "Where a Packet is too large to send, the Server MUST discard it without sending it
+                   %% and then behave as if it had completed sending that Application Message [MQTT-3.1.2-25]."
+                   case Packet#mqtt_packet.fixed#mqtt_packet_fixed.type of
+                       T when T =/= ?PUBLISH andalso
+                              T =/= ?PUBACK ->
+                           ?LOG_DEBUG("Dropping MQTT packet (type ~b). Packet size "
+                                      "(~b bytes) exceeds maximum packet size (~b bytes)",
+                                      [T, PacketSize, MaxPacketSize]);
+                       _ ->
+                           ok
+                   end,
+                   {error, packet_too_large}
+            end
+    catch throw:Reason
+            when Reason =:= mqtt_binary_too_large;
+                 Reason =:= mqtt_remaining_length_too_large ->
+              %% A single field (e.g. a topic name translated from an unbounded AMQP
+              %% routing key) or the overall remaining length can exceed the MQTT
+              %% limit on its own. Same discard semantics as [MQTT-3.1.2-25].
+              ?LOG_DEBUG("Dropping MQTT packet (type ~b): ~p",
+                         [Packet#mqtt_packet.fixed#mqtt_packet_fixed.type, Reason]),
+              {error, packet_too_large}
     end.
 
 -spec send_disconnect(reason_code(), state()) -> ok.
@@ -2208,15 +2221,18 @@ maybe_publish_to_client(
                               topic_name = Topic,
                               props = Props},
                 payload = Payload},
-    SettleOp = case send(Packet, State) of
-                   ok ->
-                       trace_tap_out(Delivery, State),
-                       message_delivered(QNameOrType, Redelivered, QoS, State),
-                       complete;
-                   {error, packet_too_large} ->
-                       discard
-               end,
-    {SettleOp, State}.
+    case send(Packet, State) of
+        ok ->
+            trace_tap_out(Delivery, State),
+            message_delivered(QNameOrType, Redelivered, QoS, State),
+            {complete, State};
+        {error, packet_too_large} ->
+            %% The packet was never actually sent, so neither the Topic Alias nor
+            %% the Packet Identifier allocated above reached the client: discard
+            %% those allocations along with the message instead of keeping state
+            %% the client doesn't know about.
+            {discard, State0}
+    end.
 
 matched_topic_filters_v5(Msg, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
     case mc:get_annotation(binding_keys, Msg) of

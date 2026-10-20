@@ -18,7 +18,9 @@ all() ->
     [
      {group, v3},
      {group, v4},
-     {group, v5}
+     {group, v5},
+     serialise_variable_byte_integer_at_limit,
+     serialise_variable_byte_integer_over_limit
     ].
 
 groups() ->
@@ -72,6 +74,17 @@ prop_puback_properties(Config) ->
 
 prop_disconnect(Config) ->
     run_proper(fun disconnect_packet/0, Config).
+
+%% A PUBLISH whose payload pushes the remaining length (variable header +
+%% payload) past ?VARIABLE_BYTE_INTEGER_MAX must not crash the connection,
+%% reachable with rabbit.max_message_size raised above ~256 MiB.
+serialise_variable_byte_integer_at_limit(_Config) ->
+    Data = rabbit_mqtt_packet:serialise_variable_byte_integer(?VARIABLE_BYTE_INTEGER_MAX),
+    ?assertEqual(4, iolist_size(Data)).
+
+serialise_variable_byte_integer_over_limit(_Config) ->
+    ?assertThrow(mqtt_remaining_length_too_large,
+                 rabbit_mqtt_packet:serialise_variable_byte_integer(?VARIABLE_BYTE_INTEGER_MAX + 1)).
 
 %%%%%%%%%%%%%%%
 %%% Helpers %%%
