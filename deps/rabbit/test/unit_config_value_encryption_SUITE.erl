@@ -32,6 +32,8 @@ groups() ->
           decrypt_config,
           decrypt_config_map,
           decrypt_config_tuple,
+          decrypt_config_tuple_unchanged,
+          decrypt_config_tuple_missing_passphrase,
           rabbitmqctl_encode
         ]}
     ].
@@ -144,6 +146,29 @@ decrypt_config_tuple(_Config) ->
     rabbit_prelaunch_conf:decrypt_config([rabbit], Algo),
     {ok, {"cn=user", Secret}} = application:get_env(rabbit, test_tuple_decrypt),
     application:unset_env(rabbit, test_tuple_decrypt),
+    ok.
+
+decrypt_config_tuple_unchanged(_Config) ->
+    Algo = {rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(),
+            rabbit_pbe:default_iterations(), crypto:strong_rand_bytes(16)},
+    Value = {"cn=user", <<"plain_password">>},
+    application:set_env(rabbit, test_tuple_unchanged, Value),
+    rabbit_prelaunch_conf:decrypt_config([rabbit], Algo),
+    {ok, Value} = application:get_env(rabbit, test_tuple_unchanged),
+    application:unset_env(rabbit, test_tuple_unchanged),
+    ok.
+
+decrypt_config_tuple_missing_passphrase(_Config) ->
+    {C, H, I, P} = {rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(),
+                    rabbit_pbe:default_iterations(), crypto:strong_rand_bytes(16)},
+    Encrypted = rabbit_pbe:encrypt_term(C, H, I, P, <<"test_bind_password">>),
+    application:set_env(rabbit, test_tuple_no_passphrase, {"cn=user", Encrypted}),
+    try
+        {bad_config_entry_decoder, missing_passphrase} =
+            catch rabbit_prelaunch_conf:decrypt_config([rabbit], [])
+    after
+        application:unset_env(rabbit, test_tuple_no_passphrase)
+    end,
     ok.
 
 encrypt_value(Key, {C, H, I, P}) ->
