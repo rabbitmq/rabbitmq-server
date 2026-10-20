@@ -151,15 +151,15 @@ valid_uri_options_still_work(_Config) ->
 
     %% Only `amqp_auth_mechanisms` functions can be named in a URI. Every value
     %% below resolves to existing atoms.
-    ?assertMatch({error, {{unknown_mechanism, _}, _}},
+    ?assertMatch({error, {unknown_mechanism, _}},
                  amqp_uri:parse("amqp://host/?auth_mechanism=erlang:send")),
-    ?assertMatch({error, {{unknown_mechanism, _}, _}},
+    ?assertMatch({error, {unknown_mechanism, _}},
                  amqp_uri:parse("amqp://host/?auth_mechanism=application:set_env")),
-    ?assertMatch({error, {{unknown_mechanism, _}, _}},
+    ?assertMatch({error, {unknown_mechanism, _}},
                  amqp_uri:parse("amqp://host/?auth_mechanism=amqp_uri:parse")),
     %% A single token that is an existing atom but not a mechanism must fail at
     %% parse time, not with `undef` when the connection is established.
-    ?assertMatch({error, {{unknown_mechanism, _}, _}},
+    ?assertMatch({error, {unknown_mechanism, _}},
                  amqp_uri:parse("amqp://host/?auth_mechanism=module_info")),
     %% Malformed separators.
     ?assertMatch({error, _}, amqp_uri:parse("amqp://host/?auth_mechanism=plain:")),

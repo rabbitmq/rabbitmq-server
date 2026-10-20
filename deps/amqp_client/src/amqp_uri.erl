@@ -20,16 +20,18 @@
 -spec remove_credentials(URI :: string() | binary()) -> string().
 remove_credentials(URI) ->
     UriString = rabbit_data_coercion:to_list(URI),
+    try
+        redact(UriString)
+    catch
+        _:_ -> "<redacted>"
+    end.
+
+redact(UriString) ->
     case uri_parser:parse(UriString,
                           [{host, undefined}, {path, undefined},
                            {port, undefined}, {'query', []}]) of
         {error, _} ->
-            %% `uri_parser:parse/2` cannot parse a structurally malformed URI.
-            %% Since this function is used to sanitize a URI before logging it,
-            %% and is therefore routinely called on invalid input, fall back to
-            %% a best-effort strip of the `user:password@` userinfo rather than
-            %% crashing.
-            re:replace(UriString, "://[^@/]*@", "://", [{return, list}]);
+            redact_unparsable(UriString);
         Props ->
             PortPart = case proplists:get_value(port, Props) of
                            undefined -> "";
@@ -44,6 +46,28 @@ remove_credentials(URI) ->
               "~ts://~ts~ts~ts", [proplists:get_value(scheme, Props), PGet(host, Props),
                               PortPart,                           PGet(path, Props)])
     end.
+
+%% Used when `uri_parser:parse/2` rejects the URI. Without `scheme://` nothing
+%% can be told apart reliably, so the whole value is redacted.
+redact_unparsable(UriString) ->
+    case re:run(UriString, "^([A-Za-z][A-Za-z0-9+.-]*)://(.*)$",
+                [dotall, {capture, all_but_first, list}]) of
+        {match, [Scheme, Rest]} ->
+            Scheme ++ "://" ++ drop_query_and_fragment(redact_userinfo(Rest));
+        nomatch ->
+            "<redacted>"
+    end.
+
+%% The password may contain unescaped `@`, `/`, `?` and `#`, so everything up
+%% to the last `@` is redacted.
+redact_userinfo(Rest) ->
+    case lists:splitwith(fun(C) -> C =/= $@ end, lists:reverse(Rest)) of
+        {_, []}       -> Rest;
+        {RevAfter, _} -> "<redacted>@" ++ lists:reverse(RevAfter)
+    end.
+
+drop_query_and_fragment(Rest) ->
+    lists:takewhile(fun(C) -> C =/= $? andalso C =/= $# end, Rest).
 
 %% @spec (Uri) -> {ok, #amqp_params_network{} | #amqp_params_direct{}} |
 %%                {error, {Info, Uri}}
@@ -77,60 +101,61 @@ parse(Uri) -> parse(Uri, <<"/">>).
 parse(Uri, DefaultVHost) ->
     try return(parse1(Uri, DefaultVHost))
     catch throw:Err -> {error, {Err, Uri}};
-          error:Err -> {error, {Err, Uri}}
+          error:Err when is_atom(Err) -> {error, {Err, Uri}};
+          error:_ -> {error, {invalid_uri, Uri}}
     end.
 
 parse1(Uri, DefaultVHost) when is_list(Uri); is_binary(Uri) ->
     UriString = rabbit_data_coercion:to_list(Uri),
     case uri_parser:parse(UriString, [{host, undefined}, {path, undefined},
                                 {port, undefined}, {'query', []}]) of
-        {error, Err} ->
-            throw({unable_to_parse_uri, Err});
+        {error, _} ->
+            throw(unable_to_parse_uri);
         Parsed ->
             Endpoint =
                 case string:to_lower(proplists:get_value(scheme, Parsed)) of
                     "amqp"  -> build_broker(Parsed, DefaultVHost);
                     "amqps" -> build_ssl_broker(Parsed, DefaultVHost);
-                    Scheme  -> fail({unexpected_uri_scheme, Scheme})
+                    _Scheme -> fail(unexpected_uri_scheme)
                 end,
             return({ok, broker_add_query(Endpoint, Parsed)})
     end;
 parse1(_, _DefaultVHost) ->
     fail(expected_string_uri).
 
-unescape_string(Atom) when is_atom(Atom) ->
+unescape_string(_Part, Atom) when is_atom(Atom) ->
     Atom;
-unescape_string(Integer) when is_integer(Integer) ->
+unescape_string(_Part, Integer) when is_integer(Integer) ->
     Integer;
-unescape_string([]) ->
+unescape_string(_Part, []) ->
     [];
-unescape_string([$%, N1, N2 | Rest]) ->
+unescape_string(Part, [$%, N1, N2 | Rest]) ->
     try
-        [erlang:list_to_integer([N1, N2], 16) | unescape_string(Rest)]
+        [erlang:list_to_integer([N1, N2], 16) | unescape_string(Part, Rest)]
     catch
-        error:badarg -> throw({invalid_entitiy, ['%', N1, N2]})
+        error:badarg -> throw({invalid_entity, Part})
     end;
-unescape_string([$% | Rest]) ->
-    fail({unterminated_entity, ['%' | Rest]});
-unescape_string([C | Rest]) ->
-    [C | unescape_string(Rest)].
+unescape_string(Part, [$% | _]) ->
+    fail({unterminated_entity, Part});
+unescape_string(Part, [C | Rest]) ->
+    [C | unescape_string(Part, Rest)].
 
 build_broker(ParsedUri, DefaultVHost) ->
     [Host, Port, Path] =
         [proplists:get_value(F, ParsedUri) || F <- [host, port, path]],
     case Port =:= undefined orelse (0 < Port andalso Port =< 65535) of
         true  -> ok;
-        false -> fail({port_out_of_range, Port})
+        false -> fail(port_out_of_range)
     end,
     VHost = case Path of
                 undefined -> DefaultVHost;
                 [$/|Rest] -> case string:chr(Rest, $/) of
-                                 0 -> list_to_binary(unescape_string(Rest));
-                                 _ -> fail({invalid_vhost, Rest})
+                                 0 -> list_to_binary(unescape_string(vhost, Rest));
+                                 _ -> fail(invalid_vhost)
                              end
             end,
     UserInfo = proplists:get_value(userinfo, ParsedUri),
-    Record = case {unescape_string(Host), Port} of
+    Record = case {unescape_string(host, Host), Port} of
                  {undefined, undefined} ->
                      #amqp_params_direct{virtual_host = VHost};
                  {undefined, _Port} ->
@@ -146,10 +171,10 @@ build_broker(ParsedUri, DefaultVHost) ->
 
 set_user_info(Ps, UserInfo) ->
     case UserInfo of
-        [U, P | _] -> set([{username, list_to_binary(unescape_string(U))},
-                           {password, list_to_binary(unescape_string(P))}], Ps);
+        [U, P | _] -> set([{username, list_to_binary(unescape_string(userinfo, U))},
+                           {password, list_to_binary(unescape_string(userinfo, P))}], Ps);
 
-        [U]        -> set([{username, list_to_binary(unescape_string(U))}], Ps);
+        [U]        -> set([{username, list_to_binary(unescape_string(userinfo, U))}], Ps);
         []         -> Ps
     end.
 
@@ -175,10 +200,9 @@ build_ssl_broker(ParsedUri, DefaultVHost) ->
           [fun (L) -> KeyString = atom_to_list(Key),
                       case lists:keysearch(KeyString, 1, Query) of
                           {value, {_, Value}} ->
-                              try return([{Key, unescape_string(Fun(Value))} | L])
-                              catch throw:Reason ->
-                                      fail({invalid_ssl_parameter,
-                                            Key, Value, Query, Reason})
+                              try return([{Key, unescape_string(query, Fun(Value))} | L])
+                              catch throw:_ ->
+                                      fail({invalid_ssl_parameter, Key})
                               end;
                           false ->
                               L
@@ -223,9 +247,8 @@ broker_add_query(Params, ParsedUri, Fields) ->
                                    ValueParsed ->
                                        return({setelement(Pos, ParamsN, ValueParsed), Pos1})
                                end
-                           catch throw:Reason ->
-                                     fail({invalid_amqp_params_parameter,
-                                           Field, Value, Query, Reason})
+                           catch throw:_ ->
+                                     fail({invalid_amqp_params_parameter, Field})
                            end
                    end
            end || Field <- Fields], {Params, 2}),
@@ -288,16 +311,16 @@ mechanisms(ParsedUri) ->
 
 mechanism(Mech) ->
     case string:split(Mech, ":", all) of
-        [Name]                         -> mechanism_fun(Name, Mech);
-        ["amqp_auth_mechanisms", Name] -> mechanism_fun(Name, Mech);
-        _                              -> throw({unknown_mechanism, Mech})
+        [Name]                         -> mechanism_fun(Name);
+        ["amqp_auth_mechanisms", Name] -> mechanism_fun(Name);
+        _                              -> throw(unknown_mechanism)
     end.
 
-mechanism_fun("plain",    _Mech) -> fun amqp_auth_mechanisms:plain/3;
-mechanism_fun("amqplain", _Mech) -> fun amqp_auth_mechanisms:amqplain/3;
-mechanism_fun("external", _Mech) -> fun amqp_auth_mechanisms:external/3;
-mechanism_fun("crdemo",   _Mech) -> fun amqp_auth_mechanisms:crdemo/3;
-mechanism_fun(_Name,       Mech) -> throw({unknown_mechanism, Mech}).
+mechanism_fun("plain")    -> fun amqp_auth_mechanisms:plain/3;
+mechanism_fun("amqplain") -> fun amqp_auth_mechanisms:amqplain/3;
+mechanism_fun("external") -> fun amqp_auth_mechanisms:external/3;
+mechanism_fun("crdemo")   -> fun amqp_auth_mechanisms:crdemo/3;
+mechanism_fun(_Name)      -> throw(unknown_mechanism).
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->

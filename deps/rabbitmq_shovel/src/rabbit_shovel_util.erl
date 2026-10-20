@@ -209,7 +209,9 @@ validate_uri(Name, Term, User) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
                   {ok, P}    -> validate_params_user(P, User);
-                  {error, E} -> {error, "\"~ts\" not a valid URI: ~tp", [Term, E]}
+                  {error, {Info, _}} ->
+                      {error, "\"~ts\" not a valid URI: ~tp",
+                       [amqp_uri:remove_credentials(Term), Info]}
               end;
         E  -> E
     end;

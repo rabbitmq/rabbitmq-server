@@ -38,6 +38,7 @@ groups() ->
           uri_list_allowed,
           map_uri_denied,
           uri_list_mixed_network_and_denied_direct,
+          invalid_uri_error_has_no_credentials,
           prop_uri_list_validation
         ]}
     ].
@@ -116,6 +117,16 @@ map_uri_denied(Config) ->
 uri_list_mixed_network_and_denied_direct(Config) ->
     Uris = [network_uri(?DENIED_VHOST), direct_uri(?DENIED_VHOST)],
     ?assertMatch([{error, _, _}], validate_with_user(Config, Uris)).
+
+invalid_uri_error_has_no_credentials(Config) ->
+    [begin
+         [{error, Fmt, Args}] = validate_with_none(Config, Uri),
+         Msg = lists:flatten(io_lib:format(Fmt, Args)),
+         ?assertEqual(nomatch, string:find(Msg, "s3cret"))
+     end || Uri <- [<<"amqp://alice:s3cret@:::">>,
+                    <<"amqps://alice:s3cret@host/?depth=x&password=s3cret">>,
+                    <<"amqp://alice:s3cret%zz@host">>]],
+    ok.
 
 %% -------------------------------------------------------------------
 %% Property-based test
