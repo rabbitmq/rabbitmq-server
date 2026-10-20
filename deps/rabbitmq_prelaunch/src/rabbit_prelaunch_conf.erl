@@ -1,7 +1,6 @@
 -module(rabbit_prelaunch_conf).
 
 -include_lib("kernel/include/logger.hrl").
--include_lib("stdlib/include/zip.hrl").
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
@@ -243,6 +242,14 @@ load_cuttlefish_config_file(Context,
 generate_config_from_cuttlefish_files(Context,
                                       ConfigFiles,
                                       AdvancedConfigFile) ->
+    rabbit_prelaunch_plugins:with_unpacked_plugins(
+      Context,
+      fun(ExpandedContext) ->
+              generate_config_from_cuttlefish_files1(
+                ExpandedContext, ConfigFiles, AdvancedConfigFile)
+      end).
+
+generate_config_from_cuttlefish_files1(Context, ConfigFiles, AdvancedConfigFile) ->
     %% Load schemas.
     SchemaFiles = find_cuttlefish_schemas(Context),
     case SchemaFiles of
@@ -320,13 +327,26 @@ find_cuttlefish_schemas(Context) ->
     ?LOG_DEBUG(
       "Looking up configuration schemas in the following applications:",
       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    find_cuttlefish_schemas(Apps, []).
+    Schemas = find_cuttlefish_schemas(Apps, []),
+    Sources = maps:get(unpacked_archives, Context, []),
+    [Path || {_, Path} <- lists:sort(
+                           [{schema_source_path(Path, Sources), Path} || Path <- Schemas])].
+
+schema_source_path(Path, [{Dir, Archive} | Rest]) ->
+    Parts = filename:split(Path),
+    Prefix = filename:split(Dir),
+    case lists:prefix(Prefix, Parts) of
+        true -> filename:join([Archive | lists:nthtail(length(Prefix), Parts)]);
+        false -> schema_source_path(Path, Rest)
+    end;
+schema_source_path(Path, []) ->
+    Path.
 
 find_cuttlefish_schemas([App | Rest], AllSchemas) ->
     Schemas = list_schemas_in_app(App),
     find_cuttlefish_schemas(Rest, AllSchemas ++ Schemas);
 find_cuttlefish_schemas([], AllSchemas) ->
-    lists:sort(fun(A,B) -> A < B end, AllSchemas).
+    AllSchemas.
 
 list_apps(#{os_type := {win32, _}, plugins_path := PluginsPath}) ->
     PluginsDirs = lists:usort(string:lexemes(PluginsPath, ";")),
@@ -341,8 +361,8 @@ list_apps1([Dir | Rest], Apps) ->
         {ok, Filenames} ->
             NewApps = [list_to_atom(
                          hd(
-                           string:split(filename:basename(F, ".ez"), "-")))
-                       || F <- Filenames],
+                           string:split(F, "-")))
+                       || F <- Filenames, filelib:is_dir(filename:join(Dir, F))],
             Apps1 = lists:umerge(Apps, lists:sort(NewApps)),
             list_apps1(Rest, Apps1);
         {error, Reason} ->
@@ -363,14 +383,14 @@ list_schemas_in_app(App) ->
                        end,
     List = case Loaded of
                true ->
-                   case code:priv_dir(App) of
+                   case code:lib_dir(App) of
                        {error, bad_name} ->
                            ?LOG_DEBUG(
                              "  [ ] ~ts (no readable priv dir)", [App],
                              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                            [];
-                       PrivDir ->
-                           SchemaDir = filename:join([PrivDir, "schema"]),
+                       AppDir ->
+                           SchemaDir = filename:join([AppDir, "priv", "schema"]),
                            do_list_schemas_in_app(App, SchemaDir)
                    end;
                Reason1 ->
@@ -388,7 +408,7 @@ list_schemas_in_app(App) ->
     List.
 
 do_list_schemas_in_app(App, SchemaDir) ->
-    case erl_prim_loader:list_dir(SchemaDir) of
+    case file:list_dir(SchemaDir) of
         {ok, Files} ->
             ?LOG_DEBUG("  [x] ~ts", [App],
                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
@@ -399,7 +419,7 @@ do_list_schemas_in_app(App, SchemaDir) ->
              || [C | _] = File <- Files,
                 C =/= $.,
                 filename:extension(File) =:= ".schema"];
-        error ->
+        {error, _} ->
             ?LOG_DEBUG(
               "  [ ] ~ts (no readable schema dir)", [App],
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
