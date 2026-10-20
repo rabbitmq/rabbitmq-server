@@ -163,12 +163,9 @@ decrypt_config_tuple_missing_passphrase(_Config) ->
                     rabbit_pbe:default_iterations(), crypto:strong_rand_bytes(16)},
     Encrypted = rabbit_pbe:encrypt_term(C, H, I, P, <<"test_bind_password">>),
     application:set_env(rabbit, test_tuple_no_passphrase, {"cn=user", Encrypted}),
-    try
-        {bad_config_entry_decoder, missing_passphrase} =
-            catch rabbit_prelaunch_conf:decrypt_config([rabbit], [])
-    after
-        application:unset_env(rabbit, test_tuple_no_passphrase)
-    end,
+    ?assertThrow({bad_config_entry_decoder, missing_passphrase},
+                 rabbit_prelaunch_conf:decrypt_config([rabbit], [])),
+    application:unset_env(rabbit, test_tuple_no_passphrase),
     ok.
 
 encrypt_value(Key, {C, H, I, P}) ->
