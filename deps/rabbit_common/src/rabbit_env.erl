@@ -7,7 +7,6 @@
 
 -module(rabbit_env).
 
--include_lib("kernel/include/file.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -include("logging.hrl").
@@ -472,12 +471,6 @@ split_base(BaseName) ->
             {string:join(AllButLast, "-"),Vsn};
         [_|_] ->
             BaseName
-    end.
-
-is_dir(Path) ->
-    case erl_prim_loader:read_file_info(Path) of
-        {ok,#file_info{type=directory}} -> true;
-        _ -> false
     end.
 
 %% -------------------------------------------------------------------
@@ -1092,14 +1085,7 @@ get_default_plugins_path_from_node(Remote) ->
 rabbit_common_mod_location_to_plugins_dir(ModDir) ->
     case filename:basename(ModDir) of
         "ebin" ->
-            case is_dir(ModDir) of
-                false ->
-                    %% rabbit_common in the plugin's .ez archive.
-                    filename:dirname(filename:dirname(filename:dirname(ModDir)));
-                true ->
-                    %% rabbit_common in the plugin's directory.
-                    filename:dirname(filename:dirname(ModDir))
-            end;
+            filename:dirname(filename:dirname(ModDir));
         _ ->
             %% rabbit_common in the CLI escript.
             PluginsBaseDir = filename:dirname(filename:dirname(ModDir)),
@@ -1695,7 +1681,7 @@ get_temp_path_win32() ->
     F = fun(E) ->
                 case os:getenv(E) of
                     false -> false;
-                    Var -> {is_dir(Var), Var}
+                    Var -> {filelib:is_dir(Var), Var}
                 end
         end,
     case lists:filtermap(F, EnvVars) of
@@ -2109,8 +2095,6 @@ normalize_path(Path0) ->
 this_module_dir() ->
     File = code:which(?MODULE),
     %% Possible locations:
-    %%   - the rabbit_common plugin (as an .ez archive):
-    %%     .../plugins/rabbit_common-$version.ez/rabbit_common-$version/ebin
     %%   - the rabbit_common plugin (as a directory):
     %%     .../plugins/rabbit_common-$version/ebin
     %%   - the CLI:

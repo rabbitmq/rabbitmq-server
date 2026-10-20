@@ -29,6 +29,7 @@ groups() ->
                                    sort_list_test
                                   ]},
      {sequential_tests, [], [
+                              static_file_directories,
                               referrer_policy_header_set_when_configured,
                               referrer_policy_header_absent_when_not_configured,
                               allow_header_absent_on_non_405_when_hide_configured,
@@ -66,6 +67,23 @@ init_per_testcase(_, Config) ->
 %% -------------------------------------------------------------------
 %% Test cases.
 %% -------------------------------------------------------------------
+
+static_file_directories(_Config) ->
+    Req = #{method => <<"GET">>, headers => #{}, path_info => [<<"index.html">>]},
+    Existing = {rabbitmq_management, "www"},
+    Missing = {rabbitmq_management, "missing-static-test-directory"},
+    ExpectedPath = list_to_binary(filename:join(
+                                   [code:priv_dir(rabbitmq_management), "www", "index.html"])),
+    lists:foreach(
+      fun(Dirs) ->
+              {cowboy_rest, Req1, State} = rabbit_mgmt_wm_static:init(Req, Dirs),
+              ?assertMatch({{sendfile, 0, _, ExpectedPath}, _, _},
+                           rabbit_mgmt_wm_static:get_file(Req1, State)),
+              ?assertMatch(
+                 {cowboy_rest, _, error},
+                 rabbit_mgmt_wm_static:init(
+                   Req#{path_info => [<<"..">>, <<"index.html">>]}, Dirs))
+      end, [[Existing, Missing], [Missing, Existing]]).
 
 tokenise_test(_Config) ->
     [] = rabbit_mgmt_format:tokenise(""),

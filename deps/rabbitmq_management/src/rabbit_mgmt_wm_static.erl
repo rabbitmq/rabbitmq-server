@@ -36,10 +36,7 @@ init(Req0, [{App, Path}|Tail]) ->
     case validate_path_info(PathInfo) of
         ok ->
             Filepath = filename:join([code:priv_dir(App), Path|PathInfo]),
-            %% We use `erl_prim_loader` because the file may be inside
-            %% an .ez archive.
-            FileInfo = erl_prim_loader:read_file_info(
-                         binary_to_list(Filepath)),
+            FileInfo = file:read_file_info(Filepath),
             case FileInfo of
                 {ok, #file_info{type = regular}} ->
                     do_init(Req1, App, Path);
@@ -55,11 +52,7 @@ init(Req0, [{App, Path}|Tail]) ->
 do_init(Req, App, Path) ->
     cowboy_static:init(Req, {priv_dir, App, Path}).
 
-%% Must be done here before `erl_prim_loader:read_file_info/1`
-%% is used.
-%%
-%% This mirrors the validation that `cowboy_static` performs internally
-%% except that this validation must happen before the one in Cowboy.
+%% Validate before the file lookup, which precedes Cowboy's own validation.
 validate_path_info([]) ->
     ok;
 validate_path_info([<<".">>|_]) ->
