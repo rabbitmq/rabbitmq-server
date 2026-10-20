@@ -278,11 +278,11 @@ vhost_update_idempotency(Config) ->
 
         ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
 
-        ?assertMatch({vhost,VHost, _, #{tags := [private,replicate]}},
+        ?assertMatch({vhost,VHost, _, #{tags := [<<"private">>, <<"replicate">>]}},
                      rabbit_ct_broker_helpers:rpc(Config, 0,
                                                   rabbit_vhost, update_tags,
                                                   [VHost, [private, replicate], ActingUser])),
-        ?assertMatch({vhost,VHost, _, #{tags := [private,replicate]}},
+        ?assertMatch({vhost,VHost, _, #{tags := [<<"private">>, <<"replicate">>]}},
                      rabbit_ct_broker_helpers:rpc(Config, 0,
                                                   rabbit_vhost, update_tags,
                                                   [VHost, [replicate, private], ActingUser])),
@@ -297,7 +297,7 @@ vhost_update_idempotency(Config) ->
                                      end, Events),
         ?assertMatch([#event{type = vhost_tags_set,
                              props = [{name, VHost},
-                                      {tags, [private, replicate]},
+                                      {tags, [<<"private">>, <<"replicate">>]},
                                       {user_who_performed_action, ActingUser}]}],
                      TagsSetEvents)
     after
@@ -554,9 +554,9 @@ parse_tags1(_Config) ->
     ?assertEqual([], rabbit_vhost:parse_tags(<<"">>)),
     ?assertEqual([], rabbit_vhost:parse_tags("")),
     ?assertEqual([], rabbit_vhost:parse_tags([])),
-    ?assertEqual([a, b], rabbit_vhost:parse_tags(<<"a,b">>)),
-    ?assertEqual([a3, b3], rabbit_vhost:parse_tags("a3,b3")),
-    ?assertEqual([tag1, tag2], rabbit_vhost:parse_tags([<<"tag1">>, <<"tag2">>])).
+    ?assertEqual([<<"a">>, <<"b">>], rabbit_vhost:parse_tags(<<"a,b">>)),
+    ?assertEqual([<<"a3">>, <<"b3">>], rabbit_vhost:parse_tags("a3,b3")),
+    ?assertEqual([<<"tag1">>, <<"tag2">>], rabbit_vhost:parse_tags([<<"tag1">>, <<"tag2">>])).
 
 vhost_tag_limit(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, vhost_tag_limit1, [Config]).
