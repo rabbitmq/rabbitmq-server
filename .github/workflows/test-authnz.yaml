@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - v4.0.x
+      - v4.3.x
     paths:
       - 'deps/rabbit/src/rabbit_auth**'
       - 'deps/rabbit/src/rabbit_access_control**'
