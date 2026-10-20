@@ -33,6 +33,17 @@ defmodule UpdateVhostMetadataCommandTest do
     assert @command.validate(["a-vhost"], %{}) == {:validation_failure, :not_enough_args}
   end
 
+  test "validate: rejects more than 32 tags" do
+    tags = fn n -> Enum.map_join(1..n, ",", &"t#{&1}") end
+
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(["a-vhost"], %{tags: tags.(33)})
+           )
+
+    assert @command.validate(["a-vhost"], %{tags: tags.(32)}) == :ok
+  end
+
   test "validate: virtual host name and one or more metadata options succeeds" do
     assert @command.validate(["a-vhost"], %{description: "Used by team A"}) == :ok
 
@@ -84,7 +95,7 @@ defmodule UpdateVhostMetadataCommandTest do
     vh = find_vhost(@vhost)
 
     assert vh
-    assert vh[:tags] == [:a1, :b2, :c3]
+    assert vh[:tags] == ["a1", "b2", "c3"]
   end
 
   test "run: enabling deletion protection succeeds", context do
@@ -121,7 +132,7 @@ defmodule UpdateVhostMetadataCommandTest do
     opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
     assert @command.run([@vhost], opts) == :ok
     vh = find_vhost(@vhost)
-    assert vh[:tags] == [:my_tag]
+    assert vh[:tags] == ["my_tag"]
   end
 
   test "run: attempt to use a non-existent virtual host fails", context do
