@@ -18,7 +18,6 @@ defmodule RabbitMQ.CLI.Core.VirtualHosts do
       val ->
         String.split(val, ",", trim: true)
         |> Enum.map(&String.trim/1)
-        |> Enum.map(&String.to_atom/1)
     end
   end
 

@@ -132,7 +132,7 @@ do_merge_metadata(VHostName, Metadata) ->
 
 -spec set_tags(VHostName, Tags) -> VHost when
       VHostName :: vhost:name(),
-      Tags :: [vhost:tag() | binary() | string()],
+      Tags :: [atom() | binary() | string()],
       VHost :: vhost:vhost() | no_return().
 %% @doc Sets the tags of an existing virtual host record.
 %%
@@ -143,7 +143,7 @@ do_merge_metadata(VHostName, Metadata) ->
 
 set_tags(VHostName, Tags)
   when is_binary(VHostName) andalso is_list(Tags) ->
-    ConvertedTags = lists:usort([rabbit_data_coercion:to_atom(Tag) || Tag <- Tags]),
+    ConvertedTags = lists:usort([vhost:tag_to_binary(Tag) || Tag <- Tags]),
     UpdateFun = fun(VHost) -> do_set_tags(VHost, ConvertedTags) end,
     update(VHostName, UpdateFun).
 

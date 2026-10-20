@@ -106,6 +106,6 @@ defmodule AddVhostCommandTest do
     opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
     assert @command.run([context[:vhost]], opts) == :ok
     record = list_vhosts() |> Enum.find(fn record -> record[:name] == context[:vhost] end)
-    assert record[:tags] == [:my_tag]
+    assert record[:tags] == ["my_tag"]
   end
 end
