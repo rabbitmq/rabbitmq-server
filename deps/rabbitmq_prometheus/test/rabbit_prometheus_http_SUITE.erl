@@ -89,7 +89,7 @@ groups() ->
                                      queue_filter_multiple_patterns_rejected_test,
                                      queue_filter_empty_is_ignored_test
         ]},
-       {special_chars, [], [core_metrics_special_chars]},
+       {special_chars, [], [core_metrics_special_chars, exchange_metrics_special_chars]},
        {authentication, [], [basic_auth]}
     ].
 
@@ -935,6 +935,20 @@ core_metrics_special_chars(Config) ->
                  when I == 0; I == 1,
                       maps:to_list(LabelValue3)),
     ok.
+
+exchange_metrics_special_chars(Config) ->
+    Labels = #{vhost => "vhost\\\"\\n\\\\",
+               exchange => "exchange\\\"\\\\",
+               type => "direct"},
+    lists:foreach(
+      fun({Family, Metric}) ->
+          {_, Body} = http_get_with_pal(Config,
+              "/metrics/detailed?family=" ++ Family, [], 200),
+          Values = maps:get(Metric, parse_response(Body)),
+          ?assertEqual([1], maps:get(Labels, Values))
+      end,
+      [{"exchange_names", rabbitmq_cluster_exchange_name},
+       {"exchange_bindings", rabbitmq_cluster_exchange_bindings}]).
 
 detailed_raft_metrics_test(Config) ->
     QQMetrics = #{#{queue => "a_quorum_queue", vhost => "/"} => ["1.0"]},

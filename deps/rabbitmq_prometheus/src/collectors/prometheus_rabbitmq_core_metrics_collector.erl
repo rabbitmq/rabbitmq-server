@@ -878,7 +878,9 @@ get_data(exchange_bindings, _, _, _) ->
                           end
                   end, Exchanges),
     maps:fold(fun(#resource{virtual_host = VHost, name = Name}, #{type := Type, binding_count := Bindings}, Acc) ->
-                      [{<<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", Type/binary, "\"">>,
+                      [{<<"vhost=\"", (escape_label_value(VHost))/binary,
+                          "\",exchange=\"", (escape_label_value(Name))/binary,
+                          "\",type=\"", (escape_label_value(Type))/binary, "\"">>,
                         Bindings}|Acc]
               end, [], WithCount);
 get_data(exchange_names, _, _, _) ->
@@ -888,7 +890,9 @@ get_data(exchange_names, _, _, _) ->
                     (#exchange{name = #resource{name = <<>>}}, Acc) ->
                         Acc;
                     (#exchange{name = #resource{virtual_host = VHost, name = Name}, type = EType}, Acc) ->
-                        Label = <<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", (atom_to_binary(EType))/binary, "\"">>,
+                        Label = <<"vhost=\"", (escape_label_value(VHost))/binary,
+                                  "\",exchange=\"", (escape_label_value(Name))/binary,
+                                  "\",type=\"", (escape_label_value(atom_to_binary(EType)))/binary, "\"">>,
                         [{Label, 1}|Acc]
                 end, [], rabbit_exchange:list());
 get_data(Table, _, _, _) ->
