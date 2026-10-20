@@ -39,16 +39,16 @@ put(Key, Value, TTL) ->
         [{Segment, T}] -> T;
         []             -> add_segment(Segment)
     end,
-    ets:insert(Table, {Key, {Expiration, Value}}),
+    safe_ets(fun() -> ets:insert(Table, {Key, {Expiration, Value}}) end),
     ok.
 
 delete(Key) ->
-    _ = [ets:delete(Table, Key)
+    _ = [safe_ets(fun() -> ets:delete(Table, Key) end)
          || Table <- get_all_segment_tables()],
     ok.
 
 clear() ->
-    _ = [ets:delete_all_objects(Table)
+    _ = [safe_ets(fun() -> ets:delete_all_objects(Table) end)
          || Table <- get_all_segment_tables()],
     ok.
 
@@ -78,9 +78,12 @@ handle_cast(_, State = #state{}) ->
 
 handle_info(gc, State = #state{}) ->
     Now = erlang:system_time(milli_seconds),
-    MatchSpec = [{{'$1', '$2'}, [{'<', '$1', {const, Now}}], ['$2']}],
+    MatchSpec = [{{'$1', '$2'}, [{'<', '$1', {const, Now}}], ['$_']}],
     Expired = ets:select(?SEGMENT_TABLE, MatchSpec),
-    [ets:delete(Table) || Table <- Expired],
+    [begin
+         ets:delete(?SEGMENT_TABLE, Boundary),
+         ets:delete(Table)
+     end || {Boundary, Table} <- Expired],
     {noreply, State};
 handle_info(_Msg, State) ->
     {noreply, State}.
@@ -96,6 +99,11 @@ segment(Expiration, SegmentSize) ->
     Begin = ((Expiration div SegmentSize) * SegmentSize),
     End = Begin + SegmentSize,
     End.
+
+safe_ets(Fun) ->
+    try Fun()
+    catch error:badarg -> ok
+    end.
 
 add_segment(Segment) ->
     gen_server:call(?MODULE, {add_segment, Segment}, ?CACHE_OPERATION_TIMEOUT).
