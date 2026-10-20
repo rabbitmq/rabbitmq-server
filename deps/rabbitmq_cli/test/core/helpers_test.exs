@@ -175,17 +175,16 @@ defmodule HelpersTest do
         {"plugins-subdirectory-04", :mock_rabbitmq_plugins_04, ~c"rolling"}
       ] do
     @tag :tmp_dir
-    test "locate extracted plugin from #{directory}", %{tmp_dir: expand_dir} do
-      plugins_dir = fixture_plugins_path(unquote(directory))
-      [archive] = Path.wildcard(Path.join(plugins_dir, "*.ez"))
-      {:ok, _} = :zip.extract(to_charlist(archive), cwd: to_charlist(expand_dir))
+    test "locate extracted plugin from #{directory}", %{tmp_dir: plugins_dir} do
+      fixture_dir = fixture_plugins_path(unquote(directory))
+      [archive] = Path.wildcard(Path.join(fixture_dir, "*.ez"))
+      {:ok, _} = :zip.extract(to_charlist(archive), cwd: to_charlist(plugins_dir))
       original_path = :code.get_path()
       name = unquote(name)
 
       try do
         opts = %{
           plugins_dir: plugins_dir,
-          plugins_expand_dir: expand_dir,
           rabbitmq_home: :code.lib_dir(:rabbit)
         }
 
@@ -215,9 +214,26 @@ defmodule HelpersTest do
     end
   end
 
-  test "offline commands resolve the local plugin expansion directory" do
-    expected = :rabbit_env.get_context()[:plugins_expand_dir]
-    assert expected != :undefined
-    assert Config.get_option(:plugins_expand_dir, %{offline: true, node: :rabbit}) == expected
+  @tag :tmp_dir
+  test "plugin discovery does not add the broker expansion directory", %{tmp_dir: root} do
+    plugins_dir = Path.join(root, "plugins")
+    expand_dir = Path.join(root, "expanded")
+    ebin = Path.join([expand_dir, "broker_plugin", "ebin"])
+    File.mkdir_p!(plugins_dir)
+    File.mkdir_p!(ebin)
+    original_path = :code.get_path()
+
+    try do
+      assert :ok =
+               add_plugins_to_load_path(%{
+                 plugins_dir: plugins_dir,
+                 plugins_expand_dir: expand_dir,
+                 offline: true
+               })
+
+      refute to_charlist(Path.expand(ebin)) in :code.get_path()
+    after
+      :code.set_path(original_path)
+    end
   end
 end

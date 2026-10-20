@@ -2071,6 +2071,12 @@ Purges a queue (removes all messages in it).
 .\" ------------------------------------------------------------------------------------------------
 RabbitMQ plugins can extend the rabbitmqctl tool to add new commands
 when enabled.
+A plugin that provides CLI commands must be unpacked in a directory listed in
+.Ev RABBITMQ_PLUGINS_DIR .
+For a plugin distributed as an
+.Pa .ez
+archive, extract it into that directory before using its CLI commands.
+.Pp
 Currently available commands can be found in the
 .Cm rabbitmqctl help
 output.

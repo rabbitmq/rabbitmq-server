@@ -17,12 +17,6 @@ defmodule RabbitMQ.CLI.Core.CodePath do
         :ok
     end
 
-    _ =
-      case Config.get_option(:plugins_expand_dir, opts) do
-        nil -> :ok
-        directory -> add_directory_plugins_to_load_path(directory)
-      end
-
     :ok
   end
 
