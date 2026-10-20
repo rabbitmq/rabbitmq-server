@@ -396,13 +396,11 @@ get_user_lib_dirs(OSType, Path) ->
     get_user_lib_dirs_1(SplitPath).
 
 get_user_lib_dirs_1([Dir|DirList]) ->
-    case erl_prim_loader:list_dir(Dir) of
+    case file:list_dir(Dir) of
         {ok, Dirs} ->
-            Paths = make_path(Dir, Dirs),
-            %% Only add paths trailing with ./ebin.
-            [P || P <- Paths, filename:basename(P) =:= "ebin"] ++
-                get_user_lib_dirs_1(DirList);
-        error ->
+            Bundles = [D || D <- Dirs, filelib:is_dir(filename:join(Dir, D))],
+            make_path(Dir, Bundles) ++ get_user_lib_dirs_1(DirList);
+        {error, _} ->
             get_user_lib_dirs_1(DirList)
     end;
 get_user_lib_dirs_1([]) -> [].
@@ -412,17 +410,23 @@ get_user_lib_dirs_1([]) -> [].
 %%
 make_path(BundleDir, Bundles0) ->
     Bundles = choose_bundles(Bundles0),
-    make_path(BundleDir, Bundles, []).
+    lists:foldl(
+      fun(Bundle, Acc) ->
+              Ebin = filename:join([BundleDir, Bundle, "ebin"]),
+              case filelib:is_dir(Ebin) of
+                  true -> [Ebin | Acc];
+                  false when Bundle =:= "ebin" ->
+                      [filename:join(BundleDir, Bundle) | Acc];
+                  false -> Acc
+              end
+      end, [], Bundles).
 
 choose_bundles(Bundles) ->
-    ArchiveExt = archive_extension(),
-    Bs = lists:sort([create_bundle(B, ArchiveExt) || B <- Bundles]),
-    [FullName || {_Name,_NumVsn,FullName} <-
-                     choose(lists:reverse(Bs), [], ArchiveExt)].
+    Bs = lists:sort([create_bundle(B) || B <- Bundles]),
+    [FullName || {_Name,_NumVsn,FullName} <- choose(lists:reverse(Bs), [])].
 
-create_bundle(FullName, ArchiveExt) ->
-    BaseName = filename:basename(FullName, ArchiveExt),
-    case split_base(BaseName) of
+create_bundle(FullName) ->
+    case split_base(FullName) of
         {Name, VsnStr} ->
             case vsn_to_num(VsnStr) of
                 {ok, VsnNum} ->
@@ -452,61 +456,13 @@ is_numstr(Cs) ->
                   (_)                       -> false
               end, Cs).
 
-choose([{Name,NumVsn,NewFullName}=New|Bs], Acc, ArchiveExt) ->
-    case lists:keyfind(Name, 1, Acc) of
-        {_, NV, OldFullName} when NV =:= NumVsn ->
-            case filename:extension(OldFullName) =:= ArchiveExt of
-                false ->
-                    choose(Bs,Acc, ArchiveExt);
-                true ->
-                    Acc2 = lists:keystore(Name, 1, Acc, New),
-                    choose(Bs,Acc2, ArchiveExt)
-            end;
-        {_, _, _} ->
-            choose(Bs,Acc, ArchiveExt);
-        false ->
-            choose(Bs,[{Name,NumVsn,NewFullName}|Acc], ArchiveExt)
+choose([{Name,_,_}=New|Bs], Acc) ->
+    case lists:keymember(Name, 1, Acc) of
+        true -> choose(Bs, Acc);
+        false -> choose(Bs, [New|Acc])
     end;
-choose([],Acc, _ArchiveExt) ->
+choose([], Acc) ->
     Acc.
-
-make_path(_, [], Res) ->
-    Res;
-make_path(BundleDir, [Bundle|Tail], Res) ->
-    Dir = filename:append(BundleDir, Bundle),
-    Ebin = filename:append(Dir, "ebin"),
-    %% First try with /ebin
-    case is_dir(Ebin) of
-        true ->
-            make_path(BundleDir, Tail, [Ebin|Res]);
-        false ->
-            %% Second try with archive
-            Ext = archive_extension(),
-            Base = filename:basename(Bundle, Ext),
-            Ebin2 = normalize_path(BundleDir, Base ++ Ext, Base, "ebin"),
-            Ebins =
-                case split_base(Base) of
-                    {AppName,_} ->
-                        Ebin3 = normalize_path(BundleDir, Base ++ Ext, AppName, "ebin"),
-                        [Ebin3, Ebin2, Dir];
-                    _ ->
-                        [Ebin2, Dir]
-                end,
-            case try_ebin_dirs(Ebins) of
-                {ok, FoundEbin} ->
-                    make_path(BundleDir, Tail, [FoundEbin|Res]);
-                error ->
-                    make_path(BundleDir, Tail, Res)
-            end
-    end.
-
-try_ebin_dirs([Ebin|Ebins]) ->
-    case is_dir(Ebin) of
-        true -> {ok,Ebin};
-        false -> try_ebin_dirs(Ebins)
-    end;
-try_ebin_dirs([]) ->
-    error.
 
 split_base(BaseName) ->
     case string:lexemes(BaseName, "-") of
@@ -523,9 +479,6 @@ is_dir(Path) ->
         {ok,#file_info{type=directory}} -> true;
         _ -> false
     end.
-
-archive_extension() ->
-    init:archive_extension().
 
 %% -------------------------------------------------------------------
 %%
