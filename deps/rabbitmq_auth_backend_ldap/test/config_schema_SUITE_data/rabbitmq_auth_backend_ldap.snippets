@@ -125,6 +125,12 @@
   [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,{"username",<<"password">>}}]}],
   [rabbitmq_auth_backend_ldap]},
 
+ {dn_lookup_bind_encrypted_password,
+  "auth_ldap.dn_lookup_bind.user_dn = username
+   auth_ldap.dn_lookup_bind.password = encrypted:GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR",
+  [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,{"username",{encrypted,<<"GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR">>}}}]}],
+  [rabbitmq_auth_backend_ldap]},
+
  {db_lookup_bind_anon,
   "auth_ldap.dn_lookup_bind = anon",
   [{rabbitmq_auth_backend_ldap,[{dn_lookup_bind,anon}]}],
@@ -151,6 +157,12 @@
   "auth_ldap.other_bind.user_dn = username
    auth_ldap.other_bind.password = password",
   [{rabbitmq_auth_backend_ldap,[{other_bind,{"username",<<"password">>}}]}],
+  [rabbitmq_auth_backend_ldap]},
+
+ {other_bind_encrypted_password,
+  "auth_ldap.other_bind.user_dn = username
+   auth_ldap.other_bind.password = encrypted:GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR",
+  [{rabbitmq_auth_backend_ldap,[{other_bind,{"username",{encrypted,<<"GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR">>}}}]}],
   [rabbitmq_auth_backend_ldap]},
 
  {ssl_options,
