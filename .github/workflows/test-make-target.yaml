@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         ref: ${{ inputs.ref }}
         fetch-tags: true
