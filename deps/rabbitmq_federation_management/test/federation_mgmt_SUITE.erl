@@ -24,6 +24,7 @@ groups() ->
                                federation_down_links,
                                restart_link,
                                restart_link_requires_policymaker,
+                               restart_link_requires_matching_vhost,
                                restart_link_unknown_node
                               ]}
     ].
@@ -180,6 +181,41 @@ restart_link_requires_policymaker(Config) ->
         http_delete(Config, "/users/policy")
     end.
 
+restart_link_requires_matching_vhost(Config) ->
+    VHost = <<"restart-link-vhost">>,
+    try
+        rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+        http_put(Config, "/users/policy",
+                 [{password, <<"policy">>}, {tags, <<"policymaker">>}],
+                 [?CREATED, ?NO_CONTENT]),
+        rabbit_ct_broker_helpers:set_full_permissions(Config, <<"policy">>, VHost),
+        wait_until(fun() ->
+                           lists:any(fun(L) -> maps:get(status, L) =:= <<"running">> end,
+                                     http_get(Config, "/federation-links"))
+                   end),
+        [Link | _] = [L || L <- http_get(Config, "/federation-links"),
+                          maps:get(status, L) =:= <<"running">>],
+        Id = maps:get(id, Link),
+        Obj = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status, lookup, [Id]),
+        Supervisor = proplists:get_value(supervisor, Obj),
+        Children = rabbit_ct_broker_helpers:rpc(Config, 0, supervisor2, which_children, [Supervisor]),
+        WrongUri = restart_uri(Link, binary_to_list(VHost)),
+        http_delete(Config, WrongUri, "policy", "policy", ?NOT_FOUND),
+        Req = #{bindings => #{vhost => VHost, id => Id, node => maps:get(node, Link)}},
+        ?assertEqual({false, Req, unused},
+                     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_mgmt,
+                                                  delete_resource, [Req, unused])),
+        ?assertEqual(Children,
+                     rabbit_ct_broker_helpers:rpc(Config, 0, supervisor2, which_children, [Supervisor])),
+        rabbit_ct_broker_helpers:set_full_permissions(Config, <<"policy">>, <<"/">>),
+        http_delete(Config, restart_uri(Link), "policy", "policy", ?NO_CONTENT),
+        ?assertNotEqual(Children,
+                        rabbit_ct_broker_helpers:rpc(Config, 0, supervisor2, which_children, [Supervisor]))
+    after
+        http_delete(Config, "/users/policy"),
+        rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+    end.
+
 restart_link_unknown_node(Config) ->
     http_delete(Config,
                 "/federation-links/vhost/%2f/no-such-link/no-such-node@no-such-host/restart",
@@ -203,7 +239,10 @@ wait_until(Fun, N) ->
     end.
 
 restart_uri(Link) ->
-    "/federation-links/vhost/%2f/" ++
+    restart_uri(Link, "%2f").
+
+restart_uri(Link, VHost) ->
+    "/federation-links/vhost/" ++ VHost ++ "/" ++
         binary_to_list(maps:get(id, Link)) ++ "/" ++
         binary_to_list(maps:get(node, Link)) ++ "/restart".
 
