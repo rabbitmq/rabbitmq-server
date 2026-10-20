@@ -24,11 +24,9 @@ jobs:
         branch:
           - main
           - v4.3.x
-          - v4.2.x
-          - v4.1.x
         include:
           - branch: main
-            project_version: 4.4.0
+            project_version: 4.3.0
           - branch: v4.3.x
             project_version: 4.3.0
 
@@ -83,8 +81,6 @@ jobs:
         branch:
           - main
           - v4.3.x
-          - v4.2.x
-          - v4.1.x
 
     needs: build-package-generic-unix
     runs-on: ubuntu-latest
