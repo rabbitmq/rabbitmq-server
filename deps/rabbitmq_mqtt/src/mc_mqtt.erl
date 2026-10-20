@@ -23,6 +23,10 @@
          prepare/2
         ]).
 
+-ifdef(TEST).
+-export([amqp_to_utf8_string/1]).
+-endif.
+
 init(Msg = #mqtt_msg{qos = Qos,
                      props = Props}) ->
     Anns0 = #{?ANN_DURABLE => durable(Qos)},
@@ -107,7 +111,10 @@ convert_from(mc_amqp, Sections, Env) ->
              end,
     Props1 = case AmqpProps of
                  #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
-                     Props0#{'Correlation-Data' => correlation_id(Corr)};
+                     case correlation_id(Corr) of
+                         undefined -> Props0;
+                         CorrData -> Props0#{'Correlation-Data' => CorrData}
+                     end;
                  _ ->
                      Props0
              end,
@@ -128,8 +135,11 @@ convert_from(mc_amqp, Sections, Env) ->
                                         false
                                 end, MsgAnns),
     %% "The keys of this map are restricted to be of type string" [AMQP 1.0 3.2.5]
+    %% The decoder does not enforce this.
     UserProp1 = lists:filtermap(fun({{utf8, Key}, Val}) ->
-                                        filter_map_amqp_to_utf8_string(Key, Val)
+                                        filter_map_amqp_to_utf8_string(Key, Val);
+                                   (_) ->
+                                        false
                                 end, AppProps),
     Props = case UserProp0 ++ UserProp1 of
                 [] -> Props2;
@@ -139,7 +149,7 @@ convert_from(mc_amqp, Sections, Env) ->
     #mqtt_msg{retain = false,
               qos = Qos,
               dup = false,
-              props = Props,
+              props = drop_invalid_properties(Props),
               payload = Payload};
 convert_from(mc_amqpl, #content{properties = PBasic,
                                 payload_fragments_rev = PFR},
@@ -161,10 +171,11 @@ convert_from(mc_amqpl, #content{properties = PBasic,
              undefined -> [];
              _ -> H0
          end,
+    %% A header with this name but the wrong type falls through to generic handling below.
     {P1, H3} = case lists:keytake(<<"x-reply-to-topic">>, 1, H1) of
                    {value, {_, longstr, Topic}, H2} ->
                        {P0#{'Response-Topic' => rabbit_mqtt_util:amqp_to_mqtt(Topic)}, H2};
-                   false ->
+                   _ ->
                        {P0, H1}
                end,
     {P2, H} = case is_binary(CorrId) of
@@ -174,7 +185,7 @@ convert_from(mc_amqpl, #content{properties = PBasic,
                       case lists:keytake(<<"x-correlation-id">>, 1, H3) of
                           {value, {_, longstr, Corr}, H4} ->
                               {P1#{'Correlation-Data' => Corr}, H4};
-                          false ->
+                          _ ->
                               {P1, H3}
                       end
               end,
@@ -195,9 +206,31 @@ convert_from(mc_amqpl, #content{properties = PBasic,
               qos = Qos,
               dup = false,
               payload = lists:reverse(PFR),
-              props = P};
+              props = drop_invalid_properties(P)};
 convert_from(_SourceProto, _, _) ->
     not_implemented.
+
+%% MQTT limits Binary Data and UTF-8 strings to 65,535 bytes, and UTF-8 strings
+%% must be well-formed without U+0000 [v5 1.5.4, 1.5.6]. AMQP enforces neither.
+-spec drop_invalid_properties(properties()) -> properties().
+drop_invalid_properties(Props) ->
+    maps:filtermap(fun drop_invalid_property/2, Props).
+
+drop_invalid_property('Correlation-Data', Val) ->
+    byte_size(Val) =< ?TWO_BYTE_INTEGER_MAX;
+drop_invalid_property(Key, Val)
+  when Key =:= 'Content-Type';
+       Key =:= 'Response-Topic' ->
+    is_valid_utf8_string(Val);
+drop_invalid_property('User-Property', Pairs) ->
+    case [Pair || {Name, Val} = Pair <- Pairs,
+                  byte_size(Name) =< ?TWO_BYTE_INTEGER_MAX,
+                  byte_size(Val) =< ?TWO_BYTE_INTEGER_MAX] of
+        [] -> false;
+        Kept -> {true, Kept}
+    end;
+drop_invalid_property(_Key, _Val) ->
+    true.
 
 convert_to(?MODULE, Msg, _Env) ->
     Msg;
@@ -482,15 +515,25 @@ prepare(_For, #mqtt_msg{} = Msg) ->
 
 correlation_id({uuid, UUID}) ->
     mc_util:uuid_to_urn_string(UUID);
-correlation_id({_T, Corr}) ->
-    rabbit_data_coercion:to_binary(Corr).
+correlation_id({ulong, N}) ->
+    integer_to_binary(N);
+correlation_id({T, Bin})
+  when T =:= binary;
+       T =:= utf8 ->
+    Bin;
+%% The AMQP 1.0 decoder does not enforce the `message-id` types.
+correlation_id(_) ->
+    undefined.
 
 %% Translates AMQP 0.9.1 headers to MQTT 5.0 User Properties if
-%% the value is convertible to a UTF-8 String.
+%% both the name and the value are convertible to a UTF-8 String.
 -spec amqpl_header_to_user_property(rabbit_framing:amqp_table()) ->
     user_property().
 amqpl_header_to_user_property(Table) ->
-    lists:filtermap(fun amqpl_field_to_utf8_string_pair/1, Table).
+    lists:filtermap(fun({K, _T, _V} = Field) ->
+                            mc_util:is_utf8_no_null(K) andalso
+                            amqpl_field_to_utf8_string_pair(Field)
+                    end, Table).
 
 amqpl_field_to_utf8_string_pair({K, longstr, V}) ->
     case mc_util:is_utf8_no_null(V) of
@@ -515,27 +558,34 @@ amqpl_field_to_utf8_string_pair({K, void, _V}) ->
     {true, {K, <<>>}};
 amqpl_field_to_utf8_string_pair({K, bool, V}) ->
     {true, {K, atom_to_binary(V)}};
-amqpl_field_to_utf8_string_pair({_K, T, _V})
-  when T =:= array;
-       T =:= table;
-       %% Raw binary data is not UTF-8 encoded.
-       T =:= binary ->
+%% Catch-all for field types not representable as a UTF-8 string (array, table, binary, decimal, ...).
+amqpl_field_to_utf8_string_pair(_) ->
     false.
 
+%% A value over the MQTT limit is dropped anyway; check the cheap bound first.
+-spec is_valid_utf8_string(binary()) -> boolean().
+is_valid_utf8_string(Bin) ->
+    byte_size(Bin) =< ?TWO_BYTE_INTEGER_MAX andalso mc_util:is_utf8_no_null(Bin).
+
+%% A User Property name is itself a UTF-8 Encoded String [MQTT-1.5.4-1/-2].
 filter_map_amqp_to_utf8_string(Key, TypeVal) ->
-    case amqp_to_utf8_string(TypeVal) of
-        cannot_convert ->
-            false;
-        String ->
-            {true, {Key, String}}
+    case is_valid_utf8_string(Key) of
+        true ->
+            case amqp_to_utf8_string(TypeVal) of
+                cannot_convert -> false;
+                String -> {true, {Key, String}}
+            end;
+        false ->
+            false
     end.
 
-amqp_to_utf8_string({utf8, Val})
-  when is_binary(Val) ->
-    Val;
-amqp_to_utf8_string({symbol, Val})
-  when is_binary(Val) ->
-    Val;
+%% The AMQP 1.0 decoder does not validate `utf8`/`symbol` content.
+amqp_to_utf8_string({T, Val})
+  when (T =:= utf8 orelse T =:= symbol) andalso is_binary(Val) ->
+    case is_valid_utf8_string(Val) of
+        true -> Val;
+        false -> cannot_convert
+    end;
 amqp_to_utf8_string(Val)
   when Val =:= null;
        Val =:= undefined ->
@@ -562,12 +612,8 @@ amqp_to_utf8_string(true) ->
     <<"true">>;
 amqp_to_utf8_string(false) ->
     <<"false">>;
-amqp_to_utf8_string({T, _Val})
-  when T =:= map;
-       T =:= list;
-       T =:= array;
-       %% Raw binary data is not UTF-8 encoded.
-       T =:= binary ->
+%% Catch-all for primitive types not worth representing as a UTF-8 string (uuid, char, arrays, ...).
+amqp_to_utf8_string(_Other) ->
     cannot_convert.
 
 durable(?QOS_0) -> false;

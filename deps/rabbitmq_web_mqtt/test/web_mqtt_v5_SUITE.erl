@@ -115,6 +115,8 @@ topic_alias_unknown(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 topic_alias_disallowed(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 topic_alias_retained_message(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 topic_alias_disallowed_retained_message(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+topic_alias_max_packet_size(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+topic_alias_max_packet_size_retained_message(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 extended_auth(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 headers_exchange(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 consistent_hash_exchange(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
