@@ -61,7 +61,7 @@ jobs:
           fi
       - name: Checkout
         if: steps.authorized.outputs.authorized == 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.HEAD_SHA }}
       - name: Configure Erlang
@@ -92,7 +92,7 @@ jobs:
     if: ${{ needs.build-package-generic-unix.outputs.authorized == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.HEAD_SHA }}
       - name: Download package-generic-unix
