@@ -15,7 +15,7 @@
 -export([add/2, add/3, add/4, delete/2, delete_ignoring_protection/2, exists/1, assert/1,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
--export([parse_tags/1, update_tags/3]).
+-export([parse_tags/1, parse_tags_with_limit_enforcement/1, update_tags/3]).
 -export([update_metadata/3, pick_known_metadata/1,
          enable_protection_from_deletion/1, disable_protection_from_deletion/1]).
 -export([lookup/1, default_name/0]).
@@ -137,28 +137,50 @@ read_config(VHost) ->
 
 -define(INFO_KEYS, vhost:info_keys()).
 
--spec parse_tags(binary() | string() | atom()) -> [atom()].
-parse_tags(undefined) ->
+-define(MAX_VHOST_TAGS, 32).
+
+-spec parse_tags(vhost:unparsed_tags()) -> [vhost:tag()].
+parse_tags(Val) ->
+    [trim_tag(Tag) || Tag <- split_tags(Val)].
+
+-spec parse_tags_with_limit_enforcement(vhost:unparsed_tags()) ->
+    {'ok', [vhost:tag()]} | {'error', {'too_many_tags', pos_integer()}} | {'error', 'invalid_tags'}.
+parse_tags_with_limit_enforcement(Val) ->
+    try
+        case split_tags(Val) of
+            Tags when length(Tags) =< ?MAX_VHOST_TAGS ->
+                {ok, [trim_tag(Tag) || Tag <- Tags]};
+            _ ->
+                {error, {too_many_tags, ?MAX_VHOST_TAGS}}
+        end
+    catch
+        error:_ -> {error, invalid_tags}
+    end.
+
+split_tags(undefined) ->
     [];
-parse_tags(<<"">>) ->
+split_tags(<<"">>) ->
     [];
-parse_tags([]) ->
+split_tags([]) ->
     [];
-parse_tags(Val) when is_binary(Val) ->
+split_tags(Val) when is_binary(Val) ->
     ValUnicode = rabbit_data_coercion:to_unicode_charlist(Val),
-    [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])];
-parse_tags(Val) when is_list(Val) ->
+    re:split(ValUnicode, ",", [unicode, {return, list}]);
+split_tags(Val) when is_list(Val) ->
     case hd(Val) of
       Bin when is_binary(Bin) ->
         %% this is a list of binaries
-        [trim_tag(Tag) || Tag <- Val];
+        Val;
       Atom when is_atom(Atom) ->
         %% this is a list of atoms
-        [trim_tag(Tag) || Tag <- Val];
+        Val;
       Int when is_integer(Int) ->
         %% this is a string/charlist
         ValUnicode = rabbit_data_coercion:to_unicode_charlist(Val),
-        [trim_tag(Tag) || Tag <- re:split(ValUnicode, ",", [unicode, {return, list}])]
+        re:split(ValUnicode, ",", [unicode, {return, list}]);
+      Str when is_list(Str) ->
+        %% this is a list of strings
+        Val
     end.
 
 -spec add(vhost:name(), rabbit_types:username()) ->
@@ -193,12 +215,16 @@ add(Name, Metadata, ActingUser) ->
 do_add(Name, Metadata0, ActingUser) ->
     ok = is_over_vhost_limit(Name),
 
-    Metadata = case maps:is_key(default_queue_type, Metadata0) of
+    Metadata1 = case maps:is_key(default_queue_type, Metadata0) of
         true ->
             Metadata0;
         false ->
             Metadata0#{default_queue_type => rabbit_queue_type:default_alias()}
     end,
+    Metadata = case normalize_tags(Metadata1) of
+                   {ok, Normalized} -> Normalized;
+                   {error, _} = Err -> throw(Err)
+               end,
 
     Description = maps:get(description, Metadata, undefined),
     Tags = maps:get(tags, Metadata, []),
@@ -337,12 +363,40 @@ update_metadata(Name, Metadata0, ActingUser) ->
             Metadata1
     end,
 
-    case validate_metadata_default_queue_type(Metadata) of
-        ok ->
-            persist_metadata_update(Name, Metadata, ActingUser);
+    case validate_metadata(Metadata) of
+        {ok, Validated} ->
+            persist_metadata_update(Name, Validated, ActingUser);
+        {error, _} = Err ->
+            Err;
         {error, _, _} = Err ->
             Err
     end.
+
+-spec validate_metadata(vhost:metadata()) ->
+    {'ok', vhost:metadata()} | {'error', any()} | {'error', 'invalid_queue_type', any()}.
+validate_metadata(Metadata0) ->
+    case normalize_tags(Metadata0) of
+        {ok, Metadata} ->
+            case validate_metadata_default_queue_type(Metadata) of
+                ok  -> {ok, Metadata};
+                Err -> Err
+            end;
+        Err ->
+            Err
+    end.
+
+normalize_tags(#{tags := Tags} = Metadata) when is_list(Tags); is_binary(Tags) ->
+    case parse_tags_with_limit_enforcement(Tags) of
+        {ok, Parsed}     -> {ok, Metadata#{tags := Parsed}};
+        {error, _} = Err -> Err
+    end;
+normalize_tags(Metadata) ->
+    {ok, Metadata}.
+
+enforce_tag_limit(Tags) when length(Tags) > ?MAX_VHOST_TAGS ->
+    throw({error, {too_many_tags, ?MAX_VHOST_TAGS}});
+enforce_tag_limit(_Tags) ->
+    ok.
 
 -spec validate_metadata_default_queue_type(vhost:metadata()) ->
     'ok' | {'error', 'invalid_queue_type', any()}.
@@ -455,8 +509,15 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
       "null"      -> <<"">>;
       Other       -> Other
     end,
-    ParsedTags = parse_tags(Tags),
-    ?LOG_DEBUG("Parsed virtual host tags ~tp to ~tp", [Tags, ParsedTags]),
+    case parse_tags_with_limit_enforcement(Tags) of
+        {ok, ParsedTags} ->
+            ?LOG_DEBUG("Parsed virtual host tags ~tp to ~tp", [Tags, ParsedTags]),
+            do_put_vhost(Name, Description, ParsedTags, DefaultQueueType, Trace, Username);
+        {error, _} = Err ->
+            Err
+    end.
+
+do_put_vhost(Name, Description, ParsedTags, DefaultQueueType, Trace, Username) ->
     Result = case exists(Name) of
                  true  ->
                      update(Name, Description, ParsedTags, DefaultQueueType, Username);
@@ -611,17 +672,10 @@ list() -> list_names().
 -spec all() -> [vhost:vhost()].
 all() -> rabbit_db_vhost:get_all().
 
--spec all_tagged_with(atom()) -> [vhost:vhost()].
+-spec all_tagged_with(atom() | string() | binary()) -> [vhost:vhost()].
 all_tagged_with(TagName) ->
-    lists:filter(
-        fun(VHost) ->
-            Meta = vhost:get_metadata(VHost),
-            case Meta of
-                #{tags := Tags} ->
-                    lists:member(rabbit_data_coercion:to_atom(TagName), Tags);
-                _ -> false
-            end
-        end, all()).
+    Tag = vhost:tag_to_binary(TagName),
+    lists:filter(fun(VHost) -> lists:member(Tag, vhost:get_tags(VHost)) end, all()).
 
 -spec count() -> non_neg_integer().
 count() ->
@@ -693,6 +747,7 @@ are_different(L1, L2) ->
 -spec update_tags(vhost:name(), [vhost_tag()], rabbit_types:username()) -> vhost:vhost().
 update_tags(VHostName, Tags, ActingUser) ->
     try
+        ok = enforce_tag_limit(Tags),
         CurrentTags = case rabbit_db_vhost:get(VHostName) of
                           undefined -> [];
                           V -> vhost:get_tags(V)
@@ -742,14 +797,9 @@ config_file_path(VHost) ->
     VHostDir = msg_store_dir_path(VHost),
     filename:join(VHostDir, ".config").
 
--spec trim_tag(list() | binary() | atom()) -> atom().
-trim_tag(Val) when is_atom(Val) ->
-    trim_tag(rabbit_data_coercion:to_binary(Val));
-trim_tag(Val) when is_list(Val) ->
-    trim_tag(rabbit_data_coercion:to_utf8_binary(Val));
-trim_tag(Val) when is_binary(Val) ->
-    ValTrimmed = string:trim(Val),
-    rabbit_data_coercion:to_atom(ValTrimmed).
+-spec trim_tag(list() | binary() | atom()) -> vhost:tag().
+trim_tag(Val) ->
+    string:trim(vhost:tag_to_binary(Val)).
 
 %%----------------------------------------------------------------------------
 

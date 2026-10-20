@@ -29,6 +29,17 @@ defmodule AddVhostCommandTest do
     assert @command.validate(["test", "extra"], %{}) == {:validation_failure, :too_many_args}
   end
 
+  test "validate: rejects more than 32 tags" do
+    tags = fn n -> Enum.map_join(1..n, ",", &"t#{&1}") end
+
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate(["a-vhost"], %{tags: tags.(33)})
+           )
+
+    assert @command.validate(["a-vhost"], %{tags: tags.(32)}) == :ok
+  end
+
   test "validate: one argument passes validation" do
     assert @command.validate(["new-vhost"], %{}) == :ok
     assert @command.validate(["new-vhost"], %{description: "Used by team A"}) == :ok
@@ -95,6 +106,6 @@ defmodule AddVhostCommandTest do
     opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
     assert @command.run([context[:vhost]], opts) == :ok
     record = list_vhosts() |> Enum.find(fn record -> record[:name] == context[:vhost] end)
-    assert record[:tags] == [:my_tag]
+    assert record[:tags] == ["my_tag"]
   end
 end

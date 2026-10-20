@@ -35,6 +35,17 @@ defmodule SetVhostTagsCommandTest do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
   end
 
+  test "validate: rejects more than 32 tags" do
+    tags = Enum.map(1..33, &"t#{&1}")
+
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate([@vhost | tags], %{})
+           )
+
+    assert @command.validate([@vhost | Enum.take(tags, 32)], %{}) == :ok
+  end
+
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     opts = %{node: :jake@thedog, timeout: 200}
 
@@ -51,7 +62,7 @@ defmodule SetVhostTagsCommandTest do
         fn record -> record[:name] == context[:vhost] end
       )
 
-    assert result[:tags] == [:qa]
+    assert result[:tags] == ["qa"]
   end
 
   @tag vhost: "non/ex1st3nT"
@@ -77,7 +88,7 @@ defmodule SetVhostTagsCommandTest do
         fn record -> record[:name] == context[:vhost] end
       )
 
-    assert Enum.sort(result[:tags]) == Enum.sort(context[:tags])
+    assert Enum.sort(result[:tags]) == Enum.sort(Enum.map(context[:tags], &to_string/1))
   end
 
   @tag vhost: @vhost, tags: [:qa]
@@ -110,7 +121,7 @@ defmodule SetVhostTagsCommandTest do
         fn record -> record[:name] == context[:vhost] end
       )
 
-    assert result[:tags] == context[:tags]
+    assert result[:tags] == Enum.map(context[:tags], &to_string/1)
   end
 
   @tag vhost: @vhost, old_tags: [:qa], new_tags: [:limited]
@@ -128,7 +139,7 @@ defmodule SetVhostTagsCommandTest do
         fn record -> record[:name] == context[:vhost] end
       )
 
-    assert result[:tags] == context[:new_tags]
+    assert result[:tags] == Enum.map(context[:new_tags], &to_string/1)
   end
 
   @tag vhost: @vhost, tags: ["abc"]

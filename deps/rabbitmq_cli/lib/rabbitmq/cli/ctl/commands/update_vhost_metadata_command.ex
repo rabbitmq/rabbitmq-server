@@ -36,7 +36,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateVhostMetadataCommand do
         {:validation_failure, :not_enough_args}
 
       _ ->
-        VirtualHosts.validate_default_queue_type(m)
+        with :ok <- VirtualHosts.validate_tags(m[:tags]) do
+          VirtualHosts.validate_default_queue_type(m)
+        end
     end
   end
 

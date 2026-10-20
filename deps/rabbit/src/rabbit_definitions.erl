@@ -847,6 +847,11 @@ add_vhost(VHost, ActingUser) ->
     Tags             = maps:get(tags, VHost, maps:get(tags, Metadata, [])),
     DefaultQueueType = maps:get(default_queue_type, Metadata, undefined),
 
+    case rabbit_vhost:parse_tags_with_limit_enforcement(maps:get(tags, Metadata, [])) of
+        {ok, _} -> ok;
+        {error, _} = Err0 -> throw(Err0)
+    end,
+
     case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQueueType, IsTracingEnabled, ActingUser) of
         ok ->
             ok;
