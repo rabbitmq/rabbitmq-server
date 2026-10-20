@@ -138,15 +138,14 @@ read_config(VHost) ->
 
 -define(INFO_KEYS, vhost:info_keys()).
 
-%% Tags are converted to atoms, which are not garbage collected.
 -define(MAX_VHOST_TAGS, 32).
 
--spec parse_tags(binary() | string() | atom()) -> [atom()].
+-spec parse_tags(binary() | string() | atom()) -> [vhost:tag()].
 parse_tags(Val) ->
     [trim_tag(Tag) || Tag <- split_tags(Val)].
 
 -spec parse_tags_with_limit_enforcement(binary() | string() | atom()) ->
-    {'ok', [atom()]} | {'error', {'too_many_tags', pos_integer()}}.
+    {'ok', [vhost:tag()]} | {'error', {'too_many_tags', pos_integer()}}.
 parse_tags_with_limit_enforcement(Val) ->
     case split_tags(Val) of
         Tags when length(Tags) =< ?MAX_VHOST_TAGS ->
@@ -658,14 +657,15 @@ list() -> list_names().
 -spec all() -> [vhost:vhost()].
 all() -> rabbit_db_vhost:get_all().
 
--spec all_tagged_with(atom()) -> [vhost:vhost()].
+-spec all_tagged_with(atom() | string() | binary()) -> [vhost:vhost()].
 all_tagged_with(TagName) ->
     lists:filter(
         fun(VHost) ->
             Meta = vhost:get_metadata(VHost),
             case Meta of
                 #{tags := Tags} ->
-                    lists:member(rabbit_data_coercion:to_atom(TagName), Tags);
+                    lists:member(vhost:tag_to_binary(TagName),
+                                 [vhost:tag_to_binary(T) || T <- Tags]);
                 _ -> false
             end
         end, all()).
@@ -791,13 +791,8 @@ config_file_path(VHost) ->
     filename:join(VHostDir, ".config").
 
 -spec trim_tag(list() | binary() | atom()) -> atom().
-trim_tag(Val) when is_atom(Val) ->
-    trim_tag(rabbit_data_coercion:to_binary(Val));
-trim_tag(Val) when is_list(Val) ->
-    trim_tag(rabbit_data_coercion:to_utf8_binary(Val));
-trim_tag(Val) when is_binary(Val) ->
-    ValTrimmed = string:trim(Val),
-    rabbit_data_coercion:to_atom(ValTrimmed).
+trim_tag(Val) ->
+    string:trim(vhost:tag_to_binary(Val)).
 
 %%----------------------------------------------------------------------------
 
