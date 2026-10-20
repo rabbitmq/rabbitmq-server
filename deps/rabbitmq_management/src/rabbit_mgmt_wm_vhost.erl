@@ -88,7 +88,11 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
                               rabbit_mgmt_util:bad_request(BackstopMsg, ReqData, Context);
                           {error, {too_many_tags, Max}} ->
                               Msg = rabbit_misc:format("A virtual host can have at most ~b tags", [Max]),
-                              rabbit_mgmt_util:bad_request(list_to_binary(Msg), ReqData, Context);
+                              rabbit_mgmt_util:bad_request(iolist_to_binary(Msg), ReqData, Context);
+                          {error, invalid_tags} ->
+                              rabbit_mgmt_util:bad_request(
+                                <<"tags must be a comma-separated string or an array of strings">>,
+                                ReqData, Context);
                           {error, E} ->
                               Reason = iolist_to_binary(
                                          io_lib:format(
