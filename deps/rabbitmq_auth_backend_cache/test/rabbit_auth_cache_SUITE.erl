@@ -31,7 +31,8 @@ groups() ->
     {rabbit_auth_cache_dict, [sequence], CommonTests},
     {rabbit_auth_cache_ets, [sequence], CommonTests},
     {rabbit_auth_cache_ets_segmented, [sequence], CommonTests},
-    {rabbit_auth_cache_ets_segmented_stateless, [sequence], CommonTests}
+    {rabbit_auth_cache_ets_segmented_stateless, [sequence],
+        CommonTests ++ [clear_after_gc, delete_after_gc]}
     ].
 
 init_per_suite(Config) ->
@@ -174,6 +175,41 @@ clear(Config) ->
     AuthCacheModule:clear(),
     {error, not_found} = AuthCacheModule:get(Key1),
     {error, not_found} = AuthCacheModule:get(Key2).
+
+clear_after_gc(Config) ->
+    AuthCacheModule = ?config(auth_cache_module, Config),
+    TTL = ?config(current_ttl, Config),
+    [SegmentSize] = ?config(auth_cache_module_args, Config),
+    ok = AuthCacheModule:put(first, first_value, TTL),
+    ok = AuthCacheModule:put(second, second_value, TTL + 2 * SegmentSize),
+    expire_segment(Config),
+    ok = AuthCacheModule:clear(),
+    {error, not_found} = AuthCacheModule:get(first),
+    {error, not_found} = AuthCacheModule:get(second),
+    AuthCacheModule:gc(),
+    _ = sys:get_state(AuthCacheModule),
+    ok = AuthCacheModule:put(first, new_value, TTL),
+    {ok, new_value} = AuthCacheModule:get(first).
+
+delete_after_gc(Config) ->
+    AuthCacheModule = ?config(auth_cache_module, Config),
+    TTL = ?config(current_ttl, Config),
+    [SegmentSize] = ?config(auth_cache_module_args, Config),
+    ok = AuthCacheModule:put(key, first_value, TTL),
+    ok = AuthCacheModule:put(key, second_value, TTL + 2 * SegmentSize),
+    ok = AuthCacheModule:put(other_key, other_value, TTL),
+    expire_segment(Config),
+    ok = AuthCacheModule:delete(key),
+    {error, not_found} = AuthCacheModule:get(key),
+    {ok, other_value} = AuthCacheModule:get(other_key).
+
+expire_segment(Config) ->
+    AuthCacheModule = ?config(auth_cache_module, Config),
+    [SegmentSize] = ?config(auth_cache_module_args, Config),
+    ok = AuthCacheModule:put(expired, expired_value, -2 * SegmentSize),
+    AuthCacheModule:gc(),
+    _ = sys:get_state(AuthCacheModule),
+    {error, not_found} = AuthCacheModule:get(expired).
 
 random_timing(Config) ->
     random_timing(Config, 15000, 1000).
