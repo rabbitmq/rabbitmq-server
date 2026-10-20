@@ -35,16 +35,16 @@ get(Key) ->
 put(Key, Value, TTL) ->
     Expiration = rabbit_auth_cache:expiration(TTL),
     Segment = gen_server:call(?MODULE, {get_write_segment, Expiration}, ?CACHE_OPERATION_TIMEOUT),
-    ets:insert(Segment, {Key, {Expiration, Value}}),
+    safe_ets(fun() -> ets:insert(Segment, {Key, {Expiration, Value}}) end),
     ok.
 
 delete(Key) ->
-    _ = [ets:delete(Table, Key)
+    _ = [safe_ets(fun() -> ets:delete(Table, Key) end)
          || Table <- gen_server:call(?MODULE, get_segment_tables, ?CACHE_OPERATION_TIMEOUT)],
     ok.
 
 clear() -> 
-    _ = [ets:delete_all_objects(Table)
+    _ = [safe_ets(fun() -> ets:delete_all_objects(Table) end)
          || Table <- gen_server:call(?MODULE, get_segment_tables, ?CACHE_OPERATION_TIMEOUT)],
     ok.
 
@@ -87,6 +87,11 @@ code_change(_OldVsn, State, _Extra) ->
 terminate(_Reason, State = #state{gc_timer = Timer}) ->
     _ = timer:cancel(Timer),
     State.
+
+safe_ets(Fun) ->
+    try Fun()
+    catch error:badarg -> ok
+    end.
 
 partition_expired_segments(Segments) ->
     lists:partition(
