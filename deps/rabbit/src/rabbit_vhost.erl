@@ -139,11 +139,11 @@ read_config(VHost) ->
 
 -define(MAX_VHOST_TAGS, 32).
 
--spec parse_tags(binary() | string() | atom()) -> [vhost:tag()].
+-spec parse_tags(vhost:unparsed_tags()) -> [vhost:tag()].
 parse_tags(Val) ->
     [trim_tag(Tag) || Tag <- split_tags(Val)].
 
--spec parse_tags_with_limit_enforcement(binary() | string() | atom()) ->
+-spec parse_tags_with_limit_enforcement(vhost:unparsed_tags()) ->
     {'ok', [vhost:tag()]} | {'error', {'too_many_tags', pos_integer()}}.
 parse_tags_with_limit_enforcement(Val) ->
     case split_tags(Val) of
