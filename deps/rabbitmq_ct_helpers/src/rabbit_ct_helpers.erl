@@ -678,7 +678,9 @@ find_elixir_home() ->
     case os:find_executable(ElixirExe) of
         false   -> {skip, "Failed to locate Elixir executable"};
         ExePath ->
-            {ok, ElixirLibDir} = exec([ExePath, "--eval", "IO.write(:code.lib_dir(:elixir, :ebin))"], []),
+            {ok, ElixirLibDir} = exec(
+                                  [ExePath, "--eval",
+                                   "IO.write(:filename.join(:code.lib_dir(:elixir), ~c\"ebin\"))"], []),
             ElixirLibDir
     end.
 
