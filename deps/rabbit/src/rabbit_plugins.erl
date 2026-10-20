@@ -318,22 +318,13 @@ which_plugin(Module) ->
     Plugins = list(),
     which_plugin(Plugins, Module).
 
-which_plugin([#plugin{name = Name} | Rest], Module) ->
+which_plugin([#plugin{name = Name} = Plugin | Rest], Module) ->
     %% Get the list of modules belonging to this plugin.
     ModulesKey = case application:get_key(Name, modules) of
                      {ok, _} = Ret ->
                          Ret;
                      undefined ->
-                         %% The plugin application might not be loaded. Load
-                         %% it temporarily and try again.
-                         case application:load(Name) of
-                             ok ->
-                                 Ret = application:get_key(Name, modules),
-                                 _ = application:unload(Name),
-                                 Ret;
-                             {error, _Reason} ->
-                                 undefined
-                         end
+                         plugin_modules(Plugin)
                  end,
     case ModulesKey of
         {ok, Modules} ->
@@ -348,6 +339,22 @@ which_plugin([#plugin{name = Name} | Rest], Module) ->
     end;
 which_plugin([], _Module) ->
     {error, no_provider}.
+
+plugin_modules(#plugin{name = Name, type = Type, location = Location}) ->
+    App = case Type of
+              ez ->
+                  read_app_file(Location);
+              dir ->
+                  Path = filename:join([Location, "ebin", atom_to_list(Name) ++ ".app"]),
+                  case rabbit_file:read_term_file(Path) of
+                      {ok, [Term]} -> Term;
+                      _ -> undefined
+                  end
+          end,
+    case App of
+        {application, Name, Props} -> {ok, proplists:get_value(modules, Props, [])};
+        _ -> undefined
+    end.
 
 %%----------------------------------------------------------------------------
 
