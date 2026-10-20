@@ -95,7 +95,7 @@ defmodule UpdateVhostMetadataCommandTest do
     vh = find_vhost(@vhost)
 
     assert vh
-    assert vh[:tags] == [:a1, :b2, :c3]
+    assert vh[:tags] == ["a1", "b2", "c3"]
   end
 
   test "run: enabling deletion protection succeeds", context do
@@ -132,7 +132,7 @@ defmodule UpdateVhostMetadataCommandTest do
     opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
     assert @command.run([@vhost], opts) == :ok
     vh = find_vhost(@vhost)
-    assert vh[:tags] == [:my_tag]
+    assert vh[:tags] == ["my_tag"]
   end
 
   test "run: attempt to use a non-existent virtual host fails", context do

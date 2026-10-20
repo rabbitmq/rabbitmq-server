@@ -121,7 +121,7 @@ defmodule SetVhostTagsCommandTest do
         fn record -> record[:name] == context[:vhost] end
       )
 
-    assert result[:tags] == context[:tags]
+    assert result[:tags] == Enum.map(context[:tags], &to_string/1)
   end
 
   @tag vhost: @vhost, old_tags: [:qa], new_tags: [:limited]
@@ -139,7 +139,7 @@ defmodule SetVhostTagsCommandTest do
         fn record -> record[:name] == context[:vhost] end
       )
 
-    assert result[:tags] == context[:new_tags]
+    assert result[:tags] == Enum.map(context[:new_tags], &to_string/1)
   end
 
   @tag vhost: @vhost, tags: ["abc"]
