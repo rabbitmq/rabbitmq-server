@@ -24,6 +24,7 @@
     terminate/3
 ]).
 -export([close_connection/2]).
+-export([conserve_resources/3]).
 
 %% cowboy_sub_protocol
 -export([upgrade/4,
@@ -38,7 +39,7 @@
     parse_state,
     proc_state,
     state,
-    conserve_resources,
+    blocked_by = sets:new([{version, 2}]) :: sets:set(rabbit_alarm:resource_alarm_source()),
     socket,
     auth_hd,
     stats_timer,
@@ -125,7 +126,6 @@ init(Req0, Opts) ->
                 heartbeat          = {none, none},
                 heartbeat_mode     = heartbeat,
                 state              = running,
-                conserve_resources = false,
                 socket             = SockInfo,
                 auth_hd            = cowboy_req:header(<<"authorization">>, Req)
             }, WsOpts#{data_delivery => relay}};
@@ -144,11 +144,26 @@ websocket_init(State) ->
     {ok, ProcessorState} = init_processor_state(State),
     LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
     erlang:send_after(LoginTimeout, self(), login_timeout),
-    {ok, rabbit_event:init_stats_timer(
+    Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    {ok, rabbit_event:init_stats_timer(control_throttle(
            State#state{proc_state     = ProcessorState,
+<<<<<<< HEAD
                        max_frame_size = unauthenticated_frame_size(),
                        parse_state    = rabbit_stomp_frame:initial_state()},
+=======
+                       parser_config  = ParserConfig,
+                       blocked_by     = sets:from_list(Alarms, [{version, 2}]),
+                       max_frame_size = unauthenticated_frame_size(),
+                       parse_state    = rabbit_stomp_frame:initial_state(ParserConfig)}),
+>>>>>>> 89ca93e (Web STOMP: block publishers during resource alarms)
            #state.stats_timer)}.
+
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
+    Pid ! {conserve_resources, Source, Conserve},
+    ok.
 
 -spec close_connection(pid(), string()) -> 'ok'.
 close_connection(Pid, Reason) ->
@@ -210,9 +225,15 @@ websocket_handle(_Frame, State) ->
 websocket_info({send, Msg}, State=#state{frame_type=FrameType}) ->
     {reply, {FrameType, Msg}, State};
 
-websocket_info({conserve_resources, Conserve}, State) ->
-    NewState = State#state{conserve_resources = Conserve},
-    handle_credits(control_throttle(NewState));
+websocket_info({conserve_resources, Source, Conserve},
+               State = #state{blocked_by = BlockedBy0}) ->
+    BlockedBy = case Conserve of
+                    true ->
+                        sets:add_element(Source, BlockedBy0);
+                    false ->
+                        sets:del_element(Source, BlockedBy0)
+                end,
+    handle_credits(State#state{blocked_by = BlockedBy});
 websocket_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     handle_credits(control_throttle(State));
@@ -501,9 +522,9 @@ handle_credits(State0) ->
             {ok, State}
     end.
 
-control_throttle(State = #state{state              = CS,
-                                conserve_resources = Mem}) ->
-    case {CS, Mem orelse credit_flow:blocked()} of
+control_throttle(State = #state{state = CS, blocked_by = BlockedBy}) ->
+    Conserve = not sets:is_empty(BlockedBy),
+    case {CS, Conserve orelse credit_flow:blocked()} of
         {running,   true} -> blocking(State);
         {blocking, false} -> running(State);
         {blocked,  false} -> running(State);
