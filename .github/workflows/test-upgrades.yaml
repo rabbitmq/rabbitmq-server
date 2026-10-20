@@ -4,6 +4,8 @@ on:
   push:
     branches:
     - main
+    - v4.4.x
+    - v4.3.x
     paths:
     - deps/**
     - scripts/**
