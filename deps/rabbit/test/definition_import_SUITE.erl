@@ -10,6 +10,7 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
 
@@ -58,7 +59,10 @@ groups() ->
                                import_case23,
                                import_case27,
                                import_case28,
-                               import_case29
+                               import_case29,
+                               import_case30,
+                               import_case31,
+                               import_case32
                               ]},
 
         {boot_time_import_using_classic_source, [], [
@@ -81,7 +85,8 @@ groups() ->
             export_import_round_trip_operator_policy_all_keys,
             export_import_round_trip_multiple_operator_policies,
             export_import_round_trip_mixed_parameters,
-            export_excludes_internal_runtime_parameters
+            export_excludes_internal_runtime_parameters,
+            export_import_round_trip_exclusive_queue_bindings
         ]},
 
         {skip_if_unchanged, [], [
@@ -191,9 +196,16 @@ init_per_group(Group, Config) ->
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(export_import_round_trip_exclusive_queue_bindings = Testcase, Config) ->
+    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+    rabbit_ct_helpers:run_steps(Config1, rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(export_import_round_trip_exclusive_queue_bindings = Testcase, Config) ->
+    delete_queue(Config, <<"/">>, <<"regular.q.bindings.test">>),
+    Config1 = rabbit_ct_helpers:run_steps(Config, rabbit_ct_client_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -357,6 +369,29 @@ import_case29(Config) ->
     ?assertNotMatch({error, _, _}, unicode:characters_to_binary(Msg)),
     ok.
 
+import_case30(Config) ->
+    VHost = <<"/">>,
+    import_file_case(Config, "case30"),
+    ?assertMatch({ok, _}, queue_lookup(Config, VHost, <<"q_demo_30">>)),
+    ?assertEqual({error, not_found}, queue_lookup(Config, VHost, <<"amq.gen-case30">>)),
+    Bindings = [{D, K} || #{<<"source">> := <<"x_demo_30">>,
+                            <<"destination">> := D,
+                            <<"routing_key">> := K} <- maps:get(bindings, export(Config))],
+    ?assertEqual([{<<"q_demo_30">>, <<"k30">>}], Bindings),
+    ok.
+
+import_case31(Config) ->
+    Msg = import_invalid_file_case_returning_message(Config, "failing_case31"),
+    ?assert(binary:match(iolist_to_binary(io_lib:format("~tp", [Msg])),
+                         <<"resources_missing">>) =/= nomatch),
+    ok.
+
+import_case32(Config) ->
+    Msg = import_invalid_file_case_returning_message(Config, "failing_case32"),
+    ?assert(binary:match(iolist_to_binary(io_lib:format("~tp", [Msg])),
+                         <<"resources_missing">>) =/= nomatch),
+    ok.
+
 import_case22(Config) ->
     import_file_case(Config, "case22"),
     Name = <<"protected">>,
@@ -412,6 +447,42 @@ export_import_round_trip_case2(Config) ->
         %% skip the test in mixed version mode
         {skip, "Should not run in mixed version environments"}
     end.
+
+export_import_round_trip_exclusive_queue_bindings(Config) ->
+    run_if_not_mixed_versions(fun() ->
+        {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+        ExclusiveQ = <<"exclusive.q.bindings.test">>,
+        RegularQ = <<"regular.q.bindings.test">>,
+        #'queue.declare_ok'{} = amqp_channel:call(
+                                  Ch, #'queue.declare'{queue = ExclusiveQ, exclusive = true}),
+        #'queue.declare_ok'{queue = ServerNamedQ} = amqp_channel:call(
+                                  Ch, #'queue.declare'{queue = <<>>, exclusive = true}),
+        #'queue.declare_ok'{} = amqp_channel:call(
+                                  Ch, #'queue.declare'{queue = RegularQ, durable = true}),
+        lists:foreach(
+          fun(Q) ->
+                  #'queue.bind_ok'{} = amqp_channel:call(
+                                         Ch, #'queue.bind'{queue = Q,
+                                                           exchange = <<"amq.direct">>,
+                                                           routing_key = <<"bindings.test">>})
+          end, [ExclusiveQ, ServerNamedQ, RegularQ]),
+
+        Defs = export(Config),
+        Destinations = binding_destinations(Defs),
+        ?assert(lists:member(RegularQ, Destinations)),
+        ?assertNot(lists:member(ExclusiveQ, Destinations)),
+        ?assertNot(lists:member(ServerNamedQ, Destinations)),
+
+        #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = RegularQ}),
+        rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+
+        import_raw(Config, rabbit_json:encode(Defs)),
+        ?assert(lists:member(RegularQ, binding_destinations(export(Config)))),
+        ok
+    end).
+
+binding_destinations(Defs) ->
+    [D || #{<<"destination">> := D} <- maps:get(bindings, Defs)].
 
 run_if_not_mixed_versions(Fun) ->
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -713,6 +784,10 @@ vhost_lookup(Config, VHost) ->
 
 user_lookup(Config, User) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, lookup_user, [User]).
+
+delete_queue(Config, VHost, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete_with,
+                                 [rabbit_misc:r(VHost, queue, Name), false, false, <<"CT tests">>]).
 
 delete_vhost(Config, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, delete, [VHost, <<"CT tests">>]).

@@ -330,12 +330,15 @@ fold_queues(Scope, Fun, Acc) ->
 fold_bindings(Scope, Fun, Acc) ->
     rabbit_db_binding:fold_projection(
       fun(#binding{source = #resource{virtual_host = VHost}} = Binding, Acc0) ->
-              case Scope of
-                  all            -> Fun(binding_definition(Binding), Acc0);
-                  {vhost, VHost} -> Fun(binding_definition(Binding), Acc0);
-                  _              -> Acc0
+              case in_scope(Scope, VHost) andalso is_exportable_binding(Binding) of
+                  true  -> Fun(binding_definition(Binding), Acc0);
+                  false -> Acc0
               end
       end, Acc).
+
+in_scope(all, _VHost)            -> true;
+in_scope({vhost, VHost}, VHost)  -> true;
+in_scope(_, _VHost)              -> false.
 
 -spec has_configured_definitions_to_load() -> boolean().
 has_configured_definitions_to_load() ->
@@ -982,9 +985,25 @@ add_binding_int(Binding, Source, Destination, ActingUser) ->
            ActingUser) of
         ok ->
             ok;
+        {error, {resources_missing, Missing}} = Err ->
+            case lists:all(fun is_skipped_queue/1, Missing) of
+                true ->
+                    ?LOG_WARNING("Skipping import of a binding whose destination queue "
+                                 "name begins with 'amq.', source: ~ts, destination: ~ts, "
+                                 "acting user: ~ts",
+                                 [Source#resource.name, Destination#resource.name, ActingUser]);
+                false ->
+                    throw(Err)
+            end;
         {error, _} = Err ->
             throw(Err)
     end.
+
+%% Queues with such names are not imported, see `add_queue_int/3`.
+is_skipped_queue({not_found, #resource{kind = queue, name = <<"amq.", _/binary>>}}) ->
+    true;
+is_skipped_queue(_) ->
+    false.
 
 %% destination_type is a binary from JSON, or an atom from all_definitions/0 (CLI erlang export/import).
 dest_type(Binding) ->
@@ -1142,7 +1161,16 @@ queue_definition(Q) ->
     }.
 
 list_bindings() ->
-    [binding_definition(B) || B <- rabbit_binding:list_explicit()].
+    lists:reverse(fold_bindings(all, fun(B, Acc) -> [B | Acc] end, [])).
+
+%% Bindings to exclusive or concurrently deleted queues cannot be restored.
+is_exportable_binding(#binding{destination = #resource{kind = queue} = Dst}) ->
+    case rabbit_amqqueue:lookup(Dst) of
+        {ok, Q} -> amqqueue:get_exclusive_owner(Q) =:= none;
+        {error, not_found} -> false
+    end;
+is_exportable_binding(_) ->
+    true.
 
 binding_definition(#binding{source      = S,
                             key         = RoutingKey,
