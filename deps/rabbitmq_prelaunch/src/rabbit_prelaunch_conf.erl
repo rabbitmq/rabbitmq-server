@@ -512,6 +512,9 @@ decrypt(Map, Algo) when is_map(Map) ->
         {NewValue, NewAlgo} = decrypt(Value, AccAlgo),
         {maps:put(Key, NewValue, AccMap), NewAlgo}
     end, {#{}, Algo}, Map);
+decrypt({Key, Value}, Algo) when Key =/= encrypted ->
+    {Value1, Algo1} = decrypt(Value, Algo),
+    {{Key, Value1}, Algo1};
 decrypt(Value, Algo) ->
     {Value, Algo}.
 
@@ -520,10 +523,6 @@ decrypt(Value, Algo) ->
 %% and ultimately return the string unmodified, as intended.
 decrypt_list([], Algo, Acc) ->
     {lists:reverse(Acc), Algo};
-decrypt_list([{Key, Value} | Tail], Algo, Acc)
-  when Key =/= encrypted ->
-    {Value1, Algo1} = decrypt(Value, Algo),
-    decrypt_list(Tail, Algo1, [{Key, Value1} | Acc]);
 decrypt_list([Value | Tail], Algo, Acc) ->
     {Value1, Algo1} = decrypt(Value, Algo),
     decrypt_list(Tail, Algo1, [Value1 | Acc]).
