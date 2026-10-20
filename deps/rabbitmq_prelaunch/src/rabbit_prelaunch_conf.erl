@@ -512,9 +512,9 @@ decrypt(Map, Algo) when is_map(Map) ->
         {NewValue, NewAlgo} = decrypt(Value, AccAlgo),
         {maps:put(Key, NewValue, AccMap), NewAlgo}
     end, {#{}, Algo}, Map);
-decrypt({Key, Value}, Algo) when Key =/= encrypted ->
-    {Value1, Algo1} = decrypt(Value, Algo),
-    {{Key, Value1}, Algo1};
+decrypt({First, Second}, Algo) when First =/= encrypted ->
+    {Second1, Algo1} = decrypt(Second, Algo),
+    {{First, Second1}, Algo1};
 decrypt(Value, Algo) ->
     {Value, Algo}.
 

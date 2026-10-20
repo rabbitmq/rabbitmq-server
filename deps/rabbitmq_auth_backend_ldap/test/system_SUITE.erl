@@ -109,7 +109,8 @@ groups() ->
         topic_authorisation_publishing_ldap_only,
         topic_authorisation_consumption,
         match_bidirectional,
-        match_bidirectional_gh_100
+        match_bidirectional_gh_100,
+        other_bind_encrypted_password
     ],
     [
       {non_parallel_tests, [], Tests
@@ -250,6 +251,9 @@ end_per_testcase(Testcase, Config)
                                       [rabbit_auth_backend_ldap, tag_queries, Cfg]),
     internal_authorization_teardown(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(other_bind_encrypted_password, Config) ->
+    rpc_set_env(Config, [rabbitmq_auth_backend_ldap, other_bind, anon]),
+    rabbit_ct_helpers:testcase_finished(Config, other_bind_encrypted_password);
 end_per_testcase(connections_closed_after_timeout, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
                                       application,
@@ -350,6 +354,22 @@ ldap_only(Config) ->
     tag_check_subst(Config),
     logging(Config),
     ok.
+
+other_bind_encrypted_password(Config) ->
+    {C, H, I, P} = Algo = {rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(),
+                           rabbit_pbe:default_iterations(), crypto:strong_rand_bytes(16)},
+    Encrypted = rabbit_pbe:encrypt_term(C, H, I, P, <<"admin">>),
+    UserDN = "cn=admin,dc=rabbitmq,dc=com",
+    rpc_set_env(Config, [rabbitmq_auth_backend_ldap, other_bind, {UserDN, Encrypted}]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_prelaunch_conf, decrypt_config,
+                                      [[rabbitmq_auth_backend_ldap], Algo]),
+    ?assertEqual({ok, {UserDN, <<"admin">>}},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+                                              [rabbitmq_auth_backend_ldap, other_bind])),
+    ?assertMatch({ok, _},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_ldap,
+                                              user_login_authentication,
+                                              [<<?ALICE_NAME>>, []])).
 
 ldap_and_internal(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
