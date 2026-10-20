@@ -453,14 +453,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   defp add_all_to_path(plugins_directories) do
     directories = String.split(to_string(plugins_directories), path_separator())
 
-    Enum.each(directories, fn directory ->
-      with {:ok, subdirs} <- File.ls(directory) do
-        for subdir <- subdirs do
-          Path.join([directory, subdir, "ebin"])
-          |> Code.append_path()
-        end
-      end
-    end)
+    Enum.each(directories, &add_directory_plugins_to_load_path/1)
 
     :ok
   end
