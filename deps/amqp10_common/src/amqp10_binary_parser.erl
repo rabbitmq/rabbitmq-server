@@ -42,6 +42,10 @@
 %% No real world sender should come anywhere near this limit.
 -define(MAX_MSG_SECTIONS, 10_000).
 
+%% Maximum encoded size in bytes of the descriptor shared by all elements of an array.
+%% Real world descriptors are either a ulong or a short symbol.
+-define(MAX_ARRAY_DESCRIPTOR_SIZE, 64).
+
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
 %% AMQP message sections from an AMQP client. This mode:
 %% 1. stops parsing when the body starts, and
@@ -141,15 +145,21 @@ parse_array(UnitSize, Bin) ->
     end.
 
 parse_array1(UnitSize, Count, <<?DESCRIBED, Rest/binary>>) ->
-    {Descriptor, B1} = parse(Rest),
-    <<_ParsedDescriptorBin:B1/binary, Rest1/binary>> = Rest,
-    case parse_array1(UnitSize, Count, Rest1) of
-        {array, Type, List} ->
-            Values = [{described, Descriptor, Value} || Value <- List],
-            % this format cannot represent an empty array of described types
-            {array, {described, Descriptor, Type}, Values};
-        {as_is, _, _} ->
-            throw({array_of_described_zero_width_elements_unsupported, Count})
+    {Descriptor, B1} = parse_array_descriptor(Count, Rest),
+    case Rest of
+        <<_ParsedDescriptorBin:B1/binary, ?DESCRIBED, _/binary>> ->
+            %% Each further described constructor costs as little as two bytes
+            %% on the wire, but would wrap each of the Count elements once more.
+            throw({array_of_nested_described_elements_unsupported, Count});
+        <<_ParsedDescriptorBin:B1/binary, Rest1/binary>> ->
+            case parse_array1(UnitSize, Count, Rest1) of
+                {array, Type, List} ->
+                    Values = [{described, Descriptor, Value} || Value <- List],
+                    % this format cannot represent an empty array of described types
+                    {array, {described, Descriptor, Type}, Values};
+                {as_is, _, _} ->
+                    throw({array_of_described_zero_width_elements_unsupported, Count})
+            end
     end;
 parse_array1(UnitSize, Count, <<Type, ArrayBin/binary>>)
   when Type >= 16#40 andalso Type =< 16#45 ->
@@ -175,6 +185,20 @@ parse_array1(_UnitSize, Count, <<Type, ArrayBin/binary>>) ->
     parse_array2(Count, Type, ArrayBin, []);
 parse_array1(_UnitSize, Count, <<>>) ->
     throw({failed_to_parse_array_element_constructor, Count}).
+
+%% The descriptor is encoded once but becomes part of each of the Count parsed
+%% elements, and the sharing is lost once the array is serialised or copied to
+%% another process.
+parse_array_descriptor(Count, <<Type, _/binary>>)
+  when Type =:= ?DESCRIBED orelse Type >= 16#c0 ->
+    throw({array_descriptor_type_unsupported, Type, Count});
+parse_array_descriptor(Count, Bin) ->
+    case parse(Bin) of
+        {_Descriptor, Size} when Size > ?MAX_ARRAY_DESCRIPTOR_SIZE ->
+            throw({array_descriptor_too_large, Size, Count});
+        Result ->
+            Result
+    end.
 
 parse_array2(0, Type, <<>>, Acc) ->
     {array, parse_constructor(Type), lists:reverse(Acc)};
