@@ -112,7 +112,7 @@ endef
 
 PARALLEL_CT_SET_1_A = auth retainer federation disconnect_on_unauthorized
 PARALLEL_CT_SET_1_B = cluster command config_schema mc_mqtt packet_fragment \
-    packet_prop processor protocol_interop proxy_protocol rabbit_mqtt_confirms \
+    packet_prop packet_validation processor protocol_interop proxy_protocol rabbit_mqtt_confirms \
     reader util
 PARALLEL_CT_SET_1_C = java v5
 PARALLEL_CT_SET_1_D = mqtt_shared

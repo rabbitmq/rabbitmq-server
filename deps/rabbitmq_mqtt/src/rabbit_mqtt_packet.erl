@@ -232,8 +232,12 @@ topic_filter_limit_exceeded() ->
 parse_connect(Bin, Fixed, Length) ->
     case Bin of
         <<PacketBin:Length/binary, Rest/binary>> ->
-            Connect = #mqtt_packet_connect{proto_ver = ProtoVer} = parse_connect(PacketBin),
-            wrap(Fixed, Connect, Rest, ProtoVer);
+            case parse_connect(PacketBin) of
+                #mqtt_packet_connect{proto_ver = ProtoVer} = Connect ->
+                    wrap(Fixed, Connect, Rest, ProtoVer);
+                {error, _} = Error ->
+                    Error
+            end;
         TooShortBin
           when byte_size(TooShortBin) < Length ->
             more_fragments([TooShortBin], byte_size(TooShortBin), Length,
@@ -243,7 +247,9 @@ parse_connect(Bin, Fixed, Length) ->
     end.
 
 -spec parse_connect(binary()) ->
-    #mqtt_packet_connect{}.
+    #mqtt_packet_connect{} | {error, reserved_connect_flag}.
+parse_connect(<<Len:16, _ProtoName:Len/binary, _ProtoVer, _Flags:7, 1:1, _/binary>>) ->
+    {error, reserved_connect_flag};
 parse_connect(<<Len:16, ProtoName:Len/binary,
                 ProtoVer,
                 UsernameFlag:1,
@@ -252,7 +258,7 @@ parse_connect(<<Len:16, ProtoName:Len/binary,
                 WillQos:2,
                 WillFlag:1,
                 CleanStart:1,
-                _Reserved:1,
+                0:1, %% ReservedFlag, must be zero
                 KeepAlive:16,
                 Rest0/binary>>) ->
     true = protocol_name_approved(ProtoVer, ProtoName),
