@@ -19,7 +19,8 @@ all() ->
     cache_expiration,
     cache_expiration_topic,
     cache_hit_across_reconnections,
-    expiry_timestamp_delegation
+    expiry_timestamp_delegation,
+    cache_entries_do_not_outlive_credentials
     ].
 
 init_per_suite(Config) ->
@@ -55,6 +56,16 @@ init_per_testcase(cache_hit_across_reconnections, Config) ->
       [rabbit, auth_backends, [rabbit_auth_backend_cache]]),
     ok = rpc(Config, rabbit_auth_backend_cache, clear_cache, []),
     Config;
+init_per_testcase(cache_entries_do_not_outlive_credentials, Config) ->
+    ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(
+           Config, rabbit_auth_backend_cache_expiring_mock),
+    ok = rpc(Config, rabbit_auth_backend_cache_expiring_mock, init, []),
+    ok = rpc(
+      Config, application, set_env,
+      [rabbitmq_auth_backend_cache, cached_backend,
+       rabbit_auth_backend_cache_expiring_mock]),
+    ok = rpc(Config, rabbit_auth_backend_cache, clear_cache, []),
+    Config;
 init_per_testcase(_TestCase, Config) ->
     Config.
 
@@ -78,6 +89,13 @@ end_per_testcase(cache_hit_across_reconnections, Config) ->
     ok = rpc(
       Config, application, set_env,
       [rabbit, auth_backends, [rabbit_auth_backend_internal]]),
+    ok = rpc(Config, rabbit_auth_backend_cache, clear_cache, []),
+    Config;
+end_per_testcase(cache_entries_do_not_outlive_credentials, Config) ->
+    ok = rpc(
+      Config, application, set_env,
+      [rabbitmq_auth_backend_cache, cached_backend,
+       rabbit_auth_backend_internal]),
     ok = rpc(Config, rabbit_auth_backend_cache, clear_cache, []),
     Config;
 end_per_testcase(_TestCase, Config) ->
@@ -215,6 +233,33 @@ expiry_timestamp_delegation(Config) ->
     {ok, Auth} = rpc(Config,rabbit_auth_backend_internal, user_login_authentication, [<<"guest">>, [{password, <<"guest">>}]]),
     %% rabbit_auth_backend_internal returns `never` for expiry_timestamp
     never = rpc(Config,rabbit_auth_backend_cache, expiry_timestamp, [Auth]).
+
+cache_entries_do_not_outlive_credentials(Config) ->
+    {ok, TTL} = rpc(Config, application, get_env, [rabbitmq_auth_backend_cache, cache_ttl]),
+    true = TTL > 3000,
+    ExpiryTs = os:system_time(second) + 3,
+    AuthProps = [{password, ExpiryTs}],
+    Resource = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"some">>},
+    Calls = fun() -> rpc(Config, rabbit_auth_backend_cache_expiring_mock, call_count, []) end,
+
+    {ok, Auth} = rpc(Config,rabbit_auth_backend_cache, user_login_authentication, [<<"user">>, AuthProps]),
+    [begin
+         {ok, Auth} = rpc(Config,rabbit_auth_backend_cache, user_login_authentication, [<<"user">>, AuthProps]),
+         {ok, _Impl} = rpc(Config,rabbit_auth_backend_cache, user_login_authorization, [<<"user">>, AuthProps]),
+         true = rpc(Config,rabbit_auth_backend_cache, check_vhost_access, [Auth, <<"/">>, undefined]),
+         true = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, Resource, read, #{}]),
+         true = rpc(Config,rabbit_auth_backend_cache, check_topic_access, [Auth, Resource, read, #{}])
+     end || _ <- [1, 2]],
+    %% The second round is served from the cache.
+    5 = Calls(),
+
+    timer:sleep((ExpiryTs - os:system_time(second)) * 1000 + 100),
+
+    {refused, _, _} = rpc(Config,rabbit_auth_backend_cache, user_login_authentication, [<<"user">>, AuthProps]),
+    {refused, _, _} = rpc(Config,rabbit_auth_backend_cache, user_login_authorization, [<<"user">>, AuthProps]),
+    false = rpc(Config,rabbit_auth_backend_cache, check_vhost_access, [Auth, <<"/">>, undefined]),
+    false = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, Resource, read, #{}]),
+    false = rpc(Config,rabbit_auth_backend_cache, check_topic_access, [Auth, Resource, read, #{}]).
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
