@@ -29,6 +29,21 @@ groups() ->
         publish_no_dest_error,
         publish_unauthorized_error,
         subscribe_error,
+<<<<<<< HEAD
+=======
+        subscribe_to_exclusive_queue_of_another_connection,
+        reserved_queue_names_are_refused,
+        queue_name_cr_lf_is_stripped,
+        queue_name_of_only_cr_lf_is_refused,
+        malformed_headers_are_refused,
+        error_frame_with_non_latin1_text_case1,
+        error_frame_with_non_latin1_text_case2,
+        error_frame_with_non_latin1_text_case3,
+        error_frame_with_utf8_encoded_text,
+        empty_queue_name_is_ignored_for_transient_subscription,
+        stream_offset_is_refused_for_classic_queue,
+        subscribe_binding_failure_keeps_queue_messages,
+>>>>>>> a75f102 (STOMP: refuse SUBSCRIBE to another connection's exclusive queue)
         subscribe,
         subscribe_with_x_priority,
         unsubscribe_ack,
@@ -70,6 +85,37 @@ init_per_group(Group, Config) ->
 end_per_group(_Group, Config) -> Config.
 
 init_per_testcase(TestCase, Config) ->
+<<<<<<< HEAD
+=======
+    case rabbit_ct_helpers:is_mixed_versions() andalso
+         lists:member(TestCase, tests_with_new_behavior()) of
+        true ->
+            {skip, "Should not run in mixed version environments"};
+        false ->
+            init_per_testcase1(TestCase, Config)
+    end.
+
+tests_with_new_behavior() ->
+    [subscribe_to_exclusive_queue_of_another_connection,
+     reserved_queue_names_are_refused,
+     queue_name_cr_lf_is_stripped,
+     queue_name_of_only_cr_lf_is_refused,
+     malformed_headers_are_refused,
+     empty_queue_name_is_ignored_for_transient_subscription,
+     error_frame_with_non_latin1_text_case1,
+     error_frame_with_non_latin1_text_case2,
+     error_frame_with_non_latin1_text_case3,
+     error_frame_with_utf8_encoded_text,
+     stream_offset_is_refused_for_classic_queue,
+     commit_of_failed_transaction_has_no_receipt,
+     send_unroutable_with_receipt,
+     global_counters_after_close,
+     consumer_counter_after_server_cancel,
+     stream_readers_closed_with_connection,
+     temp_queue_uses_amq_gen_prefix].
+
+init_per_testcase1(TestCase, Config) ->
+>>>>>>> a75f102 (STOMP: refuse SUBSCRIBE to another connection's exclusive queue)
     Version = ?config(version, Config),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, Connection} = amqp_connection:start(#amqp_params_direct{
@@ -140,9 +186,238 @@ subscribe_error(Config) ->
     Client = ?config(stomp_client, Config),
     %% SUBSCRIBE to missing queue
     rabbit_stomp_client:send(
+<<<<<<< HEAD
       Client, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
     "not_found" = proplists:get_value("message", Hdrs),
+=======
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION}]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+    <<"not_found">> = maps:get(<<"message">>, Hdrs),
+    ok.
+
+subscribe_to_exclusive_queue_of_another_connection(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    #'queue.declare_ok'{queue = QName} =
+        amqp_channel:call(Channel, #'queue.declare'{exclusive = true}),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, <<"/amq/queue/", QName/binary>>},
+                            {<<"id">>, <<"s">>}]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+    ?assertEqual(<<"resource_locked">>, maps:get(<<"message">>, Hdrs)),
+    ok.
+
+reserved_queue_names_are_refused(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Dest = iolist_to_binary(["/topic/reserved-queue-names-", Version]),
+    Frames = [{'SEND', [{<<"destination">>, <<"/queue/amq.reserved">>}]},
+              {'SUBSCRIBE', [{<<"destination">>, Dest}, {<<"id">>, <<"s">>},
+                             {<<"x-queue-name">>, <<"amq.reserved">>}]}],
+    lists:foreach(
+      fun({Command, Headers}) ->
+              {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+              rabbit_stomp_client:send(Client, Command, Headers, ["hello"]),
+              {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+              ?assertEqual({Command, <<"access_refused">>},
+                           {Command, maps:get(<<"message">>, Hdrs)})
+      end, Frames),
+    VHost = ?config(rmq_vhost, Config),
+    ?assertEqual({error, not_found},
+                 lookup_queue(rabbit_misc:r(VHost, queue, <<"amq.reserved">>), Config)).
+
+%% STOMP 1.2 is the first version that escapes CR in header values.
+queue_name_cr_lf_is_stripped(Config) ->
+    queue_name_cr_lf_is_stripped(?config(version, Config), Config).
+
+queue_name_cr_lf_is_stripped("1.2", Config) ->
+    Client = ?config(stomp_client, Config),
+    VHost = ?config(rmq_vhost, Config),
+    [begin
+         rabbit_stomp_client:send(
+           Client, 'SEND', [{<<"destination">>, Dest},
+                            {<<"receipt">>, <<"r">>}], ["hello"]),
+         stomp_receive_receipt(Client, <<"r">>),
+         QName = rabbit_misc:r(VHost, queue, Stripped),
+         ?assertMatch({ok, _}, lookup_queue(QName, Config)),
+         rabbit_stomp_client:send(
+           Client, 'SUBSCRIBE', [{<<"destination">>, Dest},
+                                 {<<"id">>, Stripped}]),
+         {ok, _, _, Body} = stomp_receive(Client, 'MESSAGE'),
+         ?assertEqual(<<"hello">>, iolist_to_binary(lists:reverse(Body))),
+         rabbit_stomp_client:send(
+           Client, 'UNSUBSCRIBE', [{<<"id">>, Stripped},
+                                   {<<"receipt">>, <<"u">>}]),
+         stomp_receive_receipt(Client, <<"u">>),
+         delete_queue_if_present(QName, Config)
+     end || {Dest, Stripped} <- [{<<"/queue/cr-lf-\r\nstripped">>, <<"cr-lf-stripped">>},
+                                 {<<"cr-lf-\r\nbare">>, <<"cr-lf-bare">>}]],
+    ok;
+queue_name_cr_lf_is_stripped(_Version, _Config) ->
+    ok.
+
+queue_name_of_only_cr_lf_is_refused(Config) ->
+    queue_name_of_only_cr_lf_is_refused(?config(version, Config), Config).
+
+queue_name_of_only_cr_lf_is_refused("1.2", Config) ->
+    Client = ?config(stomp_client, Config),
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, <<"/queue/\r\n">>}], ["hello"]),
+    {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+    ?assertEqual(<<"Invalid destination">>, maps:get(<<"message">>, Hdrs)),
+    ?assertNotEqual(nomatch, binary:match(iolist_to_binary(lists:reverse(Body)),
+                                          <<"Destination cannot be blank">>));
+queue_name_of_only_cr_lf_is_refused(_Version, _Config) ->
+    ok.
+
+malformed_headers_are_refused(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Topic = iolist_to_binary(["/topic/malformed-headers-", Version]),
+    StreamQueueName = iolist_to_binary(["malformed-headers-stream-", Version]),
+    StreamQueue = <<"/queue/", StreamQueueName/binary>>,
+    Cases = [{'SEND', [{<<"destination">>, Topic}, {<<"x-message-ttl">>, <<"60s">>}],
+              <<"precondition_failed">>},
+             {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"s">>},
+                            {<<"x-priority">>, <<"abc">>}],
+              <<"precondition_failed">>},
+             {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"s">>},
+                            {<<"x-stream-offset">>, <<"offset=abc">>}],
+              <<"precondition_failed">>},
+             {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"durable">>, <<"True">>}],
+              <<"Missing Header">>},
+             {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"s">>},
+                            {<<"durable">>, <<"true">>}, {<<"x-queue-name">>, <<>>}],
+              <<"Invalid x-queue-name">>},
+             {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"s">>},
+                            {<<"durable">>, <<"true">>}, {<<"x-queue-name">>, <<" ">>}],
+              <<"Invalid x-queue-name">>},
+             {'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"/temp-queue/x">>}],
+              <<"Invalid id">>},
+             {'SUBSCRIBE', [{<<"destination">>, StreamQueue}, {<<"id">>, <<"s">>},
+                            {<<"ack">>, <<"client">>}, {<<"prefetch-count">>, <<"10">>},
+                            {<<"durable">>, <<"true">>}, {<<"auto-delete">>, <<"false">>},
+                            {<<"x-queue-type">>, <<"stream">>},
+                            {<<"x-stream-offset">>, <<"offset=abc">>}],
+              <<"precondition_failed">>},
+             {'UNSUBSCRIBE', [{<<"destination">>, Topic}, {<<"durable">>, <<"True">>}],
+              <<"Missing Header">>}],
+    lists:foreach(
+      fun({Command, Headers, Expected}) ->
+              {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+              rabbit_stomp_client:send(Client, Command, Headers, ["hello"]),
+              {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+              ?assertEqual({Command, Headers, Expected},
+                           {Command, Headers, maps:get(<<"message">>, Hdrs)})
+      end, Cases),
+    ?assertEqual({error, not_found},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, rabbit_amqqueue, lookup,
+                   [rabbit_misc:r(<<"/">>, queue, StreamQueueName)])).
+
+error_frame_with_non_latin1_text_case1(Config) ->
+    error_frame_with_non_latin1_text(Config, "amériques.canada.québec").
+
+error_frame_with_non_latin1_text_case2(Config) ->
+    error_frame_with_non_latin1_text(Config, "भारत.दिल्ली").
+
+error_frame_with_non_latin1_text_case3(Config) ->
+    error_frame_with_non_latin1_text(Config, "ไทย.กรุงเทพ").
+
+error_frame_with_non_latin1_text(Config, Name) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Exchange = unicode:characters_to_binary(Name),
+    {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, <<"/exchange/", Exchange/binary>>},
+                            {<<"id">>, <<"s">>}]),
+    {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+    ?assertEqual(<<"not_found">>, maps:get(<<"message">>, Hdrs)),
+    ?assertNotEqual(nomatch, binary:match(iolist_to_binary(Body), Exchange)).
+
+error_frame_with_utf8_encoded_text(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Channel = ?config(amqp_channel, Config),
+    Exchange = <<"lrx-utf8-", (list_to_binary(Version))/binary>>,
+    Key = unicode:characters_to_binary("日本"),
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Channel, #'exchange.declare'{exchange = Exchange,
+                                                              type = <<"x-local-random">>}),
+    try
+        {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+        rabbit_stomp_client:send(
+          Client, 'SUBSCRIBE', [{<<"destination">>, <<"/exchange/", Exchange/binary, "/", Key/binary>>},
+                                {<<"id">>, <<"s">>}]),
+        {ok, _, Hdrs, Body} = stomp_receive(Client, 'ERROR'),
+        ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Hdrs)),
+        ?assertNotEqual(nomatch, binary:match(iolist_to_binary(lists:reverse(Body)), Key))
+    after
+        #'exchange.delete_ok'{} = amqp_channel:call(Channel, #'exchange.delete'{exchange = Exchange})
+    end.
+
+empty_queue_name_is_ignored_for_transient_subscription(Config) ->
+    Version = ?config(version, Config),
+    Client = ?config(stomp_client, Config),
+    VHost = ?config(rmq_vhost, Config),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, iolist_to_binary(["/topic/empty-queue-name-", Version])},
+                            {<<"id">>, <<"s">>}, {<<"x-queue-name">>, <<>>},
+                            {<<"receipt">>, <<"r">>}]),
+    stomp_receive_receipt(Client, <<"r">>),
+    ?assertEqual({error, not_found}, lookup_queue(rabbit_misc:r(VHost, queue, <<>>), Config)).
+
+stream_offset_is_refused_for_classic_queue(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Channel = ?config(amqp_channel, Config),
+    Queue = iolist_to_binary(["classic-with-offset-", Version]),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue = Queue, durable = true}),
+    {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, <<"/amq/queue/", Queue/binary>>},
+                            {<<"id">>, <<"s">>}, {<<"x-stream-offset">>, <<"first">>}]),
+    {ok, _, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+    ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Hdrs)),
+    #'queue.delete_ok'{} = amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
+    ok.
+
+subscribe_binding_failure_keeps_queue_messages(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue   = ?BIND_FAIL_QUEUE,
+                                                    durable = true}),
+    [amqp_channel:cast(Channel,
+                       #'basic.publish'{exchange    = <<>>,
+                                        routing_key = ?BIND_FAIL_QUEUE},
+                       #amqp_msg{payload = <<"msg">>})
+     || _ <- lists:seq(1, 10)],
+    ?awaitMatch(#'queue.declare_ok'{message_count = 10},
+                amqp_channel:call(Channel, #'queue.declare'{queue   = ?BIND_FAIL_QUEUE,
+                                                            durable = true}),
+                30_000),
+
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE',
+      [{<<"destination">>, <<"/exchange/missing-x/key">>},
+       {<<"id">>, <<"bind-fail">>},
+       {<<"x-queue-name">>, ?BIND_FAIL_QUEUE},
+       {<<"durable">>, <<"true">>},
+       {<<"auto-delete">>, <<"false">>},
+       {<<"exclusive">>, <<"false">>},
+       {<<"ack">>, <<"auto">>}]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+    <<"not_found">> = maps:get(<<"message">>, Hdrs),
+
+    {ok, Channel1} = amqp_connection:open_channel(?config(amqp_connection, Config)),
+    ?assertMatch(#'queue.declare_ok'{message_count = 10},
+                 amqp_channel:call(Channel1, #'queue.declare'{queue   = ?BIND_FAIL_QUEUE,
+                                                              durable = true})),
+>>>>>>> a75f102 (STOMP: refuse SUBSCRIBE to another connection's exclusive queue)
     ok.
 
 subscribe(Config) ->
