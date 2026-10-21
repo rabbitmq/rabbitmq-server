@@ -33,7 +33,7 @@
 
 %% Called before authentication starts. Should create a state
 %% object to be passed through all the stages of authentication.
--callback init(rabbit_net:socket()) -> any().
+-callback init(rabbit_net:socket() | rabbit_net:proxy_socket()) -> any().
 
 %% Handle a stage of authentication. Possible responses:
 %% {ok, User}
