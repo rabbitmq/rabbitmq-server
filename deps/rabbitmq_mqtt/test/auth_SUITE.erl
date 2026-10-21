@@ -120,7 +120,8 @@ sub_groups() ->
        topic_write_permission_variable_expansion,
        topic_write_permission_client_id_regex_not_injected,
        loopback_user_connects_from_remote_host,
-       connect_permission
+       connect_permission,
+       persistent_connect_permission
       ]
      },
      {limit, [shuffle],
@@ -1049,7 +1050,7 @@ subscription_queue_delete_permission(Config) ->
 
 %% queue.declare with DLX requires permission to read from queue
 will_queue_create_permission_queue_read(Config) ->
-    set_permissions(<<".*">>, ".*", <<>>, Config),
+    set_permissions(<<".*">>, ".*", <<"^mqtt-subscription-">>, Config),
     ClientId = atom_to_binary(?FUNCTION_NAME),
     disconnect_with_delayed_will(ClientId, Config),
     wait_log(
@@ -1383,6 +1384,22 @@ connect_permission(Config) ->
     set_permissions("", "", "", Config),
     C = open_mqtt_connection(Config),
     ok = emqtt:disconnect(C).
+
+persistent_connect_permission(Config) ->
+    User = ?config(mqtt_user, Config),
+    [begin
+         set_permissions(Configure, ".*", Read, Config),
+         {ok, C0} = connect_user(User, ?config(mqtt_password, Config), Config,
+                                User, non_clean_sess_opts()),
+         unlink(C0),
+         ?assertMatch({error, _}, emqtt:connect(C0))
+     end || {Configure, Read} <- [{"", ".*"}, {".*", ""}]],
+    set_permissions(".*", ".*", ".*", Config),
+    C1 = open_mqtt_connection(Config, non_clean_sess_opts()),
+    ?assertEqual({session_present, 0}, proplists:lookup(session_present, emqtt:info(C1))),
+    ok = emqtt:disconnect(C1),
+    C2 = open_mqtt_connection(Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C2).
 
 set_topic_permissions(WritePat, ReadPat, Config) ->
     rpc(Config, 0,

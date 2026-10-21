@@ -86,6 +86,8 @@ cluster_size_1_tests() ->
      ,block_only_publisher
      ,many_qos1_messages
      ,session_expiry
+     ,empty_session_reconnect
+     ,empty_session_expiry
      ,cli_close_all_connections
      ,cli_close_all_user_connections
      ,management_plugin_connection
@@ -957,6 +959,43 @@ delete_create_queue(Config) ->
     delete_queue(Ch, [CQ1, CQ2, QQ]),
     ok = emqtt:disconnect(C),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+empty_session_reconnect(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C1 = connect(ClientId, Config, non_clean_sess_opts()),
+    ?assertEqual({session_present, 0}, proplists:lookup(session_present, emqtt:info(C1))),
+    ok = emqtt:disconnect(C1),
+    C2 = connect(ClientId, Config, non_clean_sess_opts()),
+    ?assertEqual({session_present, 1}, proplists:lookup(session_present, emqtt:info(C2))),
+    ok = emqtt:disconnect(C2),
+    C3 = connect(ClientId, Config, [{clean_start, true}]),
+    ?assertEqual({session_present, 0}, proplists:lookup(session_present, emqtt:info(C3))),
+    ok = emqtt:disconnect(C3),
+    C4 = connect(ClientId, Config, non_clean_sess_opts()),
+    ?assertEqual({session_present, 0}, proplists:lookup(session_present, emqtt:info(C4))),
+    ok = emqtt:disconnect(C4),
+    C5 = connect(ClientId, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C5),
+    ?assertMatch(#{consumers := 0}, get_global_counters(Config)).
+
+empty_session_expiry(Config) ->
+    Par = max_session_expiry_interval_seconds,
+    {ok, Previous} = rpc(Config, application, get_env, [rabbitmq_mqtt, Par]),
+    ok = rpc(Config, application, set_env, [rabbitmq_mqtt, Par, 1]),
+    try
+        C1 = connect(?FUNCTION_NAME, Config, non_clean_sess_opts()),
+        timer:sleep(1500),
+        ?assertEqual(1, rpc(Config, rabbit_amqqueue, count, [])),
+        ok = emqtt:disconnect(C1),
+        ?awaitMatch(0, rpc(Config, rabbit_amqqueue, count, []), 15_000, 100),
+        C2 = connect(?FUNCTION_NAME, Config, non_clean_sess_opts()),
+        ?assertEqual({session_present, 0}, proplists:lookup(session_present, emqtt:info(C2))),
+        ok = emqtt:disconnect(C2),
+        C3 = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
+        ok = emqtt:disconnect(C3)
+    after
+        ok = rpc(Config, application, set_env, [rabbitmq_mqtt, Par, Previous])
+    end.
 
 session_expiry(Config) ->
     App = rabbitmq_mqtt,
@@ -2027,13 +2066,17 @@ notify_consumer_queue_deleted(Config, Name = Topic, ExpectedType, ConnOpts, Qos)
     {ok, #{reason_code_name := success}} = emqtt:publish(C, Name, <<"m2">>, qos1),
     ok = expect_publishes(C, Topic, [<<"m1">>, <<"m2">>]),
 
-    [[QName, Type]] = rabbitmqctl_list(Config, 0, ["list_queues", "name", "type", "--no-table-headers"]),
-    ?assertMatch(ExpectedType, Type),
+    QoSNumber = case Qos of qos0 -> 0; qos1 -> 1 end,
+    QName = rabbit_mqtt_util:queue_name_bin(Name, QoSNumber),
+    Queues = rabbitmqctl_list(Config, 0, ["list_queues", "name", "type", "--no-table-headers"]),
+    ?assert(lists:member([QName, ExpectedType], Queues)),
 
     process_flag(trap_exit, true),
     {ok, _} = rabbitmqctl(Config, 0, ["delete_queue", QName]),
 
-    await_exit(C).
+    ok = await_exit(C),
+    Clean = connect(Name, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(Clean).
 
 %% Test that consumer timeout on a quorum queue terminates the MQTT connection.
 %% Consumer timeouts are only supported for quorum queues.

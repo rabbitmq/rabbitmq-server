@@ -342,7 +342,8 @@ process_connect(State0) ->
         ok ?= check_existing_subscriptions_topic_access(State0),
         {ok, QoS0SessPresent, State1} ?= handle_clean_start_qos0(State0),
         {ok, SessPresent, State2} ?= handle_clean_start_qos1(QoS0SessPresent, State1),
-        {ok, State} ?= init_subscriptions(SessPresent, State2),
+        {ok, State3} ?= init_subscriptions(SessPresent, State2),
+        {ok, State} ?= ensure_session_queue(SessPresent, State3),
         rabbit_networking:register_non_amqp_connection(self()),
         self() ! connection_created,
         {ok, SessPresent, State}
@@ -350,6 +351,25 @@ process_connect(State0) ->
         {error, _} = Error ->
             Error
     end.
+
+ensure_session_queue(false, State = #state{cfg = #cfg{session_expiry_interval_secs = Expiry}})
+  when Expiry > 0 ->
+    %% MQTT session state includes its existence even without subscriptions.
+    maybe
+        {ok, Q} ?= ensure_queue(?QOS_1, State),
+        {ok, State1} ?= case consume(Q, ?QOS_1, State) of
+                           {ok, _} = Ok -> Ok;
+                           {error, _} = Error ->
+                               _ = delete_queue(amqqueue:get_name(Q), State),
+                               Error
+                       end,
+        {ok, State1}
+    else
+        {error, access_refused} -> {error, ?RC_NOT_AUTHORIZED};
+        {error, _} -> {error, ?RC_IMPLEMENTATION_SPECIFIC_ERROR}
+    end;
+ensure_session_queue(_, State) ->
+    {ok, State}.
 
 -spec check_existing_subscriptions_topic_access(state()) ->
     ok | {error, reason_code()}.
@@ -897,15 +917,14 @@ maybe_set_queue_qos1(_, State) ->
 
 -spec init_subscriptions(boolean(), state()) ->
     {ok, state()} | {error, reason_code()}.
-init_subscriptions(_SessionPresent = _SubscriptionsPresent = true,
-                   State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
+init_subscriptions(_SessionPresent = true, State) ->
     maybe
         {ok, SubsQos0} ?= init_subscriptions0(?QOS_0, State),
         {ok, SubsQos1} ?= init_subscriptions0(?QOS_1, State),
         Subs = maps:merge(SubsQos0, SubsQos1),
-        rabbit_global_counters:consumer_created(ProtoVer),
-        %% Cache subscriptions in process state to perform fewer queries.
-        {ok, State#state{subscriptions = Subs}}
+        State1 = State#state{subscriptions = Subs},
+        maybe_increment_consumer(State, State1),
+        {ok, State1}
     end;
 init_subscriptions(_, State) ->
     {ok, State}.
