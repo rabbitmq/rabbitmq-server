@@ -30,7 +30,8 @@
          list_login_vhosts_names/2]).
 -export([filter_tracked_conn_list/3]).
 -export([with_decode/5, decode/1, decode/2,
-         args/1, read_complete_body/1, read_complete_body_with_limit/2]).
+         args/1, read_complete_body/1, read_complete_body_with_limit/2,
+         read_urlencoded_body/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
          sort_list/2, destination_type/1, reply_list_or_paginate/3
          ]).
@@ -846,6 +847,18 @@ do_read_complete_body_with_limit(Req0, Acc, BodySizeLimit) ->
                 {more, Data, Req} ->
                     do_read_complete_body_with_limit(Req, <<Acc/binary, Data/binary>>, BodySizeLimit)
             end
+    end.
+
+%% Cowboy exits with the parser's stack trace when a form cannot be parsed. Its
+%% arguments hold the whole body, credentials included, which must not be logged.
+-spec read_urlencoded_body(cowboy_req:req()) ->
+    {ok, [{binary(), binary() | true}], cowboy_req:req()} | {error, malformed_body}.
+read_urlencoded_body(Req) ->
+    try
+        cowboy_req:read_urlencoded_body(Req)
+    catch
+        exit:{request_error, urlencoded_body, _} ->
+            {error, malformed_body}
     end.
 
 with_decode(Keys, ReqData, Context, Fun) ->

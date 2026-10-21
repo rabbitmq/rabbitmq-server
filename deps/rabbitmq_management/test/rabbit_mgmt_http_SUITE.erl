@@ -4641,6 +4641,25 @@ login_test(Config) ->
             <<"username=misteryusernumber1&password=myuser">>),
     ?assert(not proplists:is_defined("set-cookie", Headers2)),
 
+    %% A crash report of the request process would log the credentials.
+    {ok, {{_, 400, _}, _, Body3}} =
+        req(Config, 0, post, "/login",
+            [{"content-type", "application/x-www-form-urlencoded"}],
+            <<"username=myuser&password=my&=user">>),
+    ?assertMatch(#{<<"error">> := <<"bad_request">>}, rabbit_json:decode(Body3)),
+    {ok, {{_, 400, _}, _, _}} =
+        httpc:request(post, {rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "login", [],
+                             "application/x-www-form-urlencoded",
+                             "access_token=root-login-marker&=x"}, [], []),
+    [ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_logger_std_h, filesync, [Id])
+     || #{id := Id, module := rabbit_logger_std_h}
+            <- rabbit_ct_broker_helpers:rpc(Config, 0, logger, get_handler_config, [])],
+    [begin
+         {ok, Log} = file:read_file(File),
+         ?assertEqual(nomatch, binary:match(Log, <<"root-login-marker">>))
+     end || File <- rabbit_ct_broker_helpers:get_node_config(Config, 0, log_locations),
+            filelib:is_regular(File)],
+
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
 

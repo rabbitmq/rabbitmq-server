@@ -29,6 +29,7 @@ groups() ->
     [{top_level, [], Core ++ [
         keeps_client_supplied_secret,
         rejects_grants_the_management_ui_does_not_use,
+        malformed_form_is_refused,
         relays_provider_error,
         unknown_resource_server_returns_404,
         token_endpoint_rejects_get,
@@ -214,6 +215,12 @@ rejects_grants_the_management_ui_does_not_use(Config) ->
                               {<<"grant_type&client_id=c">>, <<"invalid_request">>},
                               {<<"client_id=c">>, <<"invalid_request">>},
                               {<<>>, <<"invalid_request">>}]].
+
+malformed_form_is_refused(Config) ->
+    Id = ?config(resource, Config),
+    {400, Map} = post_form(Config, token_path(Id),
+                           <<"grant_type=refresh_token&refresh_token=secret&=x">>),
+    ?assertEqual(<<"invalid_request">>, maps:get(<<"error">>, Map)).
 
 relays_provider_error(Config) ->
     Id = ?config(resource, Config),
