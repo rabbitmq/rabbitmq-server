@@ -957,12 +957,12 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                       ?LOG_WARNING(ErrorMsg, [Explanation]),
                       bad_request(list_to_binary(Explanation), ReqData1, Context);
                   {badrpc, Reason} ->
-                      Msg = io_lib:format("~tp", [Reason]),
+                      Msg = rabbit_misc:format_term(Reason),
                       ?LOG_WARNING(ErrorMsg, [Msg]),
                       bad_request(
-                        list_to_binary(
-                          io_lib:format("Request to node ~ts failed with ~tp",
-                                        [Node, Reason])),
+                        unicode:characters_to_binary(
+                          io_lib:format("Request to node ~ts failed with ~ts",
+                                        [Node, Msg])),
                         ReqData1, Context);
                   _      -> {true, ReqData1, Context}
               end
@@ -1007,8 +1007,10 @@ props_to_method(MethodName, Props, Transformers, Extra) ->
                            error:badarg -> false
                        end
                end, rabbit_data_coercion:to_list(Props)),
+    ExtraKeys = [K || {K, _} <- Extra],
+    Props2 = [P || {K, _} = P <- Props1, not lists:member(K, ExtraKeys)],
     props_to_method(
-      MethodName, rabbit_mgmt_format:format(Props1 ++ Extra, {Transformers, true})).
+      MethodName, rabbit_mgmt_format:format(Props2 ++ Extra, {Transformers, true})).
 
 props_to_method(MethodName, Props) ->
     Props1 = rabbit_mgmt_format:format(

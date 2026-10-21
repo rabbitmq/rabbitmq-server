@@ -586,7 +586,7 @@ handle_cast({frame_body, FrameBody},
               Err = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                   description = {utf8, <<"internal error">>}},
               log_error_and_close_session(
-                Err, rabbit_misc:format("~tp~n~tp", [Reason, Stacktrace]), State0)
+                Err, rabbit_misc:format("~tP~n~tP", [Reason, 10, Stacktrace, ?FORMAT_DEPTH_LIMIT]), State0)
     end;
 handle_cast({queue_event, _, _} = QEvent, State0) ->
     try handle_queue_event(QEvent, State0) of
@@ -1122,8 +1122,8 @@ handle_frame(#'v1_0.flow'{handle = Handle} = Flow,
                                 %% "If set to a handle that is not currently associated with
                                 %% an attached link, the recipient MUST respond by ending the
                                 %% session with an unattached-handle session error." [2.7.4]
-                                ?LOG_WARNING("Received Flow frame for unknown link handle: ~tp",
-                                             [Flow]),
+                                ?LOG_WARNING("Received Flow frame for unknown link handle: ~tP",
+                                             [Flow, ?FORMAT_DEPTH_LIMIT]),
                                 protocol_error(
                                   ?V_1_0_SESSION_ERROR_UNATTACHED_HANDLE,
                                   "Unattached link handle: ~b", [HandleInt])
@@ -1302,8 +1302,8 @@ handle_frame(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
                                 {error, Reason} ->
                                     protocol_error(
                                       ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                      "Failed to remove consumer from ~s: ~tp",
-                                      [rabbit_misc:rs(amqqueue:get_name(Q)), Reason])
+                                      "Failed to remove consumer from ~s: ~tP",
+                                      [rabbit_misc:rs(amqqueue:get_name(Q)), Reason, ?FORMAT_DEPTH_LIMIT])
                             end;
                         {error, not_found} ->
                             {OutgoingLinks1, Unsettled1, Pending1, QStates0}
@@ -1347,8 +1347,8 @@ handle_frame(#'v1_0.end'{},
 
 handle_frame(Frame, _State) ->
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                   "Unexpected frame ~tp",
-                   [amqp10_framing:pprint(Frame)]).
+                   "Unexpected frame ~tP",
+                   [amqp10_framing:pprint(Frame), ?FORMAT_DEPTH_LIMIT]).
 
 reply_frames(Frames, State) ->
     {ok, session_flow_fields(Frames, State), State}.
@@ -1378,8 +1378,8 @@ handle_attach(#'v1_0.attach'{
                                 Pairs0);
                 #{LinkName := Other} ->
                     link_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                               "received invalid attach ~p for management link pair ~p",
-                               [Attach, Other]);
+                               "received invalid attach ~P for management link pair ~P",
+                               [Attach, 10, Other, ?FORMAT_DEPTH_LIMIT]);
                 _ ->
                     maps:put(LinkName,
                              #management_link_pair{client_terminus_address = ClientTerminusAddress,
@@ -1435,8 +1435,8 @@ handle_attach(#'v1_0.attach'{
                                 Pairs0);
                 #{LinkName := Other} ->
                     link_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                               "received invalid attach ~p for management link pair ~p",
-                               [Attach, Other]);
+                               "received invalid attach ~P for management link pair ~P",
+                               [Attach, 10, Other, ?FORMAT_DEPTH_LIMIT]);
                 _ ->
                     maps:put(LinkName,
                              #management_link_pair{client_terminus_address = ClientTerminusAddress,
@@ -1530,8 +1530,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
             reply_frames([Reply, Flow], State);
         {error, Reason} ->
             link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                       "Attach refused: ~tp",
-                       [Reason])
+                       "Attach refused: ~tP",
+                       [Reason, ?FORMAT_DEPTH_LIMIT])
     end;
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
@@ -1562,10 +1562,16 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
     end,
 
     case ensure_source(Source0, SndSettled, LinkNameBin,
+<<<<<<< HEAD
                        Vhost, User, ContainerId, ReaderPid,
                        PermCache0, TopicPermCache0) of
+=======
+                       Cfg, PermCache0, TopicPermCache0) of
+        {error, {amqp_error, Condition, Description}} ->
+            link_error(Condition, "~ts", [Description]);
+>>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
         {error, Reason} ->
-            link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tp", [Reason]);
+            link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tP", [Reason, ?FORMAT_DEPTH_LIMIT]);
         {ok, #resource{name = QNameBin} = QName,
          #'v1_0.source'{address = {utf8, SourceAddress},
                         filter = DesiredFilter,
@@ -1662,9 +1668,59 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                     reply_frames(Reply, State);
                 {error, Reason} ->
                     link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+<<<<<<< HEAD
                                "Could not operate on ~ts: ~tp",
                                [rabbit_misc:rs(QName), Reason])
             end
+=======
+                               "Could not operate on ~ts: ~tP",
+                               [rabbit_misc:rs(QName), Reason, ?FORMAT_DEPTH_LIMIT])
+            end;
+        {ok, jms_subscription_lookup, QName, QType,
+         #'v1_0.source'{address = {utf8, SourceAddress},
+                        filter = Filter} = Source,
+         PermCache, TopicPermCache} ->
+            %% This is a 'null source lookup' used by JMS clients before
+            %% unsubscribing from a durable topic subscription.
+            %% See amqp-bindmap-jms-v1.0-wd10 8.8
+            A = #'v1_0.attach'{
+                   name = LinkName,
+                   handle = Handle,
+                   role = ?AMQP_ROLE_SENDER,
+                   initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT),
+                   snd_settle_mode = EffectiveSndSettleMode,
+                   rcv_settle_mode = RcvSettleMode,
+                   source = Source,
+                   max_message_size = MaybeMaxMessageSize},
+            L = #outgoing_link{
+                   name = LinkNameBin,
+                   source_address = SourceAddress,
+                   queue_name = QName,
+                   queue_type = QType,
+                   dynamic = false,
+                   send_settled = SndSettled,
+                   max_message_size = max_message_size(MaybeMaxMessageSize),
+                   filter = format_filter(Filter),
+                   client_flow_ctl = #client_flow_ctl{
+                                        delivery_count = ?INITIAL_DELIVERY_COUNT,
+                                        credit = 0,
+                                        echo = false,
+                                        properties = #{}},
+                   queue_flow_ctl = #queue_flow_ctl{
+                                       delivery_count = ?INITIAL_DELIVERY_COUNT,
+                                       credit = 0,
+                                       drain = false},
+                   at_least_one_credit_req_in_flight = false,
+                   stashed_credit_req = none,
+                   timeout_log_level = warning,
+                   is_jms_subscription_lookup = true},
+            OutgoingLinks = OutgoingLinks0#{HandleInt => L},
+            State = State0#state{outgoing_links = OutgoingLinks,
+                                 permission_cache = PermCache,
+                                 topic_permission_cache = TopicPermCache},
+            rabbit_global_counters:consumer_created(?PROTOCOL),
+            {ok, [A], State}
+>>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
     end.
 
 -spec link_error(term(), io:format(), [term()]) ->
@@ -2164,7 +2220,19 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                {map, KVList} ->
                    Anns1 = lists:map(
                              %% "all symbolic keys except those beginning with "x-" are reserved." [3.2.10]
+<<<<<<< HEAD
                              fun({{symbol, <<"x-", _/binary>> = K}, V}) ->
+=======
+                             fun({{symbol, <<"x-opt-deferral-token">> = K}, {utf8, Bin} = V}) ->
+                                     _ = validate_deferral_token_size(Bin),
+                                     {K, unwrap_simple_type(V)};
+                                ({{symbol, <<"x-opt-deferral-token">>}, Other}) ->
+                                     protocol_error(
+                                       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                                       "x-opt-deferral-token must be of AMQP type utf8, got: ~tP",
+                                       [Other, ?FORMAT_DEPTH_LIMIT]);
+                                ({{symbol, <<"x-", _/binary>> = K}, V}) ->
+>>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
                                      {K, unwrap_simple_type(V)}
                              end, KVList),
                    maps:from_list(Anns1)
@@ -2176,8 +2244,8 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
 settle_op_from_outcome(Outcome) ->
     protocol_error(
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-      "Unrecognised state: ~tp in DISPOSITION",
-      [Outcome]).
+      "Unrecognised state: ~tP in DISPOSITION",
+      [Outcome, ?FORMAT_DEPTH_LIMIT]).
 
 -spec flow({uint, link_handle()}, sequence_no(), rabbit_queue_type:credit()) ->
     #'v1_0.flow'{}.
@@ -2555,7 +2623,7 @@ incoming_link_transfer(
     Mc0 = try mc:init(mc_amqp, PayloadBin, #{})
           catch throw:Reason0 ->
                     link_error(?V_1_0_AMQP_ERROR_DECODE_ERROR,
-                               "failed to parse message: ~tp", [Reason0])
+                               "failed to parse message: ~tP", [Reason0, ?FORMAT_DEPTH_LIMIT])
           end,
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->
@@ -2594,8 +2662,8 @@ incoming_link_transfer(
                 {error, Reason} ->
                     link_error(
                       ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                      "failed to deliver message (delivery-tag=~p, delivery-id=~p): ~tp",
-                      [DeliveryTag, DeliveryId, Reason])
+                      "failed to deliver message (delivery-tag=~p, delivery-id=~p): ~tP",
+                      [DeliveryTag, DeliveryId, Reason, ?FORMAT_DEPTH_LIMIT])
             end;
         {error, {anonymous_terminus, false}, #'v1_0.error'{} = Err} ->
             Disposition = case Settled of
@@ -2700,7 +2768,7 @@ bad_x_cc(Value) ->
     Desc = unicode:characters_to_binary(
              lists:flatten(
                io_lib:format(
-                 "bad value for 'x-cc' message-annotation: ~tp", [Value]))),
+                 "bad value for 'x-cc' message-annotation: ~tP", [Value, ?FORMAT_DEPTH_LIMIT]))),
     #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
                   description = {utf8, Desc}}.
 
@@ -2860,8 +2928,9 @@ ensure_source(#'v1_0.source'{
             QName = queue_resource(Vhost, QNameBin),
             {ok, QName, Source, PermCache, TopicPermCache};
         _ ->
-            exit_not_implemented("Dynamic source not supported: ~tp", [Source0])
+            exit_not_implemented("Dynamic source not supported: ~tP", [Source0, ?FORMAT_DEPTH_LIMIT])
     end;
+<<<<<<< HEAD
 ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _, _, _, _) ->
     exit_not_implemented("Dynamic source not supported: ~tp", [Source]);
 ensure_source(Source0 = #'v1_0.source'{address = Address,
@@ -2881,6 +2950,34 @@ ensure_source(Source0 = #'v1_0.source'{address = Address,
                     {ok, QName, Source, PermCache, TopicPermCache}
             catch error:_ ->
                       {error, {bad_address, Address}}
+=======
+ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _) ->
+<<<<<<< HEAD
+    exit_not_implemented("Dynamic source not supported: ~tp", [Source]);
+ensure_source(Source0 = #'v1_0.source'{address = Address,
+                                       durable = Durable},
+=======
+    exit_not_implemented("Dynamic source not supported: ~tP", [Source, ?FORMAT_DEPTH_LIMIT]);
+ensure_source(Source0 = #'v1_0.source'{address = Address},
+>>>>>>> 863ba8a (Logging: avoid very deeply nested log entries)
+              _SndSettle,  LinkName,
+              #cfg{container_id = ContainerId,
+                   reader_pid = ConnPid,
+                   user = User,
+                   vhost = Vhost,
+                   is_jms = IsJms},
+              PermCache, TopicPermCache) ->
+    case is_jms_topic_terminus(IsJms, Source0) of
+        true ->
+            case jms_topic(ensure_subscription,
+                           [Source0, LinkName, Vhost, User, ContainerId,
+                            ConnPid, PermCache, TopicPermCache]) of
+                {error, not_implemented} ->
+                    {error, {amqp_error, ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                             <<"JMS topic subscription requires rabbitmq_jms plugin">>}};
+                Result ->
+                    Result
+>>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
             end;
         {utf8, SourceAddr} ->
             case address_v1_permitted() of
@@ -2983,6 +3080,7 @@ ensure_target(#'v1_0.target'{
                         capabilities = rabbit_amqp_util:capabilities([?CAP_TEMPORARY_QUEUE])
                        },
             {ok, Exchange, QNameBin, QNameBin, Target, PermCache};
+<<<<<<< HEAD
         false ->
             exit_not_implemented("Dynamic target not supported: ~p", [Target0])
     end;
@@ -3001,6 +3099,42 @@ ensure_target(Target = #'v1_0.target'{address = Address,
                     {ok, Exchange, RKey, QNameBin, Target, PermCache};
                 {error, _} = Err ->
                     Err
+=======
+        #{{symbol, ?CAP_TEMPORARY_TOPIC} := ok} when IsJms ->
+            case jms_topic(ensure_target_temporary,
+                           [Target0, Vhost, User, ContainerId, PermCache0]) of
+                {error, not_implemented} ->
+                    exit_not_implemented(
+                      "JMS temporary topics require rabbitmq_jms plugin");
+                Result ->
+                    Result
+            end;
+        _ ->
+            exit_not_implemented("Dynamic target not supported: ~P", [Target0, ?FORMAT_DEPTH_LIMIT])
+    end;
+ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _) ->
+<<<<<<< HEAD
+    exit_not_implemented("Dynamic target not supported: ~p", [Target]);
+ensure_target(Target = #'v1_0.target'{address = Address,
+                                      durable = Durable},
+=======
+    exit_not_implemented("Dynamic target not supported: ~P", [Target, ?FORMAT_DEPTH_LIMIT]);
+ensure_target(Target = #'v1_0.target'{address = Address},
+>>>>>>> 863ba8a (Logging: avoid very deeply nested log entries)
+              _LinkName,
+              #cfg{user = User,
+                   vhost = Vhost,
+                   is_jms = IsJms},
+              PermCache0) ->
+    case is_jms_topic_terminus(IsJms, Target) of
+        true ->
+            case jms_topic(ensure_target, [Target, Vhost, User, PermCache0]) of
+                {error, not_implemented} ->
+                    exit_not_implemented(
+                      "JMS topic target requires rabbitmq_jms plugin");
+                Result ->
+                    Result
+>>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
             end;
         1 ->
             case address_v1_permitted() of
@@ -3221,6 +3355,50 @@ handle_outgoing_link_flow_control(
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
 
+<<<<<<< HEAD
+=======
+%% Claim any requested deferred messages before topping up the credit: the
+%% queue delivers claimed messages ahead of the ready backlog, so this
+%% credit reaches them rather than being spent on the backlog first.
+claim_deferred_then_credit(QName, Ctag, Tokens, DeliveryCount, CappedCredit,
+                           Drain, QStates0) ->
+    {ok, QStates1, Actions0} = case Tokens of
+                                   [] ->
+                                       {ok, QStates0, []};
+                                   _ ->
+                                       rabbit_queue_type:assign_deferred(
+                                         QName, Ctag, Tokens, QStates0)
+                               end,
+    {ok, QStates, Actions1} = rabbit_queue_type:credit(
+                                QName, Ctag, DeliveryCount,
+                                CappedCredit, Drain, QStates1),
+    {ok, QStates, Actions0 ++ Actions1}.
+
+parse_deferred_tokens(undefined) ->
+    [];
+parse_deferred_tokens({map, KVList}) ->
+    Key = {symbol, <<"rabbitmq:deferral-tokens">>},
+    case lists:keyfind(Key, 1, KVList) of
+        {Key, {array, utf8, Elems}} ->
+            case length(Elems) of
+                Len when Len > ?MAX_DEFERRAL_TOKENS ->
+                    protocol_error(
+                      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                      "rabbitmq:deferral-tokens must contain at most ~b tokens, got: ~b",
+                      [?MAX_DEFERRAL_TOKENS, Len]);
+                _ ->
+                    [validate_deferral_token_size(T) || {utf8, T} <- Elems]
+            end;
+        false ->
+            [];
+        {Key, Other} ->
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+              "rabbitmq:deferral-tokens must be an array of AMQP type utf8, got: ~tP",
+              [Other, ?FORMAT_DEPTH_LIMIT])
+    end.
+
+>>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
 delivery_count_rcv(?UINT(DeliveryCount)) ->
     DeliveryCount;
 delivery_count_rcv(undefined) ->
@@ -3620,8 +3798,8 @@ declare_queue(QNameBin,
                        ReasonArgs);
         Other ->
             link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                       "Failed to declare ~s: ~p",
-                       [rabbit_misc:rs(QName), Other])
+                       "Failed to declare ~s: ~P",
+                       [rabbit_misc:rs(QName), Other, ?FORMAT_DEPTH_LIMIT])
     end,
     {ok, PermCache}.
 
@@ -3675,10 +3853,10 @@ outcomes(#'v1_0.source'{outcomes = {array, symbol, Syms} = Outcomes}) ->
         [] ->
             Outcomes;
         Unsupported ->
-            exit_not_implemented("Outcomes not supported: ~tp", [Unsupported])
+            exit_not_implemented("Outcomes not supported: ~tP", [Unsupported, ?FORMAT_DEPTH_LIMIT])
     end;
 outcomes(#'v1_0.source'{outcomes = Unsupported}) ->
-    exit_not_implemented("Outcomes not supported: ~tp", [Unsupported]);
+    exit_not_implemented("Outcomes not supported: ~tP", [Unsupported, ?FORMAT_DEPTH_LIMIT]);
 outcomes(_) ->
     {array, symbol, ?OUTCOMES}.
 
@@ -3852,7 +4030,7 @@ check_resource_access(Resource, Perm, User, Cache) ->
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
-                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
+                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~ts", [Msg])
             end
     end.
 
@@ -3903,7 +4081,7 @@ check_topic_authorisation(#exchange{type = topic,
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
-                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
+                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~ts", [Msg])
             end
     end;
 check_topic_authorisation(_, _, _, _, Cache) ->

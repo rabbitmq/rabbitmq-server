@@ -7,6 +7,8 @@
 
 -module(rabbit_logger_fmt_helpers).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 -export([format_time/2,
          format_level/2,
          format_msg/3]).
@@ -149,7 +151,7 @@ format_msg1({report, Report}, Meta, Config) ->
     FormattedReport = format_report(Report, Meta, Config),
     format_msg1(FormattedReport, Meta, Config);
 format_msg1({Format, Args}, _, _) ->
-    io_lib:format(Format, Args).
+    io_lib:format(Format, Args, [{chars_limit, ?FORMAT_CHARS_LIMIT}]).
 
 format_report(
   #{label := {application_controller, _}} = Report, Meta, Config) ->
@@ -162,7 +164,8 @@ format_report(
     try
         case erlang:fun_info(Cb, arity) of
             {arity, 1} -> Cb(Report);
-            {arity, 2} -> {"~ts", [Cb(Report, #{})]}
+            {arity, 2} -> {"~ts", [Cb(Report, #{depth => ?FORMAT_DEPTH_LIMIT,
+                                                chars_limit => ?FORMAT_CHARS_LIMIT})]}
         end
     catch
         _:_:_ ->

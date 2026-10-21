@@ -162,9 +162,9 @@ handle_http_req(HttpMethod = <<"PUT">>,
                            {ok, {<<"200">>, RespPayload, {PermCache1, TopicPermCache}}}
                    catch exit:#amqp_error{name = precondition_failed,
                                           explanation = Expl} ->
-                             throw(<<"409">>, Expl, []);
+                             throw(<<"409">>, "~ts", [Expl]);
                          exit:#amqp_error{explanation = Expl} ->
-                             throw(<<"400">>, Expl, [])
+                             throw(<<"400">>, "~ts", [Expl])
                    end
            end) of
         {ok, Result} ->
@@ -198,9 +198,9 @@ handle_http_req(HttpMethod = <<"PUT">>,
                     throw(<<"400">>, Reason, ReasonArgs)
             catch exit:#amqp_error{name = precondition_failed,
                                    explanation = Expl} ->
-                      throw(<<"409">>, Expl, []);
+                      throw(<<"409">>, "~ts", [Expl]);
                   exit:#amqp_error{explanation = Expl} ->
-                      throw(<<"400">>, Expl, [])
+                      throw(<<"400">>, "~ts", [Expl])
             end;
         {error, {absent, Q, Reason}} ->
             absent(Q, Reason)
@@ -223,7 +223,7 @@ handle_http_req(<<"PUT">>,
      } = decode_exchange(ReqPayload),
     XTypeAtom = try rabbit_exchange:check_type(XTypeBin)
                 catch exit:#amqp_error{explanation = Explanation} ->
-                          throw(<<"400">>, Explanation, [])
+                          throw(<<"400">>, "~ts", [Explanation])
                 end,
     XName = exchange_resource(Vhost, XNameBin),
     ok = prohibit_default_exchange(XName),
@@ -255,7 +255,7 @@ handle_http_req(<<"PUT">>,
             {<<"204">>, null, {PermCache, TopicPermCache}}
     catch exit:#amqp_error{name = precondition_failed,
                            explanation = Expl} ->
-              throw(<<"409">>, Expl, [])
+              throw(<<"409">>, "~ts", [Expl])
     end;
 
 handle_http_req(<<"DELETE">>,
@@ -283,9 +283,9 @@ handle_http_req(<<"DELETE">>,
                   end
           end)
     catch exit:#amqp_error{name = not_found, explanation = Explanation} ->
-              throw(<<"404">>, Explanation, []);
+              throw(<<"404">>, "~ts", [Explanation]);
           exit:#amqp_error{explanation = Explanation} ->
-              throw(<<"400">>, Explanation, [])
+              throw(<<"400">>, "~ts", [Explanation])
     end;
 
 handle_http_req(<<"DELETE">>,
@@ -305,7 +305,7 @@ handle_http_req(<<"DELETE">>,
             RespPayload = purge_or_delete_queue_response(NumMsgs),
             {<<"200">>, RespPayload, {PermCache, TopicPermCache}}
     catch exit:#amqp_error{explanation = Explanation} ->
-              throw(<<"400">>, Explanation, [])
+              throw(<<"400">>, "~ts", [Explanation])
     end;
 
 handle_http_req(<<"DELETE">>,
@@ -402,7 +402,7 @@ handle_http_req(<<"GET">>,
                        _ ->
                            throw(<<"400">>,
                                  "missing 'dste' or 'dstq' in query: ~tP",
-                                 [QueryMap, 10])
+                                 [QueryMap, ?FORMAT_DEPTH_LIMIT])
                    end,
     SrcXName = exchange_resource(Vhost, SrcXNameBin),
     DstName = rabbit_misc:r(Vhost, DstKind, DstNameBin),
@@ -438,7 +438,7 @@ decode_queue({map, KVList}) ->
              ({{utf8, <<"arguments">>}, Args}, Acc) ->
                   Acc#{arguments => args_amqp_to_amqpl(Args)};
              (Prop, _Acc) ->
-                  throw(<<"400">>, "bad queue property ~tP", [Prop, 10])
+                  throw(<<"400">>, "bad queue property ~tP", [Prop, ?FORMAT_DEPTH_LIMIT])
           end, #{}, KVList),
     Defaults = #{durable => true,
                  exclusive => false,
@@ -510,7 +510,7 @@ decode_exchange({map, KVList}) ->
              ({{utf8, <<"arguments">>}, Args}, Acc) ->
                   Acc#{arguments => args_amqp_to_amqpl(Args)};
              (Prop, _Acc) ->
-                  throw(<<"400">>, "bad exchange property ~tP", [Prop, 10])
+                  throw(<<"400">>, "bad exchange property ~tP", [Prop, ?FORMAT_DEPTH_LIMIT])
           end, #{}, KVList),
     Defaults = #{durable => true,
                  auto_delete => false,
@@ -532,7 +532,7 @@ decode_binding({map, KVList}) ->
          ({{utf8, <<"arguments">>}, Args}, Acc) ->
               Acc#{arguments => args_amqp_to_amqpl(Args)};
          (Field, _Acc) ->
-              throw(<<"400">>, "bad binding field ~tP", [Field, 10])
+              throw(<<"400">>, "bad binding field ~tP", [Field, ?FORMAT_DEPTH_LIMIT])
       end, #{}, KVList).
 
 encode_bindings(Bindings) ->
@@ -569,12 +569,12 @@ args_amqp_to_amqpl({map, KVList}) ->
                           false ->
                               throw(<<"400">>,
                                     "unsupported argument name or value ~tP",
-                                    [{{T, Key}, TypeVal}, 10])
+                                    [{{T, Key}, TypeVal}, ?FORMAT_DEPTH_LIMIT])
                       end;
                  (Arg) ->
                       throw(<<"400">>,
                             "unsupported argument ~tP",
-                            [Arg, 10])
+                            [Arg, ?FORMAT_DEPTH_LIMIT])
               end, KVList).
 
 args_amqpl_to_amqp(Args) ->
@@ -602,7 +602,7 @@ parse_uri(Uri) ->
                                    {error, Atom, Term} ->
                                        throw(<<"400">>,
                                              "failed to dissect query '~ts': ~s ~tP",
-                                             [truncate_for_error(Query), Atom, Term, 10])
+                                             [truncate_for_error(Query), Atom, Term, ?FORMAT_DEPTH_LIMIT])
                                end;
                            error ->
                                #{}
@@ -611,7 +611,7 @@ parse_uri(Uri) ->
         {error, Atom, Term} ->
             throw(<<"400">>,
                   "failed to normalize URI '~ts': ~s ~tP",
-                  [truncate_for_error(Uri), Atom, Term, 10])
+                  [truncate_for_error(Uri), Atom, Term, ?FORMAT_DEPTH_LIMIT])
     end.
 
 compose_binding_uri(Src, DstKind, Dst, Key, Args) ->
@@ -702,7 +702,7 @@ binding_checks(SrcXName, DstName, BindingKey, User, {PermCache0, TopicPermCache0
 binding_action(Action, Binding, Username, ConnPid) ->
     try rabbit_channel:binding_action(Action, Binding, Username, ConnPid)
     catch exit:#amqp_error{explanation = Explanation} ->
-              throw(<<"400">>, Explanation, [])
+              throw(<<"400">>, "~ts", [Explanation])
     end.
 
 purge_or_delete_queue_response(NumMsgs) ->
@@ -781,7 +781,7 @@ absent(Queue, Reason) ->
     Explanation = try rabbit_amqqueue:absent(Queue, Reason)
                   catch exit:#amqp_error{explanation = E} -> E
                   end,
-    throw(<<"400">>, Explanation, []).
+    throw(<<"400">>, "~ts", [Explanation]).
 
 -spec throw(binary(), io:format(), [term()]) -> no_return().
 throw(StatusCode, Format, Data) ->
