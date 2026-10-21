@@ -17,7 +17,9 @@ all() ->
     [
      fast_close_plain_port,
      fast_close_healthy_tls,
-     fast_close_recovers_from_stuck_recv
+     fast_close_recovers_from_stuck_recv,
+     socket_ends_proxy_header_from_loopback_peer,
+     socket_ends_proxy_header_from_non_loopback_peer
     ].
 
 init_per_suite(Config) ->
@@ -101,9 +103,64 @@ fast_close_recovers_from_stuck_recv(Config) ->
     stop_client(Client),
     ok.
 
+%% A proxy on this host announces local and remote clients alike.
+socket_ends_proxy_header_from_loopback_peer(_Config) ->
+    S = new_tcp_pair({127, 0, 0, 1}),
+    [?assertEqual({ok, {Src, 50000, {192, 168, 1, 2}, 5672}},
+                  rabbit_net:socket_ends(proxy_socket(S, Src), inbound))
+     || Src <- [{192, 168, 1, 1}, {127, 0, 0, 1}]],
+    ok = gen_tcp:close(S).
+
+socket_ends_proxy_header_from_non_loopback_peer(_Config) ->
+    case non_loopback_ipv4_address() of
+        undefined ->
+            {skip, "a non-loopback IPv4 address is required"};
+        Addr ->
+            S = new_tcp_pair(Addr),
+            ?assertEqual({ok, {{192, 168, 1, 1}, 50000, {192, 168, 1, 2}, 5672}},
+                         rabbit_net:socket_ends(
+                           proxy_socket(S, {192, 168, 1, 1}), inbound)),
+            {ok, {Addr, _, Addr, _}} = Ends = rabbit_net:socket_ends(S, inbound),
+            [?assertEqual(Ends,
+                          rabbit_net:socket_ends(proxy_socket(S, Src), inbound))
+             || Src <- [{127, 0, 0, 1},
+                        {0, 0, 0, 0, 0, 0, 0, 1},
+                        {0, 0, 0, 0, 0, 65535, 16#7f00, 1}]],
+            ok = gen_tcp:close(S)
+    end.
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
+
+new_tcp_pair(Addr) ->
+    {ok, L} = gen_tcp:listen(0, [binary, {active, false}, {ip, Addr}]),
+    {ok, Port} = inet:port(L),
+    {ok, _C} = gen_tcp:connect(Addr, Port, [binary, {active, false}, {ip, Addr}], 30_000),
+    {ok, S} = gen_tcp:accept(L, 30_000),
+    ok = gen_tcp:close(L),
+    S.
+
+proxy_socket(Sock, SrcAddr) ->
+    {rabbit_proxy_socket, Sock, #{command => proxy,
+                                  version => 1,
+                                  transport_family => ipv4,
+                                  transport_protocol => stream,
+                                  src_address => SrcAddr,
+                                  src_port => 50000,
+                                  dest_address => {192, 168, 1, 2},
+                                  dest_port => 5672}}.
+
+non_loopback_ipv4_address() ->
+    {ok, IfAddrs} = inet:getifaddrs(),
+    case [A || {_, Opts} <- IfAddrs,
+               Flags <- [proplists:get_value(flags, Opts, [])],
+               lists:member(up, Flags), lists:member(running, Flags),
+               {addr, A = {_, _, _, _}} <- Opts,
+               not rabbit_net:is_loopback(A)] of
+        []          -> undefined;
+        [Addr | _]  -> Addr
+    end.
 
 new_tls_pair(Config, ExtraOpts) ->
     CertFile = ?config(certfile, Config),
