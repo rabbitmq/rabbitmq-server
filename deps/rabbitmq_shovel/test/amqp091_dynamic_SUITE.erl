@@ -280,6 +280,17 @@ validation(Config) ->
                   [{<<"src-queue">>, <<"test">>},
                    {<<"src-uri">>,   [<<"derp">>]},
                    {<<"dest-uri">>,  <<"amqp://">>}]),
+    %% A list of URIs is neither empty nor nested
+    [begin
+         invalid_param(Config,
+                       [{<<"src-queue">>, <<"test">>},
+                        {<<"src-uri">>,   BadURIs},
+                        {<<"dest-uri">>,  <<"amqp://">>}]),
+         invalid_param(Config,
+                       [{<<"src-queue">>, <<"test">>},
+                        {<<"src-uri">>,   <<"amqp://">>},
+                        {<<"dest-uri">>,  BadURIs}])
+     end || BadURIs <- [[], [[]], [[<<"amqp://">>]], [<<"amqp://">>, []]]],
     invalid_param(Config,
                   [{<<"src-queue">>, <<"test">>},
                    {<<"dest-uri">>,  <<"amqp://">>}]),

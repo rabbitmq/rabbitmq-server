@@ -220,16 +220,25 @@ validate_uri(Name, Term, Protocol, User) when is_binary(Term) ->
               end;
         E  -> E
     end;
+validate_uri(Name, [], _Protocol, _User) ->
+    {error, "~ts should not be an empty list", [Name]};
 validate_uri(Name, Term, Protocol, User) ->
     case rabbit_parameter_validation:list(Name, Term) of
         ok -> case [V || URI <- Term,
-                         V <- [validate_uri(Name, URI, Protocol, User)],
+                         V <- [validate_uri_in_list(Name, URI, Protocol, User)],
                          element(1, V) =:= error] of
                   []      -> ok;
                   [E | _] -> E
               end;
         E  -> E
     end.
+
+%% A list of URIs holds URIs, not further lists: `get_uris/2` in
+%% `rabbit_shovel_parameters` expects every element to be a binary.
+validate_uri_in_list(Name, URI, Protocol, User) when is_binary(URI) ->
+    validate_uri(Name, URI, Protocol, User);
+validate_uri_in_list(Name, _URI, _Protocol, _User) ->
+    {error, "~ts should be a URI or a list of URIs", [Name]}.
 
 %% The URI of a local shovel is a direct login whatever its host, and the
 %% one of a network shovel may point at this node.
