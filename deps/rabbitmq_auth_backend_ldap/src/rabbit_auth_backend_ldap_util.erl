@@ -12,19 +12,30 @@
 %% Raw substitution without escaping. Safe only for non-DN sinks (ACL string
 %% comparisons, eldap:equalityMatch/2 filter values). To build a DN, use
 %% rabbit_ldap_rfc4514:fill_dn/2, which RFC 4514-escapes substituted values.
-fill(Fmt, []) ->
-    binary_to_list(iolist_to_binary(Fmt));
+fill(Fmt, Args) ->
+    Bin = iolist_to_binary(Fmt),
+    Vars = [{atom_to_binary(K), to_repl(V)} || {K, V} <- Args],
+    Matches = case re:run(Bin, <<"\\$\\{([^${}]+)\\}">>,
+                          [global, {capture, all, index}]) of
+                  {match, M} -> M;
+                  nomatch    -> []
+              end,
+    binary_to_list(iolist_to_binary(fill(Bin, 0, Matches, Vars))).
 
-fill(Fmt, [{K, V} | T]) ->
-    Var = [[$\\, $$, ${] ++ atom_to_list(K) ++ [$}]],
-    fill(re:replace(Fmt, Var, [to_repl(V)], [global]), T).
+fill(Bin, Pos, [], _Vars) ->
+    [binary:part(Bin, Pos, byte_size(Bin) - Pos)];
+fill(Bin, Pos, [[{Start, Len}, {NStart, NLen}] | T], Vars) ->
+    Prefix = binary:part(Bin, Pos, Start - Pos),
+    Name = binary:part(Bin, NStart, NLen),
+    Replacement = case lists:keyfind(Name, 1, Vars) of
+                      {_, V} -> V;
+                      false  -> binary:part(Bin, Start, Len)
+                  end,
+    [Prefix, Replacement | fill(Bin, Start + Len, T, Vars)].
 
-to_repl(V) when is_atom(V)   -> to_repl(atom_to_list(V));
-to_repl(V) when is_binary(V) -> to_repl(binary_to_list(V));
-to_repl([])                  -> [];
-to_repl([$\\ | T])           -> [$\\, $\\ | to_repl(T)];
-to_repl([$&  | T])           -> [$\\, $&  | to_repl(T)];
-to_repl([H   | T])           -> [H        | to_repl(T)];
+to_repl(V) when is_atom(V)   -> atom_to_list(V);
+to_repl(V) when is_binary(V) -> binary_to_list(V);
+to_repl(V) when is_list(V)   -> V;
 to_repl(_)                   -> []. % fancy variables like peer IP are just ignored
 
 %% If a binary Username is in Domain\User format, provide additional fill
