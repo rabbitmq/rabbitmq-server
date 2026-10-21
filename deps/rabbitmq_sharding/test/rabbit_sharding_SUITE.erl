@@ -37,7 +37,8 @@ groups() ->
                                 shard_basic_consume_interceptor_test,
                                 shard_auto_scale_cluster_test,
                                 queue_declare_test,
-                                shard_queue_master_locator_test
+                                shard_queue_master_locator_test,
+                                shard_invalid_spn_test
                                ]}
     ].
 
@@ -122,6 +123,14 @@ shard_queue_creation2_test(Config) ->
                        [{?TEST_X, 6}],
                        [<<"3_shard">>])
       end).
+
+shard_invalid_spn_test(Config) ->
+    [?assertMatch({error_string, _},
+                  rabbit_ct_broker_helpers:rpc(
+                    Config, 0, rabbit_policy, set,
+                    [<<"/">>, <<"invalid_shard">>, <<"^sharding">>,
+                     policy_definition(SPN), 0, <<"exchanges">>, <<"acting-user">>]))
+     || SPN <- [-1, 2.5, 4097, 100_000_000]].
 
 %% SPN = Shards Per Node
 shard_update_spn_test(Config) ->
