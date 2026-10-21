@@ -223,7 +223,8 @@ validate_uri_error_has_no_credentials(_Config) ->
          ?assertEqual(nomatch, string:find(Msg, "s3cret"))
      end || Uri <- [<<"amqp://alice:s3cret@:::">>,
                     <<"amqps://alice:s3cret@host/?depth=x&password=s3cret">>,
-                    <<"amqp://alice:s3cret%zz@host">>]],
+                    <<"amqp://alice:s3cret%zz@host">>,
+                    [[<<"amqp://alice:s3cret@host">>]]]],
     ok.
 
 %% Regression: an empty argument list resolved to a lower, non-existent arity

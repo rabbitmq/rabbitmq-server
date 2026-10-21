@@ -117,16 +117,23 @@ validate_uri(Name, Term, User) when is_binary(Term) ->
               end;
         E  -> E
     end;
+validate_uri(Name, [], _User) ->
+    {error, "~ts should not be an empty list", [Name]};
 validate_uri(Name, Term, User) ->
     case rabbit_parameter_validation:list(Name, Term) of
         ok -> case [V || U <- Term,
-                         V <- [validate_uri(Name, U, User)],
+                         V <- [validate_uri_in_list(Name, U, User)],
                          element(1, V) =:= error] of
                   []      -> ok;
                   [E | _] -> E
               end;
         E  -> E
     end.
+
+validate_uri_in_list(Name, URI, User) when is_binary(URI) ->
+    validate_uri(Name, URI, User);
+validate_uri_in_list(Name, _URI, _User) ->
+    {error, "~ts should be a URI or a list of URIs", [Name]}.
 
 %% A direct URI carries its own virtual host and credentials; check them here.
 %% A network URI may point at this node.
