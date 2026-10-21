@@ -252,10 +252,31 @@ try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
             ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts",
                        [Username2, ModN],
                        #{domain => ?RMQLOG_DOMAIN_USER}),
-            user(ModNUser, try_authorize(ModZs, Username2, AuthProps));
+            Authorized = try_authorize(ModZs, Username2, AuthProps),
+            user(ModNUser, keep_authn_state(ModN, ModNUser, Authorized));
         Else ->
             Else
     end.
+
+%% `#user.authz_backends` only holds the state of the authz backends. When
+%% the credentials verified by the authn backend expire and no authz backend
+%% accounts for that, its state is kept too.
+keep_authn_state(ModN, ModNUser, {ok, ModZImpls, ModZTags} = Authorized) ->
+    {ok, User} = user(ModNUser, Authorized),
+    Impl = rabbit_auth_backend_authn_state:impl(ModN, ModNUser, ModZTags),
+    case rabbit_auth_backend_authn_state:expiry_timestamp(auth_user(User, Impl)) of
+        never ->
+            Authorized;
+        Ts ->
+            %% Not a module check: the cache uses one module for both.
+            case expiry_timestamp(User) of
+                Ts -> Authorized;
+                _  -> ModNImpl = {rabbit_auth_backend_authn_state, Impl},
+                      {ok, [ModNImpl | ModZImpls], ModZTags}
+            end
+    end;
+keep_authn_state(_ModN, _ModNUser, Refused) ->
+    Refused.
 
 try_authenticate(Module, Username, AuthProps) ->
     case Module:user_login_authentication(Username, AuthProps) of
