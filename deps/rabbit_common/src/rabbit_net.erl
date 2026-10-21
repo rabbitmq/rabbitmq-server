@@ -68,7 +68,7 @@
 -spec fast_close(socket(), timeout()) -> ok_or_any_error().
 -spec sockname(socket()) ->
           ok_val_or_error({inet:ip_address(), ip_port()}).
--spec peername(socket()) ->
+-spec peername(socket() | proxy_socket()) ->
           ok_val_or_error({inet:ip_address(), ip_port()}).
 -spec peercert(socket() | proxy_socket()) ->
           'nossl' | ok_val_or_error(rabbit_cert_info:certificate()).
@@ -256,6 +256,15 @@ close_linked_ports(Pid) ->
 sockname(Sock)   when ?IS_SSL(Sock) -> ssl:sockname(Sock);
 sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).
 
+%% The client named by a PROXY header, under the same rule as `socket_ends/2`
+%% but without reverse DNS lookups.
+peername({rabbit_proxy_socket, Sock, #{src_address := Addr, src_port := Port}})
+  when is_tuple(Addr) ->
+    case is_loopback(Addr) andalso not is_loopback(Sock) of
+        true  -> peername(Sock);
+        false -> {ok, {Addr, Port}}
+    end;
+peername({rabbit_proxy_socket, Sock, _ProxyInfo}) -> peername(Sock);
 peername(Sock)   when ?IS_SSL(Sock) -> ssl:peername(Sock);
 peername(Sock)   when is_port(Sock) -> inet:peername(Sock).
 

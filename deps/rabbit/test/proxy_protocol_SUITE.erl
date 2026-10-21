@@ -30,7 +30,8 @@ groups() -> [
             proxy_protocol_v1_loopback_source_from_remote_peer,
             proxy_protocol_v1_guest_from_loopback_peer,
             proxy_protocol_v1_guest_from_remote_peer,
-            proxy_protocol_v2_local
+            proxy_protocol_v2_local,
+            proxy_protocol_v1_vhost_access_peeraddr
         ]}
     ].
 
@@ -190,6 +191,55 @@ proxy_protocol_v2_local(Config) ->
     gen_tcp:close(Socket),
     wait_for_connection_close(Config),
     ok.
+
+%% Authorization backends must be given the address of the client,
+%% i.e. the one from the PROXY protocol header, not the address of the proxy.
+proxy_protocol_v1_vhost_access_peeraddr(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config,
+        rabbit_auth_backend_context_propagation_mock),
+    AuthzData = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, vhost_access_authz_data, [Port]),
+    ?assertEqual(#{peeraddr => {192, 168, 1, 1}}, AuthzData),
+    wait_for_connection_close(Config),
+    ok.
+
+vhost_access_authz_data(Port) ->
+    rabbit_auth_backend_context_propagation_mock:init(),
+    {ok, AuthBackends} = application:get_env(rabbit, auth_backends),
+    ok = application:set_env(rabbit, auth_backends,
+        [rabbit_auth_backend_context_propagation_mock]),
+    try
+        {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
+            [binary, {active, false}, {packet, raw}]),
+        ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        ok = inet:send(Socket, <<"AMQP", 0, 0, 9, 1>>),
+        #'connection.start'{} = recv_method(Socket),
+        ok = send_method(Socket, #'connection.start_ok'{
+                                    client_properties = [],
+                                    mechanism = <<"PLAIN">>,
+                                    response = <<0, "guest", 0, "guest">>,
+                                    locale = <<"en_US">>}),
+        #'connection.tune'{channel_max = ChannelMax,
+                           frame_max = FrameMax} = recv_method(Socket),
+        ok = send_method(Socket, #'connection.tune_ok'{channel_max = ChannelMax,
+                                                       frame_max = FrameMax,
+                                                       heartbeat = 0}),
+        ok = send_method(Socket, #'connection.open'{virtual_host = <<"/">>}),
+        #'connection.open_ok'{} = recv_method(Socket),
+        [{vhost_access, AuthzData}] =
+            rabbit_auth_backend_context_propagation_mock:get(vhost_access),
+        true = ets:delete(rabbit_auth_backend_context_propagation_mock, vhost_access),
+        ok = send_method(Socket, #'connection.update_secret'{new_secret = <<"guest">>,
+                                                             reason = <<"test">>}),
+        #'connection.update_secret_ok'{} = recv_method(Socket),
+        [{vhost_access, AuthzData}] =
+            rabbit_auth_backend_context_propagation_mock:get(vhost_access),
+        gen_tcp:close(Socket),
+        AuthzData
+    after
+        ok = application:set_env(rabbit, auth_backends, AuthBackends)
+    end.
 
 send_method(Socket, Method) ->
     inet:send(Socket, rabbit_binary_generator:build_simple_method_frame(0, Method)).
