@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostTagsCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes, Helpers, VirtualHosts}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -14,6 +14,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetVhostTagsCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
+
+  def validate([_vhost | tags], _), do: VirtualHosts.validate_tag_count(tags)
 
   def validate(_, _), do: :ok
 
