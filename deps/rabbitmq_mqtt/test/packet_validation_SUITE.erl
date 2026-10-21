@@ -11,7 +11,7 @@
 -include("rabbit_mqtt_packet.hrl").
 
 all() ->
-    [connect_reserved_flag, fixed_header_flags].
+    [connect_reserved_flag, fixed_header_flags, connect_will_flags].
 
 init_per_suite(Config) ->
     persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, 65_536),
@@ -51,8 +51,27 @@ fixed_header_flags(_Config) ->
                  rabbit_mqtt_packet:parse(<<16#AB, 5, 0, 1, 0, 1, "a">>, 3)),
     ok.
 
+connect_will_flags(_Config) ->
+    [begin
+         [assert_connect_error(connect_packet(Vsn, Flags, <<>>), invalid_will_flags)
+          || Flags <- [16#0A, 16#12, 16#22, 16#1A, 16#1E, 16#3E]],
+         Will = <<(properties(Vsn))/binary, 0, 1, "a", 0, 1, "b">>,
+         [?assertMatch({ok, _, <<>>, Vsn}, parse_connect(Vsn, Flags, Will))
+          || Flags <- [16#06, 16#0E, 16#26, 16#2E]]
+     end || Vsn <- [4, 5]],
+    ok.
+
 parse_connect(Vsn, Flags, Payload) ->
     rabbit_mqtt_packet:parse(connect_packet(Vsn, Flags, Payload), unauthenticated).
+
+assert_connect_error(Packet, Reason) ->
+    ?assertEqual({error, Reason}, rabbit_mqtt_packet:parse(Packet, unauthenticated)),
+    [begin
+         <<First:Split/binary, Rest/binary>> = Packet,
+         {more, Cont} = rabbit_mqtt_packet:parse(First, unauthenticated),
+         ?assertEqual({error, Reason}, rabbit_mqtt_packet:parse(Rest, Cont))
+     end || Split <- lists:seq(1, byte_size(Packet) - 1)],
+    ok.
 
 connect_packet(Vsn, Flags, Payload) ->
     Props = properties(Vsn),

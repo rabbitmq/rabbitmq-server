@@ -261,9 +261,14 @@ parse_connect(Bin, Fixed, Length) ->
     end.
 
 -spec parse_connect(binary()) ->
-    #mqtt_packet_connect{} | {error, reserved_connect_flag}.
+    #mqtt_packet_connect{} | {error, reserved_connect_flag | invalid_will_flags}.
 parse_connect(<<Len:16, _ProtoName:Len/binary, _ProtoVer, _Flags:7, 1:1, _/binary>>) ->
     {error, reserved_connect_flag};
+parse_connect(<<Len:16, _ProtoName:Len/binary, _ProtoVer,
+                _Credentials:2, WillRetain:1, WillQos:2, WillFlag:1, _Flags:2, _/binary>>)
+  when WillQos =:= 3;
+       WillFlag =:= 0 andalso (WillQos =/= 0 orelse WillRetain =/= 0) ->
+    {error, invalid_will_flags};
 parse_connect(<<Len:16, ProtoName:Len/binary,
                 ProtoVer,
                 UsernameFlag:1,
