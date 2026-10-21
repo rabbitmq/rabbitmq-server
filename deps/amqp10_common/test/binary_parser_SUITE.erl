@@ -25,6 +25,8 @@ all_tests() ->
      array32_count_exceeds_data,
      array_of_zero_width_elements,
      array_of_described_zero_width_elements_unsupported,
+     array_of_nested_described_elements_unsupported,
+     array_descriptor_unsupported,
      array_element_widths,
      unsupported_type,
      server_mode_symbolic_body_descriptors,
@@ -175,6 +177,47 @@ array_of_described_zero_width_elements_unsupported(_Config) ->
     Bin = <<16#f0, (byte_size(CountAndV)):32, CountAndV/binary>>,
     ?assertThrow({array_of_described_zero_width_elements_unsupported, Count},
                  amqp10_binary_parser:parse(Bin)).
+
+array_of_nested_described_elements_unsupported(_Config) ->
+    Count = 4040,
+    Elements = binary:copy(<<1>>, Count),
+    Array = fun(Depth) ->
+                    %% ?DESCRIBED, null descriptor
+                    Described = binary:copy(<<0, 16#40>>, Depth),
+                    CountAndV = <<Count:32, Described/binary, 16#50, Elements/binary>>,
+                    <<16#f0, (byte_size(CountAndV)):32, CountAndV/binary>>
+            end,
+    ?assertMatch({{array, {described, null, ubyte}, [{described, null, {ubyte, 1}} | _]}, _},
+                 amqp10_binary_parser:parse(Array(1))),
+    [begin
+         ?assertThrow({array_of_nested_described_elements_unsupported, Count},
+                      amqp10_binary_parser:parse(Array(Depth))),
+         ?assertThrow({array_of_nested_described_elements_unsupported, Count},
+                      amqp10_binary_parser:parse_many(Array(Depth), []))
+     end || Depth <- [2, 3]].
+
+array_descriptor_unsupported(_Config) ->
+    Count = 3,
+    Array = fun(Descriptor) ->
+                    CountAndV = <<Count:32, 0, Descriptor/binary, 16#50, 1, 2, 3>>,
+                    <<16#f0, (byte_size(CountAndV)):32, CountAndV/binary>>
+            end,
+    Nulls = binary:copy(<<16#40>>, 10),
+    [?assertThrow({array_descriptor_type_unsupported, Type, Count},
+                  amqp10_binary_parser:parse(Array(Descriptor)))
+     || <<Type, _/binary>> = Descriptor <- [<<0, 16#40, 16#40>>,
+                                            <<16#c0, 11, 10, Nulls/binary>>,
+                                            <<16#c1, 11, 10, Nulls/binary>>,
+                                            <<16#d0, 14:32, 10:32, Nulls/binary>>,
+                                            <<16#d1, 14:32, 10:32, Nulls/binary>>,
+                                            <<16#e0, 5, 3, 16#50, 1, 2, 3>>,
+                                            <<16#f0, 8:32, 3:32, 16#50, 1, 2, 3>>]],
+
+    Symbol = fun(Size) -> <<16#b3, Size:32, (binary:copy(<<"a">>, Size))/binary>> end,
+    ?assertMatch({{array, {described, {symbol, _}, ubyte}, [_, _, _]}, _},
+                 amqp10_binary_parser:parse(Array(Symbol(59)))),
+    ?assertThrow({array_descriptor_too_large, 65, Count},
+                 amqp10_binary_parser:parse(Array(Symbol(60)))).
 
 array_element_widths(_Config) ->
     Arrays = [
