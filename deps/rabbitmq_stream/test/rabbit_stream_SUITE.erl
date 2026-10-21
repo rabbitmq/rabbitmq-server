@@ -224,6 +224,17 @@ init_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config
                                       set_env,
                                       [rabbitmq_stream, request_timeout, 2000]),
     rabbit_ct_helpers:testcase_started(Config, TestCase);
+init_per_testcase(cannot_change_authmechanism_during_authentication = TestCase,
+                  Config) ->
+    {ok, Mechanisms} = rabbit_ct_broker_helpers:rpc(Config, 0, application,
+                                                    get_env,
+                                                    [rabbit, auth_mechanisms]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, auth_mechanisms,
+                                       ['RABBIT-CR-DEMO' | Mechanisms]]),
+    rabbit_ct_helpers:testcase_started(
+      rabbit_ct_helpers:set_config(Config, {auth_mechanisms, Mechanisms}),
+      TestCase);
 init_per_testcase(vhost_queue_limit = TestCase, Config) ->
     QueueCount = rabbit_ct_broker_helpers:rpc(Config,
                                               0,
@@ -293,6 +304,13 @@ end_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config)
                                       application,
                                       set_env,
                                       [rabbitmq_stream, request_timeout, 60000]),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+end_per_testcase(cannot_change_authmechanism_during_authentication = TestCase,
+                 Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, auth_mechanisms,
+            rabbit_ct_helpers:get_config(Config, auth_mechanisms)]),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(vhost_queue_limit = TestCase, Config) ->
     _ = rabbit_ct_broker_helpers:rpc(Config,
@@ -422,10 +440,6 @@ cannot_use_another_authmechanism_when_updating_secret(Config) ->
 
 cannot_change_authmechanism_during_authentication(Config) ->
     T = gen_tcp,
-    {ok, Mechanisms} = rpc(Config, 0, application, get_env,
-                           [rabbit, auth_mechanisms]),
-    ok = rpc(Config, 0, application, set_env,
-             [rabbit, auth_mechanisms, ['RABBIT-CR-DEMO' | Mechanisms]]),
     StartCrDemo =
         fun() ->
                 {ok, S} = T:connect("localhost", get_port(T, Config), get_opts(T)),
@@ -440,21 +454,18 @@ cannot_change_authmechanism_during_authentication(Config) ->
                              Challenge),
                 {S, C3}
         end,
-    try
-        {S1, C1} = StartCrDemo(),
-        _ = expect_unsuccessful_authentication(
-              try_authenticate(T, S1, C1, <<"PLAIN">>, <<"guest">>, <<"guest">>),
-              ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM),
-        closed = wait_for_socket_close(T, S1, 10),
-        {S2, C2} = StartCrDemo(),
-        _ = expect_successful_authentication(
-              sasl_authenticate(T, S2, C2, <<"RABBIT-CR-DEMO">>,
-                                <<"My password is guest">>)),
-        ok = T:close(S2)
-    after
-        ok = rpc(Config, 0, application, set_env,
-                 [rabbit, auth_mechanisms, Mechanisms])
-    end,
+    {S1, C1} = StartCrDemo(),
+    _ = expect_unsuccessful_authentication(
+          try_authenticate(T, S1, C1, <<"PLAIN">>, <<"guest">>, <<"guest">>),
+          ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM),
+    closed = wait_for_socket_close(T, S1, 10),
+    {S2, C2} = StartCrDemo(),
+    C3 = expect_successful_authentication(
+           sasl_authenticate(T, S2, C2, <<"RABBIT-CR-DEMO">>,
+                             <<"My password is guest">>)),
+    C4 = tune(T, S2, C3),
+    {ok, _} = stream_test_utils:close(S2, C4),
+    closed = wait_for_socket_close(T, S2, 10),
     ok.
 
 update_secret_should_close_connection_if_wrong_secret(Config) ->
