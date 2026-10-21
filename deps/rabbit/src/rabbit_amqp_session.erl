@@ -600,7 +600,7 @@ handle_cast({frame_body, FrameBody},
               Err = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                   description = {utf8, <<"internal error">>}},
               log_error_and_close_session(
-                Err, rabbit_misc:format("~tP~n~tP", [Reason, 10, Stacktrace, ?FORMAT_DEPTH_LIMIT]), State0)
+                Err, rabbit_misc:format("~tP~n~tP", [Reason, ?FORMAT_DEPTH_LIMIT, Stacktrace, ?FORMAT_DEPTH_LIMIT]), State0)
     end;
 handle_cast({queue_event, _, _} = QEvent, State0) ->
     try handle_queue_event(QEvent, State0) of
@@ -1417,7 +1417,7 @@ handle_attach(#'v1_0.attach'{
                 #{LinkName := Other} ->
                     link_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
                                "received invalid attach ~P for management link pair ~P",
-                               [Attach, 10, Other, ?FORMAT_DEPTH_LIMIT]);
+                               [Attach, ?FORMAT_DEPTH_LIMIT, Other, ?FORMAT_DEPTH_LIMIT]);
                 _ ->
                     maps:put(LinkName,
                              #management_link_pair{client_terminus_address = ClientTerminusAddress,
@@ -1474,7 +1474,7 @@ handle_attach(#'v1_0.attach'{
                 #{LinkName := Other} ->
                     link_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
                                "received invalid attach ~P for management link pair ~P",
-                               [Attach, 10, Other, ?FORMAT_DEPTH_LIMIT]);
+                               [Attach, ?FORMAT_DEPTH_LIMIT, Other, ?FORMAT_DEPTH_LIMIT]);
                 _ ->
                     maps:put(LinkName,
                              #management_link_pair{client_terminus_address = ClientTerminusAddress,

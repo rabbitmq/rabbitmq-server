@@ -16,21 +16,26 @@ all() ->
      format_msg_with_large_args].
 
 crash_report_formatting(_Config) ->
-    ok = logger:add_handler(?FUNCTION_NAME, ?MODULE, #{config => #{pid => self()}}),
-    try
-        Big = binary:copy(<<"a">>, 16 bsl 20),
-        Deep = lists:foldl(fun(_, Acc) -> [Acc] end, x, lists:seq(1, 100_000)),
-        _ = proc_lib:spawn(fun() -> erlang:error({badmatch, {Big, Deep}}) end),
-        receive
-            {log, #{msg := Msg, meta := Meta}} ->
-                Str = format_msg_in_process(Msg, Meta),
-                ?assertNotEqual(nomatch, string:find(Str, "crasher"))
-        after 10_000 ->
-                ct:fail(no_crash_report)
-        end
-    after
-        ok = logger:remove_handler(?FUNCTION_NAME)
-    end.
+    Big = binary:copy(<<"a">>, 16 bsl 20),
+    Deep = lists:foldl(fun(_, Acc) -> [Acc] end, x, lists:seq(1, 100_000)),
+    Info = [{initial_call, {?MODULE, init, []}},
+            {pid, self()},
+            {registered_name, []},
+            {error_info, {error, {badmatch, {Big, Deep}}, []}},
+            {ancestors, []},
+            {message_queue_len, 0},
+            {messages, []},
+            {links, []},
+            {dictionary, []},
+            {trap_exit, false},
+            {status, running},
+            {heap_size, 1},
+            {stack_size, 1},
+            {reductions, 1}],
+    Msg = {report, #{label => {proc_lib, crash}, report => [Info, []]}},
+    Meta = #{report_cb => fun proc_lib:report_cb/2},
+    Str = format_msg_in_process(Msg, Meta),
+    ?assertNotEqual(nomatch, string:find(Str, "crasher")).
 
 format_msg_with_large_args(_Config) ->
     Big = binary:copy(<<"a">>, 16 bsl 20),
@@ -55,9 +60,3 @@ format_msg_in_process(Msg, Meta) ->
         {'DOWN', MRef, process, Pid, Reason} ->
             ct:fail({format_msg_failed, Reason})
     end.
-
-log(#{msg := {report, #{label := {proc_lib, crash}}}} = Event,
-    #{config := #{pid := Pid}}) ->
-    Pid ! {log, Event};
-log(_, _) ->
-    ok.
