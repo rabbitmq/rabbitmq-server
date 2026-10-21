@@ -11,6 +11,8 @@
 
 -export([register/0, validate_policy/1]).
 
+-define(MAX_SHARDS_PER_NODE, 4096).
+
 -rabbit_boot_step({?MODULE,
                    [{description, "sharding parameters"},
                     {mfa, {?MODULE, register, []}},
@@ -42,16 +44,19 @@ validate_policy(KeyList) ->
 
 %%----------------------------------------------------------------------------
 
-validate_shards_per_node(Term) when is_number(Term) ->
-    case Term >= 0 of
-        true  ->
-            ok;
-        false ->
+validate_shards_per_node(Term) when is_integer(Term) ->
+    if
+        Term < 0 ->
             {error, "shards-per-node should be greater than 0, actually was ~tp",
-             [Term]}
+             [Term]};
+        Term > ?MAX_SHARDS_PER_NODE ->
+            {error, "shards-per-node must not exceed ~b, actually was ~tp",
+             [?MAX_SHARDS_PER_NODE, Term]};
+        true ->
+            ok
     end;
 validate_shards_per_node(Term) ->
-    {error, "shards-per-node should be a number, actually was ~tp", [Term]}.
+    {error, "shards-per-node should be an integer, actually was ~tp", [Term]}.
 
 validate_routing_key(Term) when is_binary(Term) ->
     ok;
