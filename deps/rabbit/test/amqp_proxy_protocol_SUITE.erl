@@ -24,7 +24,8 @@ groups() ->
       [
        v1,
        v1_tls,
-       v2_local
+       v2_local,
+       v1_vhost_access_peeraddr
       ]}
     ].
 
@@ -100,6 +101,36 @@ v2_local(Config) ->
     ConnectionName = rpc(Config, ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>, [{capture, none}]),
     ok = gen_tcp:close(Socket).
+
+%% Authorization backends must be given the address of the client,
+%% i.e. the one from the PROXY protocol header, not the address of the proxy.
+v1_vhost_access_peeraddr(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(
+           Config, rabbit_auth_backend_context_propagation_mock),
+    AuthzData = rpc(Config, ?MODULE, vhost_access_authz_data, [Port]),
+    ?assertEqual(#{peeraddr => {192, 168, 1, 1}}, AuthzData).
+
+vhost_access_authz_data(Port) ->
+    rabbit_auth_backend_context_propagation_mock:init(),
+    {ok, AuthBackends} = application:get_env(rabbit, auth_backends),
+    ok = application:set_env(rabbit, auth_backends,
+                             [rabbit_auth_backend_context_propagation_mock]),
+    try
+        {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
+                                       [binary, {active, false}, {packet, raw}]),
+        ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        [ok = inet:send(Socket, amqp_1_0_frame(FrameType))
+         || FrameType <- [header_sasl, sasl_init, header_amqp, open]],
+        {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
+        _ConnectionName = connection_name(),
+        ok = gen_tcp:close(Socket),
+        [{vhost_access, AuthzData}] =
+            rabbit_auth_backend_context_propagation_mock:get(vhost_access),
+        AuthzData
+    after
+        ok = application:set_env(rabbit, auth_backends, AuthBackends)
+    end.
 
 %% hex frames to send to have the connection recorded in RabbitMQ
 %% use wireshark with one of the Java tests to record those
