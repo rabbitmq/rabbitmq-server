@@ -63,7 +63,8 @@ to_json(ReqData, Context) ->
     end.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_user(ReqData, Context, conn(ReqData)).
+    rabbit_mgmt_util:is_authorized_user(ReqData, Context,
+                                        fun() -> conn(ReqData) end).
 
 %%--------------------------------------------------------------------
 
