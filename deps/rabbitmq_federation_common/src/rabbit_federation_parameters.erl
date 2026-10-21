@@ -110,7 +110,7 @@ validate_uri(User) ->
 validate_uri(Name, Term, User) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
-                  {ok, Params} -> validate_uri_vhost_access(Params, User);
+                  {ok, Params} -> validate_uri_user(Params, User);
                   {error, {Info, _}} ->
                       {error, "\"~ts\" not a valid URI: ~tp",
                        [amqp_uri:remove_credentials(Term), Info]}
@@ -128,17 +128,21 @@ validate_uri(Name, Term, User) ->
         E  -> E
     end.
 
-%% A direct URI carries its own virtual host; check access to it here.
-validate_uri_vhost_access(#amqp_params_direct{}, none) ->
+%% A direct URI carries its own virtual host and credentials; check them here.
+validate_uri_user(#amqp_params_direct{}, none) ->
     ok;
-validate_uri_vhost_access(#amqp_params_direct{virtual_host = VHost}, User = #user{}) ->
+validate_uri_user(#amqp_params_direct{username = ConnUsername,
+                                      password = ConnPassword,
+                                      virtual_host = VHost}, User = #user{}) ->
     try rabbit_access_control:check_vhost_access(User, VHost, undefined, #{}) of
-        ok -> ok
+        ok ->
+            rabbit_access_control:check_login_as(
+              User, ConnUsername, is_binary(ConnPassword) andalso ConnPassword =/= <<>>)
     catch
         _:_ -> {error, "user \"~ts\" may not connect to vhost \"~ts\"",
                 [User#user.username, VHost]}
     end;
-validate_uri_vhost_access(_Params, _User) ->
+validate_uri_user(_Params, _User) ->
     ok.
 
 %%----------------------------------------------------------------------------

@@ -409,6 +409,19 @@ security_validation(Config) ->
     invalid_param(Config,
                   [{<<"src-uri">>,  <<"amqp://localhost/a">>},
                    {<<"dest-uri">>, <<"amqp://localhost/b">>}], A),
+    %% a direct URI logs in as the user it names, without a password check
+    valid_param(Config, [{<<"src-uri">>,  <<"amqp://a@/a">>},
+                         {<<"dest-uri">>, <<"amqp://b:pass@/a">>} | Qs], A),
+    [invalid_param(Config, [{<<"src-uri">>,  SrcUri},
+                            {<<"dest-uri">>, <<"amqp://a@/a">>} | Qs], A)
+     || SrcUri <- [<<"amqp:///a">>, <<"amqp://b@/a">>, <<"amqp://b:@/a">>,
+                   [<<"amqp://a@/a">>, <<"amqp:///a">>]]],
+    invalid_param(Config, [{<<"src-uri">>,  <<"amqp://a@/a">>},
+                           {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
+    ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, <<"a">>, [administrator]),
+    Admin = lookup_user(Config, <<"a">>),
+    valid_param(Config, [{<<"src-uri">>,  <<"amqp:///a">>},
+                         {<<"dest-uri">>, <<"amqp://b@/a">>} | Qs], Admin),
 
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, security_validation_remove_user, []),
