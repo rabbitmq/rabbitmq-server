@@ -1474,6 +1474,23 @@ handle_frame_pre_auth(Transport,
     send(Transport, S, Frame),
     {Connection#stream_connection{connection_step = authenticating},
      State};
+%% The authentication state belongs to the mechanism that created it.
+handle_frame_pre_auth(Transport,
+                      #stream_connection{socket = S,
+                                         auth_mechanism = {InitialMechanism, _}} =
+                          Connection,
+                      State,
+                      {request, CorrelationId,
+                       {sasl_authenticate, Mechanism, _SaslBin}})
+  when Mechanism =/= InitialMechanism ->
+    ?LOG_WARNING("Cannot change initial auth mechanism ~tp for ~tp "
+                 "during authentication",
+                 [InitialMechanism, Mechanism]),
+    CmdBody =
+        {sasl_authenticate, ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM, <<>>},
+    Frame = rabbit_stream_core:frame({response, CorrelationId, CmdBody}),
+    maybe_send_or_delay_frame(Transport, S, Frame, silent_close),
+    {Connection#stream_connection{connection_step = silent_close}, State};
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S,
                                          authentication_state = AuthState0,

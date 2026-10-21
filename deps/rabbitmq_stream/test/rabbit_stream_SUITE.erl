@@ -58,6 +58,7 @@ groups() ->
        test_update_secret,
        cannot_update_username_after_authenticated,
        cannot_use_another_authmechanism_when_updating_secret,
+       cannot_change_authmechanism_during_authentication,
        update_secret_should_close_connection_if_wrong_secret,
        update_secret_should_close_connection_if_unauthorized_vhost,
        unauthenticated_client_rejected_tcp_connected,
@@ -417,6 +418,43 @@ cannot_use_another_authmechanism_when_updating_secret(Config) ->
             try_authenticate(gen_tcp, S, C0, <<"EXTERNAL">>, <<"guest">>, <<"new_password">>),
             ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM),
     closed = wait_for_socket_close(gen_tcp, S, 10),
+    ok.
+
+cannot_change_authmechanism_during_authentication(Config) ->
+    T = gen_tcp,
+    {ok, Mechanisms} = rpc(Config, 0, application, get_env,
+                           [rabbit, auth_mechanisms]),
+    ok = rpc(Config, 0, application, set_env,
+             [rabbit, auth_mechanisms, ['RABBIT-CR-DEMO' | Mechanisms]]),
+    StartCrDemo =
+        fun() ->
+                {ok, S} = T:connect("localhost", get_port(T, Config), get_opts(T)),
+                C1 = test_peer_properties(T, S, rabbit_stream_core:init(0)),
+                ok = T:send(S, request(sasl_handshake)),
+                {{response, _, {sasl_handshake, ?RESPONSE_CODE_OK, _}}, C2} =
+                    receive_commands(T, S, C1),
+                {Challenge, C3} = sasl_authenticate(T, S, C2,
+                                                    <<"RABBIT-CR-DEMO">>, <<"guest">>),
+                ?assertMatch({response, 2,
+                              {sasl_authenticate, ?RESPONSE_SASL_CHALLENGE, _}},
+                             Challenge),
+                {S, C3}
+        end,
+    try
+        {S1, C1} = StartCrDemo(),
+        _ = expect_unsuccessful_authentication(
+              try_authenticate(T, S1, C1, <<"PLAIN">>, <<"guest">>, <<"guest">>),
+              ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM),
+        closed = wait_for_socket_close(T, S1, 10),
+        {S2, C2} = StartCrDemo(),
+        _ = expect_successful_authentication(
+              sasl_authenticate(T, S2, C2, <<"RABBIT-CR-DEMO">>,
+                                <<"My password is guest">>)),
+        ok = T:close(S2)
+    after
+        ok = rpc(Config, 0, application, set_env,
+                 [rabbit, auth_mechanisms, Mechanisms])
+    end,
     ok.
 
 update_secret_should_close_connection_if_wrong_secret(Config) ->
