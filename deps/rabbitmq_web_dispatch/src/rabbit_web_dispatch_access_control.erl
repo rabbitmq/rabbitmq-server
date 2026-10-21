@@ -176,12 +176,14 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
                         true ->
                             case Fun(User) of
                                 true ->
-                                    rabbit_core_metrics:auth_attempt_succeeded(IP, ResolvedUsername, http),
-                                    ReqData1 = rabbit_cowboy_stream_h:set_authenticated_username(
-                                        ResolvedUsername, ReqData),
-                                    {true, ReqData1,
-                                     Context#context{user     = User,
-                                                     password = Password}};
+                                    authorized(IP, ResolvedUsername, ReqData,
+                                               Context#context{user     = User,
+                                                               password = Password});
+                                {true, Impl} ->
+                                    authorized(IP, ResolvedUsername, ReqData,
+                                               Context#context{user     = User,
+                                                               password = Password,
+                                                               impl     = Impl});
                                 not_found ->
                                     rabbit_core_metrics:auth_attempt_failed(IP, ResolvedUsername, http),
                                     not_found(<<"Not Found">>, ReqData, Context);
@@ -217,7 +219,8 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
 %% own. Admins can do it all.
 %% An item that has to be looked up is passed as a fun so that it is only
 %% looked up after login. It is also called for monitors and administrators:
-%% callers rely on it to reject invalid range parameters.
+%% callers rely on it to reject invalid range parameters. The item is kept in
+%% the `impl' of the context so that the handler acts on what was authorised.
 is_authorized_user(ReqData, Context, ItemOrFun, AuthConfig) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access object">>,
@@ -226,10 +229,14 @@ is_authorized_user(ReqData, Context, ItemOrFun, AuthConfig) ->
                                      true  -> ItemOrFun();
                                      false -> ItemOrFun
                                  end,
-                          case cowboy_req:method(ReqData) of
-                              <<"DELETE">> -> is_admin(Tags);
-                              _            -> is_monitor(Tags)
-                          end orelse is_owner(Username, Item)
+                          Allowed = case cowboy_req:method(ReqData) of
+                                        <<"DELETE">> -> is_admin(Tags);
+                                        _            -> is_monitor(Tags)
+                                    end orelse is_owner(Username, Item),
+                          case Allowed of
+                              true  -> {true, Item};
+                              false -> false
+                          end
                   end,
                   AuthConfig).
 
@@ -400,6 +407,11 @@ log_access_control_result(NotOK) ->
 
 is_basic_auth_disabled(#auth_settings{basic_auth_enabled = Enabled}) ->
     not Enabled.
+
+authorized(IP, Username, ReqData, Context) ->
+    rabbit_core_metrics:auth_attempt_succeeded(IP, Username, http),
+    ReqData1 = rabbit_cowboy_stream_h:set_authenticated_username(Username, ReqData),
+    {true, ReqData1, Context}.
 
 get_auth_backends() ->
     case application:get_env(rabbitmq_web_dispatch, auth_backends) of

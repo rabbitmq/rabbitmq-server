@@ -26,16 +26,10 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
     {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-resource_exists(ReqData, Context) ->
-    case conn(ReqData) of
-        not_found ->
-            {false, ReqData, Context};
-        _Conn ->
-            {true, ReqData, Context}
-    end.
+resource_exists(ReqData, Context = #context{impl = Conn}) ->
+    {Conn =/= not_found, ReqData, Context}.
 
-to_json(ReqData, Context) ->
-    Conn = conn(ReqData),
+to_json(ReqData, Context = #context{impl = Conn}) ->
     Vsn = {1, 0},
     Protocol = proplists:get_value(protocol, Conn),
     case Protocol =:= Vsn orelse

@@ -23,16 +23,13 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-resource_exists(ReqData, Context) ->
-    case channel(ReqData) of
-        not_found -> {false, ReqData, Context};
-        _Ch       -> {true, ReqData, Context}
-    end.
+resource_exists(ReqData, Context = #context{impl = Ch}) ->
+    {Ch =/= not_found, ReqData, Context}.
 
-to_json(ReqData, Context) ->
+to_json(ReqData, Context = #context{impl = Ch}) ->
     Payload = rabbit_mgmt_format:clean_connection_details(
                 rabbit_mgmt_format:clean_consumer_details(
-                  rabbit_mgmt_format:strip_pids(channel(ReqData)))),
+                  rabbit_mgmt_format:strip_pids(Ch))),
     rabbit_mgmt_util:reply(
       maps:from_list(Payload),
       ReqData, Context).

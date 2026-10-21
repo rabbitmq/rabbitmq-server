@@ -37,19 +37,11 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
     {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-resource_exists(ReqData, Context) ->
-    case rabbit_mgmt_wm_connection:conn(ReqData) of
-        error ->
-            {false, ReqData, Context};
-        not_found ->
-            {false, ReqData, Context};
-        _Conn ->
-            {true, ReqData, Context}
-    end.
+resource_exists(ReqData, Context = #context{impl = Conn}) ->
+    {Conn =/= not_found, ReqData, Context}.
 
-to_json(ReqData, Context) ->
-    Pid = proplists:get_value(pid,
-                              rabbit_mgmt_wm_connection:conn(ReqData)),
+to_json(ReqData, Context = #context{impl = Conn}) ->
+    Pid = proplists:get_value(pid, Conn),
     Consumers =
         rabbit_mgmt_format:strip_pids(
             rabbit_stream_mgmt_db:get_connection_consumers(Pid)),
