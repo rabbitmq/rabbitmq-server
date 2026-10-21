@@ -110,16 +110,18 @@ extractPassword(AuthProps) ->
                 none -> case proplists:get_value(rabbit_auth_backend_cache, AuthProps, none) of
                             none -> undefined;
                             PasswordFun ->
-                                (PasswordFun())#impl.password
+                                normalize_password((PasswordFun())#impl.password)
                         end;
                 PasswordFun ->
-                    (PasswordFun())#impl.password
+                    normalize_password((PasswordFun())#impl.password)
             end;
-        Password when is_binary(Password) ->
-            Password;
-        _ ->
-            invalid
+        Password ->
+            normalize_password(Password)
     end.
+
+normalize_password(none) -> undefined;
+normalize_password(Password) when is_binary(Password) -> Password;
+normalize_password(_) -> invalid.
 
 user_login_authorization(Username, AuthProps) ->
     case user_login_authentication(Username, AuthProps) of

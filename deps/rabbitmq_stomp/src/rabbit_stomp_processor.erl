@@ -271,6 +271,7 @@ process_connect(Implicit, Frame,
                                adapter_info   = AdapterInfo}) ->
     process_request(
       fun(StateN) ->
+<<<<<<< HEAD
               case negotiate_version(Frame) of
                   {ok, Version} ->
                       FT = frame_transformer(Version),
@@ -292,6 +293,65 @@ process_connect(Implicit, Frame,
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
                       end;
+=======
+              Res1 = maybe
+                  ok ?= check_node_connection_limit(),
+                  {ok, Version} ?= negotiate_version(Frame),
+                  ProtoVer = stomp_proto_ver(Version),
+                  FT = frame_transformer(Version),
+                  Frame1 = FT(Frame),
+                  {Auth, {Username, _}} = Creds = creds(Frame1, SSLLoginName, Config),
+                  ok ?= check_creds(Creds, PeerIp),
+                  {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
+                  VHost = login_header(Frame1, ?HEADER_HOST, DefaultVHost),
+                  Heartbeat = login_header(Frame1, ?HEADER_HEART_BEAT, <<"0,0">>),
+                  StateN1 = StateN#state{cfg = Config#cfg{vhost = VHost,
+                                                          proto_ver = ProtoVer,
+                                                          frame_transformer = FT,
+                                                          auth_mechanism = Auth,
+                                                          auth_login = Username}},
+                  {Username, AuthProps} = auth_props_for_creds(Creds, StateN1),
+                  {ok, User} ?= rabbit_access_control:check_user_login(Username, AuthProps),
+                  #user{username = AuthUsername} = User,
+                  ok ?= check_vhost_exists(VHost, AuthUsername, PeerIp),
+                  {ok, AuthzCtx} ?= check_vhost_access(VHost, User, PeerIp),
+                  ok ?= check_vhost_connection_limit(VHost),
+                  ok ?= check_user_connection_limit(AuthUsername),
+                  ok ?= check_user_loopback(AuthUsername, PeerIp),
+                  rabbit_core_metrics:auth_attempt_succeeded(PeerIp, AuthUsername, stomp),
+                  ok = register_connection(),
+                  TraceState = rabbit_trace:init(VHost),
+                  MsgIcptCtx = #{protocol => stomp,
+                                 vhost => VHost,
+                                 username => AuthUsername,
+                                 connection_name => ConnInfo#conn_info.conn_name},
+                  SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
+                  {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
+                  ok = maybe_start_credential_expiry_timer(User),
+
+                  Headers0 = #{?HEADER_SESSION => list_to_binary(SessionId),
+                               ?HEADER_HEART_BEAT =>
+                                   <<(integer_to_binary(SendTimeout))/binary, $,,
+                                     (integer_to_binary(ReceiveTimeout))/binary>>,
+                               ?HEADER_VERSION => list_to_binary(Version)},
+                  Headers = case application:get_env(rabbitmq_stomp, hide_server_info, false) of
+                                true  -> Headers0;
+                                false -> Headers0#{?HEADER_SERVER => iolist_to_binary(server_header())}
+                            end,
+
+                  Res = ok("CONNECTED", Headers,
+                           [],
+                           StateN1#state{cfg = StateN1#state.cfg#cfg{
+                                                               session_id  = SessionId,
+                                                               version     = Version,
+                                                               trace_state = TraceState,
+                                                               msg_interceptor_ctx = MsgIcptCtx
+                                                              },
+                                         user = User,
+                                         authz_ctx = AuthzCtx}),
+                  Res
+              else
+>>>>>>> ac16c46 (STOMP, LDAP: validation improvements)
                   {error, no_common_version} ->
                       error("Version mismatch",
                             "Supported versions are ~ts~n",
@@ -301,10 +361,21 @@ process_connect(Implicit, Frame,
       end,
       State).
 
+<<<<<<< HEAD
 creds(_, _, #stomp_configuration{default_login       = DefLogin,
                                  default_passcode    = DefPasscode,
                                  force_default_creds = true}) ->
     {config, {iolist_to_binary(DefLogin), iolist_to_binary(DefPasscode)}};
+=======
+stomp_proto_ver("1.0") -> ?STOMP_PROTO_V1_0;
+stomp_proto_ver("1.1") -> ?STOMP_PROTO_V1_1;
+stomp_proto_ver("1.2") -> ?STOMP_PROTO_V1_2.
+
+creds(_, _, #cfg{default_login       = DefLogin,
+                 default_passcode    = DefPasscode,
+                 force_default_creds = true}) ->
+    {config, {default_cred(DefLogin), default_cred(DefPasscode)}};
+>>>>>>> ac16c46 (STOMP, LDAP: validation improvements)
 creds(Frame, SSLLoginName,
       #stomp_configuration{default_login    = DefLogin,
                            default_passcode = DefPasscode}) ->
@@ -316,8 +387,37 @@ creds(Frame, SSLLoginName,
         _                    -> {stomp_headers, PasswordCreds}
     end.
 
+<<<<<<< HEAD
 login_header(Frame, Key, Default) when is_binary(Default) ->
     login_header(Frame, Key, binary_to_list(Default));
+=======
+%% A missing login or passcode is not a passwordless login, so the
+%% authentication backends must not see it.
+check_creds({_, {Username, Passcode}}, PeerIp)
+  when Username =:= undefined; Passcode =:= undefined ->
+    MetricUsername = case Username of
+                         undefined -> <<>>;
+                         _         -> Username
+                     end,
+    rabbit_core_metrics:auth_attempt_failed(PeerIp, MetricUsername, stomp),
+    {error, missing_credentials};
+check_creds(_, _) ->
+    ok.
+
+default_cred(undefined) -> undefined;
+default_cred(Value) -> iolist_to_binary(Value).
+
+auth_props_for_creds(Creds, #state{cfg = #cfg{
+                                            vhost = VHost}}) ->
+    case Creds of
+        {ssl, {Username0, none}}-> {Username0, []};
+        {_, {Username0, Password}} -> {Username0, [{password, Password},
+                                                   {vhost, VHost}]}
+    end.
+
+login_header(Frame, Key, Default) when is_list(Default) ->
+    login_header(Frame, Key, list_to_binary(Default));
+>>>>>>> ac16c46 (STOMP, LDAP: validation improvements)
 login_header(Frame, Key, Default) ->
     case rabbit_stomp_frame:header(Frame, Key, Default) of
         undefined -> undefined;

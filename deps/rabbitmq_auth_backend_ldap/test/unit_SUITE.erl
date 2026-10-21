@@ -462,6 +462,10 @@ missing_password_is_not_a_passwordless_login(_Config) ->
                   rabbit_auth_backend_ldap:user_login_authentication(
                     <<"bob">>, [{password, Password}, {vhost, <<"/">>}]))
      || Password <- [undefined, <<>>, ""]],
+    [?assertMatch({refused, _, [<<"bob">>]},
+                  rabbit_auth_backend_ldap:user_login_authentication(
+                    <<"bob">>, [{Key, fun() -> {impl, undefined, undefined} end}]))
+     || Key <- [rabbit_auth_backend_ldap, rabbit_auth_backend_cache]],
     ok.
 
 utf8_list_to_string(StrangeList) ->
