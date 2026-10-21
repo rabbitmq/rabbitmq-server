@@ -11,7 +11,7 @@
 -include("rabbit_mqtt_packet.hrl").
 
 all() ->
-    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag].
+    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag, utf8_strings, publish_utf8_unchecked].
 
 init_per_suite(Config) ->
     persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, 65_536),
@@ -69,6 +69,68 @@ connect_password_flag(_Config) ->
                   parse_connect(Vsn, 16#C2, <<0, 1, "u", Password/binary>>))
      || Vsn <- [4, 5]],
     ok.
+
+utf8_strings(_Config) ->
+    Invalid = invalid_utf8_strings(),
+    [begin
+         Props = properties(Vsn),
+         Encoded = <<(byte_size(Bad)):16, Bad/binary>>,
+         Body = <<0, 4, "MQTT", Vsn, 2, 0, 60, Props/binary, Encoded/binary>>,
+         assert_connect_error(packet(16#10, Body), invalid_utf8),
+         assert_connect_error(connect_packet(Vsn, 16#82, Encoded), invalid_utf8),
+         assert_connect_error(connect_packet(Vsn, 6, <<Props/binary, Encoded/binary, 0, 0>>), invalid_utf8),
+         ?assertThrow(invalid_utf8, rabbit_mqtt_packet:parse(packet(16#82, <<0, 1, Props/binary, Encoded/binary, 0>>), Vsn)),
+         ?assertThrow(invalid_utf8, rabbit_mqtt_packet:parse(packet(16#A2, <<0, 1, Props/binary, Encoded/binary>>), Vsn))
+     end || Vsn <- [4, 5], Bad <- Invalid],
+    [begin
+         Encoded = <<(byte_size(Bad)):16, Bad/binary>>,
+         UserProps = [<<16#26, 0, 1, "k", Encoded/binary>>,
+                      <<16#26, Encoded/binary, 0, 1, "v">>],
+         [assert_connect_error(
+            packet(16#10, <<0, 4, "MQTT", 5, 2, 0, 60,
+                             (byte_size(Props)), Props/binary, 0, 4, "test">>), invalid_utf8)
+          || Props <- [<<16#15, Encoded/binary>> | UserProps]],
+         [assert_connect_error(
+            connect_packet(5, 6, <<(byte_size(Props)), Props/binary, 0, 1, "a", 0, 0>>), invalid_utf8)
+          || Props <- [<<16#03, Encoded/binary>>, <<16#08, Encoded/binary>> | UserProps]],
+         [?assertThrow(invalid_utf8,
+                       rabbit_mqtt_packet:parse(packet(Header, <<Prefix/binary, (byte_size(Props)),
+                                                                Props/binary, Payload/binary>>), 5))
+          || {Header, Prefix, Payload, Properties} <-
+                 [{16#40, <<0, 1, 0>>, <<>>, [<<16#1F, Encoded/binary>> | UserProps]},
+                  {16#E0, <<0>>, <<>>, [<<16#1C, Encoded/binary>>, <<16#1F, Encoded/binary>> | UserProps]},
+                  {16#82, <<0, 1>>, <<0, 1, "a", 0>>, UserProps},
+                  {16#A2, <<0, 1>>, <<0, 1, "a">>, UserProps}],
+             Props <- Properties]
+     end || Bad <- Invalid],
+    Good = <<16#FEFF/utf8, 16#1F600/utf8>>,
+    [?assertMatch({ok, #mqtt_packet{variable = #mqtt_packet_publish{topic_name = Good}}, <<>>, Vsn},
+                  rabbit_mqtt_packet:parse(packet(16#30, <<(byte_size(Good)):16, Good/binary,
+                                                          (properties(Vsn))/binary, 255, 0>>), Vsn))
+     || Vsn <- [4, 5]],
+    ok.
+
+publish_utf8_unchecked(_Config) ->
+    [begin
+         Encoded = <<(byte_size(Bad)):16, Bad/binary>>,
+         [?assertMatch({ok, #mqtt_packet{variable = #mqtt_packet_publish{topic_name = Bad}}, <<>>, Vsn},
+                       rabbit_mqtt_packet:parse(packet(16#30, <<Encoded/binary, (properties(Vsn))/binary>>), Vsn))
+          || Vsn <- [4, 5]],
+         [begin
+              Body = <<0, 1, "a", (byte_size(Props)), Props/binary>>,
+              ?assertMatch({ok, #mqtt_packet{variable = #mqtt_packet_publish{props = Expected}}, <<>>, 5},
+                           rabbit_mqtt_packet:parse(packet(16#30, Body), 5))
+          end || {Props, Expected} <-
+                     [{<<16#03, Encoded/binary>>, #{'Content-Type' => Bad}},
+                      {<<16#08, Encoded/binary>>, #{'Response-Topic' => Bad}},
+                      {<<16#26, Encoded/binary, 0, 1, "v">>, #{'User-Property' => [{Bad, <<"v">>}]}},
+                      {<<16#26, 0, 1, "k", Encoded/binary>>, #{'User-Property' => [{<<"k">>, Bad}]}}]]
+     end || Bad <- invalid_utf8_strings()],
+    ok.
+
+invalid_utf8_strings() ->
+    [<<0>>, <<255>>, <<16#C0, 16#80>>, <<16#ED, 16#A0, 16#80>>,
+     <<16#F4, 16#90, 16#80, 16#80>>, <<16#E2, 16#82>>].
 
 parse_connect(Vsn, Flags, Payload) ->
     rabbit_mqtt_packet:parse(connect_packet(Vsn, Flags, Payload), unauthenticated).

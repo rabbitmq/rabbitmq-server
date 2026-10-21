@@ -161,6 +161,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
             Id = maps:get('Subscription-Identifier', Props, undefined),
             Subscriptions = parse_subscriptions(Rest1, Id, max_topic_filters(), []),
+            [ok = validate_utf8(T) || #mqtt_subscription{topic_filter = T} <- Subscriptions],
             Subscribe = #mqtt_packet_subscribe{packet_id = PacketId,
                                                props = Props,
                                                subscriptions = Subscriptions},
@@ -170,6 +171,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
             Topics = parse_topic_filters(Rest1, max_topic_filters(), []),
+            [ok = validate_utf8(T) || T <- Topics],
             Unsubscribe = #mqtt_packet_unsubscribe{packet_id = PacketId,
                                                    props = Props,
                                                    topic_filters = Topics},
@@ -246,11 +248,13 @@ topic_filter_limit_exceeded() ->
 parse_connect(Bin, Fixed, Length) ->
     case Bin of
         <<PacketBin:Length/binary, Rest/binary>> ->
-            case parse_connect(PacketBin) of
+            try parse_connect(PacketBin) of
                 #mqtt_packet_connect{proto_ver = ProtoVer} = Connect ->
                     wrap(Fixed, Connect, Rest, ProtoVer);
                 {error, _} = Error ->
                     Error
+            catch throw:invalid_utf8 ->
+                      {error, invalid_utf8}
             end;
         TooShortBin
           when byte_size(TooShortBin) < Length ->
@@ -286,18 +290,22 @@ parse_connect(<<Len:16, ProtoName:Len/binary,
                 Rest0/binary>>) ->
     true = protocol_name_approved(ProtoVer, ProtoName),
     {Props, Rest1} = parse_props(Rest0, ProtoVer, ?CONNECT),
-    {ClientId, Rest2} = parse_bin(Rest1),
+    {ClientId, Rest2} = parse_utf8(Rest1),
     {WillProps, WillTopic, WillPayload, Rest3} =
     case WillFlag of
         0 ->
             {#{}, undefined, undefined, Rest2};
         1 ->
             {WillProps0, R0} = parse_props(Rest2, ProtoVer, will_props),
-            {WillTopic0, R1} = parse_bin(R0),
+            {WillTopic0, R1} = parse_utf8(R0),
             {WillPayload0, R2} = parse_bin(R1),
             {WillProps0, WillTopic0, WillPayload0, R2}
     end,
     {UserName, Rest} = parse_bin(Rest3, UsernameFlag),
+    case UserName of
+        undefined -> ok;
+        _ -> ok = validate_utf8(UserName)
+    end,
     {PasssWord, <<>>} = parse_bin(Rest, PasswordFlag),
     #mqtt_packet_connect{
        proto_ver = ProtoVer,
@@ -330,11 +338,24 @@ wrap(Fixed, Variable, Rest, ProtoVer) ->
 wrap(Fixed, Rest, ProtoVer) ->
     {ok, #mqtt_packet { fixed = Fixed }, Rest, ProtoVer}.
 
-%% parse_bin/1 is used for parsing both binary data and UTF-8 encoded strings.
-%% Our parser opts out of UTF-8 validation for performance reasons.
-%% Some UTF-8 encoded strings are blindly forwarded from MQTT publisher to MQTT subscriber.
-%% Other UTF-8 encoded strings are processed by the server and checked for UTF-8
-%% well-formedness later on.
+parse_utf8(Bin) ->
+    {String, Rest} = parse_bin(Bin),
+    ok = validate_utf8(String),
+    {String, Rest}.
+
+%% Skip UTF-8 validation in PUBLISH packets to avoid per-message scans.
+validate_utf8(_String, ?PUBLISH) ->
+    ok;
+validate_utf8(String, _Type) ->
+    validate_utf8(String).
+
+validate_utf8(<<>>) ->
+    ok;
+validate_utf8(<<C/utf8, Rest/binary>>) when C =/= 0 ->
+    validate_utf8(Rest);
+validate_utf8(_) ->
+    throw(invalid_utf8).
+
 -spec parse_bin(binary()) ->
     {binary(), binary()}.
 parse_bin(<<Len:16, Bin:Len/binary, Rest/binary>>) ->
@@ -388,9 +409,11 @@ parse_prop(<<16#02, Val:32, Bin/binary>>, Type, Props)
     parse_prop(Bin, Type, Props#{'Message-Expiry-Interval' => Val});
 parse_prop(<<16#03, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
   when Type =:= ?PUBLISH orelse Type =:= will_props ->
+    ok = validate_utf8(Val, Type),
     parse_prop(Rest, Type, Props#{'Content-Type' => Val});
 parse_prop(<<16#08, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
   when Type =:= ?PUBLISH orelse Type =:= will_props ->
+    ok = validate_utf8(Val, Type),
     parse_prop(Rest, Type, Props#{'Response-Topic' => Val});
 parse_prop(<<16#09, Len:16, Val:Len/binary, Bin/binary>>, Type, Props)
   when Type =:= ?PUBLISH orelse Type =:= will_props ->
@@ -404,6 +427,7 @@ parse_prop(<<16#11, Val:32, Bin/binary>>, Type, Props)
   when Type =:= ?CONNECT orelse Type =:= ?DISCONNECT ->
     parse_prop(Bin, Type, Props#{'Session-Expiry-Interval' => Val});
 parse_prop(<<16#15, Len:16, Val:Len/binary, Rest/binary>>, ?CONNECT = Type, Props) ->
+    ok = validate_utf8(Val),
     parse_prop(Rest, Type, Props#{'Authentication-Method' => Val});
 parse_prop(<<16#16, Len:16, Val:Len/binary, Bin/binary>>, ?CONNECT = Type, Props) ->
     parse_prop(Bin, Type, Props#{'Authentication-Data' => Val});
@@ -414,9 +438,11 @@ parse_prop(<<16#18, Val:32, Bin/binary>>, will_props = Type, Props) ->
 parse_prop(<<16#19, Val, Bin/binary>>, ?CONNECT = Type, Props) ->
     parse_prop(Bin, Type, Props#{'Request-Response-Information' => Val});
 parse_prop(<<16#1C, Len:16, Val:Len/binary, Rest/binary>>, ?DISCONNECT = Type, Props) ->
+    ok = validate_utf8(Val),
     parse_prop(Rest, Type, Props#{'Server-Reference' => Val});
 parse_prop(<<16#1F, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
   when Type =:= ?PUBACK orelse Type =:= ?DISCONNECT ->
+    ok = validate_utf8(Val),
     parse_prop(Rest, Type, Props#{'Reason-String' => Val});
 parse_prop(<<16#21, Val:16, Bin/binary>>, ?CONNECT = Type, Props) ->
     case Val of
@@ -435,6 +461,8 @@ parse_prop(<<16#26, LenName:16, Name:LenName/binary, LenVal:16, Val:LenVal/binar
            Type, Props0) ->
     %% "The User Property is allowed to appear multiple times to represent multiple
     %% name, value pairs. The same name is allowed to appear more than once."
+    ok = validate_utf8(Name, Type),
+    ok = validate_utf8(Val, Type),
     Pair = {Name, Val},
     UserProps = case Props0 of
                     #{'User-Property' := {0, _}} ->
