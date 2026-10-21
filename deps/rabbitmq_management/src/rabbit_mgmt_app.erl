@@ -24,7 +24,8 @@
 
 -rabbit_boot_step({rabbit_management_load_definitions,
                    [{description, "Imports definition file at management.load_definitions"},
-                    {mfa,         {rabbit_mgmt_load_definitions, boot, []}}]}).
+                    {mfa,         {rabbit_mgmt_load_definitions, boot, []}},
+                    {requires,    [definition_import_worker_pool, recovery]}]}).
 
 -rabbit_feature_flag(
    {detailed_queues_endpoint,
