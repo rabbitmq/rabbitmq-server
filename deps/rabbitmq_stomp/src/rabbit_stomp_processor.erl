@@ -377,7 +377,7 @@ process_connect(Implicit, Frame,
                   FT = frame_transformer(Version),
                   Frame1 = FT(Frame),
                   {Auth, {Username, _}} = Creds = creds(Frame1, SSLLoginName, Config),
-                  ok ?= check_creds(Creds),
+                  ok ?= check_creds(Creds, PeerIp),
                   {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
                   VHost = login_header(Frame1, ?HEADER_HOST, DefaultVHost),
                   Heartbeat = login_header(Frame1, ?HEADER_HEART_BEAT, <<"0,0">>),
@@ -492,7 +492,7 @@ stomp_proto_ver("1.2") -> ?STOMP_PROTO_V1_2.
 creds(_, _, #cfg{default_login       = DefLogin,
                  default_passcode    = DefPasscode,
                  force_default_creds = true}) ->
-    {config, {iolist_to_binary(DefLogin), iolist_to_binary(DefPasscode)}};
+    {config, {default_cred(DefLogin), default_cred(DefPasscode)}};
 creds(Frame, SSLLoginName,
       #cfg{default_login    = DefLogin,
            default_passcode = DefPasscode}) ->
@@ -506,11 +506,19 @@ creds(Frame, SSLLoginName,
 
 %% A missing login or passcode is not a passwordless login, so the
 %% authentication backends must not see it.
-check_creds({_, {Username, Passcode}})
+check_creds({_, {Username, Passcode}}, PeerIp)
   when Username =:= undefined; Passcode =:= undefined ->
+    MetricUsername = case Username of
+                         undefined -> <<>>;
+                         _         -> Username
+                     end,
+    rabbit_core_metrics:auth_attempt_failed(PeerIp, MetricUsername, stomp),
     {error, missing_credentials};
-check_creds(_) ->
+check_creds(_, _) ->
     ok.
+
+default_cred(undefined) -> undefined;
+default_cred(Value) -> iolist_to_binary(Value).
 
 auth_props_for_creds(Creds, #state{cfg = #cfg{
                                             vhost = VHost}}) ->
