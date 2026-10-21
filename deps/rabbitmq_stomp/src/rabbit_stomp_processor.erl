@@ -377,6 +377,7 @@ process_connect(Implicit, Frame,
                   FT = frame_transformer(Version),
                   Frame1 = FT(Frame),
                   {Auth, {Username, _}} = Creds = creds(Frame1, SSLLoginName, Config),
+                  ok ?= check_creds(Creds),
                   {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
                   VHost = login_header(Frame1, ?HEADER_HOST, DefaultVHost),
                   Heartbeat = login_header(Frame1, ?HEADER_HEART_BEAT, <<"0,0">>),
@@ -444,6 +445,9 @@ process_connect(Implicit, Frame,
                       error("Bad CONNECT",
                             "Access refused for user '~ts'",
                             [Username1], State);
+                  {error, missing_credentials} ->
+                      ?LOG_WARNING("STOMP login failed: no login or passcode provided"),
+                      error("Bad CONNECT", "No login or passcode provided", State);
                   {error, not_loopback, EUsername} ->
                       ?LOG_WARNING("STOMP login failed for user '~ts': "
                                    "this user's access is restricted to localhost",
@@ -499,6 +503,14 @@ creds(Frame, SSLLoginName,
         {not_found, SSLName} -> {ssl, {SSLName, none}};
         _                    -> {stomp_headers, PasswordCreds}
     end.
+
+%% A missing login or passcode is not a passwordless login, so the
+%% authentication backends must not see it.
+check_creds({_, {Username, Passcode}})
+  when Username =:= undefined; Passcode =:= undefined ->
+    {error, missing_credentials};
+check_creds(_) ->
+    ok.
 
 auth_props_for_creds(Creds, #state{cfg = #cfg{
                                             vhost = VHost}}) ->
