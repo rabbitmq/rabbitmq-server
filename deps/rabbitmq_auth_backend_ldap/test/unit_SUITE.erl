@@ -10,8 +10,13 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_auth_backend_ldap/include/logging.hrl").
+-include_lib("eldap/include/eldap.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -compile([export_all]).
+
+%% As in rabbit_auth_backend_ldap
+-record(impl, { user_dn, password }).
 
 all() ->
     [
@@ -32,6 +37,16 @@ all() ->
      non_dn_pattern_no_escaping,
      invalid_credentials_refused_is_not_a_format_string,
      invalid_credentials_via_with_login_is_not_a_format_string,
+     connection_is_purged_after_failed_operation,
+     anon_connection_is_purged_after_failed_operation,
+     connection_is_purged_after_unexpected_bind_response,
+     one_off_connection_is_replaced_after_failed_operation,
+     connection_is_closed_after_failed_starttls,
+     connection_error_inside_a_query_is_retried_on_a_new_connection,
+     connection_errors_abort_negated_query,
+     connection_error_in_second_operand_is_retried_on_a_new_connection,
+     connection_error_in_nested_group_search_is_retried_on_a_new_connection,
+     tag_query_does_not_read_a_late_answer,
      user_dn_pattern_gh_7161,
      missing_password_is_not_a_passwordless_login,
      format_different_types_of_ldap_attribute_values,
@@ -503,6 +518,361 @@ invalid_credentials_via_with_login_is_not_a_format_string(_Config) ->
         restore_env(log, PrevLog)
     end,
     ok.
+
+connection_is_purged_after_failed_operation(_Config) ->
+    Opts = [{idle_timeout, infinity}, {port, 389}, {anon_auth, false}],
+    with_mocked_eldap(
+      fun() ->
+              [begin
+                   %% The response to a request that timed out can still arrive,
+                   %% the retry must not read it in place of its own response.
+                   {retried, Conn1, Conn2} = with_login_failing_once(Error, Opts),
+                   ?assertNotEqual(Conn1, Conn2),
+                   ?assertNot(is_process_alive(Conn1)),
+                   ?assertEqual([Conn2], maps:values(get(ldap_conns)))
+               end || Error <- [{error, {gen_tcp_error, timeout}},
+                                {error, ldap_closed}]]
+      end).
+
+anon_connection_is_purged_after_failed_operation(_Config) ->
+    Opts = [{idle_timeout, infinity}, {port, 389}, {anon_auth, true}],
+    with_mocked_eldap(
+      fun() ->
+              [begin
+                   {retried, Conn1, Conn2} = with_login_failing_once(anon, Error, Opts),
+                   ?assertNotEqual(Conn1, Conn2),
+                   ?assertNot(is_process_alive(Conn1)),
+                   ?assertEqual([Conn2], maps:values(get(ldap_conns)))
+               end || Error <- [{error, {gen_tcp_error, timeout}},
+                                {error, ldap_closed}]]
+      end).
+
+connection_is_purged_after_unexpected_bind_response(_Config) ->
+    Opts = [{idle_timeout, infinity}, {port, 389}, {anon_auth, false}],
+    Login = fun() ->
+                    rabbit_auth_backend_ldap:with_login(
+                      {"cn=alice", <<"password">>}, ["localhost"], Opts,
+                      fun(_LDAP) -> true end)
+            end,
+    with_mocked_eldap(
+      fun() ->
+              %% A result code, known or not, is the response to the bind
+              %% request, and a local failure sends nothing.
+              [begin
+                   meck:expect(eldap, simple_bind,
+                               fun(_LDAP, _DN, _PW) -> {error, E} end),
+                   ?assertEqual({error, ldap_bind_error}, Login())
+               end || E <- [unwillingToPerform, {asn1_enum, 123}, {'EXIT', badarg}]],
+              [Conn] = maps:values(get(ldap_conns)),
+              ?assert(is_process_alive(Conn)),
+              ?assertEqual(1, meck:num_calls(eldap, open, '_')),
+              %% The response to an earlier request is not.
+              lists:foldl(
+                fun(E, Conn0) ->
+                        meck:expect(eldap, simple_bind,
+                                    fun(LDAP, _DN, _PW) when LDAP =:= Conn0 -> {error, E};
+                                       (_LDAP, _DN, _PW) -> ok
+                                    end),
+                        ?assert(Login()),
+                        ?assertNot(is_process_alive(Conn0)),
+                        [Conn1] = maps:values(get(ldap_conns)),
+                        ?assertNotEqual(Conn0, Conn1),
+                        Conn1
+                end, Conn,
+                [{searchResDone, result},
+                 {ok, {'LDAPMessage', 7, {bindResponse, result}, asn1_NOVALUE}}])
+      end).
+
+one_off_connection_is_replaced_after_failed_operation(_Config) ->
+    Opts = [{idle_timeout, 0}, {port, 389}, {anon_auth, true}],
+    with_mocked_eldap(
+      fun() ->
+              {retried, Conn1, Conn2} =
+                  with_login_failing_once(anon, {error, ldap_closed}, Opts),
+              ?assertNotEqual(Conn1, Conn2),
+              ?assertEqual(undefined, get(ldap_conns))
+      end).
+
+connection_is_closed_after_failed_starttls(_Config) ->
+    Opts = [{idle_timeout, infinity}, {port, 389}, {anon_auth, false}],
+    with_mocked_eldap(
+      fun() ->
+              ok = application:set_env(rabbitmq_auth_backend_ldap, use_starttls, true),
+              meck:expect(eldap, start_tls,
+                          fun(_LDAP, _TLSOpts) -> {error, {gen_tcp_error, timeout}} end),
+              ?assertMatch({error, _},
+                           rabbit_auth_backend_ldap:with_login(
+                             {"cn=alice", <<"password">>}, ["localhost"], Opts,
+                             fun(_LDAP) -> true end)),
+              ?assertNotEqual([], fake_conns()),
+              ?assertEqual([], [C || C <- fake_conns(), is_process_alive(C)])
+      end).
+
+connection_error_inside_a_query_is_retried_on_a_new_connection(_Config) ->
+    Opts = [{idle_timeout, infinity}, {port, 389}, {anon_auth, false}],
+    User = #auth_user{username = <<"alice">>,
+                      impl     = fun() -> #impl{user_dn  = "cn=alice",
+                                                password = <<"password">>}
+                                 end},
+    Group = "cn=group,ou=groups,dc=example,dc=com",
+    Entry = #eldap_entry{object_name = Group, attributes = [{"cn", ["alice"]}]},
+    Queries = [{'or',  [{in_group, Group}, {in_group, Group}]},
+               {'and', [{in_group, Group}, {in_group, Group}]},
+               {'not', {'or', [{in_group, Group}, {in_group, Group}]}},
+               {match, {attribute, "cn=alice", "cn"}, {string, "^al"}},
+               {in_group_nested, Group}],
+    Args = [{username, <<"alice">>}, {user_dn, "cn=alice"}],
+    with_mocked_eldap(
+      fun() ->
+              [begin
+                   erase(searches),
+                   meck:expect(eldap, search,
+                               fun(LDAP, _SearchArgs) ->
+                                       Searches = case get(searches) of
+                                                      undefined -> [];
+                                                      L         -> L
+                                                  end,
+                                       put(searches, Searches ++ [LDAP]),
+                                       case Searches of
+                                           [] -> {error, {gen_tcp_error, timeout}};
+                                           _  -> {ok, {eldap_search_result,
+                                                       [Entry], [], []}}
+                                       end
+                               end),
+                   Result = rabbit_auth_backend_ldap:with_login(
+                              {"cn=alice", <<"password">>}, ["localhost"], Opts,
+                              fun(LDAP) ->
+                                      rabbit_auth_backend_ldap:evaluate(
+                                        Q, Args, User, LDAP)
+                              end),
+                   [Conn1 | Later] = get(searches),
+                   ?assertNotEqual([], Later),
+                   ?assertNot(lists:member(Conn1, Later), {Q, get(searches)}),
+                   ?assertNot(is_process_alive(Conn1)),
+                   ?assertEqual(Later, lists:duplicate(length(Later), hd(Later)), Q),
+                   ?assertEqual([hd(Later)], maps:values(get(ldap_conns))),
+                   ?assertEqual(Expected, Result, Q)
+               end || {Q, Expected} <- lists:zip(Queries,
+                                                [true, true, false, true, true])]
+      end).
+
+connection_errors_abort_negated_query(_Config) ->
+    [with_mocked_eldap(
+       fun() ->
+               Opts = [{idle_timeout, IdleTimeout}, {port, 389},
+                       {anon_auth, Creds =:= anon}],
+               meck:expect(eldap, search, fun(_LDAP, _Args) -> Error end),
+               Result = rabbit_auth_backend_ldap:with_login(
+                          Creds, ["localhost"], Opts,
+                          fun(LDAP) ->
+                                  rabbit_auth_backend_ldap:evaluate(
+                                    {'not', {exists, "cn=blocked"}}, [],
+                                    #auth_user{username = <<"alice">>}, LDAP)
+                          end),
+               ?assertEqual({error, ldap_connect_error}, Result),
+               ?assertEqual(10, meck:num_calls(eldap, search, '_')),
+               ?assertEqual(10, length(fake_conns())),
+               ?assertEqual([], [C || C <- fake_conns(), is_process_alive(C)]),
+               ?assert(lists:member(get(ldap_conns), [undefined, #{}]))
+       end)
+     || Error <- [{error, {gen_tcp_error, timeout}},
+                  {error, ldap_closed},
+                  {error, {searchResDone, result}},
+                  {error, {ok, {'LDAPMessage', 7, {bindResponse, result},
+                                asn1_NOVALUE}}}],
+        Creds <- [anon, {"cn=alice", <<"password">>}],
+        IdleTimeout <- [0, infinity]],
+    ok.
+
+connection_error_in_second_operand_is_retried_on_a_new_connection(_Config) ->
+    Opts = [{idle_timeout, infinity}, {port, 389}, {anon_auth, false}],
+    User = #auth_user{username = <<"alice">>,
+                      impl     = fun() -> #impl{user_dn  = "cn=alice",
+                                                password = <<"password">>}
+                                 end},
+    Query = {equals, {attribute, "cn=alice", "a"}, {attribute, "cn=alice", "b"}},
+    Entry = #eldap_entry{object_name = "cn=alice", attributes = [{"b", ["x"]}]},
+    with_mocked_eldap(
+      fun() ->
+              erase(b_searches),
+              %% The order in which the operands are evaluated is not defined,
+              %% so the mock answers by attribute: "a" is missing, "b" times out once.
+              meck:expect(eldap, search,
+                          fun(LDAP, SearchArgs) ->
+                                  case proplists:get_value(attributes, SearchArgs) of
+                                      ["a"] ->
+                                          {ok, {eldap_search_result, [], [], []}};
+                                      ["b"] ->
+                                          Searches = case get(b_searches) of
+                                                         undefined -> [];
+                                                         L         -> L
+                                                     end,
+                                          put(b_searches, Searches ++ [LDAP]),
+                                          case Searches of
+                                              [] -> {error, {gen_tcp_error, timeout}};
+                                              _  -> {ok, {eldap_search_result,
+                                                          [Entry], [], []}}
+                                          end
+                                  end
+                          end),
+              Result = rabbit_auth_backend_ldap:with_login(
+                         {"cn=alice", <<"password">>}, ["localhost"], Opts,
+                         fun(LDAP) ->
+                                 rabbit_auth_backend_ldap:evaluate(
+                                   Query, [{username, <<"alice">>}], User, LDAP)
+                         end),
+              [Conn1, Conn2] = get(b_searches),
+              ?assertNotEqual(Conn1, Conn2),
+              ?assertNot(is_process_alive(Conn1)),
+              ?assertEqual([Conn2], maps:values(get(ldap_conns))),
+              ?assertEqual(false, Result)
+      end).
+
+connection_error_in_nested_group_search_is_retried_on_a_new_connection(_Config) ->
+    Opts = [{idle_timeout, infinity}, {port, 389}, {anon_auth, false}],
+    User = #auth_user{username = <<"alice">>,
+                      impl     = fun() -> #impl{user_dn  = "cn=alice",
+                                                password = <<"password">>}
+                                 end},
+    Group = "cn=group,ou=groups,dc=example,dc=com",
+    Target = "cn=target,ou=groups,dc=example,dc=com",
+    with_mocked_eldap(
+      fun() ->
+              erase(searches),
+              %% The search for the groups of `Group` times out once.
+              meck:expect(eldap, search,
+                          fun(LDAP, SearchArgs) ->
+                                  {equalityMatch, {'AttributeValueAssertion', _, DN}} =
+                                      proplists:get_value(filter, SearchArgs),
+                                  Searches = case get(searches) of
+                                                 undefined -> [];
+                                                 L         -> L
+                                             end,
+                                  put(searches, Searches ++ [{DN, LDAP}]),
+                                  case {DN, lists:keymember(Group, 1, Searches)} of
+                                      {"cn=alice", _} ->
+                                          {ok, {eldap_search_result,
+                                                [#eldap_entry{object_name = Group}], [], []}};
+                                      {Group, false} ->
+                                          {error, {gen_tcp_error, timeout}};
+                                      {Group, true} ->
+                                          {ok, {eldap_search_result,
+                                                [#eldap_entry{object_name = Target}], [], []}}
+                                  end
+                          end),
+              Result = rabbit_auth_backend_ldap:with_login(
+                         {"cn=alice", <<"password">>}, ["localhost"], Opts,
+                         fun(LDAP) ->
+                                 rabbit_auth_backend_ldap:evaluate(
+                                   {in_group_nested, Target},
+                                   [{username, <<"alice">>}, {user_dn, "cn=alice"}],
+                                   User, LDAP)
+                         end),
+              ?assertEqual(true, Result),
+              [{_, Conn1} | _] = Searches = get(searches),
+              [Conn2] = lists:usort([C || {_, C} <- Searches]) -- [Conn1],
+              ?assertNot(is_process_alive(Conn1)),
+              ?assertEqual([Conn2], maps:values(get(ldap_conns)))
+      end).
+
+tag_query_does_not_read_a_late_answer(_Config) ->
+    Monitoring = "cn=monitoring,ou=groups,dc=example,dc=com",
+    Administrator = "cn=administrator,ou=groups,dc=example,dc=com",
+    Env = [{servers, ["localhost"]}, {port, 389}, {idle_timeout, infinity},
+           {anon_auth, false}, {timeout, 5000}, {use_ssl, false},
+           {other_bind, as_user},
+           {user_dn_pattern, "cn=${username},ou=People,dc=example,dc=com"},
+           {user_bind_pattern, none}, {dn_lookup_attribute, none},
+           {dn_lookup_bind, as_user},
+           {tag_queries, [{monitoring, {in_group, Monitoring}},
+                          {administrator, {in_group, Administrator}}]}],
+    Prev = [{K, application:get_env(rabbitmq_auth_backend_ldap, K)} || {K, _} <- Env],
+    put(worker_pool_worker, true),
+    try
+        [ok = application:set_env(rabbitmq_auth_backend_ldap, K, V) || {K, V} <- Env],
+        with_mocked_eldap(
+          fun() ->
+                  %% alice is in monitoring but not in administrator. The answer to
+                  %% a search that times out is read by the next search on the
+                  %% same connection, as eldap does not check the message ID.
+                  erase(timed_out),
+                  meck:expect(eldap, search,
+                              fun(LDAP, SearchArgs) ->
+                                      Base = proplists:get_value(base, SearchArgs),
+                                      Answer = {ok, {eldap_search_result,
+                                                     [#eldap_entry{object_name = Base}
+                                                      || Base =:= Monitoring], [], []}},
+                                      case {Base, get(timed_out), get({late, LDAP})} of
+                                          {Monitoring, undefined, _} ->
+                                              put(timed_out, true),
+                                              put({late, LDAP}, Answer),
+                                              {error, {gen_tcp_error, timeout}};
+                                          {_, _, undefined} ->
+                                              Answer;
+                                          {_, _, Late} ->
+                                              put({late, LDAP}, Answer),
+                                              Late
+                                      end
+                              end),
+                  {ok, #auth_user{tags = Tags}} =
+                      rabbit_auth_backend_ldap:user_login_authentication(
+                        <<"alice">>, [{password, <<"password">>}]),
+                  ?assertEqual([monitoring], Tags)
+          end)
+    after
+        erase(worker_pool_worker),
+        [restore_env(K, V) || {K, V} <- Prev]
+    end.
+
+%% The function run on the connection returns Error the first time.
+with_login_failing_once(Error, Opts) ->
+    with_login_failing_once({"cn=alice", <<"password">>}, Error, Opts).
+
+with_login_failing_once(Creds, Error, Opts) ->
+    erase(failed_on),
+    rabbit_auth_backend_ldap:with_login(
+      Creds, ["localhost"], Opts,
+      fun(LDAP) ->
+              case put(failed_on, LDAP) of
+                  undefined -> Error;
+                  Previous  -> {retried, Previous, LDAP}
+              end
+      end).
+
+with_mocked_eldap(Fun) ->
+    PrevStartTls = application:get_env(rabbitmq_auth_backend_ldap, use_starttls),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    try
+        ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+        ok = application:set_env(rabbitmq_auth_backend_ldap, use_starttls, false),
+        ok = meck:new(eldap, [unstick, passthrough]),
+        meck:expect(eldap, open,
+                    fun(_Servers, _Opts) ->
+                            Conn = spawn(fun() -> receive stop -> ok end end),
+                            put(fake_conns, [Conn | fake_conns()]),
+                            {ok, Conn}
+                    end),
+        meck:expect(eldap, simple_bind, fun(_LDAP, _DN, _PW) -> ok end),
+        meck:expect(eldap, close, fun(_LDAP) -> ok end),
+        Fun()
+    after
+        try meck:unload(eldap) catch _:_ -> ok end,
+        [exit(Conn, kill) || Conn <- fake_conns()],
+        [erase(Key) || {Key, _} <- get(), is_mocked_eldap_key(Key)],
+        restore_env(use_starttls, PrevStartTls),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+is_mocked_eldap_key({late, _}) -> true;
+is_mocked_eldap_key(Key) ->
+    lists:member(Key, [ldap_conns, failed_on, fake_conns, searches, b_searches, timed_out]).
+
+fake_conns() ->
+    case get(fake_conns) of
+        undefined -> [];
+        Conns     -> Conns
+    end.
 
 restore_env(Key, {ok, V}) -> application:set_env(rabbitmq_auth_backend_ldap, Key, V);
 restore_env(Key, undefined) -> application:unset_env(rabbitmq_auth_backend_ldap, Key).
