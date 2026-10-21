@@ -493,6 +493,7 @@ capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost}) ->
 expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
 expect_closing_var(_ , _Acc, _Context) -> {"", error}.
 
+<<<<<<< HEAD
 resolve_scope_var(Elem, Token, Vhost) ->
     case Elem of
         "vhost" -> binary_to_list(Vhost);
@@ -505,6 +506,36 @@ resolve_scope_var(Elem, Token, Vhost) ->
     end.
 
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
+=======
+resolve_scope_var(Elem, Token, Vhost, Syntax) ->
+    Raw = case Elem of
+              "vhost" -> binary_to_list(Vhost);
+              _ ->
+                  ElemAsBinary = list_to_binary(Elem),
+                  binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+                                Value when is_binary(Value) -> Value;
+                                _ -> ElemAsBinary
+                              end)
+          end,
+    %% The expanded scope is parsed after the substitution, so a substituted
+    %% value must not be able to change its structure.
+    case Syntax of
+        regex -> escape_regex_metacharacters(Raw);
+        _       -> escape_wildcard_metacharacters(Raw)
+    end.
+
+%% "/" is not a regex metacharacter but it separates scope segments.
+escape_regex_metacharacters(Str) ->
+    Escaped = rabbit_re:escape(iolist_to_binary(Str)),
+    binary_to_list(binary:replace(Escaped, <<"/">>, <<"\\x2F">>, [global])).
+
+%% `wildcard:match/2` percent-decodes each part of the pattern after the
+%% split on "*", so an encoded value only matches itself.
+escape_wildcard_metacharacters(Str) ->
+    binary_to_list(cow_qs:urlencode(iolist_to_binary(Str))).
+
+-spec tags_from(decoded_jwt_token()) -> list(binary()).
+>>>>>>> 3460cab (OAuth 2: escape substituted values in scope variables)
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
     TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
