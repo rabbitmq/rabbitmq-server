@@ -30,7 +30,7 @@ get_key_id(Token) ->
             #jose_jws{}                             -> undefined
         end
     catch Type:Err:Stacktrace ->
-        {error, {invalid_token, Type, Err, Stacktrace}}
+        {error, {invalid_token, Type, redact_credential(Err), Stacktrace}}
     end.
 
 get_aud(Token) ->
@@ -40,5 +40,12 @@ get_aud(Token) ->
             #jose_jwt{}                             -> {ok, none}
         end
     catch Type:Err:Stacktrace ->
-        {error, {invalid_token, Type, Err, Stacktrace}}
+        {error, {invalid_token, Type, redact_credential(Err), Stacktrace}}
     end.
+
+%% `jose_jws:do_expand/1` raises `{badarg, [Token]}` on a malformed token,
+%% embedding the token itself in the exception reason.
+redact_credential({badarg, [_Token]}) ->
+    {badarg, [redacted]};
+redact_credential(Err) ->
+    Err.
