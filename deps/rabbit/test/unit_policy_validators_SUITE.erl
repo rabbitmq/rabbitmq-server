@@ -36,7 +36,8 @@ groups() ->
           delayed_retry_min,
           delayed_retry_max,
           delayed_retry_min_required_with_type,
-          delayed_retry_max_not_less_than_min
+          delayed_retry_max_not_less_than_min,
+          validation_error_formatting
         ]}
     ].
 
@@ -199,3 +200,12 @@ delayed_retry_max_not_less_than_min(_Config) ->
                  rabbit_quorum_queue:validate_policy([{<<"delayed-retry-type">>, <<"all">>},
                                                      {<<"delayed-retry-min">>, 1000},
                                                      {<<"delayed-retry-max">>, 5000}])).
+
+validation_error_formatting(_Config) ->
+    Wide = [[lists:seq(1, 64) || _ <- lists:seq(1, 256)] || _ <- lists:seq(1, 256)],
+    Deep = lists:foldl(fun(_, Acc) -> [Acc] end, 1, lists:seq(1, 20_000)),
+    {error_string, Msg} = rabbit_runtime_parameters:format_error(
+                            [{"~tp is not a valid message TTL", [Wide]},
+                             {"~tp is not a valid queue expiry", [Deep]}]),
+    ?assertMatch("Validation failed\n\n" ++ _, Msg),
+    ?assert(length(Msg) < 1_000_000).

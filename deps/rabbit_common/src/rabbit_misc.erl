@@ -33,7 +33,8 @@
 -export([tcp_name/3, format_inet_error/1]).
 -export([upmap/2, map_in_order/2, utf8_safe/1]).
 -export([dirty_dump_log/1]).
--export([format/2, format_many/1, format_stderr/2]).
+-export([format/2, format_many/1, format_stderr/2, format_term/1,
+         limit_term/1]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
 -export([parse_bool/1, parse_int/1]).
@@ -559,6 +560,47 @@ dirty_dump_log1(LH, {K, Terms, BadBytes}) ->
     dirty_dump_log1(LH, disk_log:chunk(LH, K)).
 
 format(Fmt, Args) -> lists:flatten(io_lib:format(Fmt, Args)).
+
+-define(LIMIT_TERM_BREADTH, 256).
+
+-spec format_term(term()) -> string().
+format_term(Term) ->
+    lists:flatten(
+      io_lib:format("~tP", [Term, ?FORMAT_DEPTH_LIMIT],
+                    [{chars_limit, ?FORMAT_CHARS_LIMIT}])).
+
+-spec limit_term(term()) -> term().
+limit_term(Term) ->
+    limit_term(Term, ?FORMAT_DEPTH_LIMIT).
+
+limit_term(_, 0) ->
+    '...';
+limit_term(L, Depth) when is_list(L) ->
+    case io_lib:printable_unicode_list(L) of
+        true ->
+            lists:sublist(L, ?LIMIT_TERM_BREADTH);
+        false ->
+            limit_list(L, Depth - 1, ?LIMIT_TERM_BREADTH)
+    end;
+limit_term(T, Depth) when is_tuple(T) ->
+    list_to_tuple(limit_list(tuple_to_list(T), Depth - 1, ?LIMIT_TERM_BREADTH));
+limit_term(M, Depth) when is_map(M) ->
+    maps:from_list(
+      [{limit_term(K, Depth - 1), limit_term(V, Depth - 1)}
+       || {K, V} <- lists:sublist(maps:to_list(M), ?LIMIT_TERM_BREADTH)]);
+limit_term(B, _) when is_binary(B), byte_size(B) > ?LIMIT_TERM_BREADTH ->
+    <<(binary:part(B, 0, ?LIMIT_TERM_BREADTH))/binary, "...">>;
+limit_term(T, _) ->
+    T.
+
+limit_list([], _, _) ->
+    [];
+limit_list(_, _, 0) ->
+    ['...'];
+limit_list([H | T], Depth, N) ->
+    [limit_term(H, Depth) | limit_list(T, Depth, N - 1)];
+limit_list(Improper, Depth, _) ->
+    limit_term(Improper, Depth).
 
 format_many(List) ->
     lists:flatten([io_lib:format(F ++ "~n", A) || {F, A} <- List]).
