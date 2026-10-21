@@ -3522,9 +3522,8 @@ ensure_token_expiry_timer(User, #stream_connection{token_expiry_timer = Timer} =
         Ts = rabbit_access_control:expiry_timestamp(User),
         ?LOG_DEBUG("Token expiry timestamp: ~tp", [Ts]),
         true ?= is_integer(Ts),
-        Time = (Ts - os:system_time(second)) * 1000,
+        Time = max(0, (Ts - os:system_time(second)) * 1000),
         ?LOG_DEBUG("Token expires in ~tp ms, setting timer to close connection", [Time]),
-        true ?= Time > 0,
         erlang:send_after(Time, self(), token_expired)
     else
         false ->
