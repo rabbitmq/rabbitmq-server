@@ -91,10 +91,26 @@ handle_token(Req0, State) ->
             {ok, cowboy_req:reply(405, #{<<"allow">> => <<"POST">>}, Req0), State}
     end.
 
+<<<<<<< HEAD
 forward_token_request(Req0, State, Secret, MetadataURL, HttpOpts) ->
     case token_endpoint(MetadataURL, HttpOpts) of
+=======
+forward_token_request(Req0, State, Secret, MetadataURL, HttpOpts, DiscoveryOpts) ->
+    {ok, Params, Req1} = cowboy_req:read_urlencoded_body(Req0),
+    case check_grant_type(Params) of
+        ok ->
+            relay_token_request(Req1, State, Params, Secret, MetadataURL,
+                                HttpOpts, DiscoveryOpts);
+        {error, Error} ->
+            Body = rabbit_json:encode(#{error => Error}),
+            {ok, reply_json(400, Body, Req1), State}
+    end.
+
+relay_token_request(Req1, State, Params, Secret, MetadataURL, HttpOpts,
+                    DiscoveryOpts) ->
+    case token_endpoint(MetadataURL, HttpOpts, DiscoveryOpts) of
+>>>>>>> 053efdf (OAuth 2 token proxy: only relay the management UI's grant types)
         {ok, TokenEndpoint} ->
-            {ok, Params, Req1} = cowboy_req:read_urlencoded_body(Req0),
             Body = uri_string:compose_query(inject_client_secret(Params, Secret)),
             case http_post(TokenEndpoint, Body, HttpOpts) of
                 {ok, Status, Headers, RespBody} ->
@@ -108,7 +124,19 @@ forward_token_request(Req0, State, Secret, MetadataURL, HttpOpts) ->
         {error, Reason} ->
             ?LOG_ERROR("OAuth 2 token proxy could not resolve token endpoint "
                        "from ~ts: ~tp", [MetadataURL, Reason]),
-            {ok, cowboy_req:reply(502, Req0), State}
+            {ok, cowboy_req:reply(502, Req1), State}
+    end.
+
+%% This endpoint requires no authentication, so only grants that need a user
+%% login at the provider first are relayed. A repeated `grant_type` is refused
+%% because the provider may honour another occurrence.
+-spec check_grant_type([{binary(), binary() | true}]) -> ok | {error, binary()}.
+check_grant_type(Params) ->
+    case [Value || {<<"grant_type">>, Value} <- Params] of
+        [<<"authorization_code">>] -> ok;
+        [<<"refresh_token">>] -> ok;
+        [Value] when is_binary(Value) -> {error, <<"unsupported_grant_type">>};
+        _ -> {error, <<"invalid_request">>}
     end.
 
 %% Only add the secret when the request does not already carry one, so an
