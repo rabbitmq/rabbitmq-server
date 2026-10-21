@@ -60,6 +60,7 @@ groups() ->
         redeclare_existing_queue_with_restricted_dlx,
         subscribe_error,
         subscribe_to_exclusive_queue_of_another_connection,
+        subscribe_to_own_exclusive_queue,
         reserved_queue_names_are_refused,
         queue_name_cr_lf_is_stripped,
         queue_name_of_only_cr_lf_is_refused,
@@ -588,8 +589,22 @@ subscribe_to_exclusive_queue_of_another_connection(Config) ->
     rabbit_stomp_client:send(
       Client, 'SUBSCRIBE', [{<<"destination">>, <<"/amq/queue/", QName/binary>>},
                             {<<"id">>, <<"s">>}]),
-    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR', 30_000),
     ?assertEqual(<<"resource_locked">>, maps:get(<<"message">>, Hdrs)),
+    ok.
+
+subscribe_to_own_exclusive_queue(Config) ->
+    Client = ?config(stomp_client, Config),
+    Name = <<"own-exclusive-", (integer_to_binary(rand:uniform(1_000_000)))/binary>>,
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, <<"/queue/", Name/binary>>},
+                            {<<"id">>, <<"s1">>}]),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, <<"/amq/queue/", Name/binary>>},
+                            {<<"id">>, <<"s2">>}]),
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, <<"/queue/", Name/binary>>}], ["hello"]),
+    {ok, _Client1, _, [<<"hello">>]} = stomp_receive(Client, 'MESSAGE', 30_000),
     ok.
 
 reserved_queue_names_are_refused(Config) ->
