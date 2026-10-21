@@ -11,7 +11,7 @@
 -include("rabbit_mqtt_packet.hrl").
 
 all() ->
-    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag, utf8_strings].
+    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag, utf8_strings, topic_names_and_filters].
 
 init_per_suite(Config) ->
     persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, 65_536),
@@ -104,6 +104,36 @@ utf8_strings(_Config) ->
                   rabbit_mqtt_packet:parse(packet(16#30, <<(byte_size(Good)):16, Good/binary,
                                                           (properties(Vsn))/binary, 255, 0>>), Vsn))
      || Vsn <- [4, 5]],
+    ok.
+
+topic_names_and_filters(_Config) ->
+    [begin
+         Props = properties(Vsn),
+         [?assertThrow(invalid_topic_name,
+                       rabbit_mqtt_packet:parse(packet(16#32, <<(byte_size(Topic)):16, Topic/binary,
+                                                                0, 1, Props/binary>>), Vsn))
+          || Topic <- [<<"a/+">>, <<"a/#">>, <<"a+b">>]],
+         [assert_connect_error(
+            connect_packet(Vsn, 6, <<Props/binary, (byte_size(Topic)):16, Topic/binary, 0, 0>>),
+            invalid_topic_name)
+          || Topic <- [<<>>, <<"a/+">>, <<"a/#">>, <<"a+b">>]],
+         [?assertMatch({ok, _, <<>>, Vsn},
+                       parse_connect(Vsn, 6, <<Props/binary, (byte_size(Topic)):16, Topic/binary, 0, 0>>))
+          || Topic <- [<<"/">>, <<"a/b">>, <<"$SYS/a">>]],
+         [?assertException(error, {badmatch, _},
+                           rabbit_mqtt_packet:parse(packet(Header, <<0, 1, Props/binary,
+                                                                     (byte_size(Filter)):16, Filter/binary,
+                                                                     Options/binary>>), Vsn))
+          || Filter <- [<<>>, <<"a+">>, <<"a/#/b">>, <<"a#">>],
+             {Header, Options} <- [{16#82, <<0>>}, {16#A2, <<>>}]],
+         [?assertMatch({ok, _, <<>>, Vsn},
+                       rabbit_mqtt_packet:parse(packet(16#82, <<0, 1, Props/binary,
+                                                                (byte_size(Filter)):16, Filter/binary, 0>>), Vsn))
+          || Filter <- [<<"/">>, <<"#">>, <<"+/#">>, <<"a//+">>, <<"$SYS/#">>]]
+     end || Vsn <- [4, 5]],
+    ?assertThrow(invalid_topic_name, rabbit_mqtt_packet:parse(<<16#32, 4, 0, 0, 0, 1>>, 4)),
+    ?assertError({badmatch, false}, rabbit_mqtt_packet:parse(<<16#32, 5, 0, 0, 0, 1, 0>>, 5)),
+    ?assertMatch({ok, _, <<>>, 5}, rabbit_mqtt_packet:parse(<<16#30, 6, 0, 0, 3, 16#23, 0, 1>>, 5)),
     ok.
 
 parse_connect(Vsn, Flags, Payload) ->

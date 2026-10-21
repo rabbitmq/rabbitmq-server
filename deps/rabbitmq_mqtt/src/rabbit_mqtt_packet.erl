@@ -118,7 +118,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
         {?PUBLISH, <<TopicLen:16, TopicName:TopicLen/binary,
                      PacketBin:(Length-2-TopicLen)/binary,
                      Rest/binary>>} ->
-            ok = validate_utf8(TopicName),
+            ok = validate_topic_name(TopicName, ProtoVer =:= 5),
             {PacketId, Rest1} = case Qos of
                                     ?QOS_0 ->
                                         %% "The Packet Identifier field is only present in
@@ -129,6 +129,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
                                         {Id, R}
                                 end,
             {Props, Payload} = parse_props(Rest1, ProtoVer, Type),
+            true = TopicName =/= <<>> orelse maps:is_key('Topic-Alias', Props),
             Publish = #mqtt_packet_publish{topic_name = TopicName,
                                            packet_id = PacketId,
                                            props = Props},
@@ -164,7 +165,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
                                              retain_handling = Rh,
                                              id = Id}} ||
                              <<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2>> <= Rest1],
-            [ok = validate_utf8(T) || #mqtt_subscription{topic_filter = T} <- Subscriptions],
+            [ok = validate_topic_filter(T) || #mqtt_subscription{topic_filter = T} <- Subscriptions],
             Subscribe = #mqtt_packet_subscribe{packet_id = PacketId,
                                                props = Props,
                                                subscriptions = Subscriptions},
@@ -174,7 +175,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
             Topics = [Topic || <<Len:16, Topic:Len/binary>> <= Rest1],
-            [ok = validate_utf8(T) || T <- Topics],
+            [ok = validate_topic_filter(T) || T <- Topics],
             Unsubscribe = #mqtt_packet_unsubscribe{packet_id = PacketId,
                                                    props = Props,
                                                    topic_filters = Topics},
@@ -223,8 +224,8 @@ parse_connect(Bin, Fixed, Length) ->
                     wrap(Fixed, Connect, Rest, ProtoVer);
                 {error, _} = Error ->
                     Error
-            catch throw:invalid_utf8 ->
-                      {error, invalid_utf8}
+            catch throw:Reason when Reason =:= invalid_utf8; Reason =:= invalid_topic_name ->
+                      {error, Reason}
             end;
         TooShortBin
           when byte_size(TooShortBin) < Length ->
@@ -267,7 +268,8 @@ parse_connect(<<Len:16, ProtoName:Len/binary,
             {#{}, undefined, undefined, Rest2};
         1 ->
             {WillProps0, R0} = parse_props(Rest2, ProtoVer, will_props),
-            {WillTopic0, R1} = parse_utf8(R0),
+            {WillTopic0, R1} = parse_bin(R0),
+            ok = validate_topic_name(WillTopic0, false),
             {WillPayload0, R2} = parse_bin(R1),
             {WillProps0, WillTopic0, WillPayload0, R2}
     end,
@@ -312,6 +314,29 @@ parse_utf8(Bin) ->
     {String, Rest} = parse_bin(Bin),
     ok = validate_utf8(String),
     {String, Rest}.
+
+validate_topic_name(<<>>, false) ->
+    throw(invalid_topic_name);
+validate_topic_name(Topic, _AllowEmpty) ->
+    case binary:match(Topic, [<<"+">>, <<"#">>]) of
+        nomatch -> validate_utf8(Topic);
+        _ -> throw(invalid_topic_name)
+    end.
+
+validate_topic_filter(Topic) ->
+    true = Topic =/= <<>>,
+    ok = validate_utf8(Topic),
+    validate_topic_levels(binary:split(Topic, <<"/">>, [global])).
+
+validate_topic_levels([]) ->
+    ok;
+validate_topic_levels([<<"#">>]) ->
+    ok;
+validate_topic_levels([<<"+">> | Rest]) ->
+    validate_topic_levels(Rest);
+validate_topic_levels([Level | Rest]) ->
+    nomatch = binary:match(Level, [<<"+">>, <<"#">>]),
+    validate_topic_levels(Rest).
 
 validate_utf8(<<>>) ->
     ok;

@@ -116,7 +116,7 @@ publish_packet() ->
                        retain = boolean()},
             variable = #mqtt_packet_publish{
                           packet_id = packet_id(Qos),
-                          topic_name = mqtt_utf8_string()},
+                          topic_name = mqtt_topic_name()},
             payload = binary()}).
 
 publish_with_properties_packet() ->
@@ -177,6 +177,10 @@ user_property() ->
                        {1, {<<"same name">>, mqtt_utf8_string()}},
                        {1, {<<"same name">>, <<"same value">>}}
                       ])))}.
+
+mqtt_topic_name() ->
+    ?SUCHTHAT(Topic, mqtt_utf8_string(),
+              Topic =/= <<>> andalso binary:match(Topic, [<<"+">>, <<"#">>]) =:= nomatch).
 
 qos() ->
     range(0, 2).
