@@ -1506,10 +1506,10 @@ function maybe_format_extra_queue_content(queue, extraContent) {
 
 function update_status(status) {
     var text;
+    var next_try = new Date(new Date().getTime() + timer_interval);
     if (status == 'ok')
         text = "Refreshed " + fmt_date(new Date());
     else if (status == 'error') {
-        var next_try = new Date(new Date().getTime() + timer_interval);
         text = "Error: could not connect to server";
         if (last_successful_connect) {
             text += " since " + fmt_date(last_successful_connect);
@@ -1517,9 +1517,8 @@ function update_status(status) {
         text += ". Will retry at " + fmt_date(next_try) + ".";
     }
     else if (status == 'timeout') {
-        var retry_at = new Date(new Date().getTime() + timer_interval);
         text = "Error: timed out talking to the server. Will retry at " +
-            fmt_date(retry_at) + ".";
+            fmt_date(next_try) + ".";
     }
     else
         throw("Unknown status " + status);
