@@ -6,30 +6,27 @@
 
 defmodule RabbitMQ.CLI.Core.CodePath do
   alias RabbitMQ.CLI.Core.{Config, Paths, Platform}
+  import RabbitCommon.Records
 
   def add_plugins_to_load_path(opts) do
     case Paths.plugins_dir(opts) do
       {:ok, plugins_dir} ->
-        String.split(to_string(plugins_dir), Platform.path_separator())
-        |> Enum.each(&add_directory_plugins_to_load_path/1)
+        dirs = String.split(to_string(plugins_dir), Platform.path_separator())
+        {plugins, _} = :rabbit_plugin_discovery.list(Enum.map(dirs, &to_charlist/1))
+
+        Enum.each(plugins, fn
+          plugin(type: :dir, location: location) ->
+            Code.prepend_path(Path.join(to_string(location), "ebin"))
+
+          plugin(type: :ez) ->
+            :ok
+        end)
 
       {:error, _} ->
         :ok
     end
 
     :ok
-  end
-
-  def add_directory_plugins_to_load_path(directory_with_plugins_inside_it) do
-    with {:ok, files} <- File.ls(directory_with_plugins_inside_it) do
-      Enum.each(files, fn filename ->
-        ebin = Path.join([to_string(directory_with_plugins_inside_it), filename, "ebin"])
-
-        if File.dir?(ebin) do
-          Code.append_path(ebin)
-        end
-      end)
-    end
   end
 
   def require_rabbit_and_plugins(_, opts) do

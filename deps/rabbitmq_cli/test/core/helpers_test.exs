@@ -204,10 +204,16 @@ defmodule HelpersTest do
   test "locate unpacked plugins outside the current directory", %{tmp_dir: plugins_dir} do
     ebin = Path.join([plugins_dir, "unpacked_plugin", "ebin"])
     File.mkdir_p!(ebin)
+
+    File.write!(
+      Path.join(ebin, "unpacked_plugin.app"),
+      "{application, unpacked_plugin, [{vsn, \"1.0\"}]}."
+    )
+
     original_path = :code.get_path()
 
     try do
-      add_directory_plugins_to_load_path(plugins_dir)
+      add_plugins_to_load_path(%{plugins_dir: plugins_dir})
       assert to_charlist(Path.expand(ebin)) in :code.get_path()
     after
       :code.set_path(original_path)

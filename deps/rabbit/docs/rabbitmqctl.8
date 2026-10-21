@@ -2075,7 +2075,12 @@ A plugin that provides CLI commands must be unpacked in a directory listed in
 .Ev RABBITMQ_PLUGINS_DIR .
 For a plugin distributed as an
 .Pa .ez
-archive, extract it into that directory before using its CLI commands.
+archive, extract it into that directory and move the archive out of
+.Ev RABBITMQ_PLUGINS_DIR
+before using its CLI commands.
+When multiple versions are installed, the CLI uses the highest version.
+If that version is archived, its commands are unavailable until it is unpacked.
+An archive takes precedence over an unpacked copy of the same version.
 .Pp
 Currently available commands can be found in the
 .Cm rabbitmqctl help

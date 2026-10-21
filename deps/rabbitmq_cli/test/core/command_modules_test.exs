@@ -104,6 +104,135 @@ defmodule CommandModulesTest do
     assert custom_commands["seagull"] == RabbitMQ.CLI.Seagull.Commands.SeagullCommand
   end
 
+  for {name, specs, expected} <- [
+        {"newer directory", [{:dir, ~c"1.0", ~c"old"}, {:dir, ~c"2.0", ~c"new"}], ~c"new"},
+        {"newer directory first", [{:dir, ~c"2.0", ~c"new"}, {:dir, ~c"1.0", ~c"old"}], ~c"new"},
+        {"equal directories", [{:dir, ~c"1.0", ~c"first"}, {:dir, ~c"1.0", ~c"second"}],
+         ~c"first"},
+        {"newer archive", [{:dir, ~c"1.0", ~c"old"}, {:ez, ~c"2.0", ~c"new"}], nil},
+        {"older archive", [{:ez, ~c"1.0", ~c"old"}, {:dir, ~c"2.0", ~c"new"}], ~c"new"},
+        {"equal archive", [{:dir, ~c"1.0", ~c"directory"}, {:ez, ~c"1.0", ~c"archive"}], nil}
+      ] do
+    @tag :tmp_dir
+    @tag :plugin_selection
+    test "plugin command loading selects #{name}", %{tmp_dir: root} do
+      original_path = :code.get_path()
+      dirs = Enum.map(["a", "b"], &Path.join(root, &1))
+      enabled_file = Path.join(root, "enabled_plugins")
+      File.write!(enabled_file, "[selected_cli_plugin].")
+
+      try do
+        for {dir, spec} <- Enum.zip(dirs, unquote(Macro.escape(specs))) do
+          write_plugin(dir, spec)
+        end
+
+        opts = %{
+          rabbitmq_home: :code.lib_dir(:rabbit),
+          plugins_dir: Enum.join(dirs, RabbitMQ.CLI.Core.Platform.path_separator()),
+          enabled_plugins_file: enabled_file,
+          offline: true
+        }
+
+        case unquote(expected) do
+          nil ->
+            assert @subject.plugin_modules(opts) == []
+
+          value ->
+            assert @subject.plugin_modules(opts) == [:selected_cli_command]
+            assert apply(:selected_cli_command, :value, []) == value
+        end
+      after
+        Application.unload(:selected_cli_plugin)
+        :code.purge(:selected_cli_command)
+        :code.delete(:selected_cli_command)
+        :code.set_path(original_path)
+      end
+    end
+  end
+
+  for type <- [:dir, :ez] do
+    @tag :tmp_dir
+    test "remote #{type} discovery loads commands from local plugin directories", %{tmp_dir: root} do
+      :ok = Application.ensure_loaded(:rabbit)
+      original_path = :code.get_path()
+      keys = [:plugins_dir, :enabled_plugins_file]
+      original_env = Enum.map(keys, &{&1, Application.fetch_env(:rabbit, &1)})
+      local_dir = Path.join(root, "local")
+      remote_dir = Path.join(root, "remote")
+      enabled_file = Path.join(root, "enabled_plugins")
+      File.write!(enabled_file, "[selected_cli_plugin].")
+      write_plugin(local_dir, {:dir, ~c"1.0", ~c"local"})
+      write_plugin(remote_dir, {unquote(type), ~c"1.0", ~c"remote"})
+
+      try do
+        Application.put_env(:rabbit, :plugins_dir, to_charlist(remote_dir))
+        Application.put_env(:rabbit, :enabled_plugins_file, to_charlist(enabled_file))
+
+        opts = %{
+          node: node(),
+          online: true,
+          rabbitmq_home: :code.lib_dir(:rabbit),
+          plugins_dir: local_dir
+        }
+
+        refute RabbitMQ.CLI.Plugins.Helpers.node_is_local?(opts)
+        assert :code.which(:selected_cli_command) == :non_existing
+        assert @subject.plugin_modules(opts) == [:selected_cli_command]
+        assert apply(:selected_cli_command, :value, []) == ~c"local"
+      after
+        Application.unload(:selected_cli_plugin)
+        :code.purge(:selected_cli_command)
+        :code.delete(:selected_cli_command)
+        :code.set_path(original_path)
+
+        for {key, value} <- original_env do
+          case value do
+            {:ok, value} -> Application.put_env(:rabbit, key, value)
+            :error -> Application.delete_env(:rabbit, key)
+          end
+        end
+      end
+    end
+  end
+
+  defp write_plugin(dir, {type, version, value}) do
+    app_dir = "selected_cli_plugin-#{version}"
+
+    props = [
+      vsn: version,
+      modules: [:selected_cli_command],
+      applications: [:kernel, :stdlib, :rabbit]
+    ]
+
+    app = :io_lib.format(~c"~tp.", [{:application, :selected_cli_plugin, props}])
+
+    forms = [
+      {:attribute, 1, :module, :selected_cli_command},
+      {:attribute, 1, :export, [value: 0]},
+      {:function, 1, :value, 0, [{:clause, 1, [], [], [{:string, 1, value}]}]}
+    ]
+
+    {:ok, :selected_cli_command, beam} = :compile.forms(forms, [:binary])
+
+    files = [
+      {~c"#{app_dir}/ebin/selected_cli_plugin.app", IO.iodata_to_binary(app)},
+      {~c"#{app_dir}/ebin/selected_cli_command.beam", beam}
+    ]
+
+    case type do
+      :ez ->
+        File.mkdir_p!(dir)
+        {:ok, _} = :zip.create(~c"#{dir}/#{app_dir}.ez", files)
+
+      :dir ->
+        for {path, content} <- files do
+          path = Path.join(dir, to_string(path))
+          File.mkdir_p!(Path.dirname(path))
+          File.write!(path, content)
+        end
+    end
+  end
+
   ## ------------------- commands/0 tests --------------------
 
   test "command_modules has existing commands" do
