@@ -11,7 +11,7 @@
 -include("rabbit_mqtt_packet.hrl").
 
 all() ->
-    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag, utf8_strings, publish_utf8_unchecked, topic_names_and_filters].
+    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag, utf8_strings, publish_utf8_unchecked, topic_names_and_filters, subscription_payloads].
 
 init_per_suite(Config) ->
     persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, 65_536),
@@ -160,6 +160,25 @@ topic_names_and_filters(_Config) ->
     ?assertThrow(invalid_topic_name, rabbit_mqtt_packet:parse(<<16#32, 4, 0, 0, 0, 1>>, 4)),
     ?assertError({badmatch, false}, rabbit_mqtt_packet:parse(<<16#32, 5, 0, 0, 0, 1, 0>>, 5)),
     ?assertMatch({ok, _, <<>>, 5}, rabbit_mqtt_packet:parse(<<16#30, 6, 0, 0, 3, 16#23, 0, 1>>, 5)),
+    ok.
+
+subscription_payloads(_Config) ->
+    [begin
+         Props = properties(Vsn),
+         [?assertError({badmatch, []},
+                       rabbit_mqtt_packet:parse(packet(Header, <<0, 1, Props/binary>>), Vsn))
+          || Header <- [16#82, 16#A2]],
+         ?assertError(function_clause,
+                      rabbit_mqtt_packet:parse(packet(16#82, <<0, 1, Props/binary, 0, 1, "a", 0, 0>>), Vsn)),
+         ?assertError(function_clause,
+                      rabbit_mqtt_packet:parse(packet(16#A2, <<0, 1, Props/binary, 0, 1, "a", 0>>), Vsn)),
+         [?assertException(error, {badmatch, _},
+                           rabbit_mqtt_packet:parse(packet(16#82, <<0, 1, Props/binary, 0, 1, "a", Opt>>), Vsn))
+          || Opt <- [3, 16#30, 16#40, 16#80]]
+     end || Vsn <- [4, 5]],
+    ?assertMatch({ok, _, <<>>, 3}, rabbit_mqtt_packet:parse(<<16#82, 6, 0, 1, 0, 1, "a", 16#FC>>, 3)),
+    ?assertError({badmatch, false}, rabbit_mqtt_packet:parse(<<16#82, 6, 0, 1, 0, 1, "a", 4>>, 4)),
+    ?assertMatch({ok, _, <<>>, 5}, rabbit_mqtt_packet:parse(<<16#82, 7, 0, 1, 0, 0, 1, "a", 4>>, 5)),
     ok.
 
 parse_connect(Vsn, Flags, Payload) ->

@@ -162,8 +162,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
             Id = maps:get('Subscription-Identifier', Props, undefined),
-            Subscriptions = parse_subscriptions(Rest1, Id, max_topic_filters(), []),
-            [ok = validate_topic_filter(T) || #mqtt_subscription{topic_filter = T} <- Subscriptions],
+            [_ | _] = Subscriptions = parse_subscriptions(Rest1, ProtoVer, Id, max_topic_filters(), []),
             Subscribe = #mqtt_packet_subscribe{packet_id = PacketId,
                                                props = Props,
                                                subscriptions = Subscriptions},
@@ -172,8 +171,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             %% "UNSUBSCRIBE messages use QoS level 1 to acknowledge multiple unsubscribe requests."
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
-            Topics = parse_topic_filters(Rest1, max_topic_filters(), []),
-            [ok = validate_topic_filter(T) || T <- Topics],
+            [_ | _] = Topics = parse_topic_filters(Rest1, max_topic_filters(), []),
             Unsubscribe = #mqtt_packet_unsubscribe{packet_id = PacketId,
                                                    props = Props,
                                                    topic_filters = Topics},
@@ -217,10 +215,20 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
 max_topic_filters() ->
     persistent_term:get(?PERSISTENT_TERM_MAX_TOPIC_FILTERS_PER_PACKET).
 
-parse_subscriptions(<<Len:16, _:Len/binary, _:8, _/binary>>, _Id, 0, _Acc) ->
+parse_subscriptions(<<>>, _ProtoVer, _Id, _Remaining, Acc) ->
+    lists:reverse(Acc);
+parse_subscriptions(<<Len:16, _:Len/binary, _:8, _/binary>>, _ProtoVer, _Id, 0, _Acc) ->
     topic_filter_limit_exceeded();
-parse_subscriptions(<<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2, Rest/binary>>,
-                    Id, Remaining, Acc) ->
+parse_subscriptions(<<Len:16, Topic:Len/binary, Options0, Rest/binary>>,
+                    ProtoVer, Id, Remaining, Acc) ->
+    ok = validate_topic_filter(Topic),
+    Options = case ProtoVer of
+                  3 -> Options0 band 3;
+                  _ -> Options0
+              end,
+    <<0:2, Rh:2, Rap:1, Nl:1, QoS:2>> = <<Options>>,
+    true = QoS < 3 andalso Rh < 3,
+    true = ProtoVer =:= 5 orelse Options < 3,
     Sub = #mqtt_subscription{
              topic_filter = binary:copy(Topic),
              options = #mqtt_subscription_opts{
@@ -229,16 +237,15 @@ parse_subscriptions(<<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, 
                           retain_as_published = int_to_bool(Rap),
                           retain_handling = Rh,
                           id = Id}},
-    parse_subscriptions(Rest, Id, Remaining - 1, [Sub | Acc]);
-parse_subscriptions(_, _Id, _Remaining, Acc) ->
-    lists:reverse(Acc).
+    parse_subscriptions(Rest, ProtoVer, Id, Remaining - 1, [Sub | Acc]).
 
+parse_topic_filters(<<>>, _Remaining, Acc) ->
+    lists:reverse(Acc);
 parse_topic_filters(<<Len:16, _:Len/binary, _/binary>>, 0, _Acc) ->
     topic_filter_limit_exceeded();
 parse_topic_filters(<<Len:16, Topic:Len/binary, Rest/binary>>, Remaining, Acc) ->
-    parse_topic_filters(Rest, Remaining - 1, [Topic | Acc]);
-parse_topic_filters(_, _Remaining, Acc) ->
-    lists:reverse(Acc).
+    ok = validate_topic_filter(Topic),
+    parse_topic_filters(Rest, Remaining - 1, [Topic | Acc]).
 
 -spec topic_filter_limit_exceeded() -> no_return().
 topic_filter_limit_exceeded() ->
