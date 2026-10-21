@@ -11,7 +11,7 @@
 -include("rabbit_mqtt_packet.hrl").
 
 all() ->
-    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag].
+    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag, utf8_strings].
 
 init_per_suite(Config) ->
     persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, 65_536),
@@ -65,6 +65,44 @@ connect_password_flag(_Config) ->
     ?assertMatch({ok, _, <<>>, 5}, parse_connect(5, 16#42, Password)),
     [?assertMatch({ok, _, <<>>, Vsn},
                   parse_connect(Vsn, 16#C2, <<0, 1, "u", Password/binary>>))
+     || Vsn <- [4, 5]],
+    ok.
+
+utf8_strings(_Config) ->
+    Invalid = [<<0>>, <<255>>, <<16#C0, 16#80>>, <<16#ED, 16#A0, 16#80>>,
+               <<16#F4, 16#90, 16#80, 16#80>>, <<16#E2, 16#82>>],
+    [begin
+         Props = properties(Vsn),
+         Encoded = <<(byte_size(Bad)):16, Bad/binary>>,
+         Body = <<0, 4, "MQTT", Vsn, 2, 0, 60, Props/binary, Encoded/binary>>,
+         assert_connect_error(packet(16#10, Body), invalid_utf8),
+         assert_connect_error(connect_packet(Vsn, 16#82, Encoded), invalid_utf8),
+         assert_connect_error(connect_packet(Vsn, 6, <<Props/binary, Encoded/binary, 0, 0>>), invalid_utf8),
+         ?assertThrow(invalid_utf8, rabbit_mqtt_packet:parse(packet(16#30, <<Encoded/binary, Props/binary>>), Vsn)),
+         ?assertThrow(invalid_utf8, rabbit_mqtt_packet:parse(packet(16#82, <<0, 1, Props/binary, Encoded/binary, 0>>), Vsn)),
+         ?assertThrow(invalid_utf8, rabbit_mqtt_packet:parse(packet(16#A2, <<0, 1, Props/binary, Encoded/binary>>), Vsn))
+     end || Vsn <- [4, 5], Bad <- Invalid],
+    [begin
+         UserProps = <<16#26, 0, 1, "k", (byte_size(Bad)):16, Bad/binary>>,
+         Body = <<0, 1, "a", (byte_size(UserProps)), UserProps/binary>>,
+         ?assertThrow(invalid_utf8, rabbit_mqtt_packet:parse(packet(16#30, Body), 5))
+     end || Bad <- Invalid],
+    [begin
+         Encoded = <<(byte_size(Bad)):16, Bad/binary>>,
+         UserProps = [<<16#26, 0, 1, "k", Encoded/binary>>,
+                      <<16#26, Encoded/binary, 0, 1, "v">>],
+         [assert_connect_error(
+            packet(16#10, <<0, 4, "MQTT", 5, 2, 0, 60,
+                             (byte_size(Props)), Props/binary, 0, 4, "test">>), invalid_utf8)
+          || Props <- [<<16#15, Encoded/binary>> | UserProps]],
+         [assert_connect_error(
+            connect_packet(5, 6, <<(byte_size(Props)), Props/binary, 0, 1, "a", 0, 0>>), invalid_utf8)
+          || Props <- [<<16#03, Encoded/binary>>, <<16#08, Encoded/binary>> | UserProps]]
+     end || Bad <- Invalid],
+    Good = <<16#FEFF/utf8, 16#1F600/utf8>>,
+    [?assertMatch({ok, #mqtt_packet{variable = #mqtt_packet_publish{topic_name = Good}}, <<>>, Vsn},
+                  rabbit_mqtt_packet:parse(packet(16#30, <<(byte_size(Good)):16, Good/binary,
+                                                          (properties(Vsn))/binary, 255, 0>>), Vsn))
      || Vsn <- [4, 5]],
     ok.
 

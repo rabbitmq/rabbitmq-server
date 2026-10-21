@@ -229,7 +229,7 @@ mqtt_utf8_string() ->
     ?LET(Bin, utf8(inf, MaxCodePointSize),
          begin
              L0 = unicode:characters_to_list(Bin, utf8),
-             L = lists:sublist(L0, MaxCodePoints),
+             L = lists:sublist([C || C <- L0, C =/= 0], MaxCodePoints),
              unicode:characters_to_binary(L, utf8, utf8)
          end).
 
