@@ -182,6 +182,7 @@ all_tests() -> [
     permissions_amqp_test,
     permissions_queue_delete_test,
     permissions_connection_channel_consumer_test,
+    connection_channel_name_reuse_test,
     consumers_cq_test,
     consumers_qq_test,
     consumers_require_virtual_host_access_test,
@@ -2165,6 +2166,71 @@ permissions_connection_channel_consumer_test(Config) ->
     http_get(Config, "/channels/foo", ?NOT_FOUND),
     http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
     passed.
+
+%% A connection name only consists of addresses and ports, so it can pass to a
+%% connection of another user while a request is served. What is returned or
+%% closed must be what the user was authorised for.
+connection_channel_name_reuse_test(Config) ->
+    http_put(Config, "/users/user", [{password, <<"user">>},
+                                     {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/permissions/%2F/user",
+             [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+             {group, '2xx'}),
+    {UserConn, UserConnPath, UserChPath, _} = get_conn(Config, "user", "user"),
+    {AdmConn, AdmConnPath, AdmChPath, _} = get_conn(Config, "guest", "guest"),
+    {ok, _} = amqp_connection:open_channel(UserConn),
+    {ok, _} = amqp_connection:open_channel(AdmConn),
+    await_condition(
+      fun () ->
+              [http_get(Config, P, ?OK) ||
+                  P <- [UserConnPath, UserChPath, AdmConnPath, AdmChPath]],
+              true
+      end),
+    #{name := AdmConnName} = http_get(Config, AdmConnPath, ?OK),
+    #{name := AdmChName} = http_get(Config, AdmChPath, ?OK),
+
+    ok = rpc(Config, meck, new, [rabbit_mgmt_db, [passthrough, no_link]]),
+    try
+        ok = rpc(Config, ?MODULE, reuse_name_after_first_lookup,
+                 [get_connection, AdmConnName]),
+        ?assertMatch(#{user := <<"user">>},
+                     http_get(Config, UserConnPath, "user", "user", ?OK)),
+        ok = rpc(Config, ?MODULE, reuse_name_after_first_lookup,
+                 [get_channel, AdmChName]),
+        ?assertMatch(#{user := <<"user">>},
+                     http_get(Config, UserChPath, "user", "user", ?OK)),
+        %% With stats disabled, the connection is looked up again.
+        ok = rpc(Config, ?MODULE, reuse_name_with_stats_disabled, [AdmConnName]),
+        http_get(Config, UserConnPath ++ "?disable_stats=true", "user", "user",
+                 ?NOT_FOUND),
+        ok = rpc(Config, ?MODULE, reuse_name_after_first_lookup,
+                 [get_connection, AdmConnName]),
+        MRef = erlang:monitor(process, UserConn),
+        http_delete(Config, UserConnPath, "user", "user", {group, '2xx'}),
+        receive {'DOWN', MRef, process, UserConn, _} -> ok
+        after 30000 -> ct:fail(connection_not_closed)
+        end
+    after
+        rpc(Config, meck, unload, [rabbit_mgmt_db])
+    end,
+    http_get(Config, AdmConnPath, ?OK),
+    ?assert(is_process_alive(AdmConn)),
+
+    close_connection(AdmConn),
+    http_delete(Config, "/users/user", {group, '2xx'}),
+    passed.
+
+reuse_name_with_stats_disabled(Name) ->
+    meck:expect(rabbit_mgmt_db, get_connection, 1,
+                meck:exec(fun(_) -> meck:passthrough([Name]) end)).
+
+%% From the second lookup on, any name designates the object called Name.
+reuse_name_after_first_lookup(Lookup, Name) ->
+    meck:expect(rabbit_mgmt_db, Lookup, 2,
+                meck:seq([meck:passthrough(),
+                          meck:exec(fun(_, Ranges) ->
+                                            meck:passthrough([Name, Ranges])
+                                    end)])).
 
 consumers_cq_test(Config) ->
     consumers_test(Config, [{'x-queue-type', <<"classic">>}]).
