@@ -113,6 +113,33 @@ describe('dispatcher', () => {
     });
 });
 
+describe('start_app_login', () => {
+    function startAppLogin(oauth, hasCredentials, loginSucceeds) {
+        var runs = 0;
+        sandbox.Application = function() {};
+        sandbox.Application.prototype.run = function() { runs++; };
+        sandbox.oauth = oauth;
+        sandbox.has_auth_credentials = function() { return hasCredentials; };
+        sandbox.check_login = function() { return loginSucceeds; };
+        sandbox.start_app_login();
+        return runs;
+    }
+
+    [{ enabled: false }, { enabled: true }].forEach((oauth) => {
+        it(`handles the login form when stored credentials are rejected, OAuth enabled: ${oauth.enabled}`, () => {
+            assert.equal(startAppLogin(oauth, true, false), 1);
+        });
+
+        it(`handles the login form without stored credentials, OAuth enabled: ${oauth.enabled}`, () => {
+            assert.equal(startAppLogin(oauth, false, false), 1);
+        });
+
+        it(`leaves the routes to the UI after a login, OAuth enabled: ${oauth.enabled}`, () => {
+            assert.equal(startAppLogin(oauth, true, true), 0);
+        });
+    });
+});
+
 describe('put_cast_params', () => {
     it('accepts a missing list of keys', () => {
         var put = null;

@@ -113,17 +113,9 @@ function start_app_login () {
     }
   })
 
-  if (oauth.enabled) {
-    if (has_auth_credentials()) {
-      check_login();
-    } else {
-      app.run();
-    }
-  } else
-    if (!has_auth_credentials() || !check_login()) {
-      app.run();
-    }
-
+  if (!has_auth_credentials() || !check_login()) {
+    app.run();
+  }
 }
 
 
