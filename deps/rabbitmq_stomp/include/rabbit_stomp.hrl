@@ -73,4 +73,6 @@
          state,
          timeout]).
 
+-define(EVENT_KEYS, [pid, node, vhost | ?INFO_ITEMS] ++ ?OTHER_METRICS).
+
 -type send_fun() :: fun ((iodata()) -> ok).

@@ -263,6 +263,7 @@ websocket_info(connection_created, State = #state{proc_state = ProcState}) ->
              {port, rabbit_stomp_processor:info(port, ProcState)},
              {user, rabbit_stomp_processor:info(user, ProcState)},
              {vhost, rabbit_stomp_processor:info(vhost, ProcState)},
+             {node, node()},
              {connected_at, rabbit_stomp_processor:info(connected_at, ProcState)}],
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
@@ -306,6 +307,9 @@ websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
 websocket_info(client_timeout, State) ->
     stop(State);
 
+websocket_info({shutdown, Reason}, State) ->
+    stop(State, 1000, Reason);
+
 websocket_info(credential_expired, State = #state{proc_state = ProcState}) ->
     ?LOG_WARNING("Web STOMP: closing connection ~ts of user '~ts': "
                  "credential has expired",
@@ -346,8 +350,18 @@ websocket_info(Msg, State) ->
 terminate(_Reason, _Req, State = #state{proc_state = undefined}) ->
     terminate_heartbeaters(State);
 terminate(_Reason, _Req, State = #state{proc_state = ProcState}) ->
+    maybe_notify_connection_closed(State),
     _ = rabbit_stomp_processor:flush_and_die(ProcState),
     terminate_heartbeaters(State).
+
+maybe_notify_connection_closed(#state{connection = undefined}) ->
+    ok;
+maybe_notify_connection_closed(#state{proc_state = ProcState}) ->
+    rabbit_core_metrics:connection_closed(self()),
+    rabbit_event:notify(connection_closed,
+                        [{pid, self()},
+                         {name, rabbit_stomp_processor:adapter_name(ProcState)},
+                         {node, node()}]).
 
 terminate_heartbeaters(#state{heartbeat = {none, none}}) ->
     ok;
