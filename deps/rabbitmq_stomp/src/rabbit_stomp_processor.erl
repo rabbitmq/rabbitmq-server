@@ -2205,8 +2205,8 @@ consume_queue(QRes, #{no_ack := NoAck,
                              authz_ctx = AuthzCtx,
                              queue_states  = QStates0}) ->
     check_resource_access(User, QRes, read, AuthzCtx),
-    rabbit_amqqueue:with_or_die(
-      QRes,
+    rabbit_amqqueue:with_exclusive_access_or_die(
+      QRes, self(),
       fun(Q1) ->
               case rabbit_amqqueue:basic_consume(Q1, NoAck, self(), none, false, Prefetch,
                                                  ConsumerTag, ExclusiveConsume, Args,
