@@ -271,6 +271,7 @@ process_connect(Implicit, Frame,
                                adapter_info   = AdapterInfo}) ->
     process_request(
       fun(StateN) ->
+<<<<<<< HEAD
               case negotiate_version(Frame) of
                   {ok, Version} ->
                       FT = frame_transformer(Version),
@@ -292,11 +293,123 @@ process_connect(Implicit, Frame,
                           {{ok, _, StateN1}, implicit} -> ok(StateN1);
                           _                            -> Res
                       end;
+=======
+              Res1 = maybe
+                  ok ?= check_node_connection_limit(),
+                  {ok, Version} ?= negotiate_version(Frame),
+                  ProtoVer = stomp_proto_ver(Version),
+                  FT = frame_transformer(Version),
+                  Frame1 = FT(Frame),
+                  {Auth, {Username, _}} = Creds = creds(Frame1, SSLLoginName, Config),
+                  ok ?= check_creds(Creds),
+                  {ok, DefaultVHost} = application:get_env(rabbitmq_stomp, default_vhost),
+                  VHost = login_header(Frame1, ?HEADER_HOST, DefaultVHost),
+                  Heartbeat = login_header(Frame1, ?HEADER_HEART_BEAT, <<"0,0">>),
+                  StateN1 = StateN#state{cfg = Config#cfg{vhost = VHost,
+                                                          proto_ver = ProtoVer,
+                                                          frame_transformer = FT,
+                                                          auth_mechanism = Auth,
+                                                          auth_login = Username}},
+                  {Username, AuthProps} = auth_props_for_creds(Creds, StateN1),
+                  {ok, User} ?= rabbit_access_control:check_user_login(Username, AuthProps),
+                  #user{username = AuthUsername} = User,
+                  ok ?= check_vhost_exists(VHost, AuthUsername, PeerIp),
+                  {ok, AuthzCtx} ?= check_vhost_access(VHost, User, PeerIp),
+                  ok ?= check_vhost_connection_limit(VHost),
+                  ok ?= check_user_connection_limit(AuthUsername),
+                  ok ?= check_user_loopback(AuthUsername, PeerIp),
+                  rabbit_core_metrics:auth_attempt_succeeded(PeerIp, AuthUsername, stomp),
+                  ok = register_connection(),
+                  TraceState = rabbit_trace:init(VHost),
+                  MsgIcptCtx = #{protocol => stomp,
+                                 vhost => VHost,
+                                 username => AuthUsername,
+                                 connection_name => ConnInfo#conn_info.conn_name},
+                  SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
+                  {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
+                  ok = maybe_start_credential_expiry_timer(User),
+
+                  Headers0 = #{?HEADER_SESSION => list_to_binary(SessionId),
+                               ?HEADER_HEART_BEAT =>
+                                   <<(integer_to_binary(SendTimeout))/binary, $,,
+                                     (integer_to_binary(ReceiveTimeout))/binary>>,
+                               ?HEADER_VERSION => list_to_binary(Version)},
+                  Headers = case application:get_env(rabbitmq_stomp, hide_server_info, false) of
+                                true  -> Headers0;
+                                false -> Headers0#{?HEADER_SERVER => iolist_to_binary(server_header())}
+                            end,
+
+                  Res = ok("CONNECTED", Headers,
+                           [],
+                           StateN1#state{cfg = StateN1#state.cfg#cfg{
+                                                               session_id  = SessionId,
+                                                               version     = Version,
+                                                               trace_state = TraceState,
+                                                               msg_interceptor_ctx = MsgIcptCtx
+                                                              },
+                                         user = User,
+                                         authz_ctx = AuthzCtx}),
+                  Res
+              else
+>>>>>>> 1a11e7f (STOMP: refuse CONNECT without a login or passcode)
                   {error, no_common_version} ->
                       error("Version mismatch",
                             "Supported versions are ~ts~n",
                             [string:join(?SUPPORTED_VERSIONS, ",")],
+<<<<<<< HEAD
                             StateN)
+=======
+                            StateN);
+                  {error, not_allowed, EUsername, EVHost} ->
+                      ?LOG_WARNING("STOMP login failed for user '~ts': "
+                                   "virtual host '~ts' access not allowed",
+                                   [EUsername, EVHost]),
+                      error("Bad CONNECT",
+                            "Virtual host '~ts' access denied",
+                            [EVHost], State);
+                  {refused, Username1, _Msg, _Args} ->
+                      ?LOG_WARNING("STOMP login failed for user '~ts': "
+                                   "authentication failed", [Username1]),
+                      error("Bad CONNECT",
+                            "Access refused for user '~ts'",
+                            [Username1], State);
+                  {error, missing_credentials} ->
+                      ?LOG_WARNING("STOMP login failed: no login or passcode provided"),
+                      error("Bad CONNECT", "No login or passcode provided", State);
+                  {error, not_loopback, EUsername} ->
+                      ?LOG_WARNING("STOMP login failed for user '~ts': "
+                                   "this user's access is restricted to localhost",
+                                   [EUsername]),
+                      error("Bad CONNECT", "non-loopback access denied", State);
+                  {error, quota_exceeded} ->
+                      error("Bad CONNECT",
+                            "Connection refused: vhost connection limit reached",
+                            State);
+                  {error, user_quota_exceeded} ->
+                      error("Bad CONNECT",
+                            "Connection refused: user connection limit reached",
+                            State);
+                  {error, node_connection_limit_exceeded} ->
+                      error("Bad CONNECT",
+                            "Connection refused: node connection limit reached",
+                            State)
+              end,
+              case {Res1, Implicit} of
+                  %% Success (Implicit)
+                  %% Update state without sending a CONNECTED frame
+                  {{ok, _, StateN2}, implicit} ->
+                      self() ! connection_created,
+                      ok(StateN2);
+                  %% Success (Explicit)
+                  %% Return the CONNECTED frame and update state
+                  {{ok, _, _}, _} ->
+                      self() ! connection_created,
+                      Res1;
+                  %% Failure (Authentication, quotas, etc.)
+                  %% Do NOT emit connection_created
+                  {ErrorRes, _} ->
+                      ErrorRes
+>>>>>>> 1a11e7f (STOMP: refuse CONNECT without a login or passcode)
               end
       end,
       State).
@@ -316,8 +429,29 @@ creds(Frame, SSLLoginName,
         _                    -> {stomp_headers, PasswordCreds}
     end.
 
+<<<<<<< HEAD
 login_header(Frame, Key, Default) when is_binary(Default) ->
     login_header(Frame, Key, binary_to_list(Default));
+=======
+%% A missing login or passcode is not a passwordless login, so the
+%% authentication backends must not see it.
+check_creds({_, {Username, Passcode}})
+  when Username =:= undefined; Passcode =:= undefined ->
+    {error, missing_credentials};
+check_creds(_) ->
+    ok.
+
+auth_props_for_creds(Creds, #state{cfg = #cfg{
+                                            vhost = VHost}}) ->
+    case Creds of
+        {ssl, {Username0, none}}-> {Username0, []};
+        {_, {Username0, Password}} -> {Username0, [{password, Password},
+                                                   {vhost, VHost}]}
+    end.
+
+login_header(Frame, Key, Default) when is_list(Default) ->
+    login_header(Frame, Key, list_to_binary(Default));
+>>>>>>> 1a11e7f (STOMP: refuse CONNECT without a login or passcode)
 login_header(Frame, Key, Default) ->
     case rabbit_stomp_frame:header(Frame, Key, Default) of
         undefined -> undefined;

@@ -24,6 +24,11 @@ all() ->
         heartbeat,
         login_timeout,
         credential_expires,
+<<<<<<< HEAD
+=======
+        authenticated_username_used_after_login,
+        incomplete_credentials_refused,
+>>>>>>> 1a11e7f (STOMP: refuse CONNECT without a login or passcode)
         frame_size,
         frame_size_huge,
         unauthenticated_frame_size_limited
@@ -212,6 +217,121 @@ credential_expires(Config) ->
         ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [Mod])
     end.
 
+<<<<<<< HEAD
+=======
+authenticated_username_used_after_login(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            authenticated_username_used_after_login0(Config);
+        true ->
+            {skip, "Should not run in mixed version environments"}
+    end.
+
+authenticated_username_used_after_login0(Config) ->
+    Username = <<"stomp-identity">>,
+    Rpc = fun(M, F, A) -> rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A) end,
+    ok = Rpc(rabbit_auth_backend_internal, add_user, [Username, Username, <<"acting-user">>]),
+    ok = Rpc(rabbit_auth_backend_internal, set_permissions,
+             [Username, <<"/">>, <<".*">>, <<".*">>, <<".*">>, <<"acting-user">>]),
+    {ok, TrackSource} = Rpc(application, get_env, [rabbit, track_auth_attempt_source]),
+    ok = Rpc(application, set_env, [rabbit, track_auth_attempt_source, true]),
+    ok = Rpc(rabbit_core_metrics, reset_auth_attempt_metrics, []),
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mocked = [rabbit_auth_backend_internal, rabbit_event],
+    try
+        lists:foreach(fun(Mod) -> ok = Rpc(meck, new, [Mod, [no_link, passthrough]]) end,
+                      Mocked),
+        ok = Rpc(meck, expect, [rabbit_auth_backend_internal, user_login_authentication, 2,
+                                {ok, #auth_user{username = Username, tags = [], impl = none}}]),
+        {ok, Client} = rabbit_stomp_client:connect("1.2", "login-header", "password",
+                                                   get_stomp_port(Config), []),
+        rabbit_stomp_client:send(
+          Client, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/identity">>},
+                                {<<"id">>, <<"identity">>}, {<<"receipt">>, <<"r">>},
+                                {<<"durable">>, <<"true">>}, {<<"auto-delete">>, <<"false">>}]),
+        {#stomp_frame{command = 'RECEIPT'}, Client1} = rabbit_stomp_client:recv(Client),
+        rabbit_stomp_client:send(
+          Client1, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/identity-refused">>},
+                                 {<<"id">>, <<"identity-refused">>},
+                                 {<<"durable">>, <<"true">>}, {<<"auto-delete">>, <<"false">>},
+                                 {<<"x-queue-type">>, <<"stream">>}, {<<"ack">>, <<"auto">>}]),
+        {#stomp_frame{command = 'ERROR'}, _} = rabbit_stomp_client:recv(Client1, 30_000),
+
+        Events = [binding_created, binding_deleted, queue_deleted],
+        ?awaitMatch(
+           [{binding_created, [Username]}, {binding_deleted, [Username]},
+            {queue_deleted, [Username]}],
+           [{Type, lists:usort(
+                     [proplists:get_value(user_who_performed_action, Props)
+                      || {_, {rabbit_event, notify, [T, Props | _]}, _}
+                             <- Rpc(meck, history, [rabbit_event]),
+                         T =:= Type])}
+            || Type <- Events],
+           30_000),
+        Attempts = [A || A <- Rpc(rabbit_core_metrics, get_auth_attempts_by_source, []),
+                         pget(protocol, A) =:= <<"stomp">>],
+        ?assertEqual([Username], lists:usort([pget(username, A) || A <- Attempts]))
+    after
+        lists:foreach(fun(Mod) -> _ = Rpc(meck, unload, [Mod]) end, Mocked),
+        _ = Rpc(rabbit_amqqueue, delete_with,
+                [rabbit_misc:r(<<"/">>, queue,
+                               rabbit_stomp_util:subscription_queue_name(
+                                 <<"identity">>, <<"identity">>, #stomp_frame{headers = #{}})),
+                 false, false, <<"acting-user">>]),
+        ok = Rpc(application, set_env, [rabbit, track_auth_attempt_source, TrackSource]),
+        _ = Rpc(rabbit_auth_backend_internal, delete_user, [Username, <<"acting-user">>])
+    end.
+
+incomplete_credentials_refused(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            incomplete_credentials_refused0(Config);
+        true ->
+            {skip, "Should not run in mixed version environments"}
+    end.
+
+incomplete_credentials_refused0(Config) ->
+    Rpc = fun(M, F, A) -> rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A) end,
+    {ok, DefaultUser} = Rpc(application, get_env, [rabbitmq_stomp, default_user]),
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    try
+        ok = restart_with_default_user(Config, []),
+        ok = Rpc(meck, new, [rabbit_auth_backend_internal, [no_link, passthrough]]),
+        ok = Rpc(meck, expect, [rabbit_auth_backend_internal, user_login_authentication, 2,
+                                {ok, #auth_user{username = <<"guest">>, tags = [], impl = none}}]),
+        ?assertEqual('CONNECTED',
+                     raw_connect(Config, <<"login:guest\npasscode:guest\n">>)),
+        ?assertEqual(1, Rpc(meck, num_calls, [rabbit_auth_backend_internal,
+                                              user_login_authentication, '_'])),
+        [?assertEqual({'ERROR', {ok, <<"Bad CONNECT">>}}, raw_connect(Config, Headers))
+         || Headers <- [<<"login:guest\n">>, <<"passcode:guest\n">>, <<>>]],
+        ?assertEqual(1, Rpc(meck, num_calls, [rabbit_auth_backend_internal,
+                                              user_login_authentication, '_']))
+    after
+        _ = Rpc(meck, unload, [rabbit_auth_backend_internal]),
+        ok = restart_with_default_user(Config, DefaultUser)
+    end.
+
+restart_with_default_user(Config, DefaultUser) ->
+    Rpc = fun(M, F, A) -> rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A) end,
+    ok = Rpc(application, stop, [rabbitmq_stomp]),
+    ok = Rpc(application, set_env, [rabbitmq_stomp, default_user, DefaultUser]),
+    ok = Rpc(application, start, [rabbitmq_stomp]).
+
+raw_connect(Config, Headers) ->
+    {ok, Sock} = gen_tcp:connect(localhost, get_stomp_port(Config), [{active, false}, binary]),
+    ok = gen_tcp:send(Sock, [<<"CONNECT\naccept-version:1.2\n">>, Headers, <<"\n\0">>]),
+    {ok, Data} = gen_tcp:recv(Sock, 0, 5000),
+    ok = gen_tcp:close(Sock),
+    {ok, Frame, _} = rabbit_stomp_frame:parse(Data, rabbit_stomp_frame:initial_state()),
+    case Frame of
+        #stomp_frame{command = 'ERROR'} ->
+            {'ERROR', rabbit_stomp_frame:header(Frame, <<"message">>)};
+        #stomp_frame{command = Command} ->
+            Command
+    end.
+
+>>>>>>> 1a11e7f (STOMP: refuse CONNECT without a login or passcode)
 frame_size(Config) ->
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
