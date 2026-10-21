@@ -25,8 +25,8 @@ content_types_provided(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     case rabbit_mgmt_wm_connection:conn(ReqData) of
-        error -> {false, ReqData, Context};
-        _Conn -> {true, ReqData, Context}
+        not_found -> {false, ReqData, Context};
+        _Conn     -> {true, ReqData, Context}
     end.
 
 to_json(ReqData, Context) ->

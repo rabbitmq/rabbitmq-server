@@ -229,9 +229,16 @@ is_authorized_user(ReqData, Context, ItemOrFun, AuthConfig) ->
                           case cowboy_req:method(ReqData) of
                               <<"DELETE">> -> is_admin(Tags);
                               _            -> is_monitor(Tags)
-                          end orelse Username == pget(user, Item)
+                          end orelse is_owner(Username, Item)
                   end,
                   AuthConfig).
+
+%% A missing object is refused like one of another user, so that the
+%% response does not tell which objects of other users exist.
+is_owner(_Username, not_found) ->
+    false;
+is_owner(Username, Item) ->
+    Username == pget(user, Item).
 
 %% For policies / parameters. Like is_authorized_vhost but you have to
 %% be a policymaker.
