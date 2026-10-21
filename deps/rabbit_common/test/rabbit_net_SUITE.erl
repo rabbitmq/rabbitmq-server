@@ -21,7 +21,9 @@ all() ->
      socket_ends_proxy_header_from_loopback_peer,
      socket_ends_proxy_header_from_non_loopback_peer,
      is_loopback_proxy_socket_from_loopback_peer,
-     is_loopback_proxy_socket_from_non_loopback_peer
+     is_loopback_proxy_socket_from_non_loopback_peer,
+     peername_proxy_socket_from_loopback_peer,
+     peername_proxy_socket_from_non_loopback_peer
     ].
 
 init_per_suite(Config) ->
@@ -154,6 +156,32 @@ is_loopback_proxy_socket_from_non_loopback_peer(_Config) ->
             S = new_tcp_pair(Addr),
             [?assertNot(rabbit_net:is_loopback(proxy_socket(S, Src)))
              || Src <- [{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 1}, {203, 0, 113, 5}]],
+            ok = gen_tcp:close(S)
+    end.
+
+peername_proxy_socket_from_loopback_peer(_Config) ->
+    S = new_tcp_pair({127, 0, 0, 1}),
+    {ok, Peer} = rabbit_net:peername(S),
+    [?assertEqual({ok, {Src, 50000}}, rabbit_net:peername(proxy_socket(S, Src)))
+     || Src <- [{192, 168, 1, 1}, {127, 0, 0, 1}]],
+    ?assertEqual({ok, Peer}, rabbit_net:peername(
+                               {rabbit_proxy_socket, S, #{version => 2, command => local}})),
+    ?assertEqual({ok, Peer}, rabbit_net:peername(
+                               {rabbit_proxy_socket, S, #{version => 1, command => proxy,
+                                                          transport_family => undefined,
+                                                          transport_protocol => undefined}})),
+    ok = gen_tcp:close(S).
+
+peername_proxy_socket_from_non_loopback_peer(_Config) ->
+    case non_loopback_ipv4_address() of
+        undefined ->
+            {skip, "a non-loopback IPv4 address is required"};
+        Addr ->
+            S = new_tcp_pair(Addr),
+            ?assertEqual({ok, {{192, 168, 1, 1}, 50000}},
+                         rabbit_net:peername(proxy_socket(S, {192, 168, 1, 1}))),
+            {ok, {Addr, _}} = Peer = rabbit_net:peername(S),
+            ?assertEqual(Peer, rabbit_net:peername(proxy_socket(S, {127, 0, 0, 1}))),
             ok = gen_tcp:close(S)
     end.
 

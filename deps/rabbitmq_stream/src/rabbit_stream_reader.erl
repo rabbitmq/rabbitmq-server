@@ -1501,14 +1501,7 @@ handle_frame_pre_auth(Transport,
                 AuthState =
                     case AuthState0 of
                         none ->
-                            AuthSock =
-                                case ProxySock of
-                                    undefined ->
-                                        S;
-                                    _ ->
-                                        ProxySock
-                                end,
-                            AuthMechanism:init(AuthSock);
+                            AuthMechanism:init(client_socket(S, ProxySock));
                         AS ->
                             AS
                     end,
@@ -1646,6 +1639,7 @@ handle_frame_pre_auth(_Transport,
 handle_frame_pre_auth(Transport,
                       #stream_connection{user = User = #user{username = Username},
                                          socket = S,
+                                         proxy_socket = ProxySock,
                                          ranch_ref = RanchRef,
                                          transport = TransportLayer} =
                           Connection,
@@ -1658,7 +1652,7 @@ handle_frame_pre_auth(Transport,
             ok ?= check_vhost_alive(VirtualHost),
             ok ?= check_vhost_connection_limit(VirtualHost),
             ok ?= check_user_connection_limit(Username),
-            ok ?= check_vhost_access(User, VirtualHost, S),
+            ok ?= check_vhost_access(User, VirtualHost, client_socket(S, ProxySock)),
 
             AdHost = rabbit_stream:advertised_host(TransportLayer),
             AdPort = rabbit_data_coercion:to_binary(rabbit_stream:advertised_port(TransportLayer)),
@@ -3165,6 +3159,7 @@ handle_frame_post_auth(Transport,
 complete_secret_update(NewUser = #user{username = Username},
                        #stream_connection{host = Host,
                                           socket = S,
+                                          proxy_socket = ProxySock,
                                           virtual_host = VH} = C1, S1) ->
     notify_auth_result(Username, user_authentication_success, [], C1, S1),
     rabbit_core_metrics:auth_attempt_succeeded(Host, Username, stream),
@@ -3172,7 +3167,8 @@ complete_secret_update(NewUser = #user{username = Username},
                [Username]),
     try
         ?LOG_DEBUG("Stream connection: will verify virtual host access after secret (token) update"),
-        rabbit_access_control:check_vhost_access(NewUser, VH, {socket, S}, #{}),
+        rabbit_access_control:check_vhost_access(
+          NewUser, VH, {socket, client_socket(S, ProxySock)}, #{}),
         ?LOG_DEBUG("Stream connection: successfully re-verified virtual host access"),
 
         {C1#stream_connection{user = NewUser,
@@ -4535,6 +4531,9 @@ check_user_connection_limit(Username) ->
             {error, io_lib:format("user connection limit (~tp) is reached "
                                   "for user '~ts'", [Limit, Username])}
     end.
+
+client_socket(S, undefined) -> S;
+client_socket(_S, ProxySock) -> ProxySock.
 
 check_vhost_access(User = #user{username = Username}, VHost, S) ->
     try rabbit_access_control:check_vhost_access(User, VHost, {socket, S}, #{}) of

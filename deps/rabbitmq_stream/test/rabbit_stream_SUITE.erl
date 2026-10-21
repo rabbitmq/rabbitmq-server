@@ -84,6 +84,7 @@ groups() ->
        test_super_stream_duplicate_partitions,
        authentication_error_should_close_with_delay,
        unauthorized_vhost_access_should_close_with_delay,
+       vhost_access_check_uses_proxy_protocol_client_address,
        sasl_anonymous,
        test_publisher_with_too_long_reference_errors,
        test_consumer_with_too_long_reference_errors,
@@ -272,6 +273,13 @@ init_per_testcase(unauthorized_vhost_access_should_close_with_delay = TestCase, 
   ok = rabbit_ct_broker_helpers:add_user(Config, <<"other">>),
   rabbit_ct_helpers:testcase_started(Config, TestCase);
 
+init_per_testcase(vhost_access_check_uses_proxy_protocol_client_address = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:add_user(Config, <<"other">>),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"other">>, <<"/">>),
+    ok = rpc(Config, 0, application, set_env, [rabbitmq_stream, proxy_protocol, true]),
+    ok = rpc(Config, 0, meck, new, [rabbit_auth_backend_internal, [no_link, passthrough]]),
+    rabbit_ct_helpers:testcase_started(Config, TestCase);
+
 init_per_testcase(sub_entry_batch_validation = TestCase, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config,
                                       0,
@@ -339,6 +347,11 @@ end_per_testcase(route_partitions_require_read_or_write_access = TestCase, Confi
     ok = rabbit_ct_broker_helpers:delete_user(Config, <<"test">>),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(unauthorized_vhost_access_should_close_with_delay = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:delete_user(Config, <<"other">>),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+end_per_testcase(vhost_access_check_uses_proxy_protocol_client_address = TestCase, Config) ->
+    ok = rpc(Config, 0, meck, unload, [rabbit_auth_backend_internal]),
+    ok = rpc(Config, 0, application, set_env, [rabbitmq_stream, proxy_protocol, false]),
     ok = rabbit_ct_broker_helpers:delete_user(Config, <<"other">>),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(TestCase, Config)
@@ -1787,6 +1800,28 @@ unauthorized_vhost_access_should_close_with_delay(Config) ->
     End = erlang:monotonic_time(millisecond),
     %% the stream reader module defines the delay (3 seconds)
     ?assert(End - Start > 2_000),
+    closed = wait_for_socket_close(T, S, 10),
+    ok.
+
+%% Authorization backends must be given the address of the client,
+%% i.e. the one from the PROXY protocol header, not the address of the proxy.
+vhost_access_check_uses_proxy_protocol_client_address(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    ok = T:send(S, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    User = <<"other">>,
+    Call = [rabbit_auth_backend_internal, check_vhost_access,
+            ['_', <<"/">>, #{peeraddr => {192, 168, 1, 1}}]],
+    C2 = test_authenticate(T, S, C1, User),
+    ?assertEqual(1, rpc(Config, 0, meck, num_calls, Call)),
+    C3 = expect_successful_authentication(
+           try_authenticate(T, S, C2, <<"PLAIN">>, User, User)),
+    ?assertEqual(2, rpc(Config, 0, meck, num_calls, Call)),
+    _C4 = test_close(T, S, C3),
     closed = wait_for_socket_close(T, S, 10),
     ok.
 
