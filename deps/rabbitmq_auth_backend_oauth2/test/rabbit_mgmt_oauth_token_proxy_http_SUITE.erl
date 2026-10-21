@@ -28,6 +28,7 @@ groups() ->
             ignores_forwarding_hints_in_the_query_string],
     [{top_level, [], Core ++ [
         keeps_client_supplied_secret,
+        rejects_grants_the_management_ui_does_not_use,
         relays_provider_error,
         unknown_resource_server_returns_404,
         token_endpoint_rejects_get,
@@ -234,6 +235,23 @@ keeps_client_supplied_secret(Config) ->
     {200, Map} = post_form(Config, token_path(Id), Body),
     Received = maps:get(<<"received">>, Map),
     ?assertEqual(<<"explicit">>, maps:get(<<"client_secret">>, Received)).
+
+rejects_grants_the_management_ui_does_not_use(Config) ->
+    Id = ?config(resource, Config),
+    [begin
+         {400, Map} = post_form(Config, token_path(Id), Body),
+         ?assertEqual(Error, maps:get(<<"error">>, Map)),
+         %% The mock echoes what it received: the request did not get there.
+         ?assertNot(maps:is_key(<<"received">>, Map))
+     end || {Body, Error} <- [{<<"grant_type=client_credentials&client_id=c">>,
+                               <<"unsupported_grant_type">>},
+                              {<<"grant_type=password&username=u&password=p">>,
+                               <<"unsupported_grant_type">>},
+                              {<<"grant_type=refresh_token&grant_type=client_credentials">>,
+                               <<"invalid_request">>},
+                              {<<"grant_type&client_id=c">>, <<"invalid_request">>},
+                              {<<"client_id=c">>, <<"invalid_request">>},
+                              {<<>>, <<"invalid_request">>}]].
 
 relays_provider_error(Config) ->
     Id = ?config(resource, Config),
