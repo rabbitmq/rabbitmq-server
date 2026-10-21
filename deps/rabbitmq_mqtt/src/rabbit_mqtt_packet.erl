@@ -156,16 +156,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
             Id = maps:get('Subscription-Identifier', Props, undefined),
-            Subscriptions = [#mqtt_subscription{
-                                topic_filter = Topic,
-                                options = #mqtt_subscription_opts{
-                                             qos = QoS,
-                                             no_local = int_to_bool(Nl),
-                                             retain_as_published = int_to_bool(Rap),
-                                             retain_handling = Rh,
-                                             id = Id}} ||
-                             <<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2>> <= Rest1],
-            [ok = validate_topic_filter(T) || #mqtt_subscription{topic_filter = T} <- Subscriptions],
+            [_ | _] = Subscriptions = parse_subscriptions(Rest1, ProtoVer, Id),
             Subscribe = #mqtt_packet_subscribe{packet_id = PacketId,
                                                props = Props,
                                                subscriptions = Subscriptions},
@@ -174,8 +165,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             %% "UNSUBSCRIBE messages use QoS level 1 to acknowledge multiple unsubscribe requests."
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
-            Topics = [Topic || <<Len:16, Topic:Len/binary>> <= Rest1],
-            [ok = validate_topic_filter(T) || T <- Topics],
+            [_ | _] = Topics = parse_topic_filters(Rest1),
             Unsubscribe = #mqtt_packet_unsubscribe{packet_id = PacketId,
                                                    props = Props,
                                                    topic_filters = Topics},
@@ -215,6 +205,33 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
                                    parse_packet(Joined, Fixed, Length, ProtoVer)
                            end)
     end.
+
+parse_subscriptions(<<>>, _ProtoVer, _Id) ->
+    [];
+parse_subscriptions(<<Len:16, Topic:Len/binary, Options0, Rest/binary>>, ProtoVer, Id) ->
+    ok = validate_topic_filter(Topic),
+    Options = case ProtoVer of
+                  3 -> Options0 band 3;
+                  _ -> Options0
+              end,
+    <<0:2, Rh:2, Rap:1, Nl:1, QoS:2>> = <<Options>>,
+    true = QoS < 3 andalso Rh < 3,
+    true = ProtoVer =:= 5 orelse Options < 3,
+    [#mqtt_subscription{
+        topic_filter = Topic,
+        options = #mqtt_subscription_opts{
+                     qos = QoS,
+                     no_local = int_to_bool(Nl),
+                     retain_as_published = int_to_bool(Rap),
+                     retain_handling = Rh,
+                     id = Id}} | parse_subscriptions(Rest, ProtoVer, Id)].
+
+parse_topic_filters(<<>>) ->
+    [];
+parse_topic_filters(Bin) ->
+    {Topic, Rest} = parse_bin(Bin),
+    ok = validate_topic_filter(Topic),
+    [Topic | parse_topic_filters(Rest)].
 
 parse_connect(Bin, Fixed, Length) ->
     case Bin of
