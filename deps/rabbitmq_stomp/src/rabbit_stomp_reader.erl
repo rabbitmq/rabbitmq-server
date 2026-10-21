@@ -149,7 +149,7 @@ handle_cast(QueueEvent = {queue_event, _, _}, State) ->
             {stop, {shutdown, Reason}, processor_state(NewProcState, State)}
     end;
 handle_cast({force_event_refresh, Ref}, State) ->
-    Infos = infos(?INFO_ITEMS ++ ?OTHER_METRICS, State),
+    Infos = infos(?EVENT_KEYS, State),
     rabbit_event:notify(connection_created, Infos, Ref),
     {noreply, rabbit_event:init_stats_timer(State, #reader_state.stats_timer),
      hibernate};
@@ -161,7 +161,7 @@ handle_cast(Msg, State) ->
     {stop, {stomp_unexpected_cast, Msg}, State}.
 
 handle_info(connection_created, State) ->
-    Infos = infos(?INFO_ITEMS ++ ?OTHER_METRICS, State),
+    Infos = infos(?EVENT_KEYS, State),
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
     ProcState = processor_state(State),
@@ -247,6 +247,8 @@ handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
 
 
 %%----------------------------------------------------------------------------
+handle_info({shutdown, Reason}, State) ->
+    {stop, {shutdown, {server_initiated_close, Reason}}, State};
 handle_info({'EXIT', _From, Reason}, State) ->
     {stop, {connection_died, Reason}, State}.
 %%----------------------------------------------------------------------------
@@ -366,7 +368,7 @@ terminate(Reason, undefined) ->
 terminate(Reason, State = #reader_state{processor_state = ProcState}) ->
     maybe_emit_stats(State),
     rabbit_core_metrics:connection_closed(self()),
-    Infos = infos(?OTHER_METRICS, State),
+    Infos = infos([pid, node, name | ?OTHER_METRICS], State),
     rabbit_event:notify(connection_closed, Infos),
     rabbit_networking:unregister_non_amqp_connection(self()),
     log_reason(Reason, State),

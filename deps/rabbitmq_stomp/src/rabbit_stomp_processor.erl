@@ -237,6 +237,7 @@ info(protocol, #state{cfg = #cfg{version = Version}}) ->
                    end,
     {'STOMP', VersionTuple};
 info(vhost, #state{cfg = #cfg{vhost = Val}}) -> Val;
+info(node, _) -> node();
 info(user, #state{user = undefined}) -> undefined;
 info(user, #state{user = #user{username = Username}}) -> Username;
 info(channels, _) -> 1;
@@ -390,6 +391,7 @@ process_connect(Implicit, Frame,
                   ok ?= check_vhost_exists(VHost, AuthUsername, PeerIp),
                   {ok, AuthzCtx} ?= check_vhost_access(VHost, User, PeerIp),
                   ok ?= check_vhost_connection_limit(VHost),
+                  ok ?= check_user_connection_limit(AuthUsername),
                   ok ?= check_user_loopback(AuthUsername, PeerIp),
                   rabbit_core_metrics:auth_attempt_succeeded(PeerIp, AuthUsername, stomp),
                   ok = register_connection(),
@@ -450,6 +452,10 @@ process_connect(Implicit, Frame,
                   {error, quota_exceeded} ->
                       error("Bad CONNECT",
                             "Connection refused: vhost connection limit reached",
+                            State);
+                  {error, user_quota_exceeded} ->
+                      error("Bad CONNECT",
+                            "Connection refused: user connection limit reached",
                             State);
                   {error, node_connection_limit_exceeded} ->
                       error("Bad CONNECT",
@@ -2363,6 +2369,16 @@ check_vhost_connection_limit(VHost) ->
             ?LOG_ERROR("STOMP connection failed: connection limit ~p is reached for vhost '~s'",
                        [Limit, VHost]),
             {error, quota_exceeded}
+    end.
+
+check_user_connection_limit(Username) ->
+    case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
+        false ->
+            ok;
+        {true, Limit} ->
+            ?LOG_ERROR("STOMP connection failed: connection limit ~p is reached for user '~ts'",
+                       [Limit, Username]),
+            {error, user_quota_exceeded}
     end.
 
 check_user_loopback(Username, PeerIp) ->
