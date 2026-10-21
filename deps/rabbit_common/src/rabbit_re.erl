@@ -16,6 +16,9 @@
 
 -define(MATCH_LIMIT, 50_000).
 -define(MAX_PATTERN_LENGTH, 4096).
+%% For the backtracking frames in use. PCRE2 doubles their vector as it grows,
+%% so it may allocate about three times as much while copying it.
+-define(MAX_MATCH_MEMORY, 8 * 1024 * 1024).
 
 -spec match_limit() -> pos_integer().
 match_limit() -> ?MATCH_LIMIT.
@@ -35,17 +38,55 @@ run(Subject, Pattern) ->
   | match
   | nomatch
   | {error, term()}.
+run(Subject, MP, Opts) when element(1, MP) =:= re_pattern ->
+    %% The second element of a compiled pattern is its number of captures.
+    run1(Subject, MP, element(2, MP), Opts);
 run(Subject, Pattern, Opts) ->
+    case to_binary(Pattern, Opts) of
+        error ->
+            {error, badarg};
+        Bin ->
+            %% Every capture group starts with a parenthesis.
+            run1(Subject, Bin, length(binary:matches(Bin, <<"(">>)), Opts)
+    end.
+
+run1(Subject, Pattern, Captures, Opts) ->
     try
         re:run(Subject, Pattern,
                [{match_limit, ?MATCH_LIMIT},
-                {match_limit_recursion, ?MATCH_LIMIT}
-                | Opts])
+                {match_limit_recursion, match_depth(Captures, Opts)}
+                | [Opt || Opt <- Opts, not is_match_depth_option(Opt)]])
     catch
         %% `re:run/3` raises on malformed patterns and other shape errors.
         %% Surface them as a safe error tuple so callers do not need to
         %% wrap every call in `try`.
         error:Reason -> {error, Reason}
+    end.
+
+%% Each level of depth keeps a copy of the offsets of every capture group. The
+%% PCRE2 heap limit is no alternative: when exceeded after `re:run/3` has
+%% yielded, the caller dies.
+match_depth(Captures, Opts) ->
+    Depth = lists:last([?MATCH_LIMIT | [D || {match_limit_recursion, D} <- Opts,
+                                             is_integer(D)]]),
+    min(min(Depth, ?MATCH_LIMIT), ?MAX_MATCH_MEMORY div (128 + 16 * (Captures + 1))).
+
+is_match_depth_option({match_limit_recursion, D}) -> is_integer(D);
+is_match_depth_option(_)                          -> false.
+
+to_binary(Pattern, _Opts) when is_binary(Pattern) ->
+    Pattern;
+to_binary(Pattern, Opts) ->
+    try
+        case lists:member(unicode, Opts) of
+            true  -> unicode:characters_to_binary(Pattern);
+            false -> iolist_to_binary(Pattern)
+        end
+    of
+        Bin when is_binary(Bin) -> Bin;
+        _                       -> error
+    catch
+        error:badarg -> error
     end.
 
 -spec matches(iodata() | unicode:charlist(), re:mp() | iodata()) -> boolean().
