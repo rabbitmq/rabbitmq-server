@@ -2178,9 +2178,17 @@ permissions_connection_channel_consumer_test(Config) ->
     AssertClose(MonConn, "guest", {group, '2xx'}),
     AssertClose(UserConn, "user", {group, '2xx'}),
 
+    %% A missing object gets the same response as one of another user.
+    [http_get(Config, Path, "user", "user", ?NOT_AUTHORISED) ||
+        Path <- ["/connections/foo", "/connections/foo/channels",
+                 "/connections/foo/sessions", "/channels/foo"]],
+    AssertClose("/connections/foo", "user", ?NOT_AUTHORISED),
+    AssertClose("/connections/foo", "monitor", ?NOT_AUTHORISED),
+
     http_delete(Config, "/users/user", {group, '2xx'}),
     http_delete(Config, "/users/monitor", {group, '2xx'}),
     http_get(Config, "/connections/foo", ?NOT_FOUND),
+    http_get(Config, "/connections/foo/channels", ?NOT_FOUND),
     http_get(Config, "/channels/foo", ?NOT_FOUND),
     http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
     passed.
