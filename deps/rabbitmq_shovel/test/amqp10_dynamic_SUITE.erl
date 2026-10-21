@@ -40,6 +40,7 @@ groups() ->
           dest_releases,
           test_amqp10_delete_after_queue_length,
           delete_after_duration_validation,
+          security_validation,
           delete_after_duration_autodeletes,
           delete_after_duration_runs,
           delete_after_duration_runs_long,
@@ -304,6 +305,35 @@ delete_after_duration_validation(Config) ->
     ?assertMatch({error_string, _}, Set(<<"whenever">>)),
     ?assertMatch({error_string, _}, Set(100 * 365 * 24 * 60 * 60)),
     ok.
+
+security_validation(Config) ->
+    ok = rabbit_ct_broker_helpers:add_user(Config, <<"a">>, <<"a">>),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"a">>, <<"/">>),
+    try
+        A = lookup_user(Config, <<"a">>),
+        Def = fun(SrcUri) ->
+                      [{<<"src-protocol">>, <<"amqp10">>},
+                       {<<"src-uri">>, SrcUri},
+                       {<<"src-address">>, <<"src">>},
+                       {<<"dest-protocol">>, <<"amqp10">>},
+                       {<<"dest-uri">>, <<"amqp://a:a@localhost:5672">>},
+                       {<<"dest-address">>, <<"dest">>}]
+              end,
+        shovel_test_utils:valid_param(Config, Def(<<"amqp://b:b@localhost:5672">>), A),
+        %% An anonymous login is anonymous_login_user, guest by default, which
+        %% loopback_users limits to localhost. The last URI is not valid.
+        [shovel_test_utils:invalid_param(Config, Def(Uri), A)
+         || Uri <- [<<"amqp://localhost:5672">>,
+                    <<"amqp://a:a@localhost:5672?sasl=anon">>,
+                    <<"amqp://a:a@?sasl=anon">>,
+                    <<"amqp://guest:guest@localhost:5672">>,
+                    <<"amqp://a@localhost:5672">>]],
+        ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, <<"a">>, [administrator]),
+        shovel_test_utils:valid_param(Config, Def(<<"amqp://localhost:5672">>),
+                                      lookup_user(Config, <<"a">>))
+    after
+        rabbit_ct_broker_helpers:delete_user(Config, <<"a">>)
+    end.
 
 delete_after_duration_autodeletes(Config) ->
     Src = ?config(srcq, Config),

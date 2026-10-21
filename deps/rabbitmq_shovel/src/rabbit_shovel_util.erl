@@ -16,6 +16,8 @@
          decl_fun/2,
          pget2count/3,
          validate_uri_fun/1,
+         validate_uri_fun/2,
+         local_credentials/1,
          validate_queue_args/2,
          validate_consumer_args/2,
          validate_delete_after/2,
@@ -203,22 +205,25 @@ pget2count(K1, K2, Defs) ->
     end.
 
 validate_uri_fun(User) ->
-    fun (Name, Term) -> validate_uri(Name, Term, User) end.
+    validate_uri_fun(amqp091, User).
 
-validate_uri(Name, Term, User) when is_binary(Term) ->
+validate_uri_fun(Protocol, User) ->
+    fun (Name, Term) -> validate_uri(Name, Term, Protocol, User) end.
+
+validate_uri(Name, Term, Protocol, User) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
-                  {ok, P}    -> validate_params_user(P, User);
+                  {ok, P}    -> validate_params_user(Protocol, P, Term, User);
                   {error, {Info, _}} ->
                       {error, "\"~ts\" not a valid URI: ~tp",
                        [amqp_uri:remove_credentials(Term), Info]}
               end;
         E  -> E
     end;
-validate_uri(Name, Term, User) ->
+validate_uri(Name, Term, Protocol, User) ->
     case rabbit_parameter_validation:list(Name, Term) of
         ok -> case [V || URI <- Term,
-                         V <- [validate_uri(Name, URI, User)],
+                         V <- [validate_uri(Name, URI, Protocol, User)],
                          element(1, V) =:= error] of
                   []      -> ok;
                   [E | _] -> E
@@ -226,12 +231,34 @@ validate_uri(Name, Term, User) ->
         E  -> E
     end.
 
-validate_params_user(#amqp_params_direct{}, none) ->
+%% The URI of a local shovel is a direct login whatever its host, and the
+%% one of a network shovel may point at this node.
+validate_params_user(_Protocol, _Params, _Uri, none) ->
     ok;
-validate_params_user(#amqp_params_direct{username = ConnUsername,
-                                         password = ConnPassword,
-                                         virtual_host = VHost},
-                     User = #user{username = Username}) ->
+validate_params_user(local, Params, _Uri, User) ->
+    {ConnUsername, ConnPassword, VHost} = local_credentials(Params),
+    validate_direct_login(ConnUsername, ConnPassword, VHost, User);
+validate_params_user(amqp10, _Params, Uri, User) ->
+    case amqp10_login_username(binary_to_list(Uri)) of
+        {ok, undefined} ->
+            ok;
+        {ok, ConnUsername} ->
+            rabbit_access_control:check_login_as(User, ConnUsername, true);
+        error ->
+            {error, "\"~ts\" not a valid AMQP 1.0 URI",
+             [amqp_uri:remove_credentials(Uri)]}
+    end;
+validate_params_user(amqp091, #amqp_params_direct{username = ConnUsername,
+                                                  password = ConnPassword,
+                                                  virtual_host = VHost},
+                     _Uri, User) ->
+    validate_direct_login(ConnUsername, ConnPassword, VHost, User);
+validate_params_user(amqp091, #amqp_params_network{username = ConnUsername},
+                     _Uri, User) ->
+    rabbit_access_control:check_login_as(User, ConnUsername, true).
+
+validate_direct_login(ConnUsername, ConnPassword, VHost,
+                      User = #user{username = Username}) ->
     VHostAccess = try rabbit_access_control:check_vhost_access(
                           User, VHost, undefined, #{})
                   catch _:E -> {error, E}
@@ -247,9 +274,39 @@ validate_params_user(#amqp_params_direct{username = ConnUsername,
               User, ConnUsername, is_binary(ConnPassword) andalso ConnPassword =/= <<>>);
         _ ->
             {error, "user \"~ts\" may not connect to vhost \"~ts\"", [Username, VHost]}
-    end;
-validate_params_user(#amqp_params_network{}, _User) ->
-    ok.
+    end.
+
+-spec local_credentials(#amqp_params_direct{} | #amqp_params_network{}) ->
+    {rabbit_types:username() | none, rabbit_types:password() | none,
+     rabbit_types:vhost()}.
+local_credentials(#amqp_params_direct{username = none, password = none,
+                                      virtual_host = VHost}) ->
+    {<<"guest">>, <<"guest">>, VHost};
+local_credentials(#amqp_params_direct{username = Username, password = Password,
+                                      virtual_host = VHost}) ->
+    {Username, Password, VHost};
+local_credentials(#amqp_params_network{username = Username, password = Password,
+                                       virtual_host = VHost}) ->
+    {Username, Password, VHost}.
+
+%% Without credentials in the URI, or with `sasl=anon', the AMQP 1.0 client
+%% logs in anonymously, and RabbitMQ maps that to `anonymous_login_user'.
+amqp10_login_username(Uri) ->
+    try amqp10_client:parse_uri(Uri) of
+        {ok, #{sasl := anon}} ->
+            case application:get_env(rabbit, anonymous_login_user) of
+                {ok, Username} when is_binary(Username) -> {ok, Username};
+                _                                       -> {ok, undefined}
+            end;
+        {ok, #{sasl := {plain, Username, _}}} ->
+            {ok, Username};
+        {ok, _} ->
+            {ok, undefined};
+        {error, _} ->
+            error
+    catch
+        _:_ -> error
+    end.
 
 validate_queue_args(Name, Term0) ->
     validate_amqp_table_args(Name, Term0, rabbit_amqqueue:declare_args()).
