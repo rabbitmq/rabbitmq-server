@@ -283,3 +283,7 @@
 
 %% Preferred value instead of `infinity`
 -define(GEN_SERVER_CALL_TIMEOUT, 60000).
+
+%% Limits for formatting terms such as with `~tP`
+-define(FORMAT_DEPTH_LIMIT, 10).
+-define(FORMAT_CHARS_LIMIT, 262_144).

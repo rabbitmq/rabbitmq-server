@@ -34,6 +34,8 @@ all() ->
 groups() ->
     [
         {parallel_tests, [parallel], [
+            format_term,
+            limit_term,
             data_coercion_as_list,
             data_coercion_to_binary,
             data_coercion_to_binary_rejects_unsupported_types,
@@ -397,6 +399,19 @@ data_coercion_to_list(_Config) ->
     IPv6 = {0, 0, 0, 0, 0, 0, 0, 1},
     IPv6Result = rabbit_data_coercion:to_list(IPv6),
     ?assert(is_list(IPv6Result)).
+
+format_term(_Config) ->
+    Deep = lists:foldl(fun(_, Acc) -> [Acc] end, x, lists:seq(1, 20_000)),
+    ?assert(length(rabbit_misc:format_term(Deep)) < 1000),
+    ?assert(length(rabbit_misc:format_term(binary:copy(<<"a">>, 1_000_000))) < 1000),
+    ?assertEqual("ok", rabbit_misc:format_term(ok)).
+
+limit_term(_Config) ->
+    Deep = lists:foldl(fun(_, Acc) -> {list, [Acc]} end, x, lists:seq(1, 20_000)),
+    Limited = rabbit_misc:limit_term(Deep),
+    ?assert(length(lists:flatten(io_lib:format("~tp", [Limited]))) < 1000),
+    ?assertEqual({a, <<"b">>, [1, 2]}, rabbit_misc:limit_term({a, <<"b">>, [1, 2]})),
+    ?assert(byte_size(rabbit_misc:limit_term(binary:copy(<<"a">>, 1_000_000))) < 1000).
 
 data_coercion_as_list(_Config) ->
     %% Lists pass through unchanged

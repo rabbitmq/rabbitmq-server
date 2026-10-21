@@ -603,7 +603,7 @@ handle_cast({frame_body, FrameBody},
               Err = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                   description = {utf8, <<"internal error">>}},
               log_error_and_close_session(
-                Err, rabbit_misc:format("~tp~n~tp", [Reason, Stacktrace]), State0)
+                Err, rabbit_misc:format("~tP~n~tP", [Reason, 10, Stacktrace, ?FORMAT_DEPTH_LIMIT]), State0)
     end;
 handle_cast({queue_event, _, _} = QEvent, State0) ->
     try handle_queue_event(QEvent, State0) of
@@ -1139,8 +1139,8 @@ handle_frame(#'v1_0.flow'{handle = Handle} = Flow,
                                 %% "If set to a handle that is not currently associated with
                                 %% an attached link, the recipient MUST respond by ending the
                                 %% session with an unattached-handle session error." [2.7.4]
-                                ?LOG_WARNING("Received Flow frame for unknown link handle: ~tp",
-                                             [Flow]),
+                                ?LOG_WARNING("Received Flow frame for unknown link handle: ~tP",
+                                             [Flow, ?FORMAT_DEPTH_LIMIT]),
                                 protocol_error(
                                   ?V_1_0_SESSION_ERROR_UNATTACHED_HANDLE,
                                   "Unattached link handle: ~b", [HandleInt])
@@ -1342,8 +1342,8 @@ handle_frame(Detach0 = #'v1_0.detach'{handle = ?UINT(HandleInt),
                                 {error, Reason} ->
                                     protocol_error(
                                       ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                      "Failed to remove consumer from ~s: ~tp",
-                                      [rabbit_misc:rs(amqqueue:get_name(Q)), Reason])
+                                      "Failed to remove consumer from ~s: ~tP",
+                                      [rabbit_misc:rs(amqqueue:get_name(Q)), Reason, ?FORMAT_DEPTH_LIMIT])
                             end;
                         {error, not_found} ->
                             {OutgoingLinks1, Unsettled1, Pending1, QStates0, Detach0, PC}
@@ -1388,8 +1388,8 @@ handle_frame(#'v1_0.end'{},
 
 handle_frame(Frame, _State) ->
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                   "Unexpected frame ~tp",
-                   [amqp10_framing:pprint(Frame)]).
+                   "Unexpected frame ~tP",
+                   [amqp10_framing:pprint(Frame), ?FORMAT_DEPTH_LIMIT]).
 
 reply_frames(Frames, State) ->
     {ok, session_flow_fields(Frames, State), State}.
@@ -1419,8 +1419,8 @@ handle_attach(#'v1_0.attach'{
                                 Pairs0);
                 #{LinkName := Other} ->
                     link_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                               "received invalid attach ~p for management link pair ~p",
-                               [Attach, Other]);
+                               "received invalid attach ~P for management link pair ~P",
+                               [Attach, 10, Other, ?FORMAT_DEPTH_LIMIT]);
                 _ ->
                     maps:put(LinkName,
                              #management_link_pair{client_terminus_address = ClientTerminusAddress,
@@ -1476,8 +1476,8 @@ handle_attach(#'v1_0.attach'{
                                 Pairs0);
                 #{LinkName := Other} ->
                     link_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                               "received invalid attach ~p for management link pair ~p",
-                               [Attach, Other]);
+                               "received invalid attach ~P for management link pair ~P",
+                               [Attach, 10, Other, ?FORMAT_DEPTH_LIMIT]);
                 _ ->
                     maps:put(LinkName,
                              #management_link_pair{client_terminus_address = ClientTerminusAddress,
@@ -1557,8 +1557,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
             reply_frames([Reply, Flow], State);
         {error, Reason} ->
             link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                       "Attach refused: ~tp",
-                       [Reason])
+                       "Attach refused: ~tP",
+                       [Reason, ?FORMAT_DEPTH_LIMIT])
     end;
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
@@ -1591,9 +1591,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
     case ensure_source(Source0, SndSettled, LinkNameBin,
                        Cfg, PermCache0, TopicPermCache0) of
         {error, {amqp_error, Condition, Description}} ->
-            link_error(Condition, Description, []);
+            link_error(Condition, "~ts", [Description]);
         {error, Reason} ->
-            link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tp", [Reason]);
+            link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tP", [Reason, ?FORMAT_DEPTH_LIMIT]);
         {ok, #resource{name = QNameBin} = QName,
          #'v1_0.source'{address = {utf8, SourceAddress},
                         filter = DesiredFilter,
@@ -1704,8 +1704,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                     reply_frames(Reply, State);
                 {error, Reason} ->
                     link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                               "Could not operate on ~ts: ~tp",
-                               [rabbit_misc:rs(QName), Reason])
+                               "Could not operate on ~ts: ~tP",
+                               [rabbit_misc:rs(QName), Reason, ?FORMAT_DEPTH_LIMIT])
             end;
         {ok, jms_subscription_lookup, QName, QType,
          #'v1_0.source'{address = {utf8, SourceAddress},
@@ -2257,8 +2257,8 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                                 ({{symbol, <<"x-opt-deferral-token">>}, Other}) ->
                                      protocol_error(
                                        ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                                       "x-opt-deferral-token must be of AMQP type utf8, got: ~tp",
-                                       [Other]);
+                                       "x-opt-deferral-token must be of AMQP type utf8, got: ~tP",
+                                       [Other, ?FORMAT_DEPTH_LIMIT]);
                                 ({{symbol, <<"x-", _/binary>> = K}, V}) ->
                                      {K, unwrap_simple_type(V)}
                              end, KVList),
@@ -2271,8 +2271,8 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
 settle_op_from_outcome(Outcome) ->
     protocol_error(
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-      "Unrecognised state: ~tp in DISPOSITION",
-      [Outcome]).
+      "Unrecognised state: ~tP in DISPOSITION",
+      [Outcome, ?FORMAT_DEPTH_LIMIT]).
 
 -spec flow({uint, link_handle()}, sequence_no(), rabbit_queue_type:credit()) ->
     #'v1_0.flow'{}.
@@ -2652,7 +2652,7 @@ incoming_link_transfer(
     Mc0 = try mc:init(mc_amqp, PayloadBin, #{})
           catch throw:Reason0 ->
                     link_error(?V_1_0_AMQP_ERROR_DECODE_ERROR,
-                               "failed to parse message: ~tp", [Reason0])
+                               "failed to parse message: ~tP", [Reason0, ?FORMAT_DEPTH_LIMIT])
           end,
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, IsJms, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->
@@ -2692,8 +2692,8 @@ incoming_link_transfer(
                 {error, Reason} ->
                     link_error(
                       ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                      "failed to deliver message (delivery-tag=~p, delivery-id=~p): ~tp",
-                      [DeliveryTag, DeliveryId, Reason])
+                      "failed to deliver message (delivery-tag=~p, delivery-id=~p): ~tP",
+                      [DeliveryTag, DeliveryId, Reason, ?FORMAT_DEPTH_LIMIT])
             end;
         {error, {anonymous_terminus, false}, #'v1_0.error'{} = Err} ->
             Disposition = case Settled of
@@ -2831,7 +2831,7 @@ bad_x_cc(Value) ->
     Desc = unicode:characters_to_binary(
              lists:flatten(
                io_lib:format(
-                 "bad value for 'x-cc' message-annotation: ~tp", [Value]))),
+                 "bad value for 'x-cc' message-annotation: ~tP", [Value, ?FORMAT_DEPTH_LIMIT]))),
     #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
                   description = {utf8, Desc}}.
 
@@ -2980,12 +2980,17 @@ ensure_source(#'v1_0.source'{
             QName = queue_resource(Vhost, QNameBin),
             {ok, QName, Source, PermCache, TopicPermCache};
         _ ->
-            exit_not_implemented("Dynamic source not supported: ~tp", [Source0])
+            exit_not_implemented("Dynamic source not supported: ~tP", [Source0, ?FORMAT_DEPTH_LIMIT])
     end;
 ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _) ->
+<<<<<<< HEAD
     exit_not_implemented("Dynamic source not supported: ~tp", [Source]);
 ensure_source(Source0 = #'v1_0.source'{address = Address,
                                        durable = Durable},
+=======
+    exit_not_implemented("Dynamic source not supported: ~tP", [Source, ?FORMAT_DEPTH_LIMIT]);
+ensure_source(Source0 = #'v1_0.source'{address = Address},
+>>>>>>> 863ba8a (Logging: avoid very deeply nested log entries)
               _SndSettle,  LinkName,
               #cfg{container_id = ContainerId,
                    reader_pid = ConnPid,
@@ -3147,12 +3152,17 @@ ensure_target(#'v1_0.target'{
                     Result
             end;
         _ ->
-            exit_not_implemented("Dynamic target not supported: ~p", [Target0])
+            exit_not_implemented("Dynamic target not supported: ~P", [Target0, ?FORMAT_DEPTH_LIMIT])
     end;
 ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _) ->
+<<<<<<< HEAD
     exit_not_implemented("Dynamic target not supported: ~p", [Target]);
 ensure_target(Target = #'v1_0.target'{address = Address,
                                       durable = Durable},
+=======
+    exit_not_implemented("Dynamic target not supported: ~P", [Target, ?FORMAT_DEPTH_LIMIT]);
+ensure_target(Target = #'v1_0.target'{address = Address},
+>>>>>>> 863ba8a (Logging: avoid very deeply nested log entries)
               _LinkName,
               #cfg{user = User,
                    vhost = Vhost,
@@ -3460,8 +3470,8 @@ parse_deferred_tokens({map, KVList}) ->
         {Key, Other} ->
             protocol_error(
               ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-              "rabbitmq:deferral-tokens must be an array of AMQP type utf8, got: ~tp",
-              [Other])
+              "rabbitmq:deferral-tokens must be an array of AMQP type utf8, got: ~tP",
+              [Other, ?FORMAT_DEPTH_LIMIT])
     end.
 
 delivery_count_rcv(?UINT(DeliveryCount)) ->
@@ -3885,8 +3895,8 @@ declare_queue(QNameBin,
                        ReasonArgs);
         Other ->
             link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                       "Failed to declare ~s: ~p",
-                       [rabbit_misc:rs(QName), Other])
+                       "Failed to declare ~s: ~P",
+                       [rabbit_misc:rs(QName), Other, ?FORMAT_DEPTH_LIMIT])
     end,
     {ok, PermCache}.
 
@@ -3939,10 +3949,10 @@ outcomes(#'v1_0.source'{outcomes = {array, symbol, Syms} = Outcomes}) ->
         [] ->
             Outcomes;
         Unsupported ->
-            exit_not_implemented("Outcomes not supported: ~tp", [Unsupported])
+            exit_not_implemented("Outcomes not supported: ~tP", [Unsupported, ?FORMAT_DEPTH_LIMIT])
     end;
 outcomes(#'v1_0.source'{outcomes = Unsupported}) ->
-    exit_not_implemented("Outcomes not supported: ~tp", [Unsupported]);
+    exit_not_implemented("Outcomes not supported: ~tP", [Unsupported, ?FORMAT_DEPTH_LIMIT]);
 outcomes(_) ->
     {array, symbol, ?OUTCOMES}.
 
@@ -4116,7 +4126,7 @@ check_resource_access(Resource, Perm, User, Cache) ->
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
-                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
+                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~ts", [Msg])
             end
     end.
 
@@ -4167,7 +4177,7 @@ check_topic_authorisation(#exchange{type = topic,
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
-                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
+                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~ts", [Msg])
             end
     end;
 check_topic_authorisation(_, _, _, _, Cache) ->

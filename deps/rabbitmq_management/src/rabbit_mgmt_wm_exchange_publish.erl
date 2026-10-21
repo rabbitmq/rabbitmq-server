@@ -56,7 +56,8 @@ do_it(ReqData0, Context) ->
     X = rabbit_mgmt_util:id(exchange, ReqData0),
     rabbit_mgmt_util:with_decode(
       [routing_key, properties, payload, payload_encoding], ReqData0, Context,
-      fun ([RoutingKey, Props0, Payload0, Enc], _, ReqData) when is_binary(Payload0) ->
+      fun ([RoutingKey, Props0, Payload0, Enc], _, ReqData)
+            when is_binary(Payload0), is_binary(RoutingKey) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->
@@ -93,6 +94,8 @@ do_it(ReqData0, Context) ->
                                 bad(confirm_timeout, MRef, ReqData, Context)
                         end
                 end);
+          ([_RoutingKey, _Props, Payload, _Enc], _, _ReqData) when is_binary(Payload) ->
+              throw({error, routing_key_not_string});
           ([_RoutingKey, _Props, _Payload, _Enc], _, _ReqData) ->
               throw({error, payload_not_string})
       end).

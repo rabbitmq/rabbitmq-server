@@ -75,7 +75,7 @@ format_info({running, Props}) ->
 
 format_info({terminated, Reason}) ->
     [{state,  terminated},
-        {reason, print("~tp", [Reason])}].
+        {reason, print("~ts", [rabbit_misc:format_term(Reason)])}].
 
 format_ts({{Y, M, D}, {H, Min, S}}) ->
     print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
