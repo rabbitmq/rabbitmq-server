@@ -11,7 +11,7 @@
 -include("rabbit_mqtt_packet.hrl").
 
 all() ->
-    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag, utf8_strings, topic_names_and_filters, subscription_payloads].
+    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag, utf8_strings, topic_names_and_filters, subscription_payloads, subscription_identifier_zero].
 
 init_per_suite(Config) ->
     persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, 65_536),
@@ -153,6 +153,13 @@ subscription_payloads(_Config) ->
     ?assertMatch({ok, _, <<>>, 3}, rabbit_mqtt_packet:parse(<<16#82, 6, 0, 1, 0, 1, "a", 16#FC>>, 3)),
     ?assertError({badmatch, false}, rabbit_mqtt_packet:parse(<<16#82, 6, 0, 1, 0, 1, "a", 4>>, 4)),
     ?assertMatch({ok, _, <<>>, 5}, rabbit_mqtt_packet:parse(<<16#82, 7, 0, 1, 0, 0, 1, "a", 4>>, 5)),
+    ok.
+
+subscription_identifier_zero(_Config) ->
+    ?assertError({badmatch, false},
+                 rabbit_mqtt_packet:parse(<<16#82, 9, 0, 1, 2, 16#0B, 0, 0, 1, "a", 0>>, 5)),
+    ?assertMatch({ok, _, <<>>, 5},
+                 rabbit_mqtt_packet:parse(<<16#82, 9, 0, 1, 2, 16#0B, 1, 0, 1, "a", 0>>, 5)),
     ok.
 
 parse_connect(Vsn, Flags, Payload) ->
