@@ -41,6 +41,8 @@ groups() ->
           loopback_user_denied,
           uri_list_denied,
           uri_list_allowed,
+          uri_list_empty,
+          uri_list_nested,
           map_uri_denied,
           uri_list_mixed_network_and_denied_direct,
           invalid_uri_error_has_no_credentials,
@@ -150,6 +152,18 @@ uri_list_allowed(Config) ->
     Uris = [direct_uri(?ALLOWED_VHOST), direct_uri(?ALLOWED_VHOST)],
     ?assertEqual([ok], validate_with_user(Config, Uris)).
 
+uri_list_empty(Config) ->
+    ?assertMatch([{error, _, _}], validate_with_user(Config, [])),
+    ?assertMatch([{error, _, _}], validate_with_none(Config, [])).
+
+uri_list_nested(Config) ->
+    [begin
+         ?assertMatch([{error, _, _}], validate_with_user(Config, Uris)),
+         ?assertMatch([{error, _, _}], validate_with_none(Config, Uris))
+     end || Uris <- [[[]],
+                     [[network_uri(?ALLOWED_VHOST)]],
+                     [network_uri(?ALLOWED_VHOST), [network_uri(?ALLOWED_VHOST)]]]].
+
 map_uri_denied(Config) ->
     Term = #{<<"uri">> => direct_uri(?DENIED_VHOST)},
     ?assertMatch([{error, _, _}], validate_term_with_user(Config, Term)).
@@ -165,7 +179,8 @@ invalid_uri_error_has_no_credentials(Config) ->
          ?assertEqual(nomatch, string:find(Msg, "s3cret"))
      end || Uri <- [<<"amqp://alice:s3cret@:::">>,
                     <<"amqps://alice:s3cret@host/?depth=x&password=s3cret">>,
-                    <<"amqp://alice:s3cret%zz@host">>]],
+                    <<"amqp://alice:s3cret%zz@host">>,
+                    [[<<"amqp://alice:s3cret@host">>]]]],
     ok.
 
 %% -------------------------------------------------------------------
