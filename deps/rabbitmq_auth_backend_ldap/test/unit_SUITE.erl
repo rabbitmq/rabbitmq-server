@@ -30,6 +30,7 @@ all() ->
      invalid_credentials_refused_is_not_a_format_string,
      invalid_credentials_via_with_login_is_not_a_format_string,
      user_dn_pattern_gh_7161,
+     missing_password_is_not_a_passwordless_login,
      format_different_types_of_ldap_attribute_values,
      ldap_log_domain_routing,
      ldap_log_callsites_carry_domain
@@ -427,6 +428,14 @@ user_dn_pattern_gh_7161(_Config) ->
     ok = application:load(rabbitmq_auth_backend_ldap),
     {ok, UserDnPattern} = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
     ?assertEqual("${username}", UserDnPattern).
+
+%% Only an absent password or `none` (EXTERNAL) is a passwordless login.
+missing_password_is_not_a_passwordless_login(_Config) ->
+    [?assertMatch({refused, _, [<<"bob">>]},
+                  rabbit_auth_backend_ldap:user_login_authentication(
+                    <<"bob">>, [{password, Password}, {vhost, <<"/">>}]))
+     || Password <- [undefined, <<>>, ""]],
+    ok.
 
 utf8_list_to_string(StrangeList) ->
   unicode:characters_to_list(list_to_binary(StrangeList)).
