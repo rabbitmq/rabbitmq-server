@@ -108,7 +108,7 @@ validate_uri(User) ->
     fun (Name, Term) -> validate_uri(Name, Term, User) end.
 
 validate_uri(Name, Term, User) when is_binary(Term) ->
-    case rabbit_parameter_validation:binary(Name, Term) of
+    case rabbit_parameter_validation:uri(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
                   {ok, Params} -> validate_uri_user(Params, User);
                   {error, {Info, _}} ->
