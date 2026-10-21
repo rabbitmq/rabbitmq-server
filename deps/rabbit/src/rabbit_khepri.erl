@@ -1342,10 +1342,11 @@ transaction(Fun, ReadWrite) ->
 
 transaction(Fun, ReadWrite, Options) ->
     Options1 = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options),
-    case khepri:transaction(?STORE_ID, Fun, ReadWrite, Options1) of
-        ok              -> ok; %% Async transaction.
-        {ok, Result}    -> Result;
-        {error, Reason} -> throw({error, Reason})
+    try
+        khepri:transaction(?STORE_ID, Fun, ReadWrite, Options1)
+    catch
+        error:?khepri_error(tx_submission_error, #{reason := Error}) ->
+            Error
     end.
 
 fence(Timeout) ->
