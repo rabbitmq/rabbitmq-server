@@ -49,7 +49,13 @@ groups() ->
                        more_than_one_resource_server_id_not_allowed_in_one_token,
                        mqtt_expired_token,
                        mqtt_expirable_token,
+<<<<<<< HEAD
                        web_mqtt_expirable_token
+=======
+                       web_mqtt_expirable_token,
+                       expirable_token_with_internal_authz_backend,
+                       mqtt_scope_pattern_syntax_regex_subscribe_denied
+>>>>>>> ef513f7 (Keep the authn backend's credential expiry with other authz backends)
                       ]},
 
      {token_refresh, [], [
@@ -94,6 +100,8 @@ groups() ->
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
 -define(EXTRA_SCOPES_SOURCE, <<"additional_rabbitmq_scopes">>).
 -define(CLAIMS_FIELD, <<"claims">>).
+
+-define(INTERNAL_DB_USER, <<"internal-db-user">>).
 
 -define(SCOPE_ALIAS_NAME,   <<"role-1">>).
 -define(SCOPE_ALIAS_NAME_2, <<"role-2">>).
@@ -233,6 +241,17 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
+init_per_testcase(expirable_token_with_internal_authz_backend = Testcase, Config) ->
+    %% auth_backends.1.authn = oauth2
+    %% auth_backends.1.authz = internal
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbit, auth_backends,
+         [{rabbit_auth_backend_oauth2, rabbit_auth_backend_internal}]]),
+    ok = rabbit_ct_broker_helpers:add_user(Config, ?INTERNAL_DB_USER),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, ?INTERNAL_DB_USER, <<"/">>),
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config;
+
 init_per_testcase(multiple_resource_server_ids, Config) ->
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
       [rabbitmq_auth_backend_oauth2, scope_prefix, <<"rmq.">> ]),
@@ -301,6 +320,13 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_
         [rabbitmq_auth_backend_oauth2, scope_aliases]),
   rabbit_ct_helpers:testcase_finished(Config, Testcase),
   Config;
+
+end_per_testcase(expirable_token_with_internal_authz_backend = Testcase, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbit, auth_backends, [rabbit_auth_backend_oauth2]]),
+    ok = rabbit_ct_broker_helpers:delete_user(Config, ?INTERNAL_DB_USER),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
+    Config;
 
 end_per_testcase(multiple_resource_server_ids, Config) ->
   rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
@@ -538,6 +564,45 @@ mqtt_expirable_token0(Port, AdditionalOpts, Connect, Config) ->
     end,
     receive {disconnected, ReasonCode, _} -> ok
     after Millis * 2 -> ct:fail("missing DISCONNECT packet from server")
+    end.
+
+%% Test that the token can be renewed and that RabbitMQ closes the connection
+%% when the token expires although the OAuth 2 backend is used for
+%% authentication only and the internal backend, which knows nothing about
+%% the token, for authorisation.
+expirable_token_with_internal_authz_backend(Config) ->
+    Seconds = 3,
+    Millis = Seconds * 1000,
+    Jwk = rabbit_ct_helpers:get_config(Config, fixture_jwk),
+    Token = fun(ExpiresIn) ->
+                    Claims = ?UTIL_MOD:token_with_scopes_and_expiration(
+                               ?UTIL_MOD:full_permission_scopes(),
+                               os:system_time(seconds) + ExpiresIn),
+                    {_Algo, T} = ?UTIL_MOD:sign_token_hs(
+                                    Claims#{<<"sub">> => ?INTERNAL_DB_USER}, Jwk),
+                    T
+            end,
+
+    Conn = open_unmanaged_connection(Config, 0, ?INTERNAL_DB_USER, Token(Seconds)),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    MRef = erlang:monitor(process, Conn),
+
+    ok = amqp_connection:update_secret(Conn, Token(Seconds * 2), <<"token refresh">>),
+
+    receive {'DOWN', MRef, process, Conn, Reason} ->
+                ct:fail({connection_closed_after_token_refresh, Reason})
+    after Millis + 500 ->
+              #'queue.declare_ok'{} =
+                  amqp_channel:call(Ch, #'queue.declare'{exclusive = true})
+    end,
+
+    receive {'DOWN', MRef, process, Conn,
+             {shutdown, {server_initiated_close, 320,
+                         <<"CONNECTION_FORCED - credential expired">>}}} ->
+                ok
+    after Millis * 2 ->
+              ct:fail("server did not close our connection")
     end.
 
 %% Test that RabbitMQ closes the AMQP 1.0 connection when the token expires.

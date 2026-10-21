@@ -26,6 +26,11 @@
 
          expiry_timestamp/1,
          update_state_rebuilds_tags/1,
+<<<<<<< HEAD
+=======
+         authn_backend_expiry_with_different_authz_backend/1,
+         check_user_id0_tag_representation/1,
+>>>>>>> ef513f7 (Keep the authn backend's credential expiry with other authz backends)
          with_enabled_plugin/1,
          with_enabled_plugin_plus_internal/1,
          with_missing_plugin/1,
@@ -45,7 +50,13 @@ all() ->
 
 groups() ->
     [{unit_tests, [], [expiry_timestamp,
+<<<<<<< HEAD
                        update_state_rebuilds_tags]},
+=======
+                       update_state_rebuilds_tags,
+                       authn_backend_expiry_with_different_authz_backend,
+                       check_user_id0_tag_representation]},
+>>>>>>> ef513f7 (Keep the authn backend's credential expiry with other authz backends)
      {integration_tests, [], [with_enabled_plugin,
                               with_enabled_plugin_plus_internal,
                               with_missing_plugin,
@@ -220,6 +231,99 @@ update_state_rebuilds_tags(_) ->
     ?assertEqual([administrator], U4#user.tags),
     ok.
 
+<<<<<<< HEAD
+=======
+%% With different authn and authz backends, credentials that only the authn
+%% backend knows the expiry of must still expire and be refreshable.
+authn_backend_expiry_with_different_authz_backend(_) ->
+    Now = os:system_time(seconds),
+    ModN = rabbit_expiring_authn_backend,
+    ok = meck:new(ModN, [non_strict]),
+    %% The credential is its own expiry timestamp.
+    meck:expect(ModN, user_login_authentication,
+                fun(Username, [{password, Ts}]) ->
+                        {ok, #auth_user{username = Username,
+                                        tags = [impersonator],
+                                        impl = fun() -> Ts end}}
+                end),
+    meck:expect(ModN, expiry_timestamp, fun(#auth_user{impl = Impl}) -> Impl() end),
+    meck:expect(ModN, update_state,
+                fun(_, refuse_me) ->
+                        {refused, "refused", []};
+                   (AuthUser, Ts) ->
+                        {ok, AuthUser#auth_user{tags = [],
+                                                impl = fun() -> Ts end}}
+                end),
+    ModZ = rabbit_static_authz_backend,
+    ok = meck:new(ModZ, [non_strict]),
+    meck:expect(ModZ, user_login_authorization,
+                fun(_, _) -> {ok, none, [management]} end),
+    meck:expect(ModZ, expiry_timestamp, fun(_) -> never end),
+    meck:expect(ModZ, check_resource_access, fun(_, _, _, _) -> true end),
+    Login = fun(Ts, Backends) ->
+                    rabbit_access_control:check_user_login(
+                      <<"u">>, [{password, Ts}], Backends)
+            end,
+    Resource = rabbit_misc:r(<<"/">>, queue, <<"q">>),
+
+    {ok, U1} = Login(Now + 60, [{ModN, ModZ}]),
+    ?assertEqual([impersonator, management], U1#user.tags),
+    ?assertEqual(Now + 60, rabbit_access_control:expiry_timestamp(U1)),
+    ?assert(rabbit_access_control:permission_cache_can_expire(U1)),
+    ?assertEqual(ok, rabbit_access_control:check_resource_access(
+                       U1, Resource, read, #{})),
+
+    %% The authn backend gets to verify the new credentials. Its tags are
+    %% rebuilt, the ones granted by the authz backend are kept.
+    ?assertEqual({refused, "refused", []},
+                 rabbit_access_control:update_state(U1, refuse_me)),
+    {ok, U2} = rabbit_access_control:update_state(U1, Now + 120),
+    ?assertEqual(Now + 120, rabbit_access_control:expiry_timestamp(U2)),
+    ?assertEqual([management], U2#user.tags),
+    %% The tags of the authz backend are not added again on each refresh.
+    meck:expect(ModN, update_state,
+                fun(AuthUser, Ts) -> {ok, AuthUser#auth_user{impl = fun() -> Ts end}} end),
+    {ok, U2b} = rabbit_access_control:update_state(U2, Now + 180),
+    {ok, U2c} = rabbit_access_control:update_state(U2b, Now + 240),
+    ?assertEqual([management], U2c#user.tags),
+
+    {ok, U3} = rabbit_access_control:update_state(U2, Now - 1),
+    ?assertExit(#amqp_error{name = access_refused},
+                rabbit_access_control:check_resource_access(
+                  U3, Resource, read, #{})),
+
+    %% Nothing to keep if the credentials do not expire...
+    ?assertMatch({ok, #user{authz_backends = [{ModZ, none}]}},
+                 Login(never, [{ModN, [ModZ]}])),
+    %% ... or if an authz backend accounts for their expiry already.
+    meck:expect(ModN, user_login_authorization,
+                fun(_, [{password, Ts}]) -> {ok, fun() -> Ts end} end),
+    {ok, U4} = Login(Now + 60, [{ModN, [ModN, ModZ]}]),
+    ?assertMatch([{ModN, _}, {ModZ, none}], U4#user.authz_backends),
+    ?assertEqual(Now + 60, rabbit_access_control:expiry_timestamp(U4)),
+
+    %% `expiry_timestamp/1` is not a `rabbit_authn_backend` callback.
+    meck:delete(ModN, expiry_timestamp, 1),
+    ?assertMatch({ok, #user{authz_backends = [{ModZ, none}]}},
+                 Login(Now + 60, [{ModN, ModZ}])),
+    ok.
+
+%% `impersonator` may reach `#user.tags` as an atom (LDAP, HTTP, OAuth2
+%% backends) or a binary (the internal backend, which avoids interning
+%% admin-supplied tag strings); both must be honoured.
+check_user_id0_tag_representation(_) ->
+    Actual = #user{username = <<"actual">>, tags = [<<"impersonator">>]},
+    ?assertEqual(ok, rabbit_access_control:check_user_id0(<<"claimed">>, Actual)),
+
+    ActualAtomTag = #user{username = <<"actual">>, tags = [impersonator]},
+    ?assertEqual(ok, rabbit_access_control:check_user_id0(<<"claimed">>, ActualAtomTag)),
+
+    NonImpersonator = #user{username = <<"actual">>, tags = [<<"management">>]},
+    ?assertMatch({refused, _, _},
+                 rabbit_access_control:check_user_id0(<<"claimed">>, NonImpersonator)),
+    ok.
+
+>>>>>>> ef513f7 (Keep the authn backend's credential expiry with other authz backends)
 with_enabled_plugin(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     ok = rabbit_ct_broker_helpers:enable_plugin(Config, Node, my_auth_plugin),
