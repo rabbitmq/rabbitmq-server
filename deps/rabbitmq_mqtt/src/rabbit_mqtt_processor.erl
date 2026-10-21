@@ -2203,7 +2203,7 @@ deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc0} = Delivery,
     McMqtt = mc:convert(mc_mqtt, Mc, mc_env()),
     MqttMsg = #mqtt_msg{qos = PublisherQos} = mc:protocol_state(McMqtt),
     QoS = effective_qos(PublisherQos, SubscriberQoS),
-    {SettleOp, State1} = maybe_publish_to_client(MqttMsg, Delivery, QoS, State0),
+    {SettleOp, State1} = maybe_publish_to_client(MqttMsg, Delivery, QoS, SubscriberQoS, State0),
     State = maybe_auto_settle(AckRequired, SettleOp, QoS, QNameOrType, QMsgId, State1),
     ok = maybe_notify_sent(QNameOrType, QPid, State),
     State.
@@ -2215,17 +2215,26 @@ effective_qos(PublisherQoS, SubscriberQoS) ->
     %% [MQTT-3.8.4-8]."
     erlang:min(PublisherQoS, SubscriberQoS).
 
-maybe_publish_to_client(_, {_, _, _, _Redelivered = true, _}, ?QOS_0, State) ->
+maybe_publish_to_client(_, {_, _, _, _Redelivered = true, _}, ?QOS_0, _, State) ->
     %% Do not redeliver to MQTT subscriber who gets message at most once.
     {complete, State};
-maybe_publish_to_client(
+maybe_publish_to_client(#mqtt_msg{topic = Topic} = Msg,
+                        {_, _, _, _, Mc} = Delivery, QoS, SubscriberQoS, State) ->
+    MatchedTopicFilters = matched_topic_filters(Mc, Topic, SubscriberQoS, State),
+    case {Topic, MatchedTopicFilters} of
+        {<<$$, _/binary>>, []} ->
+            {discard, State};
+        _ ->
+            publish_to_client(Msg, Delivery, QoS, MatchedTopicFilters, State)
+    end.
+
+publish_to_client(
   #mqtt_msg{retain = Retain,
             topic = Topic0,
             payload = Payload,
             props = Props0},
-  {QNameOrType, _QPid, QMsgId, Redelivered, Mc} = Delivery,
-  QoS, State0) ->
-    MatchedTopicFilters = matched_topic_filters_v5(Mc, State0),
+  {QNameOrType, _QPid, QMsgId, Redelivered, _Mc} = Delivery,
+  QoS, MatchedTopicFilters, State0) ->
     Props1 = maybe_add_subscription_ids(MatchedTopicFilters, Props0, State0),
     {Topic, Props, State1} = process_topic_alias_outbound(Topic0, Props1, State0),
     {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State1),
@@ -2253,13 +2262,29 @@ maybe_publish_to_client(
             {discard, State0}
     end.
 
-matched_topic_filters_v5(Msg, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
+matched_topic_filters(Msg, <<$$, _/binary>> = Topic, QoS, #state{subscriptions = Subs}) ->
+    case mc:get_annotation(binding_keys, Msg) of
+        undefined ->
+            %% Older topic projections omit binding keys for MQTT 3 subscriptions.
+            TopicLevels = binary:split(Topic, <<"/">>, [global]),
+            [Filter || <<$$, _/binary>> = Filter := #mqtt_subscription_opts{qos = Q} <- Subs,
+                       Q =:= QoS,
+                       topic_matches(TopicLevels, binary:split(Filter, <<"/">>, [global]))];
+        BKeys -> [amqp_to_mqtt(Key) || <<$$, _/binary>> = Key <- BKeys]
+    end;
+matched_topic_filters(Msg, _, _, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
     case mc:get_annotation(binding_keys, Msg) of
         undefined -> [];
         BKeys -> lists:map(fun rabbit_mqtt_util:amqp_to_mqtt/1, BKeys)
     end;
-matched_topic_filters_v5(_, _) ->
+matched_topic_filters(_, _, _, _) ->
     [].
+
+topic_matches(_, [<<"#">>]) -> true;
+topic_matches([], []) -> true;
+topic_matches([_ | Topics], [<<"+">> | Filters]) -> topic_matches(Topics, Filters);
+topic_matches([Level | Topics], [Level | Filters]) -> topic_matches(Topics, Filters);
+topic_matches(_, _) -> false.
 
 maybe_add_subscription_ids(TopicFilters, Props, #state{subscriptions = Subs}) ->
     Ids = lists:filtermap(fun(T) -> case maps:get(T, Subs, undefined) of

@@ -95,6 +95,7 @@ cluster_size_1_tests() ->
      ,disconnect
      ,pubsub_shared_connection
      ,pubsub_separate_connections
+     ,system_topic_wildcards
      ,will_with_disconnect
      ,will_without_disconnect
      ,decode_basic_properties
@@ -959,6 +960,49 @@ delete_create_queue(Config) ->
     delete_queue(Ch, [CQ1, CQ2, QQ]),
     ok = emqtt:disconnect(C),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+system_topic_wildcards(Config) ->
+    Pub = connect(?FUNCTION_NAME, Config),
+    [begin
+         Wild = connect(<<"system-wild", ($0 + QoS)>>, Config),
+         Mixed = connect(<<"system-mixed", ($0 + QoS)>>, Config),
+         {ok, _, [QoS, QoS, QoS]} = emqtt:subscribe(Wild, [{<<"#">>, [{qos, QoS}]},
+                                                          {<<"+/status">>, [{qos, QoS}]},
+                                                          {<<"$OTHER/#">>, [{qos, QoS}]}]),
+         Props = case ?config(mqtt_version, Config) of
+                     v5 -> #{'Subscription-Identifier' => 1};
+                     _ -> #{}
+                 end,
+         {ok, _, [QoS]} = emqtt:subscribe(Mixed, Props, [{<<"#">>, [{qos, QoS}]}]),
+         Props2 = maps:map(fun(_, _) -> 2 end, Props),
+         {ok, _, [QoS]} = emqtt:subscribe(Mixed, Props2, [{<<"$SYS/#">>, [{qos, QoS}]}]),
+         {ok, _} = emqtt:publish(Pub, <<"$SYS/status">>, <<"system">>, qos1),
+         receive {publish, #{client_pid := Mixed, topic := <<"$SYS/status">>,
+                             payload := <<"system">>, properties := ReceivedProps}} ->
+                     case Props2 of
+                         #{'Subscription-Identifier' := 2} ->
+                             ?assertEqual(2, maps:get('Subscription-Identifier', ReceivedProps));
+                         _ -> ok
+                     end
+         after ?TIMEOUT -> ct:fail(missing_system_publish)
+         end,
+         {ok, _} = emqtt:publish(Pub, <<"normal/status">>, <<"regular">>, qos1),
+         ok = expect_publishes(Wild, <<"normal/status">>, [<<"regular">>]),
+         ok = expect_publishes(Mixed, <<"normal/status">>, [<<"regular">>]),
+         ok = emqtt:disconnect(Wild),
+         ok = emqtt:disconnect(Mixed)
+     end || QoS <- [0, 1]],
+    Split = connect(<<"system-split">>, Config),
+    {ok, _, [0, 1]} = emqtt:subscribe(Split, [{<<"#">>, qos0}, {<<"$SYS/#">>, qos1}]),
+    {ok, _} = emqtt:publish(Pub, <<"$SYS/status">>, <<"split">>, qos1),
+    receive {publish, #{client_pid := Split, qos := 1, payload := <<"split">>}} -> ok
+    after ?TIMEOUT -> ct:fail(missing_system_publish)
+    end,
+    ok = emqtt:disconnect(Split),
+    ok = emqtt:disconnect(Pub),
+    receive {publish, Unexpected} -> ct:fail({unexpected_publish, Unexpected})
+    after 100 -> ok
+    end.
 
 empty_session_reconnect(Config) ->
     ClientId = atom_to_binary(?FUNCTION_NAME),
