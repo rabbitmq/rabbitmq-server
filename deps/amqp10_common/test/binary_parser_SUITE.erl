@@ -28,6 +28,7 @@ all_tests() ->
      array_of_nested_described_elements_unsupported,
      array_descriptor_unsupported,
      array_element_widths,
+     array_compound_elements_parsed_in_place,
      unsupported_type,
      server_mode_symbolic_body_descriptors,
      server_mode_body_descriptor_prefix_collision,
@@ -259,6 +260,43 @@ array_element_widths(_Config) ->
               ?assertEqual({Array, byte_size(Bin)},
                            amqp10_binary_parser:parse(Bin))
       end, Arrays).
+
+array_compound_elements_parsed_in_place(_Config) ->
+    %% larger than a heap binary
+    Leaf = {binary, binary:copy(<<7>>, 100)},
+    Arrays = [
+              {array, list, [{list, [Leaf]}]},
+              {array, map, [{map, [{{utf8, <<"k">>}, Leaf}]}]},
+              {array, array, [{array, list, [{list, [Leaf]}]}]},
+              {array, list, [{list, [{array, map, [{map, [{{utf8, <<"k">>}, Leaf}]}]}]}]}
+             ],
+    lists:foreach(
+      fun(Array) ->
+              Bin = iolist_to_binary(amqp10_binary_generator:generate(Array)),
+              {Parsed, _} = amqp10_binary_parser:parse(Bin),
+              ?assertEqual(Array, Parsed),
+              ?assertEqual(byte_size(Bin),
+                           binary:referenced_byte_size(innermost_binary(Parsed)))
+      end, Arrays),
+
+    %% Each nesting level costs 9 bytes: size, count, and element constructor.
+    Depth = 1000,
+    Nested = lists:foldl(fun(_, Inner) ->
+                                 <<(5 + byte_size(Inner)):32, 1:32, 16#f0, Inner/binary>>
+                         end, <<6:32, 1:32, 16#50, 1>>, lists:seq(1, Depth)),
+    NestedBin = <<16#f0, Nested/binary>>,
+    {NestedParsed, Size} = amqp10_binary_parser:parse(NestedBin),
+    ?assertEqual(byte_size(NestedBin), Size),
+    ?assertEqual({Depth, {array, ubyte, [{ubyte, 1}]}},
+                 unnest_arrays(NestedParsed, 0)).
+
+innermost_binary({binary, Bin}) -> Bin;
+innermost_binary({array, _Type, [Elem]}) -> innermost_binary(Elem);
+innermost_binary({list, [Elem]}) -> innermost_binary(Elem);
+innermost_binary({map, [{_Key, Val}]}) -> innermost_binary(Val).
+
+unnest_arrays({array, array, [Elem]}, Depth) -> unnest_arrays(Elem, Depth + 1);
+unnest_arrays(Innermost, Depth) -> {Depth, Innermost}.
 
 unsupported_type(_Config) ->
     UnsupportedType = 16#02,
