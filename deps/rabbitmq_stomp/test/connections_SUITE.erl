@@ -32,7 +32,11 @@ all() ->
         unauthenticated_send_returns_error,
         unauthenticated_subscribe_returns_error,
         unauthenticated_disconnect_returns_error,
-        unauthenticated_error_does_not_crash_reader
+        unauthenticated_error_does_not_crash_reader,
+        connection_is_tracked,
+        user_deletion_closes_connection,
+        vhost_connection_limit,
+        user_connection_limit
     ].
 
 merge_app_env(Config) ->
@@ -363,3 +367,66 @@ unauthenticated_error_does_not_crash_reader(Config) ->
     gen_tcp:close(Sock),
     ?awaitMatch(N, count_connections(Config), 5_000),
     ok.
+
+connection_is_tracked(Config) ->
+    {ok, Client} = rabbit_stomp_client:connect(get_stomp_port(Config)),
+    ?awaitMatch(1, count_tracked_stomp_connections(Config), 30_000),
+    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(
+                      Config, 0, rabbit_connection_tracking,
+                      count_tracked_items_in, [{user, <<"guest">>}])),
+    rabbit_stomp_client:disconnect(Client),
+    ?awaitMatch(0, count_tracked_stomp_connections(Config), 30_000).
+
+user_deletion_closes_connection(Config) ->
+    User = <<"stomp-tracked-user">>,
+    ok = rabbit_ct_broker_helpers:add_user(Config, 0, User, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    {ok, {Sock, _}} = rabbit_stomp_client:connect("1.2", binary_to_list(User),
+                                                  binary_to_list(User),
+                                                  get_stomp_port(Config), []),
+    ?awaitMatch(1, count_tracked_stomp_connections(Config), 30_000),
+    ok = rabbit_ct_broker_helpers:delete_user(Config, User),
+    ?assertEqual({error, closed}, gen_tcp:recv(Sock, 0, 30_000)),
+    ?awaitMatch(0, count_tracked_stomp_connections(Config), 30_000).
+
+vhost_connection_limit(Config) ->
+    ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_connections, 1),
+    try
+        {ok, Client} = rabbit_stomp_client:connect(get_stomp_port(Config)),
+        ?awaitMatch(1, count_tracked_stomp_connections(Config), 30_000),
+        ?assertEqual(<<"Connection refused: vhost connection limit reached">>,
+                     connect_error(Config, "guest")),
+        rabbit_stomp_client:disconnect(Client)
+    after
+        ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>)
+    end.
+
+user_connection_limit(Config) ->
+    ok = rabbit_ct_broker_helpers:set_user_limits(Config, <<"guest">>,
+                                                  #{max_connections => 1}),
+    try
+        {ok, Client} = rabbit_stomp_client:connect(get_stomp_port(Config)),
+        ?awaitMatch(1, count_tracked_stomp_connections(Config), 30_000),
+        ?assertEqual(<<"Connection refused: user connection limit reached">>,
+                     connect_error(Config, "guest")),
+        rabbit_stomp_client:disconnect(Client)
+    after
+        ok = rabbit_ct_broker_helpers:clear_user_limits(Config, <<"guest">>, all)
+    end.
+
+count_tracked_stomp_connections(Config) ->
+    length([C || #tracked_connection{protocol = {'STOMP', _}} = C
+                     <- rabbit_ct_broker_helpers:rpc(
+                          Config, 0, rabbit_connection_tracking, list, [])]).
+
+connect_error(Config, User) ->
+    {ok, Sock} = gen_tcp:connect(localhost, get_stomp_port(Config),
+                                 [{active, false}, binary]),
+    Client = {Sock, []},
+    rabbit_stomp_client:send(Client, 'CONNECT',
+                             [{<<"accept-version">>, <<"1.2">>},
+                              {<<"login">>, list_to_binary(User)},
+                              {<<"passcode">>, list_to_binary(User)}]),
+    {#stomp_frame{command = 'ERROR'} = Frame, _} = rabbit_stomp_client:recv(Client),
+    gen_tcp:close(Sock),
+    iolist_to_binary(lists:reverse(Frame#stomp_frame.body_iolist_rev)).
