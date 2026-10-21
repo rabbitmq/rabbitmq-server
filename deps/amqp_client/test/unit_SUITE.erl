@@ -23,6 +23,7 @@ all() ->
       amqp_uri_remove_credentials_malformed,
       amqp_uri_error_info_has_no_user_input,
       uri_parser_accepts_string_and_binaries,
+      uri_parser_splits_userinfo_and_query,
       rabbit_channel_build_topic_variable_map,
       main_reader_rejects_oversized_frame,
       main_reader_rejects_oversized_frame_with_split_header,
@@ -327,6 +328,18 @@ uri_parser_accepts_string_and_binaries(_Config) ->
                    {userinfo,["user","pass"]}],
                    uri_parser:parse(Uri, []))
         || Uri <- string_binaries_uris()],
+    ok.
+
+uri_parser_splits_userinfo_and_query(_Config) ->
+    Parse = fun(Key, Uri) -> proplists:get_value(Key, uri_parser:parse(Uri, [])) end,
+    ?assertEqual([], Parse('query', "amqp://host")),
+    ?assertEqual([], Parse('query', "amqp://host?")),
+    ?assertEqual([{"a", "b=c"}, "", "d", {"e", ""}, {"", "f"}, ""],
+                 Parse('query', "amqp://host?a=b=c&&d&e=&=f&")),
+    ?assertEqual([], Parse(userinfo, "amqp://host")),
+    ?assertEqual([], Parse(userinfo, "amqp://@host")),
+    ?assertEqual(["user"], Parse(userinfo, "amqp://user@host")),
+    ?assertEqual(["user", "", "pass", ""], Parse(userinfo, "amqp://user::pass:@host")),
     ok.
 
 string_binaries_uris() ->
