@@ -322,15 +322,22 @@ generate_config_from_cuttlefish_files1(Context, ConfigFiles, AdvancedConfigFile)
             override_with_advanced_config(Config, AdvancedConfigFile)
     end.
 
-find_cuttlefish_schemas(Context) ->
-    Apps = list_apps(Context),
+find_cuttlefish_schemas(#{schema_apps := Apps} = Context) ->
     ?LOG_DEBUG(
       "Looking up configuration schemas in the following applications:",
       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     Schemas = find_cuttlefish_schemas(Apps, []),
     Sources = maps:get(unpacked_archives, Context, []),
     [Path || {_, Path} <- lists:sort(
-                           [{schema_source_path(Path, Sources), Path} || Path <- Schemas])].
+                           [{schema_source_path(Path, Sources), Path} || Path <- Schemas])];
+find_cuttlefish_schemas(#{plugins_path := PluginsPath} = Context) ->
+    Separator = case maps:get(os_type, Context, os:type()) of
+                    {win32, _} -> ";";
+                    _ -> ":"
+                end,
+    {Plugins, _} = rabbit_plugin_discovery:list(string:lexemes(PluginsPath, Separator)),
+    Apps = [Name || #plugin{name = Name} <- Plugins],
+    find_cuttlefish_schemas(Context#{schema_apps => Apps}).
 
 schema_source_path(Path, [{Dir, Archive} | Rest]) ->
     Parts = filename:split(Path),
@@ -347,33 +354,6 @@ find_cuttlefish_schemas([App | Rest], AllSchemas) ->
     find_cuttlefish_schemas(Rest, AllSchemas ++ Schemas);
 find_cuttlefish_schemas([], AllSchemas) ->
     AllSchemas.
-
-list_apps(#{os_type := {win32, _}, plugins_path := PluginsPath}) ->
-    PluginsDirs = lists:usort(string:lexemes(PluginsPath, ";")),
-    list_apps1(PluginsDirs, []);
-list_apps(#{plugins_path := PluginsPath}) ->
-    PluginsDirs = lists:usort(string:lexemes(PluginsPath, ":")),
-    list_apps1(PluginsDirs, []).
-
-
-list_apps1([Dir | Rest], Apps) ->
-    case file:list_dir(Dir) of
-        {ok, Filenames} ->
-            NewApps = [list_to_atom(
-                         hd(
-                           string:split(F, "-")))
-                       || F <- Filenames, filelib:is_dir(filename:join(Dir, F))],
-            Apps1 = lists:umerge(Apps, lists:sort(NewApps)),
-            list_apps1(Rest, Apps1);
-        {error, Reason} ->
-            ?LOG_DEBUG(
-              "Failed to list directory \"~ts\" content: ~ts",
-              [Dir, file:format_error(Reason)],
-              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-            list_apps1(Rest, Apps)
-    end;
-list_apps1([], AppInfos) ->
-    AppInfos.
 
 list_schemas_in_app(App) ->
     {Loaded, Unload} = case application:load(App) of

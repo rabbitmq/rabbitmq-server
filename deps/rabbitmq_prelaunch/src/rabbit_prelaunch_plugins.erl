@@ -6,6 +6,7 @@
 
 -module(rabbit_prelaunch_plugins).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/zip.hrl").
@@ -17,77 +18,37 @@ with_unpacked_plugins(#{os_type := OSType, plugins_path := PluginsPath} = Contex
                     {win32, _} -> ";";
                     _ -> ":"
                 end,
-    Archives = [filename:join(Dir, File)
-                || Dir <- string:lexemes(PluginsPath, Separator),
-                   File <- filelib:wildcard("*.ez", Dir)],
-    Plugins = lists:foldl(fun select_archive/2, #{}, Archives),
-    case lists:sort(maps:values(Plugins)) of
-        [] ->
-            Fun(Context);
-        Selected ->
-            Stage = make_stage(maps:get(plugins_expand_dir, Context)),
-            OriginalPath = code:get_path(),
-            Loaded = application:loaded_applications(),
-            try
-                Sources = [unpack(Plugin, Stage) || Plugin <- Selected],
-                Dirs = [Dir || {Dir, _} <- Sources],
-                ExpandedPath = string:join([PluginsPath | Dirs], Separator),
-                Fun(Context#{plugins_path => ExpandedPath, unpacked_archives => Sources})
-            after
-                lists:foreach(
-                  fun application:unload/1,
-                  [App || {App, _, _} <- application:loaded_applications() -- Loaded,
-                          maps:is_key(App, Plugins)]),
-                lists:foreach(
-                  fun code:del_path/1,
-                  [Path || Path <- code:get_path() -- OriginalPath,
-                           lists:prefix(filename:split(Stage), filename:split(Path))]),
-                ok = file:del_dir_r(Stage)
-            end
-    end.
-
-select_archive(Archive, Plugins) ->
-    case archive_info(Archive) of
-        {ok, {Name, Version, _, _} = Info} ->
-            case code:lib_dir(Name) of
-                Dir when is_list(Dir) ->
-                    case filelib:is_dir(Dir) of
-                        true -> Plugins;
-                        false -> select_version(Name, Version, Info, Plugins)
-                    end;
-                _ ->
-                    select_version(Name, Version, Info, Plugins)
-            end;
-        {error, Reason} ->
-            ?LOG_WARNING("Could not read plugin archive ~ts: ~tp", [Archive, Reason]),
-            Plugins
-    end.
-
-select_version(Name, Version, Info, Plugins) ->
-    case maps:find(Name, Plugins) of
-        {ok, {_, ExistingVersion, _, _}} ->
-            case rabbit_semver:gt(Version, ExistingVersion) of
-                true -> Plugins#{Name => Info};
-                false -> Plugins
-            end;
-        error ->
-            Plugins#{Name => Info}
-    end.
-
-archive_info(Archive) ->
+    {Plugins, Problems} = rabbit_plugin_discovery:list(string:lexemes(PluginsPath, Separator)),
+    lists:foreach(
+      fun({Path, Reason}) ->
+              ?LOG_WARNING("Could not use plugin ~ts: ~tp", [Path, Reason])
+      end, Problems),
+    Archives = [Plugin || Plugin = #plugin{type = ez} <- Plugins],
+    Stage = case Archives of
+                [] -> undefined;
+                _ -> make_stage(maps:get(plugins_expand_dir, Context))
+            end,
+    OriginalPath = code:get_path(),
+    Loaded = application:loaded_applications(),
+    Names = [Name || #plugin{name = Name} <- Plugins],
     try
-        {ok, Files} = zip:list_dir(Archive),
-        [{Root, AppPath} | _] =
-            [{Root, Path} || #zip_file{name = Path} <- Files,
-                            [Root, "ebin", File] <- [filename:split(Path)],
-                            filename:extension(File) =:= ".app"],
-        {ok, [{AppPath, Binary}]} = zip:extract(Archive, [memory, {file_list, [AppPath]}]),
-        {ok, Tokens, _} = erl_scan:string(binary_to_list(Binary)),
-        {ok, {application, Name, Props}} = erl_parse:parse_term(Tokens),
-        true = is_atom(Name) andalso is_list(Props),
-        {ok, {Name, proplists:get_value(vsn, Props, "0"), Archive, Root}}
-    catch
-        error:Reason -> {error, Reason}
+        Sources = [unpack(Plugin, Stage) || Plugin <- Archives],
+        lists:foreach(
+          fun(#plugin{type = dir, location = Dir}) ->
+                  true = code:add_patha(filename:join(Dir, "ebin"));
+             (#plugin{type = ez}) -> ok
+          end, Plugins),
+        Fun(Context#{schema_apps => Names, unpacked_archives => Sources})
+    after
+        lists:foreach(
+          fun application:unload/1,
+          [App || {App, _, _} <- application:loaded_applications() -- Loaded,
+                  lists:member(App, Names)]),
+        true = code:set_path(OriginalPath),
+        case Stage of
+            undefined -> ok;
+            _ -> ok = file:del_dir_r(Stage)
+        end
     end.
 
 make_stage(ExpandDir) ->
@@ -104,8 +65,11 @@ make_stage(ExpandDir) ->
             throw({error, {cannot_create_schema_directory, Stage, Reason}})
     end.
 
-unpack({Name, _, Archive, Root}, Stage) ->
+unpack(#plugin{name = Name, location = Archive}, Stage) ->
     {ok, Files} = zip:list_dir(Archive),
+    [Root | _] = [Root || #zip_file{name = Path} <- Files,
+                         [Root, "ebin", File] <- [filename:split(Path)],
+                         filename:extension(File) =:= ".app"],
     lists:foreach(
       fun(#zip_file{name = Path, info = #file_info{type = Type}}) ->
               Parts = string:lexemes(Path, "/"),

@@ -13,8 +13,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 all() ->
-    [archive_schema, archive_versions, archive_schema_order, unpacked_schema_precedence,
-     archive_schema_failure_cleanup, archive_path_traversal].
+    [archive_schema, archive_versions, archive_schema_order, mixed_schema_versions,
+     archive_schema_failure_cleanup, archive_path_traversal, directory_schema_lookup].
 
 archive_schema(Config) ->
     {Context, ConfFile} = context(Config, ?FUNCTION_NAME),
@@ -64,31 +64,78 @@ archive_schema_order(Config) ->
         code:set_path(OriginalPath)
     end.
 
-unpacked_schema_precedence(Config) ->
-    {Context, ConfFile} = context(Config, ?FUNCTION_NAME),
-    Archive = archive(Context, "1.0", schema(), [{"priv/schema/value", <<"1">>}]),
+mixed_schema_versions(Config) ->
+    Cases = [{newer_archive, [{dir, "1.0", 1}, {ez, "2.0", 2}], 2},
+             {newer_directory, [{ez, "1.0", 1}, {dir, "2.0", 2}], 2},
+             {equal_versions, [{dir, "1.0", 1}, {ez, "1.0", 2}], 2},
+             {equal_directories, [{dir, "1.0", 1}, {dir, "1.0", 2}], 1},
+             {newer_directory_first, [{dir, "2.0", 2}, {dir, "1.0", 1}], 2}],
+    lists:foreach(
+      fun({Case, Specs, Expected}) ->
+              {Context0, ConfFile} = context(Config, Case),
+              Dirs = [filename:join(maps:get(plugins_path, Context0), Dir)
+                      || Dir <- ["a", "b"]],
+              lists:foreach(
+                fun({Dir, {Type, Vsn, Value}}) ->
+                        ok = filelib:ensure_dir(filename:join(Dir, "unused")),
+                        Archive = archive(Context0#{plugins_path => Dir}, Vsn, schema(),
+                                          [{"priv/schema/value", integer_to_binary(Value)}]),
+                        case Type of
+                            dir ->
+                                {ok, _} = zip:extract(Archive, [{cwd, Dir}]),
+                                ok = file:delete(Archive);
+                            ez -> ok
+                        end
+                end, lists:zip(Dirs, Specs)),
+              Separator = case os:type() of {win32, _} -> ";"; _ -> ":" end,
+              Context = Context0#{plugins_path => string:join(Dirs, Separator)},
+              OriginalPath = code:get_path(),
+              try
+                  rabbit_env:context_to_code_path(Context),
+                  ConfigPath = code:get_path(),
+                  lists:foreach(
+                    fun(_) ->
+                            ?assertEqual([{archive_schema_plugin, [{value, Expected}]}],
+                                         generate(Context, ConfFile)),
+                            assert_clean(Context, ConfigPath)
+                    end, [first, second])
+              after
+                  code:set_path(OriginalPath)
+              end
+      end, Cases).
+
+directory_schema_lookup(Config) ->
+    {Context, _} = context(Config, ?FUNCTION_NAME),
+    Archive = archive(Context, "1.0", schema(), []),
     {ok, _} = zip:extract(Archive, [{cwd, maps:get(plugins_path, Context)}]),
     ok = file:delete(Archive),
-    archive(Context, "2.0", schema(), [{"priv/schema/value", <<"2">>}]),
     OriginalPath = code:get_path(),
     try
         rabbit_env:context_to_code_path(Context),
-        ?assertEqual(filename:join([maps:get(plugins_path, Context),
-                                    "archive_schema_plugin-1.0", "priv"]),
-                     code:priv_dir(archive_schema_plugin)),
-        ?assertEqual([{archive_schema_plugin, [{value, 1}]}],
-                     generate(Context, ConfFile))
+        ?assertEqual([filename:join([maps:get(plugins_path, Context),
+                                    "archive_schema_plugin-1.0", "priv", "schema",
+                                    "archive.schema"])],
+                     rabbit_prelaunch_conf:find_cuttlefish_schemas(Context))
     after
         code:set_path(OriginalPath)
     end.
 
 archive_schema_failure_cleanup(Config) ->
     {Context, ConfFile} = context(Config, ?FUNCTION_NAME),
-    archive(Context, "1.0", schema(), []),
+    Archive = archive(Context, "1.0", schema(), [{"priv/schema/value", <<"1">>}]),
+    {ok, _} = zip:extract(Archive, [{cwd, maps:get(plugins_path, Context)}]),
+    ok = file:delete(Archive),
+    archive(Context, "2.0", schema(), []),
     OriginalPath = code:get_path(),
-    ?assertThrow({error, failed_to_prepare_configuration},
-                 generate(Context, ConfFile)),
-    assert_clean(Context, OriginalPath).
+    try
+        rabbit_env:context_to_code_path(Context),
+        ConfigPath = code:get_path(),
+        ?assertThrow({error, failed_to_prepare_configuration},
+                     generate(Context, ConfFile)),
+        assert_clean(Context, ConfigPath)
+    after
+        code:set_path(OriginalPath)
+    end.
 
 archive_path_traversal(Config) ->
     {Context, ConfFile} = context(Config, ?FUNCTION_NAME),
