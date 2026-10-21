@@ -45,6 +45,7 @@ groups() ->
           uri_list_nested,
           map_uri_denied,
           uri_list_mixed_network_and_denied_direct,
+          uri_too_long,
           invalid_uri_error_has_no_credentials,
           prop_uri_list_validation
         ]}
@@ -172,6 +173,14 @@ uri_list_mixed_network_and_denied_direct(Config) ->
     Uris = [network_uri(?DENIED_VHOST), direct_uri(?DENIED_VHOST)],
     ?assertMatch([{error, _, _}], validate_with_user(Config, Uris)).
 
+uri_too_long(Config) ->
+    ?assertEqual([ok], validate_with_user(Config, network_uri_of_size(65536))),
+    ?assertMatch([{error, _, [<<"uri">>, 65536]}],
+                 validate_with_user(Config, network_uri_of_size(65537))),
+    ?assertMatch([{error, _, [<<"uri">>, 65536]}],
+                 validate_with_user(Config, [network_uri(?ALLOWED_VHOST),
+                                             network_uri_of_size(65537)])).
+
 invalid_uri_error_has_no_credentials(Config) ->
     [begin
          [{error, Fmt, Args}] = validate_with_none(Config, Uri),
@@ -224,6 +233,10 @@ direct_uri(VHost) ->
 
 network_uri(VHost) ->
     <<"amqp://", ?USER/binary, ":", ?PASSWORD/binary, "@localhost:5672/", VHost/binary>>.
+
+network_uri_of_size(Size) ->
+    Prefix = <<"amqp://", ?USER/binary, ":", ?PASSWORD/binary, "@localhost?">>,
+    <<Prefix/binary, (binary:copy(<<"&">>, Size - byte_size(Prefix)))/binary>>.
 
 validate_with_user(Config, Uris) ->
     validate_term_with_user(Config, [{<<"uri">>, Uris}]).
