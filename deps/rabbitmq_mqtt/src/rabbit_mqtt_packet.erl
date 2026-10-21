@@ -261,7 +261,8 @@ parse_connect(Bin, Fixed, Length) ->
     end.
 
 -spec parse_connect(binary()) ->
-    #mqtt_packet_connect{} | {error, reserved_connect_flag | invalid_will_flags}.
+    #mqtt_packet_connect{} |
+    {error, reserved_connect_flag | invalid_will_flags | password_without_username}.
 parse_connect(<<Len:16, _ProtoName:Len/binary, _ProtoVer, _Flags:7, 1:1, _/binary>>) ->
     {error, reserved_connect_flag};
 parse_connect(<<Len:16, _ProtoName:Len/binary, _ProtoVer,
@@ -269,6 +270,9 @@ parse_connect(<<Len:16, _ProtoName:Len/binary, _ProtoVer,
   when WillQos =:= 3;
        WillFlag =:= 0 andalso (WillQos =/= 0 orelse WillRetain =/= 0) ->
     {error, invalid_will_flags};
+parse_connect(<<Len:16, _ProtoName:Len/binary, ProtoVer, 0:1, 1:1, _Flags:6, _/binary>>)
+  when ProtoVer =/= 5 ->
+    {error, password_without_username};
 parse_connect(<<Len:16, ProtoName:Len/binary,
                 ProtoVer,
                 UsernameFlag:1,

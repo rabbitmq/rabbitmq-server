@@ -11,7 +11,7 @@
 -include("rabbit_mqtt_packet.hrl").
 
 all() ->
-    [connect_reserved_flag, fixed_header_flags, connect_will_flags].
+    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag].
 
 init_per_suite(Config) ->
     persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, 65_536),
@@ -59,6 +59,15 @@ connect_will_flags(_Config) ->
          [?assertMatch({ok, _, <<>>, Vsn}, parse_connect(Vsn, Flags, Will))
           || Flags <- [16#06, 16#0E, 16#26, 16#2E]]
      end || Vsn <- [4, 5]],
+    ok.
+
+connect_password_flag(_Config) ->
+    Password = <<0, 2, 255, 0>>,
+    assert_connect_error(connect_packet(4, 16#42, Password), password_without_username),
+    ?assertMatch({ok, _, <<>>, 5}, parse_connect(5, 16#42, Password)),
+    [?assertMatch({ok, _, <<>>, Vsn},
+                  parse_connect(Vsn, 16#C2, <<0, 1, "u", Password/binary>>))
+     || Vsn <- [4, 5]],
     ok.
 
 parse_connect(Vsn, Flags, Payload) ->
