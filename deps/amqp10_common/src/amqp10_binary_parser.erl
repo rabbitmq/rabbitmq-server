@@ -210,13 +210,25 @@ parse_array2(Count, Type, Bin, Acc) ->
     Size = array_element_size(Type, Bin),
     case Bin of
         <<Element:Size/binary, Rest/binary>> ->
-            TotalSize = Size + 1,
-            %% assertion
-            {Value, TotalSize} = parse(<<Type, Element/binary>>),
+            Value = parse_array_element(Type, Element),
             parse_array2(Count - 1, Type, Rest, [Value | Acc]);
         _ ->
             throw({failed_to_parse_array_insufficient_input, Type, Count, Acc})
     end.
+
+%% A list32, map32 or array32 element is parsed in place: putting the constructor
+%% back in front of it would copy what is nested within once per nesting level.
+parse_array_element(16#d0, <<_Size:32, _IgnoreCount:32, Value/binary>>) ->
+    {list, parse_many(Value, [])};
+parse_array_element(16#d1, <<_Size:32, _IgnoreCount:32, Value/binary>>) ->
+    {map, mapify(parse_many(Value, []))};
+parse_array_element(16#f0, <<_Size:32, CountAndV/binary>>) ->
+    parse_array(32, CountAndV);
+parse_array_element(Type, Element) ->
+    TotalSize = byte_size(Element) + 1,
+    %% assertion
+    {Value, TotalSize} = parse(<<Type, Element/binary>>),
+    Value.
 
 %% Returns the byte size of a single array element, excluding the constructor
 %% that all elements of the array share.
