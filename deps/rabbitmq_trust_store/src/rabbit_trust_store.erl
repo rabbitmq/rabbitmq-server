@@ -135,6 +135,13 @@ whitelisted(#'OTPCertificate'{}=C, {bad_cert, selfsigned_peer}, continue) ->
     end;
 whitelisted(_, {bad_cert, _} = Reason, _) ->
     {fail, Reason};
+%% `confirmed` means that a whitelisted certificate is the trust anchor, and
+%% `rabbit_trust_store_app:partial_chain/1` handles a whitelisted peer, so
+%% this certificate was issued by a whitelisted one.
+whitelisted(#'OTPCertificate'{}=C, Event, confirmed) when Event =:= valid;
+                                                          Event =:= valid_peer ->
+    log_certificate_rejected("certificate was issued by a whitelisted certificate", C),
+    {fail, "certificate was issued by a whitelisted certificate"};
 whitelisted(_, valid, St) ->
     {valid, St};
 whitelisted(#'OTPCertificate'{}=_, valid_peer, St) ->

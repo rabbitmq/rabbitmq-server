@@ -5,6 +5,9 @@ strategy. Instead of the traditional PKI chain traversal mechanism,
 this strategy simply checks the leaf certificate presented by a client
 against an approved ("whitelisted") set of certificates.
 
+A whitelisted certificate does not make the certificates it issued trusted:
+they must be whitelisted themselves or validate against `ssl_options.cacertfile`.
+
 
 ## Rationale
 
