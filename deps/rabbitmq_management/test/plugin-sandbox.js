@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROUTER_JS = path.join(__dirname, '../priv/www/js/router.js');
 
-export function loadPlugin(pluginPath, nodesJson) {
+export function loadPlugin(pluginPath) {
     var calls = [];
     var docHandlers = {};
     var documentStub = { title: '' };
@@ -61,10 +61,8 @@ export function loadPlugin(pluginPath, nodesJson) {
             calls.push({ fn: 'render', reqs: reqs, template: template, redirect: redirect });
         },
         go_to: function(url) { calls.push({ fn: 'go_to', url: url }); },
-        sync_get: function() {
-            return nodesJson === undefined
-                ? JSON.stringify([{ name: 'rabbit@host1' }])
-                : nodesJson;
+        go_to_first_node: function(prefix, suffix) {
+            calls.push({ fn: 'go_to_first_node', prefix: prefix, suffix: suffix });
         },
         put_cast_params: function(sammy, p, mandatory, numeric, boolean) {
             calls.push({

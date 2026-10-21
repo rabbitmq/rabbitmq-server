@@ -34,7 +34,7 @@ const sandbox = {
     jQuery: jqStub,
     window: {},
     document: {},
-    console: { error: function() { consoleErrors.push(arguments); } },
+    console: { error: function() { consoleErrors.push(arguments); }, warn: function() {} },
     COMPILED_TEMPLATES: { status: function(model) { return model.text; } },
     timer_interval: 5000,
     QUEUE_TYPE: { quorum: { params: {} } }
@@ -137,6 +137,33 @@ describe('start_app_login', () => {
         it(`leaves the routes to the UI after a login, OAuth enabled: ${oauth.enabled}`, () => {
             assert.equal(startAppLogin(oauth, true, true), 0);
         });
+    });
+});
+
+describe('go_to_first_node', () => {
+    function goToFirstNode(nodesJson, prefix, suffix) {
+        sandbox.location = undefined;
+        sandbox.sync_get = function() { return nodesJson; };
+        sandbox.go_to_first_node(prefix, suffix);
+        return sandbox.location;
+    }
+
+    it('goes to the first node', () => {
+        var nodes = JSON.stringify([{ name: 'rabbit@host1' }, { name: 'rabbit@host2' }]);
+        assert.equal(goToFirstNode(nodes, '#/traces/'), '#/traces/rabbit@host1');
+        assert.equal(goToFirstNode(nodes, '#/top/', '/20'), '#/top/rabbit@host1/20');
+    });
+
+    it('does not navigate when the node list cannot be fetched', () => {
+        assert.equal(goToFirstNode(false, '#/top/', '/20'), undefined);
+    });
+
+    it('does not navigate when the node list is an empty body', () => {
+        assert.equal(goToFirstNode('', '#/top/', '/20'), undefined);
+    });
+
+    it('does not navigate when no node is listed', () => {
+        assert.equal(goToFirstNode('[]', '#/top/', '/20'), undefined);
     });
 });
 

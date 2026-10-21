@@ -18,25 +18,7 @@ describe('tracing routes', () => {
         var plugin = loadPlugin(TRACING_JS);
         plugin.app._runRoute('get', '#/traces');
         assert.deepEqual(Array.from(plugin.calls),
-                         [{ fn: 'go_to', url: '#/traces/rabbit@host1' }]);
-    });
-
-    it('does not navigate when the node list cannot be fetched', () => {
-        var plugin = loadPlugin(TRACING_JS, false);
-        plugin.app._runRoute('get', '#/traces');
-        assert.deepEqual(Array.from(plugin.calls), []);
-    });
-
-    it('does not navigate when the node list is an empty body', () => {
-        var plugin = loadPlugin(TRACING_JS, '');
-        plugin.app._runRoute('get', '#/traces');
-        assert.deepEqual(Array.from(plugin.calls), []);
-    });
-
-    it('does not navigate when no node is listed', () => {
-        var plugin = loadPlugin(TRACING_JS, '[]');
-        plugin.app._runRoute('get', '#/traces');
-        assert.deepEqual(Array.from(plugin.calls), []);
+                         [{ fn: 'go_to_first_node', prefix: '#/traces/', suffix: undefined }]);
     });
 
     it('renders the traces of one node', () => {

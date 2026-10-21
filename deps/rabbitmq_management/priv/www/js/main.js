@@ -438,6 +438,17 @@ function update_interval() {
 function go_to(url) {
     this.location = url;
 }
+
+// `sync_get` answers false for a failed request.
+function go_to_first_node(prefix, suffix) {
+    var nodes = JSON.parse(sync_get('/nodes') || '[]');
+    if (nodes.length > 0) {
+        go_to(prefix + nodes[0].name + (suffix || ''));
+    } else {
+        console.warn('Cannot list the nodes, so staying put');
+    }
+}
+
 function go_to_home() {
     // location.href = rabbit_path_prefix() + "/"
     location.href =  "/"

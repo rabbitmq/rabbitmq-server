@@ -17,13 +17,15 @@ describe('top routes', () => {
     it('redirects #/top to the first node with 20 rows', () => {
         var plugin = loadPlugin(TOP_JS);
         plugin.app._runRoute('get', '#/top');
-        assert.deepEqual(plugin.calls, [{ fn: 'go_to', url: '#/top/rabbit@host1/20' }]);
+        assert.deepEqual(plugin.calls,
+                         [{ fn: 'go_to_first_node', prefix: '#/top/', suffix: '/20' }]);
     });
 
     it('redirects #/top/ets to the first node with 20 rows', () => {
         var plugin = loadPlugin(TOP_JS);
         plugin.app._runRoute('get', '#/top/ets');
-        assert.deepEqual(plugin.calls, [{ fn: 'go_to', url: '#/top/ets/rabbit@host1/20' }]);
+        assert.deepEqual(plugin.calls,
+                         [{ fn: 'go_to_first_node', prefix: '#/top/ets/', suffix: '/20' }]);
     });
 
     it('renders processes for a node and row count', () => {
@@ -65,24 +67,6 @@ describe('top routes', () => {
         var plugin = loadPlugin(TOP_JS);
         plugin.app._runRoute('get', '#/top/rabbit%40host1/20?x=1');
         assert.equal(plugin.calls[0].reqs.top.options.row_count, '20');
-    });
-
-    it('does not navigate when the node list cannot be fetched', () => {
-        var plugin = loadPlugin(TOP_JS, false);
-        plugin.app._runRoute('get', '#/top');
-        assert.deepEqual(Array.from(plugin.calls), []);
-    });
-
-    it('does not navigate when the node list is an empty body', () => {
-        var plugin = loadPlugin(TOP_JS, '');
-        plugin.app._runRoute('get', '#/top');
-        assert.deepEqual(Array.from(plugin.calls), []);
-    });
-
-    it('does not navigate when no node is listed', () => {
-        var plugin = loadPlugin(TOP_JS, '[]');
-        plugin.app._runRoute('get', '#/top/ets');
-        assert.deepEqual(Array.from(plugin.calls), []);
     });
 
     it('registers its change handlers on the document', () => {
