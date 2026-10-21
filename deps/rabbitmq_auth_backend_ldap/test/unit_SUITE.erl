@@ -17,6 +17,7 @@ all() ->
     [
      fill,
      ad_fill,
+     fill_does_not_expand_substituted_values,
      rfc4514_escape_value,
      rfc4514_fill_dn,
      dn_lookup_fallback_dn_escaping,
@@ -47,6 +48,32 @@ fill(_Config) ->
     F("x${usernamex",  [{username,  "ab"}],     "x${usernamex"),
     F("x${username}x", [{username,  "a\\b"}],   "xa\\bx"),
     F("x${username}x", [{username,  "a&b"}],    "xa&bx"),
+    F("${ns.key}-${Client_ID}-${v2}",
+      [{'ns.key', "a"}, {'Client_ID', "b"}, {v2, "c"}], "a-b-c"),
+    F("${ns.key}", [{username, "a"}], "${ns.key}"),
+    ok.
+
+fill_does_not_expand_substituted_values(_Config) ->
+    Name = "${ad_domain}${ad_user}${username}",
+    ?assertEqual("cn=" ++ Name,
+                 rabbit_auth_backend_ldap_util:fill(
+                   "cn=${username}", [{username, Name}])),
+    ?assertEqual("cn=" ++ Name ++ ",d=" ++ "x" ++ ",u=" ++ "y",
+                 rabbit_auth_backend_ldap_util:fill(
+                   "cn=${username},d=${ad_domain},u=${ad_user}",
+                   [{username, Name}, {ad_domain, "x"}, {ad_user, "y"}])),
+    ?assertEqual("cn=" ++ Name,
+                 rabbit_ldap_rfc4514:fill_dn(
+                   "cn=${username}", [{username, Name}])),
+    DownLevel = <<"${ad_domain}\\${ad_user}${username}">>,
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(DownLevel),
+    Filled = rabbit_auth_backend_ldap_util:fill(
+               "${username}", [{username, DownLevel} | ADArgs]),
+    ?assertEqual(binary_to_list(DownLevel), Filled),
+    Big = lists:flatten(lists:duplicate(2000, "${ad_domain}${ad_user}")),
+    BigFilled = rabbit_auth_backend_ldap_util:fill(
+                  "${username}", [{username, Big}, {ad_domain, Big}, {ad_user, Big}]),
+    ?assertEqual(length(Big), length(BigFilled)),
     ok.
 
 rfc4514_escape_value(_Config) ->
