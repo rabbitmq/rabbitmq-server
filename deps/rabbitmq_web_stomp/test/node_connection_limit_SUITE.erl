@@ -13,6 +13,7 @@
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
@@ -20,7 +21,8 @@
 
 all() ->
     [cross_transport_native_and_web,
-     cross_transport_count_decrements].
+     cross_transport_count_decrements,
+     web_stomp_connection_is_tracked].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -72,7 +74,21 @@ cross_transport_count_decrements(Config) ->
     await_local_count(Config, 0),
     ok.
 
+web_stomp_connection_is_tracked(Config) ->
+    {ok, WS} = open_web_stomp(Config),
+    ?awaitMatch([_], tracked_stomp_connections(Config), 30_000),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_connection_tracking, close_connections,
+           [tracked_stomp_connections(Config), "closed by test", 0]),
+    ?assertMatch({close, _}, rfc6455_client:recv(WS, ?TIMEOUT)),
+    ?awaitMatch([], tracked_stomp_connections(Config), 30_000).
+
 %% --- helpers ---
+
+tracked_stomp_connections(Config) ->
+    [C || #tracked_connection{protocol = {'STOMP', _}} = C
+              <- rabbit_ct_broker_helpers:rpc(
+                   Config, 0, rabbit_connection_tracking, list, [])].
 
 set_max_connections(Config, Value) ->
     ok = rabbit_ct_broker_helpers:rpc(
