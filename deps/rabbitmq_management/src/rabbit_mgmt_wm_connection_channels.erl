@@ -41,7 +41,8 @@ to_json(ReqData, Context) ->
 is_authorized(ReqData, Context) ->
     try
         rabbit_mgmt_util:is_authorized_user(
-          ReqData, Context, rabbit_mgmt_wm_connection:conn(ReqData))
+          ReqData, Context,
+          fun() -> rabbit_mgmt_wm_connection:conn(ReqData) end)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)

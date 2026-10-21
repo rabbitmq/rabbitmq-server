@@ -215,10 +215,17 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
 %% Used for connections / channels. A normal user can only see / delete
 %% their own stuff. Monitors can see other users' and delete their
 %% own. Admins can do it all.
-is_authorized_user(ReqData, Context, Item, AuthConfig) ->
+%% An item that has to be looked up is passed as a fun so that it is only
+%% looked up after login. It is also called for monitors and administrators:
+%% callers rely on it to reject invalid range parameters.
+is_authorized_user(ReqData, Context, ItemOrFun, AuthConfig) ->
     is_authorized(ReqData, Context,
                   <<"User not authorised to access object">>,
                   fun(#user{username = Username, tags = Tags}) ->
+                          Item = case is_function(ItemOrFun, 0) of
+                                     true  -> ItemOrFun();
+                                     false -> ItemOrFun
+                                 end,
                           case cowboy_req:method(ReqData) of
                               <<"DELETE">> -> is_admin(Tags);
                               _            -> is_monitor(Tags)

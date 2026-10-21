@@ -2130,6 +2130,18 @@ permissions_connection_channel_consumer_test(Config) ->
     AssertRead(MonConnCh, ?NOT_AUTHORISED),
     AssertRead(AdmConnCh, ?NOT_AUTHORISED),
 
+    %% Computing the samples for such a range crashes the pool worker, so
+    %% the object must not be looked up for a client that has not logged in.
+    TooLarge = "1" ++ lists:duplicate(306, $0),
+    Range = "?data_rates_age=" ++ TooLarge ++ "&data_rates_incr=" ++ TooLarge,
+    Workers = rabbit_ct_broker_helpers:rpc(Config, 0, supervisor, which_children,
+                                           [management_worker_pool_sup]),
+    [http_get(Config, P ++ Range, "user", "wrong password", ?NOT_AUTHORISED)
+     || P <- [UserConn, UserCh, UserConnCh]],
+    ?assertEqual(Workers,
+                 rabbit_ct_broker_helpers:rpc(Config, 0, supervisor, which_children,
+                                              [management_worker_pool_sup])),
+
     AssertClose = fun(Path, User, Status) ->
                           http_delete(Config, Path, User, User, Status)
                   end,
