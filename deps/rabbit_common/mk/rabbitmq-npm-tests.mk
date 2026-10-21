@@ -10,7 +10,13 @@ npm-test:
 	@if command -v node > /dev/null 2>&1 \
 	    && node -e 'process.exit(+process.versions.node.split(".")[0] >= $(NODE_MIN_MAJOR) ? 0 : 1)' \
 	    && [ -n "$(NPM_TEST_FILES)" ]; then \
-		cd $(CURDIR) && node --test $(NPM_TEST_FILES); \
+		cd $(CURDIR) && \
+		if command -v npm > /dev/null 2>&1; then \
+			{ [ package-lock.json -nt package.json ] || npm install; } && \
+			npm test -- $(NPM_TEST_FILES); \
+		else \
+			node --test $(NPM_TEST_FILES); \
+		fi; \
 	elif [ -n "$(REQUIRE_NPM_TESTS)" ]; then \
 		echo "Cannot run the JavaScript tests for $(PROJECT)"; \
 		exit 1; \
