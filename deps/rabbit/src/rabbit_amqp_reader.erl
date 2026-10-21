@@ -654,13 +654,18 @@ handle_sasl_frame(#'v1_0.sasl_init'{mechanism = {symbol, Mechanism},
                                     hostname = _},
                   State0 = #v1{connection_state = waiting_sasl_init,
                                connection = Connection,
-                               sock = Sock}) ->
+                               sock = Sock,
+                               proxy_socket = ProxySock}) ->
     ResponseBin = case Response of
                       undefined -> <<>>;
                       {binary, Bin} -> Bin
                   end,
     AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
-    AuthState = AuthMechanism:init(Sock),
+    AuthSock = case ProxySock of
+                   undefined -> Sock;
+                   _ -> ProxySock
+               end,
+    AuthState = AuthMechanism:init(AuthSock),
     State = State0#v1{
               connection = Connection#v1_connection{
                              auth_mechanism = {Mechanism, AuthMechanism},

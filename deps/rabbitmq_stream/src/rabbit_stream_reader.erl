@@ -1493,6 +1493,7 @@ handle_frame_pre_auth(Transport,
     {Connection#stream_connection{connection_step = silent_close}, State};
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S,
+                                         proxy_socket = ProxySock,
                                          authentication_state = AuthState0,
                                          host = Host,
                                          peer_host = PeerHost} =
@@ -1506,7 +1507,14 @@ handle_frame_pre_auth(Transport,
                 AuthState =
                     case AuthState0 of
                         none ->
-                            AuthMechanism:init(S);
+                            AuthSock =
+                                case ProxySock of
+                                    undefined ->
+                                        S;
+                                    _ ->
+                                        ProxySock
+                                end,
+                            AuthMechanism:init(AuthSock);
                         AS ->
                             AS
                     end,

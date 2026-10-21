@@ -70,7 +70,7 @@
           ok_val_or_error({inet:ip_address(), ip_port()}).
 -spec peername(socket()) ->
           ok_val_or_error({inet:ip_address(), ip_port()}).
--spec peercert(socket()) ->
+-spec peercert(socket() | proxy_socket()) ->
           'nossl' | ok_val_or_error(rabbit_cert_info:certificate()).
 -spec connection_string(socket(), 'inbound' | 'outbound') ->
           ok_val_or_error(string()).
@@ -78,7 +78,7 @@
 %                   'inbound' | 'outbound') ->
 %           ok_val_or_error({host_or_ip(), ip_port(),
 %                            host_or_ip(), ip_port()}).
--spec is_loopback(socket() | inet:ip_address()) -> boolean().
+-spec is_loopback(socket() | proxy_socket() | inet:ip_address()) -> boolean().
 % -spec unwrap_socket(socket() | ranch_proxy:proxy_socket() | ranch_proxy_ssl:ssl_socket()) -> socket().
 
 -dialyzer({nowarn_function, [socket_ends/2, unwrap_socket/1]}).
@@ -259,6 +259,7 @@ sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).
 peername(Sock)   when ?IS_SSL(Sock) -> ssl:peername(Sock);
 peername(Sock)   when is_port(Sock) -> inet:peername(Sock).
 
+peercert({rabbit_proxy_socket, Sock, _ProxyInfo}) -> peercert(Sock);
 peercert(Sock)   when ?IS_SSL(Sock) -> ssl:peercert(Sock);
 peercert(Sock)   when is_port(Sock) -> nossl.
 
@@ -367,6 +368,12 @@ is_loopback(Sock) when is_port(Sock) ; ?IS_SSL(Sock) ->
         {ok, {Addr, _Port}} -> is_loopback(Addr);
         {error, _}          -> false
     end;
+%% The client is the one the PROXY header names, but as in `socket_ends/2`
+%% a header sent from another host cannot make the connection local.
+is_loopback({rabbit_proxy_socket, Sock, #{command := local}}) ->
+    is_loopback(Sock);
+is_loopback({rabbit_proxy_socket, Sock, #{src_address := Addr}}) ->
+    is_loopback(Addr) andalso is_loopback(Sock);
 %% We could parse the results of inet:getifaddrs() instead. But that
 %% would be more complex and less maybe Windows-compatible...
 is_loopback({127,_,_,_})             -> true;

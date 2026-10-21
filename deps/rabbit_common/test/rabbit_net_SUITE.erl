@@ -19,7 +19,9 @@ all() ->
      fast_close_healthy_tls,
      fast_close_recovers_from_stuck_recv,
      socket_ends_proxy_header_from_loopback_peer,
-     socket_ends_proxy_header_from_non_loopback_peer
+     socket_ends_proxy_header_from_non_loopback_peer,
+     is_loopback_proxy_socket_from_loopback_peer,
+     is_loopback_proxy_socket_from_non_loopback_peer
     ].
 
 init_per_suite(Config) ->
@@ -126,6 +128,32 @@ socket_ends_proxy_header_from_non_loopback_peer(_Config) ->
              || Src <- [{127, 0, 0, 1},
                         {0, 0, 0, 0, 0, 0, 0, 1},
                         {0, 0, 0, 0, 0, 65535, 16#7f00, 1}]],
+            ok = gen_tcp:close(S)
+    end.
+
+is_loopback_proxy_socket_from_loopback_peer(_Config) ->
+    S = new_tcp_pair({127, 0, 0, 1}),
+    ?assert(rabbit_net:is_loopback(S)),
+    ?assertNot(rabbit_net:is_loopback(proxy_socket(S, {203, 0, 113, 5}))),
+    ?assert(rabbit_net:is_loopback(proxy_socket(S, {127, 0, 0, 1}))),
+    ?assert(rabbit_net:is_loopback(proxy_socket(S, {0, 0, 0, 0, 0, 0, 0, 1}))),
+    ?assert(rabbit_net:is_loopback(
+              {rabbit_proxy_socket, S, #{version => 2, command => local}})),
+    ?assertNot(rabbit_net:is_loopback(
+                 {rabbit_proxy_socket, S, #{version => 1, command => proxy,
+                                            transport_family => undefined,
+                                            transport_protocol => undefined}})),
+    ?assertEqual(nossl, rabbit_net:peercert(proxy_socket(S, {127, 0, 0, 1}))),
+    ok = gen_tcp:close(S).
+
+is_loopback_proxy_socket_from_non_loopback_peer(_Config) ->
+    case non_loopback_ipv4_address() of
+        undefined ->
+            {skip, "a non-loopback IPv4 address is required"};
+        Addr ->
+            S = new_tcp_pair(Addr),
+            [?assertNot(rabbit_net:is_loopback(proxy_socket(S, Src)))
+             || Src <- [{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 1}, {203, 0, 113, 5}]],
             ok = gen_tcp:close(S)
     end.
 

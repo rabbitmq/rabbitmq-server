@@ -1266,18 +1266,23 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                       client_properties = ClientProperties},
                State0 = #v1{connection_state = starting,
                             connection       = Connection0,
-                            sock             = Sock}) ->
+                            sock             = Sock,
+                            proxy_socket     = ProxySock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
     Capabilities =
         case rabbit_misc:table_lookup(ClientProperties, <<"capabilities">>) of
             {table, Capabilities1} -> Capabilities1;
             _                      -> []
         end,
+    AuthSock = case ProxySock of
+                   undefined -> Sock;
+                   _         -> ProxySock
+               end,
     Connection1 = Connection0#connection{
                     client_properties = ClientProperties,
                     capabilities      = Capabilities,
                     auth_mechanism    = {Mechanism, AuthMechanism},
-                    auth_state        = AuthMechanism:init(Sock)},
+                    auth_state        = AuthMechanism:init(AuthSock)},
     Connection2 = augment_connection_log_name(Connection1),
     State = State0#v1{connection_state = securing,
                       connection       = Connection2},
