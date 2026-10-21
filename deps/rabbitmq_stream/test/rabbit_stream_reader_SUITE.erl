@@ -80,7 +80,12 @@ ensure_token_expiry_timer_test(_) ->
 
     meck:expect(rabbit_access_control, expiry_timestamp, fun (_) -> Now - 60 end),
     {_, #stream_connection{token_expiry_timer = TR4}} = ensure_token_expiry_timer(#user{}, #stream_connection{}),
-    ?assertEqual(undefined, TR4),
+    ?assert(is_reference(TR4)),
+    receive
+        token_expired -> ok
+    after 1000 ->
+        ct:fail("token_expired not received for an already expired token")
+    end,
 
     DummyTRef = erlang:send_after(1_000 * 1_000, self(), dummy),
     meck:expect(rabbit_access_control, permission_cache_can_expire, fun (_) -> false end),
