@@ -297,8 +297,15 @@ socket_ends({rabbit_proxy_socket, Sock, ProxyInfo}, Direction) ->
           dest_address := ToAddress,
           dest_port := ToPort
          } ->
-            {ok, {rdns(FromAddress), FromPort,
-                  rdns(ToAddress),   ToPort}}
+            case is_loopback(FromAddress) andalso not is_loopback(Sock) of
+                true ->
+                    %% A PROXY header sent from another host cannot make the
+                    %% connection local: `loopback_users` is checked against it.
+                    socket_ends(Sock, Direction);
+                false ->
+                    {ok, {rdns(FromAddress), FromPort,
+                          rdns(ToAddress),   ToPort}}
+            end
     end.
 
 maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
