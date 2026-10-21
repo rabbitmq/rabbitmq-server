@@ -40,6 +40,7 @@ parse(<<>>, ProtoVer)
     {more, fun(Bin) -> parse(Bin, ProtoVer) end};
 parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, ProtoVer)
   when is_number(ProtoVer) ->
+    ok = validate_fixed_header(MessageType, Dup, QoS, Retain, ProtoVer),
     Fixed = #mqtt_packet_fixed{type = MessageType,
                                dup = int_to_bool(Dup),
                                qos = QoS,
@@ -48,6 +49,19 @@ parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, ProtoVer)
 parse(Bin, Cont)
   when is_function(Cont) ->
     Cont(Bin).
+
+validate_fixed_header(_Type, _Dup, _QoS, _Retain, 3) ->
+    ok;
+validate_fixed_header(?PUBLISH, _Dup, QoS, _Retain, _) when QoS < 3 ->
+    ok;
+validate_fixed_header(Type, 0, 1, 0, _)
+  when Type =:= ?SUBSCRIBE; Type =:= ?UNSUBSCRIBE ->
+    ok;
+validate_fixed_header(Type, 0, 0, 0, _)
+  when Type =:= ?PUBACK; Type =:= ?PINGREQ; Type =:= ?DISCONNECT; Type =:= ?AUTH ->
+    ok;
+validate_fixed_header(_, _, _, _, _) ->
+    throw(invalid_fixed_header).
 
 parse_remaining_len(<<>>, Fixed, ProtoVer) ->
     {more, fun(Bin) -> parse_remaining_len(Bin, Fixed, ProtoVer) end};

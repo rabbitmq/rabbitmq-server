@@ -11,7 +11,7 @@
 -include("rabbit_mqtt_packet.hrl").
 
 all() ->
-    [connect_reserved_flag].
+    [connect_reserved_flag, fixed_header_flags].
 
 init_per_suite(Config) ->
     persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, 65_536),
@@ -32,6 +32,21 @@ connect_reserved_flag(_Config) ->
               ?assertEqual({error, reserved_connect_flag}, rabbit_mqtt_packet:parse(Rest, Cont))
           end || Split <- lists:seq(1, byte_size(Packet) - 1)]
      end || Vsn <- [4, 5]],
+    ok.
+
+fixed_header_flags(_Config) ->
+    [begin
+         ?assertMatch({ok, _, <<>>, Vsn}, rabbit_mqtt_packet:parse(<<16#C0, 0>>, Vsn)),
+         [?assertThrow(invalid_fixed_header,
+                       rabbit_mqtt_packet:parse(<<Type:4, Flags:4, 0>>, Vsn))
+          || {Type, ValidFlags} <- [{?SUBSCRIBE, 2}, {?UNSUBSCRIBE, 2},
+                                    {?PUBACK, 0}, {?PINGREQ, 0}, {?DISCONNECT, 0}],
+             Flags <- lists:seq(0, 15), Flags =/= ValidFlags]
+     end || Vsn <- [4, 5]],
+    ?assertMatch({ok, _, <<>>, 3},
+                 rabbit_mqtt_packet:parse(<<16#8B, 6, 0, 1, 0, 1, "a", 0>>, 3)),
+    ?assertMatch({ok, _, <<>>, 3},
+                 rabbit_mqtt_packet:parse(<<16#AB, 5, 0, 1, 0, 1, "a">>, 3)),
     ok.
 
 parse_connect(Vsn, Flags, Payload) ->
