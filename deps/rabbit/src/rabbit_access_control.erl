@@ -13,6 +13,7 @@
 
 -export([ensure_auth_backends_are_enabled/0]).
 -export([check_user_pass_login/2, check_user_login/2, check_user_login/3, check_user_loopback/2,
+         check_login_as/3,
          check_vhost_access/4, check_resource_access/4, check_topic_access/4,
          check_user_id/2]).
 
@@ -320,6 +321,33 @@ check_user_loopback(Username, SockOrAddr) ->
         orelse not lists:member(Username, Users) of
         true  -> ok;
         false -> not_allowed
+    end.
+
+%% Shovels and federation links log in with their URI's credentials on behalf
+%% of the user who set them up. A direct AMQP 0-9-1 login without a username
+%% passes every permission check; one without a password is not authenticated.
+-spec check_login_as(rabbit_types:user() | none,
+                     rabbit_types:username() | none,
+                     PasswordChecked :: boolean()) ->
+    ok | {error, string(), [term()]}.
+
+check_login_as(none, _Username, _PasswordChecked) ->
+    ok;
+check_login_as(#user{username = ActingUsername, tags = Tags},
+               Username, PasswordChecked) ->
+    IsAdmin = lists:member(<<"administrator">>,
+                           [rabbit_data_coercion:to_binary(T) || T <- Tags]),
+    case IsAdmin orelse Username =:= ActingUsername of
+        true ->
+            ok;
+        false when Username =:= none ->
+            {error, "user \"~ts\" may not use a URI without a hostname or "
+                    "a username", [ActingUsername]};
+        false when not PasswordChecked ->
+            {error, "user \"~ts\" may not use the username \"~ts\" without "
+                    "a password", [ActingUsername, Username]};
+        false ->
+            ok
     end.
 
 get_authz_data_from({ip, Address}) ->

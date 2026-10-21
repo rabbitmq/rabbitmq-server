@@ -228,7 +228,9 @@ validate_uri(Name, Term, User) ->
 
 validate_params_user(#amqp_params_direct{}, none) ->
     ok;
-validate_params_user(#amqp_params_direct{virtual_host = VHost},
+validate_params_user(#amqp_params_direct{username = ConnUsername,
+                                         password = ConnPassword,
+                                         virtual_host = VHost},
                      User = #user{username = Username}) ->
     VHostAccess = try rabbit_access_control:check_vhost_access(
                           User, VHost, undefined, #{})
@@ -240,7 +242,9 @@ validate_params_user(#amqp_params_direct{virtual_host = VHost},
             ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: ~tp", [NotOK])
     end,
     case rabbit_vhost:exists(VHost) andalso VHostAccess of
-        ok -> ok;
+        ok ->
+            rabbit_access_control:check_login_as(
+              User, ConnUsername, is_binary(ConnPassword) andalso ConnPassword =/= <<>>);
         _ ->
             {error, "user \"~ts\" may not connect to vhost \"~ts\"", [Username, VHost]}
     end;

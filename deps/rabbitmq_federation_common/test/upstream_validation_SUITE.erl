@@ -33,6 +33,10 @@ groups() ->
           direct_uri_denied,
           direct_uri_nonexistent_vhost,
           direct_uri_no_user,
+          direct_uri_without_username_denied,
+          direct_uri_other_username_denied,
+          direct_uri_other_username_and_password_allowed,
+          direct_uri_administrator_allowed,
           network_uri_allowed,
           uri_list_denied,
           uri_list_allowed,
@@ -97,6 +101,32 @@ direct_uri_nonexistent_vhost(Config) ->
 
 direct_uri_no_user(Config) ->
     ?assertEqual([ok], validate_with_none(Config, direct_uri(?DENIED_VHOST))).
+
+%% Such a connection would not be subject to permission checks.
+direct_uri_without_username_denied(Config) ->
+    ?assertMatch([{error, _, _}],
+                 validate_with_user(Config, <<"amqp:///", ?ALLOWED_VHOST/binary>>)).
+
+%% Such a connection would log in as another user without authenticating.
+direct_uri_other_username_denied(Config) ->
+    ?assertMatch([{error, _, _}],
+                 validate_with_user(Config, <<"amqp://other@/", ?ALLOWED_VHOST/binary>>)),
+    ?assertMatch([{error, _, _}],
+                 validate_with_user(Config, <<"amqp://other:@/", ?ALLOWED_VHOST/binary>>)).
+
+direct_uri_other_username_and_password_allowed(Config) ->
+    ?assertEqual([ok],
+                 validate_with_user(Config, <<"amqp://other:pass@/", ?ALLOWED_VHOST/binary>>)).
+
+direct_uri_administrator_allowed(Config) ->
+    Uris = [<<"amqp:///", ?ALLOWED_VHOST/binary>>,
+            <<"amqp://other@/", ?ALLOWED_VHOST/binary>>],
+    ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, ?USER, [administrator]),
+    try
+        ?assertEqual([ok], validate_with_user(Config, Uris))
+    after
+        ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, ?USER, [])
+    end.
 
 %% A network URI authenticates over the wire on connect, so it is unchecked here.
 network_uri_allowed(Config) ->
@@ -165,7 +195,7 @@ vhost_for(denied)      -> ?DENIED_VHOST;
 vhost_for(nonexistent) -> ?NONEXISTENT_VHOST.
 
 direct_uri(VHost) ->
-    <<"amqp:///", VHost/binary>>.
+    <<"amqp://", ?USER/binary, "@/", VHost/binary>>.
 
 network_uri(VHost) ->
     <<"amqp://localhost:5672/", VHost/binary>>.

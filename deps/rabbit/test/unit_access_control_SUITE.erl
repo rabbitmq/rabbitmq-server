@@ -35,7 +35,14 @@ groups() ->
           login_of_nonexistent_user,
           set_tags_for_passwordless_user,
           change_password,
+<<<<<<< HEAD
           auth_backend_internal_expand_topic_permission
+=======
+          login_with_pbkdf2_sha256_hashed_password,
+          login_with_legacy_4_byte_salt_hashed_password,
+          auth_backend_internal_expand_topic_permission,
+          check_login_as
+>>>>>>> 7ca5fb7 (Shovel and federation: check who a direct URI logs in as)
       ]}
     ].
 
@@ -485,3 +492,20 @@ version_negotiation2(Hostname, Port, Header) ->
     {ok, ServerVersion} = gen_tcp:recv(C, 8, 100),
     ok = gen_tcp:close(C),
     ServerVersion.
+
+check_login_as(Config) ->
+    Check = fun(ActingUser, Username, PasswordChecked) ->
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, 0, rabbit_access_control, check_login_as,
+                      [ActingUser, Username, PasswordChecked])
+            end,
+    User = fun(Tags) -> #user{username = <<"pm">>, tags = Tags, authz_backends = []} end,
+    ok = Check(none, none, false),
+    [ok = Check(User(Tags), none, false)
+     || Tags <- [[administrator], [<<"administrator">>]]],
+    ok = Check(User([<<"policymaker">>]), <<"pm">>, false),
+    ok = Check(User([<<"policymaker">>]), <<"other">>, true),
+    [{error, _, _} = Check(User(Tags), Username, PasswordChecked)
+     || Tags <- [[policymaker], [<<"policymaker">>]],
+        {Username, PasswordChecked} <- [{none, true}, {<<"other">>, false}]],
+    ok.
