@@ -47,6 +47,14 @@ fill(_Config) ->
     F("x${usernamex",  [{username,  "ab"}],     "x${usernamex"),
     F("x${username}x", [{username,  "a\\b"}],   "xa\\bx"),
     F("x${username}x", [{username,  "a&b"}],    "xa&bx"),
+    F("x${username}x", [{username,  {1, 2}}],   "xx"),
+    F("x${username}x", [{username,  "ab"}, {username, "cd"}], "xabx"),
+    F("x${y${username}x", [{username, "ab"}],   "x${yabx"),
+    F("${username}${username}", [{username, "ab"}], "abab"),
+    %% Variables inside substituted values are not expanded
+    F("x${username}x", [{username, "${vhost}"}, {vhost, "ab"}], "x${vhost}x"),
+    F("x${vhost}x", [{username, "ab"}, {vhost, "${username}"}], "x${username}x"),
+    F("${a}${b}", [{a, "${"}, {b, "c}"}, {c, "X"}], "${c}"),
     ok.
 
 rfc4514_escape_value(_Config) ->
@@ -421,6 +429,14 @@ ad_fill(_Config) ->
     U1 = <<"ADDomain\\ADUser\\Extra">>,
     A1 = rabbit_auth_backend_ldap_util:get_active_directory_args(U1),
     F("x-${ad_domain}-x-${ad_user}-x", A1, "x-ADDomain-x-ADUser\\Extra-x"),
+
+    %% The halves of the username are not expanded inside each other
+    U2 = <<"${ad_user}${ad_user}\\${ad_domain}${ad_domain}">>,
+    A2 = [{username, U2} |
+          rabbit_auth_backend_ldap_util:get_active_directory_args(U2)],
+    F("x-${username}-x", A2, "x-" ++ binary_to_list(U2) ++ "-x"),
+    F("x-${ad_domain}-x-${ad_user}-x", A2,
+      "x-${ad_user}${ad_user}-x-${ad_domain}${ad_domain}-x"),
     ok.
 
 user_dn_pattern_gh_7161(_Config) ->

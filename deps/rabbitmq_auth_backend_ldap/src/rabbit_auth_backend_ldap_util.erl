@@ -12,19 +12,23 @@
 %% Raw substitution without escaping. Safe only for non-DN sinks (ACL string
 %% comparisons, eldap:equalityMatch/2 filter values). To build a DN, use
 %% rabbit_ldap_rfc4514:fill_dn/2, which RFC 4514-escapes substituted values.
-fill(Fmt, []) ->
-    binary_to_list(iolist_to_binary(Fmt));
+%%
+%% Only the template is searched for variables: substituted values come from
+%% clients and must not be expanded themselves.
+fill(Fmt, Args) ->
+    Fill = fun(Var, [Name]) ->
+                   case [V || {K, V} <- Args, atom_to_binary(K) =:= Name] of
+                       [V | _] -> to_repl(V);
+                       []      -> Var
+                   end
+           end,
+    binary_to_list(
+      iolist_to_binary(
+        re:replace(Fmt, "\\$\\{([^{}]*)\\}", Fill, [global]))).
 
-fill(Fmt, [{K, V} | T]) ->
-    Var = [[$\\, $$, ${] ++ atom_to_list(K) ++ [$}]],
-    fill(re:replace(Fmt, Var, [to_repl(V)], [global]), T).
-
-to_repl(V) when is_atom(V)   -> to_repl(atom_to_list(V));
-to_repl(V) when is_binary(V) -> to_repl(binary_to_list(V));
-to_repl([])                  -> [];
-to_repl([$\\ | T])           -> [$\\, $\\ | to_repl(T)];
-to_repl([$&  | T])           -> [$\\, $&  | to_repl(T)];
-to_repl([H   | T])           -> [H        | to_repl(T)];
+to_repl(V) when is_atom(V)   -> atom_to_list(V);
+to_repl(V) when is_binary(V) -> V;
+to_repl(V) when is_list(V)   -> V;
 to_repl(_)                   -> []. % fancy variables like peer IP are just ignored
 
 %% If a binary Username is in Domain\User format, provide additional fill
