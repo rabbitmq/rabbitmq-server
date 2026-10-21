@@ -456,6 +456,7 @@ parse_prop(<<16#09, Len:16, Val:Len/binary, Bin/binary>>, Type, Props)
     parse_prop(Bin, Type, Props#{'Correlation-Data' => Val});
 parse_prop(<<16#0B, Bin/binary>>, ?SUBSCRIBE = Type, Props) ->
     {Val, Rest} = parse_variable_byte_integer(Bin),
+    true = Val > 0,
     %% Client sends at most one Subscription-Identifier to the server (in SUBSCRIBE packet).
     %% "It is a Protocol Error to include the Subscription Identifier more than once." [v5 3.8.2.1.2]
     parse_prop(Rest, Type, Props#{'Subscription-Identifier' => Val});
