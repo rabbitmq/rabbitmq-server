@@ -38,6 +38,7 @@ groups() ->
           direct_uri_other_username_and_password_allowed,
           direct_uri_administrator_allowed,
           network_uri_allowed,
+          loopback_user_denied,
           uri_list_denied,
           uri_list_allowed,
           map_uri_denied,
@@ -120,7 +121,8 @@ direct_uri_other_username_and_password_allowed(Config) ->
 
 direct_uri_administrator_allowed(Config) ->
     Uris = [<<"amqp:///", ?ALLOWED_VHOST/binary>>,
-            <<"amqp://other@/", ?ALLOWED_VHOST/binary>>],
+            <<"amqp://other@/", ?ALLOWED_VHOST/binary>>,
+            <<"amqp://localhost:5672/", ?DENIED_VHOST/binary>>],
     ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, ?USER, [administrator]),
     try
         ?assertEqual([ok], validate_with_user(Config, Uris))
@@ -128,9 +130,17 @@ direct_uri_administrator_allowed(Config) ->
         ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, ?USER, [])
     end.
 
-%% A network URI authenticates over the wire on connect, so it is unchecked here.
+%% A network URI is authenticated by the broker it points at.
 network_uri_allowed(Config) ->
     ?assertEqual([ok], validate_with_user(Config, network_uri(?DENIED_VHOST))).
+
+%% The link connects from this node, which loopback_users does not refuse.
+%% A network URI without credentials logs in as guest.
+loopback_user_denied(Config) ->
+    [?assertMatch([{error, _, _}], validate_with_user(Config, Uri))
+     || Uri <- [<<"amqp://localhost:5672/", ?DENIED_VHOST/binary>>,
+                <<"amqp://guest:guest@localhost:5672/", ?DENIED_VHOST/binary>>,
+                <<"amqp://guest:guest@/", ?ALLOWED_VHOST/binary>>]].
 
 uri_list_denied(Config) ->
     Uris = [direct_uri(?ALLOWED_VHOST), direct_uri(?DENIED_VHOST)],
@@ -198,7 +208,7 @@ direct_uri(VHost) ->
     <<"amqp://", ?USER/binary, "@/", VHost/binary>>.
 
 network_uri(VHost) ->
-    <<"amqp://localhost:5672/", VHost/binary>>.
+    <<"amqp://", ?USER/binary, ":", ?PASSWORD/binary, "@localhost:5672/", VHost/binary>>.
 
 validate_with_user(Config, Uris) ->
     validate_term_with_user(Config, [{<<"uri">>, Uris}]).

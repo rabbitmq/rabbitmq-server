@@ -129,7 +129,8 @@ validate_uri(Name, Term, User) ->
     end.
 
 %% A direct URI carries its own virtual host and credentials; check them here.
-validate_uri_user(#amqp_params_direct{}, none) ->
+%% A network URI may point at this node.
+validate_uri_user(_Params, none) ->
     ok;
 validate_uri_user(#amqp_params_direct{username = ConnUsername,
                                       password = ConnPassword,
@@ -142,8 +143,8 @@ validate_uri_user(#amqp_params_direct{username = ConnUsername,
         _:_ -> {error, "user \"~ts\" may not connect to vhost \"~ts\"",
                 [User#user.username, VHost]}
     end;
-validate_uri_user(_Params, _User) ->
-    ok.
+validate_uri_user(#amqp_params_network{username = ConnUsername}, User) ->
+    rabbit_access_control:check_login_as(User, ConnUsername, true).
 
 %%----------------------------------------------------------------------------
 

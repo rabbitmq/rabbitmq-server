@@ -53,7 +53,7 @@
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_data_coercion, [to_binary/1]).
--import(rabbit_shovel_util, [validate_uri_fun/1,
+-import(rabbit_shovel_util, [validate_uri_fun/2,
                              obfuscated_uris/2,
                              deobfuscate_uris/1]).
 
@@ -153,7 +153,7 @@ validate_dest(_Def) ->
 
 validate_src_funs(_Def, User) ->
     [
-     {<<"src-uri">>, validate_uri_fun(User), mandatory},
+     {<<"src-uri">>, validate_uri_fun(amqp10, User), mandatory},
      {<<"src-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"src-consumer-name">>, fun rabbit_parameter_validation:binary/2, optional},
@@ -164,7 +164,7 @@ validate_src_funs(_Def, User) ->
     ].
 
 validate_dest_funs(_Def, User) ->
-    [{<<"dest-uri">>, validate_uri_fun(User), mandatory},
+    [{<<"dest-uri">>, validate_uri_fun(amqp10, User), mandatory},
      {<<"dest-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2, optional},
      {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2, optional},

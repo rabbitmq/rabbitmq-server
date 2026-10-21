@@ -327,9 +327,9 @@ check_user_loopback(Username, SockOrAddr) ->
         false -> not_allowed
     end.
 
-%% Shovels and federation links log in with their URI's credentials on behalf
-%% of the user who set them up. A direct AMQP 0-9-1 login without a username
-%% passes every permission check; one without a password is not authenticated.
+%% Shovels and federation links log in from this node, with their URI's
+%% credentials, on behalf of the user who set them up. A direct AMQP 0-9-1 login
+%% without a username passes every permission check.
 -spec check_login_as(rabbit_types:user() | none,
                      rabbit_types:username() | none,
                      PasswordChecked :: boolean()) ->
@@ -347,11 +347,19 @@ check_login_as(#user{username = ActingUsername, tags = Tags},
         false when Username =:= none ->
             {error, "user \"~ts\" may not use a URI without a hostname or "
                     "a username", [ActingUsername]};
-        false when not PasswordChecked ->
-            {error, "user \"~ts\" may not use the username \"~ts\" without "
-                    "a password", [ActingUsername, Username]};
         false ->
-            ok
+            {ok, LoopbackUsers} = application:get_env(rabbit, loopback_users),
+            case lists:member(Username, LoopbackUsers) of
+                true ->
+                    {error, "user \"~ts\" may not use the credentials of user "
+                            "\"~ts\", who can only connect from localhost",
+                     [ActingUsername, Username]};
+                false when not PasswordChecked ->
+                    {error, "user \"~ts\" may not use the username \"~ts\" "
+                            "without a password", [ActingUsername, Username]};
+                false ->
+                    ok
+            end
     end.
 
 get_authz_data_from({ip, Address}) ->

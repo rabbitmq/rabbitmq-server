@@ -399,16 +399,23 @@ security_validation(Config) ->
           {<<"dest-queue">>, <<"test2">>}],
 
     A = lookup_user(Config, <<"a">>),
-    valid_param(Config, [{<<"src-uri">>,  <<"amqp://localhost:5672/a">>},
-                         {<<"dest-uri">>, <<"amqp://localhost:5672/b">>} | Qs], A),
+    valid_param(Config, [{<<"src-uri">>,  <<"amqp://a:@localhost:5672/a">>},
+                         {<<"dest-uri">>, <<"amqp://b:pass@localhost:5672/b">>} | Qs], A),
+    %% a loopback_users member logs in from this node, implicitly without
+    %% credentials in a network URI
+    [invalid_param(Config, [{<<"src-uri">>,  SrcUri},
+                            {<<"dest-uri">>, <<"amqp://a@/a">>} | Qs], A)
+     || SrcUri <- [<<"amqp://localhost:5672/a">>,
+                   <<"amqp://guest:guest@localhost:5672/a">>,
+                   <<"amqp://guest:guest@/a">>]],
     %% src-uri and dest-uri are not valid URIs
     invalid_param(Config,
                   [{<<"src-uri">>,  <<"an arbitrary string">>},
                    {<<"dest-uri">>, <<"\o/ \o/ \o/">>} | Qs], A),
     %% missing src-queue and dest-queue
     invalid_param(Config,
-                  [{<<"src-uri">>,  <<"amqp://localhost/a">>},
-                   {<<"dest-uri">>, <<"amqp://localhost/b">>}], A),
+                  [{<<"src-uri">>,  <<"amqp://a:@localhost/a">>},
+                   {<<"dest-uri">>, <<"amqp://a:@localhost/b">>}], A),
     %% a direct URI logs in as the user it names, without a password check
     valid_param(Config, [{<<"src-uri">>,  <<"amqp://a@/a">>},
                          {<<"dest-uri">>, <<"amqp://b:pass@/a">>} | Qs], A),
@@ -422,6 +429,8 @@ security_validation(Config) ->
     Admin = lookup_user(Config, <<"a">>),
     valid_param(Config, [{<<"src-uri">>,  <<"amqp:///a">>},
                          {<<"dest-uri">>, <<"amqp://b@/a">>} | Qs], Admin),
+    valid_param(Config, [{<<"src-uri">>,  <<"amqp://localhost:5672/a">>},
+                         {<<"dest-uri">>, <<"amqp://guest:guest@/a">>} | Qs], Admin),
 
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, security_validation_remove_user, []),
