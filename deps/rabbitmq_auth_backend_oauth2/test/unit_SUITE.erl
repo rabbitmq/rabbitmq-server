@@ -1114,8 +1114,11 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     set_env(key_config, UaaEnv),
 
-    ?assertMatch({refused, _, _}, user_login_authentication(Username,
-        [{password, <<"not a token">>}])).
+    ?assertMatch({refused,
+                  "Authentication using OAuth 2/JWT token failed: ~tp",
+                  [{error, {invalid_token, error, {badarg, [redacted]}, _}}]},
+                 user_login_authentication(Username,
+                     [{password, <<"not a token">>}])).
 
 unsuccessful_access_without_scopes(_) ->
     Username = <<"username">>,
