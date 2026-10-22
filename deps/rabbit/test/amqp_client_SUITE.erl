@@ -272,7 +272,10 @@ init_per_group(Group, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{rmq_nodes_count, Nodes},
-                         {rmq_nodename_suffix, Suffix}]),
+                         {rmq_nodename_suffix, Suffix},
+                         %% `tcp_back_pressure_rabbitmq_internal_flow/2` stops reading
+                         %% from the socket, so the writer's send times out.
+                         {ignored_crashes, ["{writer,send_failed,timeout}"]}]),
     rabbit_ct_helpers:run_setup_steps(
       Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
