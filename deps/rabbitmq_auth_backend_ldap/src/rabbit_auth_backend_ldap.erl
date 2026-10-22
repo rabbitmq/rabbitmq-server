@@ -73,6 +73,10 @@ user_login_authentication(Username, []) ->
 user_login_authentication(Username, AuthProps) when is_list(AuthProps) ->
     case extractPassword(AuthProps) of
         undefined -> user_login_authentication(Username, []);
+        invalid ->
+            ?L("CHECK: login for ~ts", [Username]),
+            ?L("DECISION: login for ~ts: denied, no valid password provided", [Username]),
+            {refused, "user '~ts' - no valid password provided", [Username]};
         <<>> ->
             %% Password "" is special in LDAP, see
             %% https://tools.ietf.org/html/rfc4513#section-5.1.2
@@ -98,7 +102,7 @@ user_login_authentication(Username, _AuthProps) ->
 %% Credentials (i.e. password) maybe directly in the password attribute in AuthProps
 %% or as a Function with the attribute rabbit_auth_backend_ldap if the user was already authenticated with http backend
 %% or as a Function with the attribute rabbit_auth_backend_cache if the user was already authenticated via cache backend
--spec extractPassword(list()) -> rabbit_types:option(binary()).
+-spec extractPassword(list()) -> rabbit_types:option(binary()) | invalid.
 extractPassword(AuthProps) ->
     case proplists:get_value(password, AuthProps, none) of
         none ->
@@ -111,8 +115,10 @@ extractPassword(AuthProps) ->
                 PasswordFun ->
                     (PasswordFun())#impl.password
             end;
-        Password ->
-            Password
+        Password when is_binary(Password) ->
+            Password;
+        _ ->
+            invalid
     end.
 
 user_login_authorization(Username, AuthProps) ->

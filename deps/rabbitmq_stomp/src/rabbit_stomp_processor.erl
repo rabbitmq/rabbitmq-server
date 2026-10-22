@@ -603,6 +603,8 @@ maybe_start_credential_expiry_timer(Connection) ->
 
 do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)", State);
+do_login(_, undefined, _, _, _, _, State) ->
+    error("Bad CONNECT", "Missing login or passcode header(s)", State);
 do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
          State = #proc_state{peer_addr = Addr}) ->
     case start_connection(
