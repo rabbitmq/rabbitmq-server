@@ -494,15 +494,23 @@ expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
 expect_closing_var(_ , _Acc, _Context) -> {"", error}.
 
 resolve_scope_var(Elem, Token, Vhost) ->
-    case Elem of
-        "vhost" -> binary_to_list(Vhost);
-        _ ->
-            ElemAsBinary = list_to_binary(Elem),
-            binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
-                          Value when is_binary(Value) -> Value;
-                          _ -> ElemAsBinary
-                        end)
-    end.
+    Raw = case Elem of
+              "vhost" -> binary_to_list(Vhost);
+              _ ->
+                  ElemAsBinary = list_to_binary(Elem),
+                  binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+                                Value when is_binary(Value) -> Value;
+                                _ -> ElemAsBinary
+                              end)
+          end,
+    %% The expanded scope is parsed after the substitution, so a substituted
+    %% value must not be able to change its structure.
+    escape_wildcard_metacharacters(Raw).
+
+%% `wildcard:match/2` percent-decodes each part of the pattern after the
+%% split on "*", so an encoded value only matches itself.
+escape_wildcard_metacharacters(Str) ->
+    binary_to_list(cow_qs:urlencode(iolist_to_binary(Str))).
 
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
 tags_from(DecodedToken) ->

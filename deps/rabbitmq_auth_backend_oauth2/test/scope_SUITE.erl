@@ -14,6 +14,11 @@
 all() ->
     [
         variable_expansion,
+        substitution_percent_encodes_metacharacters,
+        crafted_claim_cannot_broaden_scope,
+        crafted_claim_cannot_broaden_vhost_scope,
+        slash_in_substituted_value_cannot_add_a_scope_segment,
+        vhost_with_a_slash_matches_self,
         permission_all,
         permission_vhost,
         permission_resource,
@@ -92,6 +97,51 @@ variable_expansion(_Config) ->
           rabbit_auth_backend_oauth2:get_expanded_scopes(Token, #resource{virtual_host = Vhost}), Comment)
         end
       , Scenarios).
+
+substitution_percent_encodes_metacharacters(_Config) ->
+    Token = #{<<"scope">> => [<<"read:{vhost}/{custom_claim}">>],
+              <<"custom_claim">> => <<"b*b/%62">>},
+    ?assertEqual([<<"read:%2F/b%2Ab%2F%2562">>], expand(Token, <<"/">>)).
+
+crafted_claim_cannot_broaden_scope(_Config) ->
+    Bobs = #resource{virtual_host = <<"vh">>, kind = queue, name = <<"q-bob">>},
+    [begin
+         Token = #{<<"scope">> => [<<"read:vh/q-{custom_claim}">>],
+                   <<"custom_claim">> => Claim},
+         Own = Bobs#resource{name = <<"q-", Claim/binary>>},
+         [Expanded] = expand(Token, <<"vh">>),
+         ?assertEqual(true, rabbit_oauth2_scope:resource_access(
+             Own, read, [Expanded])),
+         ?assertEqual(false, rabbit_oauth2_scope:resource_access(
+             Bobs, read, [Expanded]))
+     end || Claim <- [<<"*">>, <<"b*">>, <<"%62ob">>, <<"bob/x">>]].
+
+crafted_claim_cannot_broaden_vhost_scope(_Config) ->
+    Token = #{<<"scope">> => [<<"read:{custom_claim}/*">>],
+              <<"custom_claim">> => <<"*">>},
+    [Expanded] = expand(Token, <<"vh">>),
+    ?assertEqual(true, rabbit_oauth2_scope:vhost_access(<<"*">>, [Expanded])),
+    ?assertEqual(false, rabbit_oauth2_scope:vhost_access(<<"vh">>, [Expanded])).
+
+slash_in_substituted_value_cannot_add_a_scope_segment(_Config) ->
+    Token = #{<<"scope">> => [<<"read:vh/q-{custom_claim}">>],
+              <<"custom_claim">> => <<"bob/x">>},
+    [Expanded] = expand(Token, <<"vh">>),
+    ?assertEqual(true, rabbit_oauth2_scope:resource_access(
+        #resource{virtual_host = <<"vh">>, kind = queue, name = <<"q-bob/x">>},
+        read, [Expanded])),
+    ?assertEqual(false, rabbit_oauth2_scope:resource_access(
+        #resource{virtual_host = <<"vh">>, kind = queue, name = <<"q-bob">>},
+        read, [Expanded])).
+
+vhost_with_a_slash_matches_self(_Config) ->
+    Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
+    [Expanded] = expand(Token, <<"/">>),
+    ?assertEqual(true, rabbit_oauth2_scope:vhost_access(<<"/">>, [Expanded])).
+
+expand(Token, VHost) ->
+    rabbit_auth_backend_oauth2:get_expanded_scopes(
+      Token, #resource{virtual_host = VHost}).
 
 permission_all(_Config) ->
     WildcardScopeWrite = <<"write:*/*">>,
