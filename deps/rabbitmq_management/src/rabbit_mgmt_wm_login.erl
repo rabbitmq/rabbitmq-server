@@ -36,14 +36,13 @@ is_authorized(#{method := <<"OPTIONS">>} = ReqData, Context) ->
 is_authorized(#{method := <<"DELETE">>} = ReqData, Context) ->
     {true, ReqData, Context};
 is_authorized(ReqData0, Context) ->
-    {ok, Body, ReqData} = cowboy_req:read_urlencoded_body(ReqData0),
-    Username = proplists:get_value(<<"username">>, Body),
-    Password = proplists:get_value(<<"password">>, Body),
-    case rabbit_mgmt_util:is_authorized_user(ReqData, Context, Username, Password) of
-        {true, ReqData1, Context1} ->
-            {true, ReqData1, Context1};
-        Other ->
-            Other
+    case rabbit_mgmt_util:read_urlencoded_body(ReqData0) of
+        {ok, Body, ReqData} ->
+            Username = proplists:get_value(<<"username">>, Body),
+            Password = proplists:get_value(<<"password">>, Body),
+            rabbit_mgmt_util:is_authorized_user(ReqData, Context, Username, Password);
+        {error, malformed_body} ->
+            rabbit_mgmt_util:bad_request(<<"Malformed request body">>, ReqData0, Context)
     end.
 
 accept_content(ReqData, Context) ->

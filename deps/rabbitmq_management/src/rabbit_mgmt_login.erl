@@ -46,10 +46,14 @@ init(Req0, State) ->
   login(cowboy_req:method(Req0), Req0, State).
 
 login(<<"POST">>, Req0, State) ->
-    {ok, Body, _} = cowboy_req:read_urlencoded_body(Req0),
-    case proplists:get_value(?OAUTH2_ACCESS_TOKEN, Body) of
-        undefined -> handleStrictOrPreferredAuthMechanism(Req0, Body, State);
-        AccessToken -> handleAccessToken(Req0, AccessToken, State)
+    case rabbit_mgmt_util:read_urlencoded_body(Req0) of
+        {ok, Body, _} ->
+            case proplists:get_value(?OAUTH2_ACCESS_TOKEN, Body) of
+                undefined -> handleStrictOrPreferredAuthMechanism(Req0, Body, State);
+                AccessToken -> handleAccessToken(Req0, AccessToken, State)
+            end;
+        {error, malformed_body} ->
+            {ok, cowboy_req:reply(400, Req0), State}
     end;
 
 login(<<"GET">>, Req, State) ->
