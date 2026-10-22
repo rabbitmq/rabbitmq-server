@@ -16,7 +16,9 @@ suite() ->
 
 all() ->
     [memory_alarm, disk_alarm, existing_alarms, overlapping_alarms,
-     alarm_cleared_before_publish, consumer_receives_during_alarm].
+     alarm_cleared_before_publish, heartbeats_started_after_blocking,
+     blocked_connection_idle_timeout, idle_timeout_before_publish,
+     consumer_receives_during_alarm].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -30,9 +32,27 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(
       Config, rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(Testcase, Config)
+  when Testcase =:= blocked_connection_idle_timeout;
+       Testcase =:= idle_timeout_before_publish ->
+    WsOpts = rpc(Config, application, get_env,
+                 [rabbitmq_web_stomp, cowboy_ws_opts, []]),
+    ok = rabbit_ws_test_util:update_app_env(
+           Config, cowboy_ws_opts, [{idle_timeout, 1000} |
+                                    proplists:delete(idle_timeout, WsOpts)]),
+    [{saved_ws_opts, WsOpts} | Config];
+init_per_testcase(_, Config) ->
+    Config.
+
 end_per_testcase(_, Config) ->
     clear_alarm(Config, memory),
     clear_alarm(Config, disk),
+    case proplists:lookup(saved_ws_opts, Config) of
+        {saved_ws_opts, WsOpts} ->
+            ok = rabbit_ws_test_util:update_app_env(Config, cowboy_ws_opts, WsOpts);
+        none ->
+            ok
+    end,
     Config.
 
 memory_alarm(Config) ->
@@ -80,16 +100,75 @@ overlapping_alarms(Config) ->
     end).
 
 alarm_cleared_before_publish(Config) ->
-    with_connection(Config, fun(Conn, Ref, Pid) ->
+    with_connection(Config, [{"heart-beat", "10000,0"}], <<>>,
+                    fun(Conn, Ref, Pid) ->
         set_alarm(Config, memory),
         await_state(Config, Pid, blocking),
         clear_alarm(Config, memory),
         await_state(Config, Pid, running),
+        ?assertEqual({error, timeout}, gun:await(Conn, Ref, 200)),
         send(Conn, Ref, "SUBSCRIBE",
              [{"destination", "/topic/resource-alarm"}, {"id", "s0"},
               {"receipt", "subscribed"}], <<>>),
         await_receipt(Conn, Ref, <<"subscribed">>)
     end).
+
+heartbeats_started_after_blocking(Config) ->
+    set_alarm(Config, memory),
+    Send = stomp:marshal("SEND", [{"destination", "/topic/resource-alarm"}]),
+    with_connection(Config, [{"heart-beat", "1000,0"}], Send,
+                    fun(Conn, Ref, Pid) ->
+        await_state(Config, Pid, blocked),
+        ?assertEqual({error, timeout}, gun:await(Conn, Ref, 3500)),
+        clear_alarm(Config, memory),
+        await_state(Config, Pid, running),
+        send(Conn, Ref, "SUBSCRIBE",
+             [{"destination", "/topic/resource-alarm"}, {"id", "s0"},
+              {"receipt", "subscribed"}], <<>>),
+        await_receipt(Conn, Ref, <<"subscribed">>),
+        ?assertEqual({ws, {close, 1000, <<"STOMP died">>}},
+                     gun:await(Conn, Ref, 4000))
+    end).
+
+blocked_connection_idle_timeout(Config) ->
+    with_connection(Config, [{"heart-beat", "10000,0"}], <<>>,
+                    fun(Conn, Ref, Pid) ->
+        {Sender, Monitor} = spawn_monitor(fun() -> send_heartbeats(Conn, Ref) end),
+        try
+            ?assertEqual({error, timeout}, gun:await(Conn, Ref, 1500)),
+            set_alarm(Config, memory),
+            await_state(Config, Pid, blocking),
+            block_publisher(Config, Conn, Ref, Pid),
+            ?assertEqual({error, timeout}, gun:await(Conn, Ref, 2500)),
+            clear_alarm(Config, memory),
+            await_state(Config, Pid, running),
+            await_receipt(Conn, Ref, <<"pending">>),
+            Sender ! stop,
+            receive
+                {'DOWN', Monitor, process, Sender, normal} -> ok
+            after 1000 ->
+                ct:fail(heartbeat_sender_did_not_stop)
+            end,
+            ?assertEqual({ws, {close, 1000, <<>>}}, gun:await(Conn, Ref, 3000))
+        after
+            Sender ! stop
+        end
+    end).
+
+idle_timeout_before_publish(Config) ->
+    with_connection(Config, fun(Conn, Ref, Pid) ->
+        set_alarm(Config, memory),
+        await_state(Config, Pid, blocking),
+        ?assertEqual({ws, {close, 1000, <<>>}}, gun:await(Conn, Ref, 3000))
+    end).
+
+send_heartbeats(Conn, Ref) ->
+    receive
+        stop -> ok
+    after 100 ->
+        gun:ws_send(Conn, Ref, {text, <<"\n">>}),
+        send_heartbeats(Conn, Ref)
+    end.
 
 consumer_receives_during_alarm(Config) ->
     with_connection(Config, fun(Consumer, ConsumerRef, ConsumerPid) ->
@@ -118,6 +197,9 @@ block_publisher(Config, Conn, Ref, Pid) ->
     ?assertEqual({error, timeout}, gun:await(Conn, Ref, 200)).
 
 with_connection(Config, Fun) ->
+    with_connection(Config, [], <<>>, Fun).
+
+with_connection(Config, ConnectHeaders, InitialData, Fun) ->
     Before = rpc(Config, ets, tab2list, [connection_created]),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_stomp),
     {ok, Conn} = gun:open("localhost", Port, #{protocols => [http]}),
@@ -125,7 +207,9 @@ with_connection(Config, Fun) ->
         {ok, http} = gun:await_up(Conn),
         Ref = gun:ws_upgrade(Conn, "/ws"),
         {upgrade, [<<"websocket">>], _} = gun:await(Conn, Ref),
-        send(Conn, Ref, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}], <<>>),
+        Connect = stomp:marshal("CONNECT", [{"login", "guest"}, {"passcode", "guest"} |
+                                           ConnectHeaders]),
+        gun:ws_send(Conn, Ref, {text, <<Connect/binary, InitialData/binary>>}),
         {<<"CONNECTED">>, _, <<>>} = recv(Conn, Ref),
         rabbit_ct_helpers:await_condition(fun() ->
             length(rpc(Config, ets, tab2list, [connection_created]) -- Before) =:= 1
