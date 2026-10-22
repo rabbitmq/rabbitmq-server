@@ -37,6 +37,14 @@ fun(Conf) ->
 end}.
 
 
+%% Upper bounds for a single "get messages" HTTP API request
+
+{mapping, "management.polling_consumer.max_messages", "rabbitmq_management.basic_get_max_messages",
+    [{datatype, integer}, {validators, ["non_zero_positive_integer"]}]}.
+
+{mapping, "management.polling_consumer.max_payload_bytes", "rabbitmq_management.basic_get_max_payload_bytes",
+    [{datatype, bytesize}, {validators, ["non_zero_positive_integer"]}]}.
+
 %% Number of delegate processes to use for metrics acquisition intra-cluster
 %% communication. On a machine which has a very large number of cores and is
 %% also part of a cluster, you may wish to increase this value.

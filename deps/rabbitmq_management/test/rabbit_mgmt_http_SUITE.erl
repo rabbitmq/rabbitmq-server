@@ -205,6 +205,8 @@ all_tests() -> [
     format_output_test,
     columns_test,
     get_test,
+    get_invalid_count_test,
+    get_payload_limit_test,
     get_encoding_test,
     get_fail_test,
     publish_test,
@@ -3726,6 +3728,52 @@ get_test(Config) ->
     amqp_channel:close(Ch),
     close_connection(Conn),
 
+    passed.
+
+get_invalid_count_test(Config) ->
+    http_put(Config, "/queues/%2F/get_count_test", #{durable => true}, {group, '2xx'}),
+    {Conn, Ch} = open_connection_and_channel(Config),
+    amqp_channel:cast(Ch, #'basic.publish'{exchange = <<>>,
+                                           routing_key = <<"get_count_test">>},
+                      #amqp_msg{payload = <<"abc">>}),
+    Get = fun(Count, Expected) ->
+                  http_post(Config, "/queues/%2F/get_count_test/get",
+                            [{ackmode, ack_requeue_true}, {count, Count},
+                             {encoding, auto}], Expected)
+          end,
+    Get(0, ?BAD_REQUEST),
+    Get(-1, ?BAD_REQUEST),
+    Get(1001, ?BAD_REQUEST),
+    [_] = Get(1, ?OK),
+    [_] = Get(1000, ?OK),
+    http_delete(Config, "/queues/%2F/get_count_test", {group, '2xx'}),
+    amqp_channel:close(Ch),
+    close_connection(Conn),
+    passed.
+
+get_payload_limit_test(Config) ->
+    Key = basic_get_max_payload_bytes,
+    http_put(Config, "/queues/%2F/get_limit_test", #{durable => true}, {group, '2xx'}),
+    {Conn, Ch} = open_connection_and_channel(Config),
+    [amqp_channel:cast(Ch, #'basic.publish'{exchange = <<>>,
+                                            routing_key = <<"get_limit_test">>},
+                       #amqp_msg{payload = <<"0123456789">>})
+     || _ <- lists:seq(1, 5)],
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbitmq_management, Key, 25]),
+    Msgs = http_post(Config, "/queues/%2F/get_limit_test/get",
+                     [{ackmode, ack_requeue_true}, {count, 5},
+                      {encoding, auto}, {truncate, 3}], ?OK),
+    3 = length(Msgs),
+    [<<"012">>, <<"012">>, <<"012">>] = [maps:get(payload, M) || M <- Msgs],
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                      [rabbitmq_management, Key]),
+    5 = length(http_post(Config, "/queues/%2F/get_limit_test/get",
+                         [{ackmode, ack_requeue_false}, {count, 5},
+                          {encoding, auto}], ?OK)),
+    http_delete(Config, "/queues/%2F/get_limit_test", {group, '2xx'}),
+    amqp_channel:close(Ch),
+    close_connection(Conn),
     passed.
 
 get_encoding_test(Config) ->
