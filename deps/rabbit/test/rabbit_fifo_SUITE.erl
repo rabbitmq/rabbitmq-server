@@ -359,6 +359,10 @@ credit_enq_enq_checkout_settled_credit_test(Config) ->
                                   end, FinalEffects)).
 
 
+make_credit_non_boolean_drain_test(_Config) ->
+    ?assertError(function_clause,
+                 rabbit_fifo:make_credit(<<"key">>, 1, 0, {ubyte, 1})).
+
 credit_with_drained_test(Config) ->
     Ctag = ?FUNCTION_NAME,
     Cid = {Ctag, self()},

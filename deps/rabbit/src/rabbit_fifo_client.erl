@@ -493,7 +493,8 @@ local_query(Server, QueryFun, Timeout) when is_atom(QueryFun) ->
              Drain :: boolean(),
              state()) ->
     {state(), rabbit_queue_type:actions()}.
-credit(ConsumerTag, DeliveryCount, Credit, Drain, State) ->
+credit(ConsumerTag, DeliveryCount, Credit, Drain, State)
+  when is_boolean(Drain) ->
     ConsumerKey = consumer_key(ConsumerTag, State),
     ServerId = pick_server(State),
     Cmd = rabbit_fifo:make_credit(ConsumerKey, Credit, DeliveryCount, Drain),

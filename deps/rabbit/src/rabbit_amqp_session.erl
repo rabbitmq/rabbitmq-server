@@ -3136,8 +3136,8 @@ handle_outgoing_mgmt_link_flow_control(
   #state{outgoing_management_links = Links0,
          outgoing_pending = Pending
         } = State0) ->
-    Drain = default(Drain0, false),
-    Echo = default(Echo0, false),
+    Drain = boolean_field(drain, Drain0),
+    Echo = boolean_field(echo, Echo0),
     DeliveryCountRcv = delivery_count_rcv(MaybeDeliveryCountRcv),
     LinkCreditSnd = amqp10_util:link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd),
     {Count, Credit} = case Drain of
@@ -3177,8 +3177,8 @@ handle_outgoing_link_flow_control(
         } = State0) ->
     Ctag = handle_to_ctag(HandleInt),
     DeliveryCountRcv = delivery_count_rcv(MaybeDeliveryCountRcv),
-    Drain = default(Drain0, false),
-    Echo = default(Echo0, false),
+    Drain = boolean_field(drain, Drain0),
+    Echo = boolean_field(echo, Echo0),
     case CreditReqInFlight of
         false ->
             LinkCreditSnd = amqp10_util:link_credit_snd(
@@ -3230,6 +3230,14 @@ delivery_count_rcv(undefined) ->
     %% receiver, i.e., the delivery-countsnd specified in the flow state carried
     %% by the initial attach frame from the sender to the receiver." [2.6.7]
     ?INITIAL_DELIVERY_COUNT.
+
+boolean_field(_Field, undefined) ->
+    false;
+boolean_field(_Field, Bool) when is_boolean(Bool) ->
+    Bool;
+boolean_field(Field, Value) ->
+    protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                   "invalid field '~s': ~tp", [Field, Value]).
 
 default(undefined, Default) -> Default;
 default(Thing, _Default) -> Thing.
