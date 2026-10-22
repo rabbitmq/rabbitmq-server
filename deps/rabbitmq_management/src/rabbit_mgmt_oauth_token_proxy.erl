@@ -91,17 +91,13 @@ handle_token(Req0, State) ->
             {ok, cowboy_req:reply(405, #{<<"allow">> => <<"POST">>}, Req0), State}
     end.
 
-<<<<<<< HEAD
 forward_token_request(Req0, State, Secret, MetadataURL, HttpOpts) ->
-    case token_endpoint(MetadataURL, HttpOpts) of
-=======
-forward_token_request(Req0, State, Secret, MetadataURL, HttpOpts, DiscoveryOpts) ->
     case rabbit_mgmt_util:read_urlencoded_body(Req0) of
         {ok, Params, Req1} ->
             case check_grant_type(Params) of
                 ok ->
                     relay_token_request(Req1, State, Params, Secret, MetadataURL,
-                                        HttpOpts, DiscoveryOpts);
+                                        HttpOpts);
                 {error, Error} ->
                     reply_token_error(400, Error, Req1, State)
             end;
@@ -113,10 +109,8 @@ reply_token_error(Status, Error, Req, State) ->
     Body = rabbit_json:encode(#{error => Error}),
     {ok, reply_json(Status, Body, Req), State}.
 
-relay_token_request(Req1, State, Params, Secret, MetadataURL, HttpOpts,
-                    DiscoveryOpts) ->
-    case token_endpoint(MetadataURL, HttpOpts, DiscoveryOpts) of
->>>>>>> 053efdf (OAuth 2 token proxy: only relay the management UI's grant types)
+relay_token_request(Req1, State, Params, Secret, MetadataURL, HttpOpts) ->
+    case token_endpoint(MetadataURL, HttpOpts) of
         {ok, TokenEndpoint} ->
             Body = uri_string:compose_query(inject_client_secret(Params, Secret)),
             case http_post(TokenEndpoint, Body, HttpOpts) of
