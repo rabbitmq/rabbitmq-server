@@ -46,20 +46,15 @@ allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"DELETE">>, <<"OPTIONS">>], ReqData,
      Context}.
 
-resource_exists(ReqData, Context) ->
-    case conn(ReqData) of
-        not_found ->
-            {false, ReqData, Context};
-        _Conn ->
-            {true, ReqData, Context}
-    end.
+resource_exists(ReqData, Context = #context{impl = Conn}) ->
+    {Conn =/= not_found, ReqData, Context}.
 
-to_json(ReqData, Context) ->
+to_json(ReqData, Context = #context{impl = Conn}) ->
     case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
             rabbit_mgmt_util:reply(
                 maps:from_list(
-                    rabbit_mgmt_format:strip_pids(conn_stats(ReqData))),
+                    rabbit_mgmt_format:strip_pids(Conn)),
                 ReqData, Context);
         true ->
             rabbit_mgmt_util:reply([{name,
@@ -67,23 +62,19 @@ to_json(ReqData, Context) ->
                                    ReqData, Context)
     end.
 
-delete_resource(ReqData, Context) ->
-    case conn(ReqData) of
-        not_found ->
+delete_resource(ReqData, Context = #context{impl = Conn}) ->
+    case proplists:get_value(pid, Conn) of
+        undefined ->
             ok;
-        Conn ->
-            case proplists:get_value(pid, Conn) of
-                undefined ->
-                    ok;
-                Pid when is_pid(Pid) ->
-                    force_close_connection(ReqData, Pid)
-            end
+        Pid when is_pid(Pid) ->
+            force_close_connection(ReqData, Pid)
     end,
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
     try
-        rabbit_mgmt_util:is_authorized_user(ReqData, Context, conn(ReqData))
+        rabbit_mgmt_util:is_authorized_user(ReqData, Context,
+                                            fun() -> conn(ReqData) end)
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData,

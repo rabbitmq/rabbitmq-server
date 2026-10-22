@@ -184,6 +184,7 @@ all_tests() -> [
     permissions_amqp_test,
     permissions_queue_delete_test,
     permissions_connection_channel_consumer_test,
+    connection_channel_name_reuse_test,
     consumers_cq_test,
     consumers_qq_test,
     consumers_require_virtual_host_access_test,
@@ -2157,6 +2158,20 @@ permissions_connection_channel_consumer_test(Config) ->
     AssertRead(MonConnCh, ?NOT_AUTHORISED),
     AssertRead(AdmConnCh, ?NOT_AUTHORISED),
 
+    %% Computing the samples for such a range crashes the pool worker, so
+    %% the object must not be looked up for a client that has not logged in.
+    TooLarge = "1" ++ lists:duplicate(306, $0),
+    Range = "?data_rates_age=" ++ TooLarge ++ "&data_rates_incr=" ++ TooLarge,
+    Workers = rabbit_ct_broker_helpers:rpc(Config, 0, supervisor, which_children,
+                                           [management_worker_pool_sup]),
+    [http_get(Config, P ++ Range, "user", "wrong password", ?NOT_AUTHORISED)
+     || P <- [UserConn, UserCh, UserConnCh]],
+    ?assertEqual(Workers,
+                 rabbit_ct_broker_helpers:rpc(Config, 0, supervisor, which_children,
+                                              [management_worker_pool_sup])),
+    http_get(Config, UserConnCh ++ "?disable_stats=true&msg_rates_age=60&msg_rates_incr=0",
+             "user", "user", ?BAD_REQUEST),
+
     AssertClose = fun(Path, User, Status) ->
                           http_delete(Config, Path, User, User, Status)
                   end,
@@ -2166,12 +2181,85 @@ permissions_connection_channel_consumer_test(Config) ->
     AssertClose(MonConn, "guest", {group, '2xx'}),
     AssertClose(UserConn, "user", {group, '2xx'}),
 
+    %% A missing object gets the same response as one of another user.
+    [http_get(Config, Path, "user", "user", ?NOT_AUTHORISED) ||
+        Path <- ["/connections/foo", "/connections/foo/channels",
+                 "/connections/foo/sessions", "/channels/foo"]],
+    AssertClose("/connections/foo", "user", ?NOT_AUTHORISED),
+    AssertClose("/connections/foo", "monitor", ?NOT_AUTHORISED),
+
     http_delete(Config, "/users/user", {group, '2xx'}),
     http_delete(Config, "/users/monitor", {group, '2xx'}),
     http_get(Config, "/connections/foo", ?NOT_FOUND),
+    http_get(Config, "/connections/foo/channels", ?NOT_FOUND),
     http_get(Config, "/channels/foo", ?NOT_FOUND),
     http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
     passed.
+
+%% A connection name only consists of addresses and ports, so it can pass to a
+%% connection of another user while a request is served. What is returned or
+%% closed must be what the user was authorised for.
+connection_channel_name_reuse_test(Config) ->
+    http_put(Config, "/users/user", [{password, <<"user">>},
+                                     {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/permissions/%2F/user",
+             [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+             {group, '2xx'}),
+    {UserConn, UserConnPath, UserChPath, _} = get_conn(Config, "user", "user"),
+    {AdmConn, AdmConnPath, AdmChPath, _} = get_conn(Config, "guest", "guest"),
+    {ok, _} = amqp_connection:open_channel(UserConn),
+    {ok, _} = amqp_connection:open_channel(AdmConn),
+    await_condition(
+      fun () ->
+              [http_get(Config, P, ?OK) ||
+                  P <- [UserConnPath, UserChPath, AdmConnPath, AdmChPath]],
+              true
+      end),
+    #{name := AdmConnName} = http_get(Config, AdmConnPath, ?OK),
+    #{name := AdmChName} = http_get(Config, AdmChPath, ?OK),
+
+    ok = rpc(Config, meck, new, [rabbit_mgmt_db, [passthrough, no_link]]),
+    try
+        ok = rpc(Config, ?MODULE, reuse_name_after_first_lookup,
+                 [get_connection, AdmConnName]),
+        ?assertMatch(#{user := <<"user">>},
+                     http_get(Config, UserConnPath, "user", "user", ?OK)),
+        ok = rpc(Config, ?MODULE, reuse_name_after_first_lookup,
+                 [get_channel, AdmChName]),
+        ?assertMatch(#{user := <<"user">>},
+                     http_get(Config, UserChPath, "user", "user", ?OK)),
+        %% With stats disabled, the connection is looked up again.
+        ok = rpc(Config, ?MODULE, reuse_name_with_stats_disabled, [AdmConnName]),
+        http_get(Config, UserConnPath ++ "?disable_stats=true", "user", "user",
+                 ?NOT_FOUND),
+        ok = rpc(Config, ?MODULE, reuse_name_after_first_lookup,
+                 [get_connection, AdmConnName]),
+        MRef = erlang:monitor(process, UserConn),
+        http_delete(Config, UserConnPath, "user", "user", {group, '2xx'}),
+        receive {'DOWN', MRef, process, UserConn, _} -> ok
+        after 30000 -> ct:fail(connection_not_closed)
+        end
+    after
+        rpc(Config, meck, unload, [rabbit_mgmt_db])
+    end,
+    http_get(Config, AdmConnPath, ?OK),
+    ?assert(is_process_alive(AdmConn)),
+
+    close_connection(AdmConn),
+    http_delete(Config, "/users/user", {group, '2xx'}),
+    passed.
+
+reuse_name_with_stats_disabled(Name) ->
+    meck:expect(rabbit_mgmt_db, get_connection, 1,
+                meck:exec(fun(_) -> meck:passthrough([Name]) end)).
+
+%% From the second lookup on, any name designates the object called Name.
+reuse_name_after_first_lookup(Lookup, Name) ->
+    meck:expect(rabbit_mgmt_db, Lookup, 2,
+                meck:seq([meck:passthrough(),
+                          meck:exec(fun(_, Ranges) ->
+                                            meck:passthrough([Name, Ranges])
+                                    end)])).
 
 consumers_cq_test(Config) ->
     consumers_test(Config, [{'x-queue-type', <<"classic">>}]).
