@@ -2142,6 +2142,8 @@ permissions_connection_channel_consumer_test(Config) ->
     ?assertEqual(Workers,
                  rabbit_ct_broker_helpers:rpc(Config, 0, supervisor, which_children,
                                               [management_worker_pool_sup])),
+    http_get(Config, UserConnCh ++ "?disable_stats=true&msg_rates_age=60&msg_rates_incr=0",
+             "user", "user", ?BAD_REQUEST),
 
     AssertClose = fun(Path, User, Status) ->
                           http_delete(Config, Path, User, User, Status)
