@@ -102,9 +102,23 @@ format_line([Var | Rest], Msg, LogEvent, Config, Line)
   when is_atom(Var) ->
     String = format_var(Var, LogEvent, Config),
     format_line(Rest, Msg, LogEvent, Config, [String | Line]);
+format_line([{Var, Then, Else} | Rest], Msg, #{meta := Meta} = LogEvent,
+            Config, Line)
+  when is_atom(Var) ->
+    Branch = case maps:get(Var, Meta, undefined) of
+                 undefined -> Else;
+                 _Value -> Then
+             end,
+    format_line(Branch ++ Rest, Msg, LogEvent, Config, Line);
 format_line([], _, _, _, Line) ->
     remove_trailing_whitespaces(Line).
 
 remove_trailing_whitespaces([Tail | Line]) ->
-    Tail1 = string:strip(Tail, right),
-    lists:reverse([Tail1 | Line]).
+    case string:trim(Tail, trailing) of
+        [] ->
+            remove_trailing_whitespaces(Line);
+        Tail1 ->
+            lists:reverse([Tail1 | Line])
+    end;
+remove_trailing_whitespaces([]) ->
+    [].

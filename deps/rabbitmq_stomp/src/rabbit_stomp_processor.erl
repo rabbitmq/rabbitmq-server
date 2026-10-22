@@ -304,7 +304,7 @@ process_connect(Implicit, Frame,
 creds(_, _, #stomp_configuration{default_login       = DefLogin,
                                  default_passcode    = DefPasscode,
                                  force_default_creds = true}) ->
-    {config, {iolist_to_binary(DefLogin), iolist_to_binary(DefPasscode)}};
+    {config, {default_cred(DefLogin), default_cred(DefPasscode)}};
 creds(Frame, SSLLoginName,
       #stomp_configuration{default_login    = DefLogin,
                            default_passcode = DefPasscode}) ->
@@ -315,6 +315,9 @@ creds(Frame, SSLLoginName,
         {not_found, SSLName} -> {ssl, {SSLName, none}};
         _                    -> {stomp_headers, PasswordCreds}
     end.
+
+default_cred(undefined) -> undefined;
+default_cred(Value) -> iolist_to_binary(Value).
 
 login_header(Frame, Key, Default) when is_binary(Default) ->
     login_header(Frame, Key, binary_to_list(Default));
