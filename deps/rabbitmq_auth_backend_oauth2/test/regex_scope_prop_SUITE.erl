@@ -97,18 +97,18 @@ substituted_vhost_grants_only_itself(Config) ->
 
 prop_substituted_vhost_grants_only_itself(_Config) ->
     ?FORALL(
-        {VHost, Other},
-        {hostile_token(), hostile_token()},
+        {VHost, Other, Syntax},
+        {hostile_token(), hostile_token(), scope_pattern_syntax()},
         ?IMPLIES(
             VHost =/= Other,
             begin
                 Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
                 Resource = #resource{virtual_host = VHost},
                 [Expanded] = rabbit_auth_backend_oauth2:get_expanded_scopes(
-                    Token, Resource, regex),
-                rabbit_oauth2_scope:vhost_access(VHost, [Expanded], regex)
+                    Token, Resource, Syntax),
+                rabbit_oauth2_scope:vhost_access(VHost, [Expanded], Syntax)
                 andalso
-                not rabbit_oauth2_scope:vhost_access(Other, [Expanded], regex)
+                not rabbit_oauth2_scope:vhost_access(Other, [Expanded], Syntax)
             end)).
 
 substituted_claim_grants_only_itself(Config) ->
@@ -117,8 +117,8 @@ substituted_claim_grants_only_itself(Config) ->
 
 prop_substituted_claim_grants_only_itself(_Config) ->
     ?FORALL(
-        {ClaimValue, OtherName},
-        {hostile_token(), hostile_token()},
+        {ClaimValue, OtherName, Syntax},
+        {hostile_token(), hostile_token(), scope_pattern_syntax()},
         ?IMPLIES(
             ClaimValue =/= OtherName,
             begin
@@ -126,21 +126,25 @@ prop_substituted_claim_grants_only_itself(_Config) ->
                           <<"custom_claim">> => ClaimValue},
                 Resource = #resource{virtual_host = <<"vh">>},
                 [Expanded] = rabbit_auth_backend_oauth2:get_expanded_scopes(
-                    Token, Resource, regex),
+                    Token, Resource, Syntax),
                 Self = #resource{virtual_host = <<"vh">>,
                                  kind = queue, name = ClaimValue},
                 Other = #resource{virtual_host = <<"vh">>,
                                   kind = queue, name = OtherName},
-                rabbit_oauth2_scope:resource_access(Self, read, [Expanded], regex)
+                rabbit_oauth2_scope:resource_access(Self, read, [Expanded], Syntax)
                 andalso
-                not rabbit_oauth2_scope:resource_access(Other, read, [Expanded], regex)
+                not rabbit_oauth2_scope:resource_access(Other, read, [Expanded], Syntax)
             end)).
 
-%% Includes the regex metacharacters that escaping must neutralise.
+scope_pattern_syntax() ->
+    oneof([wildcard, regex]).
+
+%% Includes the regex and wildcard metacharacters, the percent-encoding
+%% introducer and the scope segment separator that escaping must neutralise.
 hostile_token() ->
     ?LET(Chars,
          non_empty(list(oneof([range($a, $z), range($0, $9),
-                               $-, $_,
+                               $-, $_, $/, $%,
                                $., $*, $+, $?, $^, $$, $|,
                                $(, $), $[, $], ${, $}, $\\]))),
          list_to_binary(Chars)).
