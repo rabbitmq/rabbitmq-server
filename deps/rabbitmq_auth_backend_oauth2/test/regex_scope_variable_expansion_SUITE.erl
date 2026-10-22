@@ -15,11 +15,17 @@
 all() ->
     [
         wildcard_substitution_is_unchanged,
+        wildcard_substitution_percent_encodes_metacharacters,
+        crafted_claim_cannot_broaden_wildcard_scope,
+        crafted_claim_cannot_broaden_wildcard_vhost_scope,
+        slash_in_substituted_value_cannot_add_a_scope_segment,
+        vhost_with_a_slash_matches_self,
         regex_substitution_escapes_vhost_metacharacters,
         regex_substitution_escapes_claim_metacharacters,
         crafted_vhost_cannot_broaden_regex_scope,
         crafted_claim_cannot_broaden_regex_scope,
         backslash_in_substituted_value_is_escaped,
+        slash_in_substituted_value_is_escaped,
         multiple_variables_in_one_scope_are_each_escaped,
         literal_pattern_text_is_not_escaped,
         substituted_value_matches_self_under_regex,
@@ -37,6 +43,54 @@ wildcard_substitution_is_unchanged(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
     ?assertEqual([<<"read:foo/q">>], expand(Token, <<"foo">>, wildcard)),
     ?assertEqual([<<"read:foo.bar/q">>], expand(Token, <<"foo.bar">>, wildcard)).
+
+wildcard_substitution_percent_encodes_metacharacters(_Config) ->
+    Token = #{<<"scope">> => [<<"read:{vhost}/{custom_claim}">>],
+              <<"custom_claim">> => <<"b*b/%62">>},
+    ?assertEqual([<<"read:%2F/b%2Ab%2F%2562">>], expand(Token, <<"/">>, wildcard)).
+
+crafted_claim_cannot_broaden_wildcard_scope(_Config) ->
+    Bobs = #resource{virtual_host = <<"vh">>, kind = queue, name = <<"q-bob">>},
+    [begin
+         Token = #{<<"scope">> => [<<"read:vh/q-{custom_claim}">>],
+                   <<"custom_claim">> => Claim},
+         Own = Bobs#resource{name = <<"q-", Claim/binary>>},
+         [Expanded] = expand(Token, <<"vh">>, wildcard),
+         ?assertEqual(true, rabbit_oauth2_scope:resource_access(
+             Own, read, [Expanded], wildcard)),
+         ?assertEqual(false, rabbit_oauth2_scope:resource_access(
+             Bobs, read, [Expanded], wildcard))
+     end || Claim <- [<<"*">>, <<"b*">>, <<"%62ob">>, <<"bob/x">>]].
+
+crafted_claim_cannot_broaden_wildcard_vhost_scope(_Config) ->
+    Token = #{<<"scope">> => [<<"read:{custom_claim}/*">>],
+              <<"custom_claim">> => <<"*">>},
+    [Expanded] = expand(Token, <<"vh">>, wildcard),
+    ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
+        <<"*">>, [Expanded], wildcard)),
+    ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
+        <<"vh">>, [Expanded], wildcard)).
+
+slash_in_substituted_value_cannot_add_a_scope_segment(_Config) ->
+    Token = #{<<"scope">> => [<<"read:vh/q-{custom_claim}">>],
+              <<"custom_claim">> => <<"bob/x">>},
+    [begin
+         [Expanded] = expand(Token, <<"vh">>, Syntax),
+         ?assertEqual(true, rabbit_oauth2_scope:resource_access(
+             #resource{virtual_host = <<"vh">>, kind = queue, name = <<"q-bob/x">>},
+             read, [Expanded], Syntax)),
+         ?assertEqual(false, rabbit_oauth2_scope:resource_access(
+             #resource{virtual_host = <<"vh">>, kind = queue, name = <<"q-bob">>},
+             read, [Expanded], Syntax))
+     end || Syntax <- [wildcard, regex]].
+
+vhost_with_a_slash_matches_self(_Config) ->
+    Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
+    [begin
+         [Expanded] = expand(Token, <<"/">>, Syntax),
+         ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
+             <<"/">>, [Expanded], Syntax))
+     end || Syntax <- [wildcard, regex]].
 
 regex_substitution_escapes_vhost_metacharacters(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
@@ -70,6 +124,10 @@ crafted_claim_cannot_broaden_regex_scope(_Config) ->
 backslash_in_substituted_value_is_escaped(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
     ?assertEqual([<<"read:foo\\\\bar/q">>], expand(Token, <<"foo\\bar">>, regex)).
+
+slash_in_substituted_value_is_escaped(_Config) ->
+    Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
+    ?assertEqual([<<"read:foo\\x2Fbar/q">>], expand(Token, <<"foo/bar">>, regex)).
 
 multiple_variables_in_one_scope_are_each_escaped(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/{custom_claim}">>],

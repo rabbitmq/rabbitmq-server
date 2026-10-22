@@ -522,13 +522,22 @@ resolve_scope_var(Elem, Token, Vhost, Syntax) ->
                                 _ -> ElemAsBinary
                               end)
           end,
+    %% The expanded scope is parsed after the substitution, so a substituted
+    %% value must not be able to change its structure.
     case Syntax of
         regex -> escape_regex_metacharacters(Raw);
-        _       -> Raw
+        _       -> escape_wildcard_metacharacters(Raw)
     end.
 
+%% "/" is not a regex metacharacter but it separates scope segments.
 escape_regex_metacharacters(Str) ->
-    binary_to_list(rabbit_re:escape(iolist_to_binary(Str))).
+    Escaped = rabbit_re:escape(iolist_to_binary(Str)),
+    binary_to_list(binary:replace(Escaped, <<"/">>, <<"\\x2F">>, [global])).
+
+%% `wildcard:match/2` percent-decodes each part of the pattern after the
+%% split on "*", so an encoded value only matches itself.
+escape_wildcard_metacharacters(Str) ->
+    binary_to_list(cow_qs:urlencode(iolist_to_binary(Str))).
 
 -spec tags_from(decoded_jwt_token()) -> list(binary()).
 tags_from(DecodedToken) ->
