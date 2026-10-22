@@ -150,6 +150,8 @@ groups() ->
        modified_quorum_queue,
        modified_quorum_queue_delivery_time,
        disposition_reversed_range_rejected,
+       flow_non_boolean_drain_quorum_queue,
+       flow_non_boolean_echo_quorum_queue,
        session_flow_max_incoming_window,
        modified_dead_letter_headers_exchange,
        modified_dead_letter_history,
@@ -849,6 +851,50 @@ modified_quorum_queue_delivery_time(Config) ->
     ?assertMatch({ok, #{message_count := 0}},
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close(Init).
+
+flow_non_boolean_drain_quorum_queue(Config) ->
+    flow_non_boolean_field(Config, drain).
+
+flow_non_boolean_echo_quorum_queue(Config) ->
+    flow_non_boolean_field(Config, echo).
+
+flow_non_boolean_field(Config, Field) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = amqp10_client:link_handle(Receiver),
+    Flow0 = #'v1_0.flow'{link_credit = {uint, 1}},
+    Flow = case Field of
+               drain -> Flow0#'v1_0.flow'{drain = {ubyte, 1}};
+               echo -> Flow0#'v1_0.flow'{echo = {ubyte, 1}}
+           end,
+    ok = amqp10_client_session:flow_link(Session, OutputHandle, Flow, never),
+    receive
+        {amqp10_event,
+         {session, Session,
+          {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
+    after 30000 -> flush(missing_ended),
+                   ct:fail("did not receive expected error")
+    end,
+    ok = close_connection_sync(Connection),
+
+    Init2 = {_, Session2, LinkPair2} = init(Config),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session2, <<"receiver2">>, Address, settled),
+    {ok, M1} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair2, QName),
+    ok = close(Init2).
 
 %% A reversed disposition range ends the session with amqp:invalid-field.
 disposition_reversed_range_rejected(Config) ->

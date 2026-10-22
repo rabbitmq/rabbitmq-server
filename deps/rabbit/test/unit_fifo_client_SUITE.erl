@@ -16,7 +16,8 @@ all() ->
     [
      return_accumulation_is_not_quadratic,
      discard_accumulation_is_not_quadratic,
-     return_and_discard_accumulation_preserves_order
+     return_and_discard_accumulation_preserves_order,
+     credit_rejects_non_boolean_drain
     ].
 
 %% While a consumer is over the soft limit, return/3 and discard/3 stash
@@ -104,3 +105,9 @@ flush_gen_casts() ->
     after 0 ->
             ok
     end.
+
+credit_rejects_non_boolean_drain(_Config) ->
+    ServerId = {unit_fifo_client_SUITE_fake_server, node()},
+    State = rabbit_fifo_client:init([ServerId], 0),
+    ?assertError(function_clause,
+                 rabbit_fifo_client:credit(<<"tag">>, 0, 1, {ubyte, 1}, State)).
