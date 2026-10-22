@@ -1114,11 +1114,15 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     set_env(key_config, UaaEnv),
 
-    ?assertMatch({refused,
-                  "Authentication using OAuth 2/JWT token failed: ~tp",
-                  [{error, {invalid_token, error, {badarg, [redacted]}, _}}]},
+    Refused = {refused,
+               "Authentication using an OAuth 2/JWT token failed: provided token is invalid",
+               []},
+    ?assertEqual(Refused,
                  user_login_authentication(Username,
-                     [{password, <<"not a token">>}])).
+                     [{password, <<"not a token">>}])),
+    ?assertEqual(Refused,
+                 rabbit_auth_backend_oauth2:update_state(
+                     #auth_user{username = Username}, <<"not a token">>)).
 
 unsuccessful_access_without_scopes(_) ->
     Username = <<"username">>,
