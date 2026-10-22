@@ -117,7 +117,22 @@ forward_token_request(Req0, State, Secret, MetadataURL, HttpOpts, DiscoveryOpts)
         {error, Reason} ->
             ?LOG_ERROR("OAuth 2 token proxy could not resolve token endpoint "
                        "from ~ts: ~tp", [MetadataURL, Reason]),
+<<<<<<< HEAD
             {ok, cowboy_req:reply(502, Req0), State}
+=======
+            {ok, cowboy_req:reply(502, Req1), State}
+    end.
+
+%% Only the grants used by the management UI are relayed. A repeated
+%% `grant_type` is refused because the provider may use a different occurrence.
+-spec check_grant_type([{binary(), binary() | true}]) -> ok | {error, binary()}.
+check_grant_type(Params) ->
+    case [Value || {<<"grant_type">>, Value} <- Params] of
+        [<<"authorization_code">>] -> ok;
+        [<<"refresh_token">>] -> ok;
+        [Value] when is_binary(Value) -> {error, <<"unsupported_grant_type">>};
+        _ -> {error, <<"invalid_request">>}
+>>>>>>> d5a8352 (OAuth 2: simplify a comment)
     end.
 
 %% Only add the secret when the request does not already carry one, so an
