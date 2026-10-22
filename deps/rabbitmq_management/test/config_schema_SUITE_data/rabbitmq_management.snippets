@@ -9,6 +9,14 @@
         {rates_mode,basic}]}],
   [rabbitmq_management]},
 
+ {polling_consumer_limits,
+  "management.polling_consumer.max_messages = 500
+   management.polling_consumer.max_payload_bytes = 16MB",
+  [{rabbitmq_management,
+       [{basic_get_max_messages, 500},
+        {basic_get_max_payload_bytes, 16777216}]}],
+  [rabbitmq_management]},
+
  %%
  %% Additional listeners
  %%
