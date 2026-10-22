@@ -66,8 +66,7 @@ do_it(ReqData0, Context) ->
                               end,
                         Trunc = case maps:get(truncate, Body, undefined) of
                                     undefined -> none;
-                                    TruncBin  -> rabbit_mgmt_util:parse_int(
-                                                   TruncBin)
+                                    TruncBin  -> parse_non_negative_integer(TruncBin)
                                 end,
 
                         Reply = basic_gets(Count, Ch, Q, AckMode, Enc, Trunc),
@@ -79,6 +78,14 @@ do_it(ReqData0, Context) ->
 
 
 
+
+parse_non_negative_integer(TruncBin) ->
+    case rabbit_mgmt_util:parse_int(TruncBin) of
+        Len when Len >= 0 ->
+            Len;
+        _ ->
+            throw({error, <<"truncate must be a non-negative integer">>})
+    end.
 
 basic_gets(0, _, _, _, _, _) ->
     [];

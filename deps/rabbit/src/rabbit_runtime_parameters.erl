@@ -52,6 +52,10 @@
          list_global/0, list_global_formatted/0, list_global_formatted/2,
          lookup_global/1, global_info_keys/0, clear_global/2]).
 
+-ifdef(TEST).
+-export([format_error/1]).
+-endif.
+
 %%----------------------------------------------------------------------------
 
 -type ok_or_error_string() :: 'ok' | {'error_string', string()}.
@@ -113,7 +117,12 @@ set_global(Name, Term, ActingUser)  ->
     ok.
 
 format_error(L) ->
-    {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
+    {error_string,
+     lists:flatten(
+       ["Validation failed\n\n" |
+        [io_lib:format(F ++ "~n", [rabbit_misc:limit_term(Arg) || Arg <- A],
+                       [{chars_limit, ?FORMAT_CHARS_LIMIT}])
+         || {F, A} <- L]])}.
 
 -spec set_any(rabbit_types:vhost(), binary(), binary(), term(),
               rabbit_types:user() | rabbit_types:username() | 'none')

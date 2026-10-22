@@ -94,12 +94,15 @@ validate_binding(_X, #binding{args = Args}) ->
         {longstr, <<"any-with-x">>} -> ok;
         {longstr, Other} ->
             {error, {binding_invalid,
-                     "Invalid x-match field value ~tp; "
-                     "expected all, any, all-with-x, or any-with-x", [Other]}};
+                     "Invalid x-match field value ~ts; "
+                     "expected all, any, all-with-x, or any-with-x",
+                     [rabbit_misc:format_term(Other)]}};
         {Type, Other} ->
             {error, {binding_invalid,
-                     "Invalid x-match field type ~tp (value ~tp); "
-                     "expected longstr", [Type, Other]}};
+                     "Invalid x-match field type ~ts (value ~ts); "
+                     "expected longstr",
+                     [rabbit_misc:format_term(Type),
+                      rabbit_misc:format_term(Other)]}};
         undefined -> ok %% [0]
     end.
 
