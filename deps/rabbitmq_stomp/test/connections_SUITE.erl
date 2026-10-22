@@ -26,6 +26,7 @@ all() ->
         login_timeout,
         credential_expires,
         authenticated_username_used_after_login,
+        incomplete_credentials_refused,
         frame_size,
         frame_size_huge,
         unauthenticated_frame_size_limited,
@@ -281,6 +282,55 @@ authenticated_username_used_after_login0(Config) ->
                  false, false, <<"acting-user">>]),
         ok = Rpc(application, set_env, [rabbit, track_auth_attempt_source, TrackSource]),
         _ = Rpc(rabbit_auth_backend_internal, delete_user, [Username, <<"acting-user">>])
+    end.
+
+incomplete_credentials_refused(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            incomplete_credentials_refused0(Config);
+        true ->
+            {skip, "Should not run in mixed version environments"}
+    end.
+
+incomplete_credentials_refused0(Config) ->
+    Rpc = fun(M, F, A) -> rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A) end,
+    {ok, DefaultUser} = Rpc(application, get_env, [rabbitmq_stomp, default_user]),
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    try
+        ok = restart_with_default_user(Config, []),
+        ok = Rpc(meck, new, [rabbit_auth_backend_internal, [no_link, passthrough]]),
+        ok = Rpc(meck, expect, [rabbit_auth_backend_internal, user_login_authentication, 2,
+                                {ok, #auth_user{username = <<"guest">>, tags = [], impl = none}}]),
+        ?assertEqual('CONNECTED',
+                     raw_connect(Config, <<"login:guest\npasscode:guest\n">>)),
+        ?assertEqual(1, Rpc(meck, num_calls, [rabbit_auth_backend_internal,
+                                              user_login_authentication, '_'])),
+        [?assertEqual({'ERROR', {ok, <<"Bad CONNECT">>}}, raw_connect(Config, Headers))
+         || Headers <- [<<"login:guest\n">>, <<"passcode:guest\n">>, <<>>]],
+        ?assertEqual(1, Rpc(meck, num_calls, [rabbit_auth_backend_internal,
+                                              user_login_authentication, '_']))
+    after
+        _ = Rpc(meck, unload, [rabbit_auth_backend_internal]),
+        ok = restart_with_default_user(Config, DefaultUser)
+    end.
+
+restart_with_default_user(Config, DefaultUser) ->
+    Rpc = fun(M, F, A) -> rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A) end,
+    ok = Rpc(application, stop, [rabbitmq_stomp]),
+    ok = Rpc(application, set_env, [rabbitmq_stomp, default_user, DefaultUser]),
+    ok = Rpc(application, start, [rabbitmq_stomp]).
+
+raw_connect(Config, Headers) ->
+    {ok, Sock} = gen_tcp:connect(localhost, get_stomp_port(Config), [{active, false}, binary]),
+    ok = gen_tcp:send(Sock, [<<"CONNECT\naccept-version:1.2\n">>, Headers, <<"\n\0">>]),
+    {ok, Data} = gen_tcp:recv(Sock, 0, 5000),
+    ok = gen_tcp:close(Sock),
+    {ok, Frame, _} = rabbit_stomp_frame:parse(Data, rabbit_stomp_frame:initial_state()),
+    case Frame of
+        #stomp_frame{command = 'ERROR'} ->
+            {'ERROR', rabbit_stomp_frame:header(Frame, <<"message">>)};
+        #stomp_frame{command = Command} ->
+            Command
     end.
 
 frame_size(Config) ->
