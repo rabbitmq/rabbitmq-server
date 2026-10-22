@@ -226,5 +226,5 @@ flush(State0 = #state{sock = Sock,
                                  pending_size = 0},
             rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats);
         {error, Reason} ->
-            exit({writer, send_failed, Reason})
+            exit({shutdown, {writer, send_failed, Reason}})
     end.
