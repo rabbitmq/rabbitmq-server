@@ -467,12 +467,20 @@ function fmt_uptime(u) {
         return min + 'm ' + sec + 's';
 }
 
+// `applications` and `enabled_plugins` both come from
+// `rabbit_mgmt_db:augment_nodes/2`, so a node that was never augmented
+// carries neither.
+function has_plugin_info(node) {
+    return Array.isArray(node.applications) &&
+        Array.isArray(node.enabled_plugins);
+}
+
 function fmt_plugins_small(node) {
-    if (node.applications === undefined) return '';
+    if (!has_plugin_info(node)) return '';
     var plugins = [];
     for (var i = 0; i < node.applications.length; i++) {
         var application = node.applications[i];
-        if (jQuery.inArray(application.name, node.enabled_plugins) != -1 ) {
+        if (node.enabled_plugins.indexOf(application.name) !== -1) {
             plugins.push(fmt_escape_html_one_line(application.name));
         }
     }
@@ -481,10 +489,11 @@ function fmt_plugins_small(node) {
 }
 
 function get_plugins_list(node) {
+    if (!has_plugin_info(node)) return [];
     var result = [];
     for (var i = 0; i < node.applications.length; i++) {
         var application = node.applications[i];
-        if (jQuery.inArray(application.name, node.enabled_plugins) != -1 ) {
+        if (node.enabled_plugins.indexOf(application.name) !== -1) {
             result.push(application);
         }
     }

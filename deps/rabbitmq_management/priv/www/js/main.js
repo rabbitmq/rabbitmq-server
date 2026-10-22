@@ -92,15 +92,18 @@ function dispatcher_add(fun) {
 }
 
 function dispatcher() {
-    this.use('Title');
     this.setTitle('RabbitMQ: ');
     for (var i in dispatcher_modules) {
-        dispatcher_modules[i](this);
+        try {
+            dispatcher_modules[i](this);
+        } catch (e) {
+            console.error('Could not add the routes of a management UI extension', e);
+        }
     }
 }
 
 function start_app_login () {
-  app = new Sammy.Application(function () {
+  app = new Application(function () {
     this.get('/', function () {})
     this.get('#/', function () {})
     if (!oauth.enabled || !oauth.oauth_disable_basic_auth) {
@@ -110,17 +113,9 @@ function start_app_login () {
     }
   })
 
-  if (oauth.enabled) {
-    if (has_auth_credentials()) {
-      check_login();
-    } else {
-      app.run();
-    }
-  } else
-    if (!has_auth_credentials() || !check_login()) {
-      app.run();
-    }
-
+  if (!has_auth_credentials() || !check_login()) {
+    app.run();
+  }
 }
 
 
@@ -234,27 +229,6 @@ function start_app() {
     if (app !== undefined) {
         app.unload();
     }
-    // Oh boy. Sammy uses various different methods to determine if
-    // the URL hash has changed. Unsurprisingly this is a native event
-    // in modern browsers, and falls back to an icky polling function
-    // in MSIE. But it looks like there's a bug. The polling function
-    // should get installed when the app is started. But it's guarded
-    // behind if (Sammy.HashLocationProxy._interval != null). And of
-    // course that's not specific to the application; it's pretty
-    // global. So we need to manually clear that in order for links to
-    // work in MSIE.
-    // Filed as https://github.com/quirkey/sammy/issues/171
-    //
-    // Note for when we upgrade: HashLocationProxy has become
-    // DefaultLocationProxy in later versions, but otherwise the issue
-    // remains.
-
-    // updated to the version  0.7.6 this _interval = null is fixed
-    // just leave the history here.
-    //Sammy.HashLocationProxy._interval = null;
-
-
-
     var url = this.location.toString();
     var hash = this.location.hash;
     var pathname = this.location.pathname;
@@ -276,7 +250,7 @@ function start_app() {
         this.location = url.replace(/#token_type.+/gi, return_to);
     }
 
-    app = new Sammy.Application(dispatcher);
+    app = new Application(dispatcher);
     app.run();
 }
 
@@ -464,6 +438,17 @@ function update_interval() {
 function go_to(url) {
     this.location = url;
 }
+
+// `sync_get` answers false for a failed request.
+function go_to_first_node(prefix, suffix) {
+    var nodes = JSON.parse(sync_get('/nodes') || '[]');
+    if (nodes.length > 0) {
+        go_to(prefix + nodes[0].name + (suffix || ''));
+    } else {
+        console.warn('Cannot list the nodes, so staying put');
+    }
+}
+
 function go_to_home() {
     // location.href = rabbit_path_prefix() + "/"
     location.href =  "/"
@@ -524,16 +509,22 @@ function render(reqs, template, highlight) {
     current_template = template;
     current_reqs = reqs;
     clear_postprocessors();
-    for (var i in outstanding_reqs) {
-        outstanding_reqs[i].abort();
-    }
-    outstanding_reqs = [];
+    abort_outstanding_reqs();
     current_highlight = highlight;
     if (old_template !== current_template) {
         window.scrollTo(0, 0);
     }
     update();
     notifyActivatedTab(current_highlight);
+}
+
+function abort_outstanding_reqs() {
+    for (var i = 0; i < outstanding_reqs.length; i++) {
+        // An aborted request is not a failure to connect.
+        outstanding_reqs[i].onreadystatechange = null;
+        outstanding_reqs[i].abort();
+    }
+    outstanding_reqs = [];
 }
 
 function reset_current_reqs() {
@@ -665,7 +656,7 @@ function nav(pair) {
 }
 
 function show(pair) {
-    var hasUserTag = jQuery.inArray(pair[1], user_tags) != -1
+    var hasUserTag = user_tags.indexOf(pair[1]) !== -1
     if (pair.length > 2 && pair[2]) {
       return hasUserTag && ac.canAccessVhosts()
     } else {
@@ -1313,7 +1304,7 @@ function multifield_input(prefix, suffix, type) {
 function update_filter_regex(jElem) {
     current_filter_regex = null;
     jElem.parents('.filter').children('.status-error').remove();
-    if (current_filter_regex_on && $.trim(current_filter).length > 0) {
+    if (current_filter_regex_on && current_filter.trim().length > 0) {
         try {
             current_filter_regex = new RegExp(current_filter,'i');
         } catch (e) {
@@ -1518,12 +1509,18 @@ function maybe_format_extra_queue_content(queue, extraContent) {
 
 function update_status(status) {
     var text;
+    var next_try = new Date(new Date().getTime() + timer_interval);
     if (status == 'ok')
         text = "Refreshed " + fmt_date(new Date());
     else if (status == 'error') {
-        var next_try = new Date(new Date().getTime() + timer_interval);
-        text = "Error: could not connect to server since " +
-            fmt_date(last_successful_connect) + ". Will retry at " +
+        text = "Error: could not connect to server";
+        if (last_successful_connect) {
+            text += " since " + fmt_date(last_successful_connect);
+        }
+        text += ". Will retry at " + fmt_date(next_try) + ".";
+    }
+    else if (status == 'timeout') {
+        text = "Error: timed out talking to the server. Will retry at " +
             fmt_date(next_try) + ".";
     }
     else
@@ -1553,7 +1550,7 @@ function with_req(method, path, body, fun, on404fun) {
     req.setRequestHeader('x-vhost', current_vhost);
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
-            var ix = jQuery.inArray(req, outstanding_reqs);
+            var ix = outstanding_reqs.indexOf(req);
             if (ix != -1) {
                 outstanding_reqs.splice(ix, 1);
             }
@@ -1696,7 +1693,7 @@ function check_bad_response(req, full_page_404, on404fun) {
             if (last_page_out_of_range_error > 0)
                     seconds = (new Date().getTime() - last_page_out_of_range_error.getTime())/1000;
             if (seconds > 3) {
-                 Sammy.log('server reports page is out of range, redirecting to page 1');
+                 console.log('server reports page is out of range, redirecting to page 1');
                  var contexts = {
                      "queues": "queues",
                      "exchanges": "exchanges",
@@ -1822,7 +1819,7 @@ function collapse_multifields(params0) {
             }
         }
     }
-    if (params.hasOwnProperty('queuetype')) {
+    if (has_own_key(params, 'queuetype')) {
         var the_queue_type = params['queuetype'];
         delete params['queuetype'];
         if (the_queue_type != 'default') {
@@ -1869,17 +1866,17 @@ function maybe_remove_fields(params) {
 function put_parameter(sammy, mandatory_keys, num_keys, bool_keys,
                        arrayable_keys) {
     for (var i in sammy.params) {
-        if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
-        if (sammy.params[i] == '' && jQuery.inArray(i, mandatory_keys) == -1) {
+        if (i === 'length' || !has_own_key(sammy.params, i)) continue;
+        if (sammy.params[i] == '' && !has_key(mandatory_keys, i)) {
             delete sammy.params[i];
         }
-        else if (jQuery.inArray(i, num_keys) != -1) {
+        else if (has_key(num_keys, i)) {
             sammy.params[i] = parseInt(sammy.params[i]);
         }
-        else if (jQuery.inArray(i, bool_keys) != -1) {
+        else if (has_key(bool_keys, i)) {
             sammy.params[i] = sammy.params[i] == 'true';
         }
-        else if (jQuery.inArray(i, arrayable_keys) != -1) {
+        else if (has_key(arrayable_keys, i)) {
             sammy.params[i] = sammy.params[i].split(' ');
             if (sammy.params[i].length == 1) {
                 sammy.params[i] = sammy.params[i][0];
@@ -1899,18 +1896,28 @@ function put_parameter(sammy, mandatory_keys, num_keys, bool_keys,
 
 function put_cast_params(sammy, path, mandatory_keys, num_keys, bool_keys) {
     for (var i in sammy.params) {
-        if (i === 'length' || !sammy.params.hasOwnProperty(i)) continue;
-        if (sammy.params[i] == '' && jQuery.inArray(i, mandatory_keys) == -1) {
+        if (i === 'length' || !has_own_key(sammy.params, i)) continue;
+        if (sammy.params[i] == '' && !has_key(mandatory_keys, i)) {
             delete sammy.params[i];
         }
-        else if (jQuery.inArray(i, num_keys) != -1) {
+        else if (has_key(num_keys, i)) {
             sammy.params[i] = parseInt(sammy.params[i]);
         }
-        else if (jQuery.inArray(i, bool_keys) != -1) {
+        else if (has_key(bool_keys, i)) {
             sammy.params[i] = sammy.params[i] == 'true';
         }
     }
     if (sync_put(sammy, path)) update();
+}
+
+function has_key(keys, key) {
+    return keys != null && keys.indexOf(key) !== -1;
+}
+
+// A query string or form field can name a parameter `hasOwnProperty`,
+// which shadows the method on the map being read.
+function has_own_key(params, key) {
+    return Object.prototype.hasOwnProperty.call(params, key);
 }
 
 function update_column_options(sammy) {
@@ -2114,10 +2121,7 @@ function change_own_password(sammy) {
 
     password_change_in_progress = true;
     pause_auto_refresh();
-    for (var i in outstanding_reqs) {
-        outstanding_reqs[i].abort();
-    }
-    outstanding_reqs = [];
+    abort_outstanding_reqs();
 
     function finish() {
         if (done) return;

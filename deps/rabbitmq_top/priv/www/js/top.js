@@ -6,12 +6,10 @@
 
 dispatcher_add(function(sammy) {
     sammy.get('#/top', function() {
-            var nodes = JSON.parse(sync_get('/nodes'));
-            go_to('#/top/' + nodes[0].name + "/20");
+            go_to_first_node('#/top/', '/20');
         });
     sammy.get('#/top/ets', function() {
-            var nodes = JSON.parse(sync_get('/nodes'));
-            go_to('#/top/ets/' + nodes[0].name + "/20");
+            go_to_first_node('#/top/ets/', '/20');
         });
     sammy.get('#/top/:node/:row_count', function() {
             render({'top':   {path:    '/top/' + esc(this.params['node']),

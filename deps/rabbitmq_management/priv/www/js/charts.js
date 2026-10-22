@@ -245,7 +245,14 @@ function rates_text(items, stats, mode, fmt, chart_rates) {
 //
 
 function render_charts() {
-    $('.chart').map(function() {
+    var charts = $('.chart');
+    if (charts.length === 0) {
+        return;
+    }
+    chart_chrome.grid.tickColor =
+        getComputedStyle(document.documentElement)
+            .getPropertyValue('--chart-grid-color').trim() || "#aaa";
+    charts.map(function() {
         render_chart($(this));
     });
 }
@@ -255,12 +262,32 @@ var chart_colors = {full: ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed'
                     node: ['#6ae26a', '#e24545']};
 
 var chart_chrome = {
-    series: { lines: { show: true } },
+    series: { lines: { show: true, lineWidth: 2 } },
     grid:   { borderWidth: 2, borderColor: "#aaa" },
-    xaxis:  { tickColor: "#fff", mode: "time", timezone: "browser" },
-    yaxis:  { tickColor: "#eee", min: 0 },
-    legend: { show: false }
+    // Flot 4 draws grid lines for the innermost axis of each direction.
+    xaxis:  { showTicks: false, gridLines: false, mode: "time",
+              timezone: "browser", timeBase: "milliseconds" },
+    // `major`, the default, leaves the first and last tick labels
+    // unmeasured, so a two-tick axis reserves no room for them.
+    yaxis:  { showTicks: false, showTickLabels: "all", min: 0,
+              ticks: chart_y_ticks },
+    legend: { show: false },
+    // Flot 4 ignores `yaxis.min` when it scales the axis to the data.
+    hooks:  { adjustSeriesDataRange: [chart_y_range_from_zero] }
 };
+
+function chart_y_range_from_zero(plot, series, range) {
+    range.ymin = 0;
+    if (!isFinite(range.ymax)) {
+        range.ymax = 0;
+    }
+}
+
+// `setEndpointTicks` adds the axis ends itself, so an idle chart asks for
+// no ticks of its own rather than a duplicate pair.
+function chart_y_ticks(axis) {
+    return axis.max == 1 ? [] : axis.tickGenerator(axis);
+}
 
 function chart_fill(mode, i) {
     return mode =='node' && i == 0;
@@ -309,11 +336,6 @@ function render_chart(div) {
 
 function fmt_y_axis(fmt) {
     return function (val, axis) {
-        // axis.ticks seems to include the bottom value but not the top
-        if (axis.max == 1 && axis.ticks.length > 1) {
-            var newTicks = [axis.ticks[0]];
-            axis.ticks = newTicks;
-        }
         return fmt(val, axis.max);
     }
 }
