@@ -138,9 +138,8 @@ relay_token_request(Req1, State, Params, Secret, MetadataURL, HttpOpts,
             {ok, cowboy_req:reply(502, Req1), State}
     end.
 
-%% This endpoint requires no authentication, so only grants that need a user
-%% login at the provider first are relayed. A repeated `grant_type` is refused
-%% because the provider may honour another occurrence.
+%% Only the grants used by the management UI are relayed. A repeated
+%% `grant_type` is refused because the provider may use a different occurrence.
 -spec check_grant_type([{binary(), binary() | true}]) -> ok | {error, binary()}.
 check_grant_type(Params) ->
     case [Value || {<<"grant_type">>, Value} <- Params] of
