@@ -394,7 +394,51 @@ var HELP = {
       <p>Furthermore, message payloads will be truncated to 50000 bytes.</p>',
 
     'message-publish-headers':
-      'Headers can have any name. Only long string headers can be set here.',
+      'Headers can have any name. Only long string headers can be set here. \
+      With AMQP 1.0 these are sent as application properties.',
+
+    'message-publish-annotations':
+      'Message annotation names must start with "x-".',
+
+    'message-publish-delivery-time':
+      '<p>Sets the <code>x-opt-delivery-time</code> message annotation to the \
+      chosen time, in milliseconds since the epoch. With a quorum queue, the \
+      message is not delivered to consumers before that time. Times in the \
+      past are ignored.</p>\
+      <p>Use either a date and time in the browser\'s time zone, or a delay \
+      in seconds from now. Do not also add <code>x-opt-delivery-time</code> to \
+      the message annotations.</p>',
+
+    'message-modify-delivery-time':
+      '<p>Sets the <code>x-opt-delivery-time</code> message annotation to the \
+      chosen time, in milliseconds since the epoch. With a quorum queue, the \
+      message is not delivered to consumers before that time. Times in the \
+      past are ignored.</p>\
+      <p>Use either a date and time in the browser\'s time zone, or a delay \
+      in seconds from now. Do not also add <code>x-opt-delivery-time</code> to \
+      the message annotations.</p>',
+
+    'message-modify-annotations':
+      'Message annotation names must start with "x-".',
+
+    'message-publish-amqp-properties':
+      '<p>Properties of the AMQP 1.0 message. Invalid properties are rejected. \
+      Valid properties are:</p>\
+      <ul>\
+      <li>message_id</li>\
+      <li>user_id</li>\
+      <li>to</li>\
+      <li>subject</li>\
+      <li>reply_to</li>\
+      <li>correlation_id</li>\
+      <li>content_type</li>\
+      <li>content_encoding</li>\
+      <li>absolute_expiry_time (milliseconds since the epoch)</li>\
+      <li>creation_time (milliseconds since the epoch)</li>\
+      <li>group_id</li>\
+      <li>group_sequence</li>\
+      <li>reply_to_group_id</li>\
+      </ul>',
 
     'message-publish-properties':
       '<p>You can set other message properties here (delivery mode and headers \
