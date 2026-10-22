@@ -16,6 +16,9 @@
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-define(DEFAULT_MAX_MESSAGES, 1000).
+-define(DEFAULT_MAX_PAYLOAD_BYTES, 67108864).
+
 %%--------------------------------------------------------------------
 
 init(Req, _State) ->
@@ -58,7 +61,13 @@ do_it(ReqData0, Context) ->
                 VHost, ReqData, Context,
                 fun (Ch) ->
                         AckMode = parse_ackmode(AckModeBin),
-                        Count = rabbit_mgmt_util:parse_int(CountBin),
+                        MaxMessages = application:get_env(
+                                        rabbitmq_management, basic_get_max_messages,
+                                        ?DEFAULT_MAX_MESSAGES),
+                        MaxPayloadBytes = application:get_env(
+                                            rabbitmq_management, basic_get_max_payload_bytes,
+                                            ?DEFAULT_MAX_PAYLOAD_BYTES),
+                        Count = parse_count(CountBin, MaxMessages),
                         Enc = case EncBin of
                                   <<"auto">>   -> auto;
                                   <<"base64">> -> base64;
@@ -69,7 +78,7 @@ do_it(ReqData0, Context) ->
                                     TruncBin  -> parse_non_negative_integer(TruncBin)
                                 end,
 
-                        Reply = basic_gets(Count, Ch, Q, AckMode, Enc, Trunc),
+                        Reply = basic_gets(Count, MaxPayloadBytes, Ch, Q, AckMode, Enc, Trunc),
                         maybe_return(Reply, Ch, AckMode),
                         rabbit_mgmt_util:reply(remove_delivery_tag(Reply),
 					       ReqData, Context)
@@ -87,13 +96,37 @@ parse_non_negative_integer(TruncBin) ->
             throw({error, <<"truncate must be a non-negative integer">>})
     end.
 
-basic_gets(0, _, _, _, _, _) ->
-    [];
+parse_count(CountBin, MaxMessages) ->
+    case rabbit_mgmt_util:parse_int(CountBin) of
+        Count when is_integer(Count), Count >= 1, Count =< MaxMessages ->
+            Count;
+        _ ->
+            throw({error, iolist_to_binary(
+                            [<<"Invalid count value: ">>, to_bin(CountBin),
+                             <<". It must be an integer between 1 and ">>,
+                             integer_to_binary(MaxMessages)])})
+    end.
 
-basic_gets(Count, Ch, Q, AckMode, Enc, Trunc) ->
+to_bin(V) when is_binary(V)  -> V;
+to_bin(V) when is_integer(V) -> integer_to_binary(V);
+to_bin(V)                    -> iolist_to_binary(io_lib:format("~p", [V])).
+
+basic_gets(Count, MaxPayloadBytes, Ch, Q, AckMode, Enc, Trunc) ->
+    basic_gets(Count, MaxPayloadBytes, 0, Ch, Q, AckMode, Enc, Trunc, []).
+
+basic_gets(0, _, _, _, _, _, _, _, Acc) ->
+    lists:reverse(Acc);
+basic_gets(_, MaxPayloadBytes, Total, _, _, _, _, _, Acc)
+  when Total >= MaxPayloadBytes ->
+    lists:reverse(Acc);
+basic_gets(Count, MaxPayloadBytes, Total, Ch, Q, AckMode, Enc, Trunc, Acc) ->
     case basic_get(Ch, Q, AckMode, Enc, Trunc) of
-        none -> [];
-        M    -> [M | basic_gets(Count - 1, Ch, Q, AckMode, Enc, Trunc)]
+        none ->
+            lists:reverse(Acc);
+        M ->
+            Size = proplists:get_value(payload_bytes, M),
+            basic_gets(Count - 1, MaxPayloadBytes, Total + Size,
+                       Ch, Q, AckMode, Enc, Trunc, [M | Acc])
     end.
 
 
@@ -185,7 +218,7 @@ maybe_truncate(Payload, none)                         -> Payload;
 maybe_truncate(Payload, Len) when size(Payload) < Len -> Payload;
 maybe_truncate(Payload, Len) ->
     <<Start:Len/binary, _Rest/binary>> = Payload,
-    Start.
+    binary:copy(Start).
 
 payload_part(Payload, Enc) ->
     {PL, E} = case Enc of
