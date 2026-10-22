@@ -416,6 +416,9 @@ start_cluster(Q) ->
                                          {user_who_performed_action,
                                           ActingUser}]),
                     {new, NewQ};
+                {error, {members_exist, Existing}} = Error ->
+                    _ = delete_unreferenced_members(Existing),
+                    declare_queue_error(Error, NewQ, LeaderNode, ActingUser);
                 {error, Error} ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             catch
@@ -431,6 +434,47 @@ start_cluster(Q) ->
              "Could not declare quorum ~ts on node '~ts' because the metadata "
              "store operation timed out",
              [rabbit_misc:rs(QName), node()]}
+    end.
+
+%% Different queue names can map to the same Ra name, so a member is only
+%% removed if no quorum queue tracks its uid. Nothing is removed unless every
+%% quorum queue tracks member uids.
+delete_unreferenced_members(Existing) ->
+    case referenced_uids() of
+        {ok, Referenced} ->
+            [begin
+                 UId = erpc_call(Node, ra_directory, uid_of,
+                                 [?RA_SYSTEM, Name], ?RPC_TIMEOUT),
+                 case is_binary(UId) andalso
+                      not lists:member(UId, Referenced) of
+                     true ->
+                         ?LOG_WARNING("Deleting orphaned Ra server ~w with uid ~ts",
+                                      [Id, UId]),
+                         ra_server_sup_sup:delete_server(?RA_SYSTEM, Id, UId,
+                                                         ?RPC_TIMEOUT);
+                     false ->
+                         ok
+                 end
+             end || {Name, Node} = Id <- Existing];
+        unknown ->
+            []
+    end.
+
+referenced_uids() ->
+    try
+        {ok, lists:flatmap(
+               fun(Q) ->
+                       case amqqueue:get_type_state(Q) of
+                           #{nodes := UIds} when is_map(UIds) ->
+                               maps:values(UIds);
+                           _ ->
+                               throw(untracked_uids)
+                       end
+               end, [Q || Q <- rabbit_amqqueue:list(),
+                          amqqueue:get_type(Q) == ?MODULE])}
+    catch
+        throw:untracked_uids ->
+            unknown
     end.
 
 declare_queue_error(Error, Queue, Leader, ActingUser) ->
