@@ -34,6 +34,8 @@
          logging_to_user_log_category_works/1,
          setting_log_levels_in_config_with_output_overridden_in_env_works/1,
          setting_message_format_works/1,
+         setting_message_format_with_conditionals_after_msg_works/1,
+         setting_message_format_rendering_nothing_works/1,
          setting_level_format_works/1,
          setting_time_format_works/1,
          logging_as_single_line_works/1,
@@ -81,6 +83,8 @@ groups() ->
        logging_to_user_log_category_works,
        setting_log_levels_in_config_with_output_overridden_in_env_works,
        setting_message_format_works,
+       setting_message_format_with_conditionals_after_msg_works,
+       setting_message_format_rendering_nothing_works,
        setting_level_format_works,
        setting_time_format_works,
        logging_as_single_line_works,
@@ -617,6 +621,61 @@ setting_message_format_works(Config) ->
          "unknown_field=<unknown unknown_field> ",
          "msg=", RandomMsgBin/binary>>,
        Line).
+
+setting_message_format_with_conditionals_after_msg_works(Config) ->
+    Context = default_context(Config),
+    Format = ["level=", level, " ",
+              "msg=", msg, " ",
+              {md_key, ["known_md_key=", md_key], []}, " ",
+              {unknown_field,
+               ["unknown_field=", unknown_field],
+               ["unknown_field_spotted"]}, " ",
+              {unknown_field, ["unknown_field=", unknown_field], []}, " ",
+              {unknown_md_key, ["unknown_md_key=", unknown_md_key], []}],
+    {PrefixFormat, LineFormat} =
+    rabbit_prelaunch_early_logging:determine_prefix(Format),
+    ok = application:set_env(
+           rabbit, log,
+           [{file, [{formatter, {rabbit_logger_text_fmt,
+                                 #{prefix_format => PrefixFormat,
+                                   line_format => LineFormat}}}]}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    Metadata = #{md_key => "md_value"},
+    {RandomMsg, Line} = log_and_return_line(Context, Metadata),
+
+    RandomMsgBin = list_to_binary(RandomMsg),
+    ?assertEqual(
+       <<"level=warning ",
+         "msg=", RandomMsgBin/binary, " ",
+         "known_md_key=md_value ",
+         "unknown_field_spotted">>,
+       Line).
+
+setting_message_format_rendering_nothing_works(Config) ->
+    Context = default_context(Config),
+    Format = [{unknown_md_key, ["unknown_md_key=", unknown_md_key], []}],
+    {PrefixFormat, LineFormat} =
+    rabbit_prelaunch_early_logging:determine_prefix(Format),
+    ok = application:set_env(
+           rabbit, log,
+           [{file, [{formatter, {rabbit_logger_text_fmt,
+                                 #{prefix_format => PrefixFormat,
+                                   line_format => LineFormat}}}]}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    ?LOG_WARNING("a message the format does not mention", #{}),
+
+    ok = rabbit_logger_std_h:filesync(rmq_1_file_1),
+    MainFile = main_log_file_in_context(Context),
+    {ok, Content} = file:read_file(MainFile),
+    ?assertNotEqual(<<>>, Content),
+    ?assertEqual(
+       <<>>, binary:replace(Content, <<"\n">>, <<>>, [global])).
 
 setting_level_format_works(Config) ->
     LevelFormats = #{lc  => "warning",
