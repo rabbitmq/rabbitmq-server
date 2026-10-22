@@ -125,11 +125,13 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
     {'error', any()}.
 update_state(AuthUser, NewToken) ->
     case resolve_resource_server(NewToken) of
+        {error, {invalid_token, _, _, _}} ->
+            {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
         {error, _} = Err0 -> Err0;
         {ResourceServer, _} = Tuple ->
             case check_token(NewToken, Tuple) of
                 %% avoid logging the token
-                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+                {refused, {error, {invalid_token, _Type, _Err, _Stacktrace}}} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
                 {refused, Err} ->
                     {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err]), []};
@@ -171,11 +173,13 @@ authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
     case resolve_resource_server(Token) of
+        {error, {invalid_token, _, _, _}} ->
+            {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
         {error, _} = Err0 ->
             {refused, "Authentication using OAuth 2/JWT token failed: ~tp", [Err0]};
         {ResourceServer, _} = Tuple ->
             case check_token(Token, Tuple) of
-                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+                {refused, {error, {invalid_token, _Type, _Err, _Stacktrace}}} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
                 {refused, Err} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
