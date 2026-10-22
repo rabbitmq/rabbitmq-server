@@ -195,10 +195,10 @@ get_authz_data(ReqData) ->
 %% Used for connections / channels. A normal user can only see / delete
 %% their own stuff. Monitors can see other users' and delete their
 %% own. Admins can do it all.
-is_authorized_user(ReqData, Context, Item) ->
+is_authorized_user(ReqData, Context, ItemOrFun) ->
     rabbit_web_dispatch_access_control:is_authorized_user(ReqData,
                                                 Context,
-                                                Item,
+                                                ItemOrFun,
                                                 auth_config()).
 
 %% For policies / parameters. Like is_authorized_vhost but you have to
