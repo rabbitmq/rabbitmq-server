@@ -3817,7 +3817,8 @@ make_discard(ConsumerKey, MsgIds) ->
 
 -spec make_credit(consumer_key(), rabbit_queue_type:credit(),
                   non_neg_integer(), boolean()) -> protocol().
-make_credit(Key, Credit, DeliveryCount, Drain) ->
+make_credit(Key, Credit, DeliveryCount, Drain)
+  when is_boolean(Drain) ->
     #credit{consumer_key = Key,
             credit = Credit,
             delivery_count = DeliveryCount,
