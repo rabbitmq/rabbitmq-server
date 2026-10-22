@@ -972,6 +972,24 @@ function postprocess() {
             update_multifields();
         });
 
+    $(document).on('change', '.ackmode-select', function() {
+            $(this).closest('form').find('.modify-only').toggle($(this).val() == 'modify');
+        });
+    $(document).on('change', '.protocol-select', function() {
+            var amqp = $(this).val() == 'amqp';
+            var form = $(this).closest('form');
+            form.find('.amqp-only').toggle(amqp);
+            form.find('.amqp091-only').toggle(!amqp);
+            var ackmode = form.find('select[name="ackmode"]');
+            if (ackmode.length > 0) {
+                var options = amqp ? ACKMODES_AMQP : ACKMODES_AMQP091;
+                ackmode.empty();
+                for (var i = 0; i < options.length; i++) {
+                    ackmode.append($('<option>').val(options[i][0]).text(options[i][1]));
+                }
+                ackmode.trigger('change');
+            }
+        });
     $(document).on('change', '.multifield select', function() {
             update_multifields();
         });
@@ -1416,8 +1434,76 @@ function publish_msg(params0) {
     }
 }
 
+function apply_delivery_time(params, annotations) {
+    var deliver_at = params['deliver_at'];
+    var delay = params['delay_seconds'];
+    delete params['deliver_at'];
+    delete params['delay_seconds'];
+    var has_at = deliver_at != undefined && deliver_at != '';
+    var has_delay = delay != undefined && delay != '';
+    if (!has_at && !has_delay) return annotations;
+    if (has_at && has_delay)
+        throw('Set either "Deliver at" or a delay, not both');
+    if (annotations['x-opt-delivery-time'] != undefined)
+        throw('x-opt-delivery-time is set both here and in the annotations');
+    var time;
+    if (has_at) {
+        time = new Date(deliver_at).getTime();
+    } else {
+        time = Date.now() + Math.round(parseFloat(delay) * 1000);
+    }
+    if (isNaN(time))
+        throw('Invalid delivery time');
+    annotations['x-opt-delivery-time'] = time;
+    return annotations;
+}
+
+var ACKMODES_AMQP091 = [['ack_requeue_true', 'Nack message requeue true'],
+                        ['ack_requeue_false', 'Automatic ack'],
+                        ['reject_requeue_true', 'Reject requeue true'],
+                        ['reject_requeue_false', 'Reject requeue false']];
+
+var ACKMODES_AMQP = [['ack_requeue_true', 'Released'],
+                     ['ack_requeue_false', 'Accepted'],
+                     ['reject_requeue_false', 'Rejected'],
+                     ['modify', 'Modified']];
+
+function publish_amqp_params(params) {
+    var int_props = ['group_sequence', 'absolute_expiry_time', 'creation_time'];
+    var props = {};
+    for (var name in params['props']) {
+        var value = params['props'][name];
+        if (value == '') continue;
+        if (int_props.indexOf(name) != -1) {
+            value = parseInt(value);
+            if (isNaN(value))
+                throw(name + ' must be an integer');
+        }
+        props[name] = value;
+    }
+    var header = {durable: params['delivery_mode'] == '2'};
+    if (params['amqp_priority'] != '')
+        header['priority'] = parseInt(params['amqp_priority']);
+    if (params['amqp_ttl'] != '')
+        header['ttl'] = parseInt(params['amqp_ttl']);
+    params['header'] = header;
+    params['properties'] = props;
+    params['application_properties'] = params['headers'] == '' ? {} : params['headers'];
+    params['message_annotations'] = apply_delivery_time(
+        params, params['annotations'] == undefined ? {} : params['annotations']);
+    delete params['headers'];
+    delete params['annotations'];
+    delete params['amqp_priority'];
+    delete params['amqp_ttl'];
+}
+
 function publish_msg0(params) {
     var path = fill_path_template('/exchanges/:vhost/:name/publish', params);
+    if (params['protocol'] == 'amqp') {
+        publish_amqp_params(params);
+        publish_req(path, params);
+        return;
+    }
     params['properties'] = {};
     params['properties']['delivery_mode'] = parseInt(params['delivery_mode']);
     if (params['headers'] != '')
@@ -1443,6 +1529,10 @@ function publish_msg0(params) {
             params['properties'][name] = value;
         }
     }
+    publish_req(path, params);
+}
+
+function publish_req(path, params) {
     with_req('POST', path, JSON.stringify(params), function(resp) {
             var result = JSON.parse(resp.responseText);
             if (result.routed) {
@@ -1453,7 +1543,24 @@ function publish_msg0(params) {
         });
 }
 
-function get_msgs(params) {
+function get_msgs(params0) {
+    var params;
+    try {
+        params = params_magic(params0);
+    } catch (e) {
+        show_popup('warn', fmt_escape_html(e));
+        return false;
+    }
+    try {
+        params['annotations'] = apply_delivery_time(
+            params, params['modannotations'] == undefined ? {} : params['modannotations']);
+    } catch (e) {
+        show_popup('warn', fmt_escape_html(e));
+        return false;
+    }
+    delete params['modannotations'];
+    params['delivery_failed'] = params['delivery_failed'] == 'true';
+    params['undeliverable_here'] = params['undeliverable_here'] == 'true';
     var path = fill_path_template('/queues/:vhost/:name/get', params);
     with_req('POST', path, JSON.stringify(params), function(resp) {
             var msgs = JSON.parse(resp.responseText);

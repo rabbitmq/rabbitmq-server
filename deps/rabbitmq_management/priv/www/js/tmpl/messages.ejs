@@ -18,10 +18,28 @@
     <th>Redelivered</th>
     <td><%= fmt_boolean(msg.redelivered) %></td>
   </tr>
+  <% if (msg.header != undefined) { %>
+  <tr>
+    <th>Header</th>
+    <td><%= fmt_table_short(msg.header) %></td>
+  </tr>
+  <% } %>
   <tr>
     <th>Properties</th>
     <td><%= fmt_table_short(msg.properties) %></td>
   </tr>
+  <% if (msg.application_properties != undefined) { %>
+  <tr>
+    <th>Application properties</th>
+    <td><%= fmt_table_short(msg.application_properties) %></td>
+  </tr>
+  <% } %>
+  <% if (msg.message_annotations != undefined) { %>
+  <tr>
+    <th>Message annotations</th>
+    <td><%= fmt_table_short(msg.message_annotations) %></td>
+  </tr>
+  <% } %>
   <tr>
     <th>
       Payload

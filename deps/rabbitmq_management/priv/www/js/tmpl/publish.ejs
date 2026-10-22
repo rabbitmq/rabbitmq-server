@@ -11,6 +11,15 @@
 <% } %>
       <input type="hidden" name="properties" value=""/>
       <table class="form">
+        <tr>
+          <th><label>Protocol:</label></th>
+          <td>
+            <select name="protocol" class="protocol-select">
+              <option value="amqp091">AMQP 0-9-1</option>
+              <option value="amqp" selected>AMQP 1.0</option>
+            </select>
+          </td>
+        </tr>
 <% if (mode == 'queue') { %>
         <tr>
           <td colspan="2"><input type="hidden" name="routing_key" value="<%= fmt_string(queue.name) %>"/> Message will be published to the default exchange with routing key <strong><%= fmt_string(queue.name) %></strong>, routing it to this queue.</td>
@@ -34,10 +43,19 @@
         <% } else { %>
           <input type="hidden" name="delivery_mode" value="2">
         <% } %>
+        <tr class="amqp-only">
+          <th><label>Priority:</label></th>
+          <td><input type="text" name="amqp_priority" value=""/></td>
+        </tr>
+        <tr class="amqp-only">
+          <th><label>TTL (ms):</label></th>
+          <td><input type="text" name="amqp_ttl" value=""/></td>
+        </tr>
         <tr>
           <th>
             <label>
-              Headers:
+              <span class="amqp091-only" style="display: none">Headers:</span>
+              <span class="amqp-only">Application properties:</span>
               <span class="help" id="message-publish-headers"></span>
             </label>
           </th>
@@ -49,11 +67,38 @@
           <th>
             <label>
               Properties:
-              <span class="help" id="message-publish-properties"></span>
+              <span class="help amqp091-only" style="display: none" id="message-publish-properties"></span>
+              <span class="help amqp-only" id="message-publish-amqp-properties"></span>
             </label>
           </th>
           <td>
             <div class="multifield string-only" id="props"></div>
+          </td>
+        </tr>
+        <% if (mode != 'queue' || is_quorum(queue)) { %>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Deliver at:
+              <span class="help" id="message-publish-delivery-time"></span>
+            </label>
+          </th>
+          <td><input type="datetime-local" name="deliver_at" value=""/></td>
+        </tr>
+        <tr class="amqp-only">
+          <th><label>Or delay (seconds):</label></th>
+          <td><input type="text" name="delay_seconds" value=""/></td>
+        </tr>
+        <% } %>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Message annotations:
+              <span class="help" id="message-publish-annotations"></span>
+            </label>
+          </th>
+          <td>
+            <div class="multifield" id="annotations"></div>
           </td>
         </tr>
         <tr>
