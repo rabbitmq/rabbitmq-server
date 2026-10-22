@@ -1562,14 +1562,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
     end,
 
     case ensure_source(Source0, SndSettled, LinkNameBin,
-<<<<<<< HEAD
                        Vhost, User, ContainerId, ReaderPid,
                        PermCache0, TopicPermCache0) of
-=======
-                       Cfg, PermCache0, TopicPermCache0) of
-        {error, {amqp_error, Condition, Description}} ->
-            link_error(Condition, "~ts", [Description]);
->>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
         {error, Reason} ->
             link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tP", [Reason, ?FORMAT_DEPTH_LIMIT]);
         {ok, #resource{name = QNameBin} = QName,
@@ -1668,59 +1662,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                     reply_frames(Reply, State);
                 {error, Reason} ->
                     link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-<<<<<<< HEAD
-                               "Could not operate on ~ts: ~tp",
-                               [rabbit_misc:rs(QName), Reason])
-            end
-=======
                                "Could not operate on ~ts: ~tP",
                                [rabbit_misc:rs(QName), Reason, ?FORMAT_DEPTH_LIMIT])
-            end;
-        {ok, jms_subscription_lookup, QName, QType,
-         #'v1_0.source'{address = {utf8, SourceAddress},
-                        filter = Filter} = Source,
-         PermCache, TopicPermCache} ->
-            %% This is a 'null source lookup' used by JMS clients before
-            %% unsubscribing from a durable topic subscription.
-            %% See amqp-bindmap-jms-v1.0-wd10 8.8
-            A = #'v1_0.attach'{
-                   name = LinkName,
-                   handle = Handle,
-                   role = ?AMQP_ROLE_SENDER,
-                   initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT),
-                   snd_settle_mode = EffectiveSndSettleMode,
-                   rcv_settle_mode = RcvSettleMode,
-                   source = Source,
-                   max_message_size = MaybeMaxMessageSize},
-            L = #outgoing_link{
-                   name = LinkNameBin,
-                   source_address = SourceAddress,
-                   queue_name = QName,
-                   queue_type = QType,
-                   dynamic = false,
-                   send_settled = SndSettled,
-                   max_message_size = max_message_size(MaybeMaxMessageSize),
-                   filter = format_filter(Filter),
-                   client_flow_ctl = #client_flow_ctl{
-                                        delivery_count = ?INITIAL_DELIVERY_COUNT,
-                                        credit = 0,
-                                        echo = false,
-                                        properties = #{}},
-                   queue_flow_ctl = #queue_flow_ctl{
-                                       delivery_count = ?INITIAL_DELIVERY_COUNT,
-                                       credit = 0,
-                                       drain = false},
-                   at_least_one_credit_req_in_flight = false,
-                   stashed_credit_req = none,
-                   timeout_log_level = warning,
-                   is_jms_subscription_lookup = true},
-            OutgoingLinks = OutgoingLinks0#{HandleInt => L},
-            State = State0#state{outgoing_links = OutgoingLinks,
-                                 permission_cache = PermCache,
-                                 topic_permission_cache = TopicPermCache},
-            rabbit_global_counters:consumer_created(?PROTOCOL),
-            {ok, [A], State}
->>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
+            end
     end.
 
 -spec link_error(term(), io:format(), [term()]) ->
@@ -2220,19 +2164,7 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                {map, KVList} ->
                    Anns1 = lists:map(
                              %% "all symbolic keys except those beginning with "x-" are reserved." [3.2.10]
-<<<<<<< HEAD
                              fun({{symbol, <<"x-", _/binary>> = K}, V}) ->
-=======
-                             fun({{symbol, <<"x-opt-deferral-token">> = K}, {utf8, Bin} = V}) ->
-                                     _ = validate_deferral_token_size(Bin),
-                                     {K, unwrap_simple_type(V)};
-                                ({{symbol, <<"x-opt-deferral-token">>}, Other}) ->
-                                     protocol_error(
-                                       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                                       "x-opt-deferral-token must be of AMQP type utf8, got: ~tP",
-                                       [Other, ?FORMAT_DEPTH_LIMIT]);
-                                ({{symbol, <<"x-", _/binary>> = K}, V}) ->
->>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
                                      {K, unwrap_simple_type(V)}
                              end, KVList),
                    maps:from_list(Anns1)
@@ -2930,9 +2862,8 @@ ensure_source(#'v1_0.source'{
         _ ->
             exit_not_implemented("Dynamic source not supported: ~tP", [Source0, ?FORMAT_DEPTH_LIMIT])
     end;
-<<<<<<< HEAD
 ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _, _, _, _) ->
-    exit_not_implemented("Dynamic source not supported: ~tp", [Source]);
+    exit_not_implemented("Dynamic source not supported: ~tP", [Source, ?FORMAT_DEPTH_LIMIT]);
 ensure_source(Source0 = #'v1_0.source'{address = Address,
                                       durable = Durable},
               _SndSettle,  _LinkName, Vhost, User, _ContainerId,
@@ -2950,29 +2881,6 @@ ensure_source(Source0 = #'v1_0.source'{address = Address,
                     {ok, QName, Source, PermCache, TopicPermCache}
             catch error:_ ->
                       {error, {bad_address, Address}}
-=======
-ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _) ->
-    exit_not_implemented("Dynamic source not supported: ~tP", [Source, ?FORMAT_DEPTH_LIMIT]);
-ensure_source(Source0 = #'v1_0.source'{address = Address,
-                                       durable = Durable},
-              _SndSettle,  LinkName,
-              #cfg{container_id = ContainerId,
-                   reader_pid = ConnPid,
-                   user = User,
-                   vhost = Vhost,
-                   is_jms = IsJms},
-              PermCache, TopicPermCache) ->
-    case is_jms_topic_terminus(IsJms, Source0) of
-        true ->
-            case jms_topic(ensure_subscription,
-                           [Source0, LinkName, Vhost, User, ContainerId,
-                            ConnPid, PermCache, TopicPermCache]) of
-                {error, not_implemented} ->
-                    {error, {amqp_error, ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                             <<"JMS topic subscription requires rabbitmq_jms plugin">>}};
-                Result ->
-                    Result
->>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
             end;
         {utf8, SourceAddr} ->
             case address_v1_permitted() of
@@ -3075,12 +2983,11 @@ ensure_target(#'v1_0.target'{
                         capabilities = rabbit_amqp_util:capabilities([?CAP_TEMPORARY_QUEUE])
                        },
             {ok, Exchange, QNameBin, QNameBin, Target, PermCache};
-<<<<<<< HEAD
         false ->
-            exit_not_implemented("Dynamic target not supported: ~p", [Target0])
+            exit_not_implemented("Dynamic target not supported: ~P", [Target0, ?FORMAT_DEPTH_LIMIT])
     end;
 ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _, _, _, _) ->
-    exit_not_implemented("Dynamic target not supported: ~p", [Target]);
+    exit_not_implemented("Dynamic target not supported: ~P", [Target, ?FORMAT_DEPTH_LIMIT]);
 ensure_target(Target = #'v1_0.target'{address = Address,
                                       durable = Durable},
               _LinkName, Vhost, User, _ContainerId, _ConnPid, PermCache0) ->
@@ -3094,37 +3001,6 @@ ensure_target(Target = #'v1_0.target'{address = Address,
                     {ok, Exchange, RKey, QNameBin, Target, PermCache};
                 {error, _} = Err ->
                     Err
-=======
-        #{{symbol, ?CAP_TEMPORARY_TOPIC} := ok} when IsJms ->
-            case jms_topic(ensure_target_temporary,
-                           [Target0, Vhost, User, ContainerId, PermCache0]) of
-                {error, not_implemented} ->
-                    exit_not_implemented(
-                      "JMS temporary topics require rabbitmq_jms plugin");
-                Result ->
-                    Result
-            end;
-        _ ->
-            exit_not_implemented("Dynamic target not supported: ~P", [Target0, ?FORMAT_DEPTH_LIMIT])
-    end;
-ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _) ->
-    exit_not_implemented("Dynamic target not supported: ~P", [Target, ?FORMAT_DEPTH_LIMIT]);
-ensure_target(Target = #'v1_0.target'{address = Address,
-                                      durable = Durable},
-              _LinkName,
-              #cfg{user = User,
-                   vhost = Vhost,
-                   is_jms = IsJms},
-              PermCache0) ->
-    case is_jms_topic_terminus(IsJms, Target) of
-        true ->
-            case jms_topic(ensure_target, [Target, Vhost, User, PermCache0]) of
-                {error, not_implemented} ->
-                    exit_not_implemented(
-                      "JMS topic target requires rabbitmq_jms plugin");
-                Result ->
-                    Result
->>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
             end;
         1 ->
             case address_v1_permitted() of
@@ -3345,50 +3221,6 @@ handle_outgoing_link_flow_control(
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
 
-<<<<<<< HEAD
-=======
-%% Claim any requested deferred messages before topping up the credit: the
-%% queue delivers claimed messages ahead of the ready backlog, so this
-%% credit reaches them rather than being spent on the backlog first.
-claim_deferred_then_credit(QName, Ctag, Tokens, DeliveryCount, CappedCredit,
-                           Drain, QStates0) ->
-    {ok, QStates1, Actions0} = case Tokens of
-                                   [] ->
-                                       {ok, QStates0, []};
-                                   _ ->
-                                       rabbit_queue_type:assign_deferred(
-                                         QName, Ctag, Tokens, QStates0)
-                               end,
-    {ok, QStates, Actions1} = rabbit_queue_type:credit(
-                                QName, Ctag, DeliveryCount,
-                                CappedCredit, Drain, QStates1),
-    {ok, QStates, Actions0 ++ Actions1}.
-
-parse_deferred_tokens(undefined) ->
-    [];
-parse_deferred_tokens({map, KVList}) ->
-    Key = {symbol, <<"rabbitmq:deferral-tokens">>},
-    case lists:keyfind(Key, 1, KVList) of
-        {Key, {array, utf8, Elems}} ->
-            case length(Elems) of
-                Len when Len > ?MAX_DEFERRAL_TOKENS ->
-                    protocol_error(
-                      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                      "rabbitmq:deferral-tokens must contain at most ~b tokens, got: ~b",
-                      [?MAX_DEFERRAL_TOKENS, Len]);
-                _ ->
-                    [validate_deferral_token_size(T) || {utf8, T} <- Elems]
-            end;
-        false ->
-            [];
-        {Key, Other} ->
-            protocol_error(
-              ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-              "rabbitmq:deferral-tokens must be an array of AMQP type utf8, got: ~tP",
-              [Other, ?FORMAT_DEPTH_LIMIT])
-    end.
-
->>>>>>> 1acb828 (Logging: avoid very deeply nested log entries)
 delivery_count_rcv(?UINT(DeliveryCount)) ->
     DeliveryCount;
 delivery_count_rcv(undefined) ->
