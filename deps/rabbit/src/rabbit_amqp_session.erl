@@ -2983,14 +2983,9 @@ ensure_source(#'v1_0.source'{
             exit_not_implemented("Dynamic source not supported: ~tP", [Source0, ?FORMAT_DEPTH_LIMIT])
     end;
 ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _) ->
-<<<<<<< HEAD
-    exit_not_implemented("Dynamic source not supported: ~tp", [Source]);
+    exit_not_implemented("Dynamic source not supported: ~tP", [Source, ?FORMAT_DEPTH_LIMIT]);
 ensure_source(Source0 = #'v1_0.source'{address = Address,
                                        durable = Durable},
-=======
-    exit_not_implemented("Dynamic source not supported: ~tP", [Source, ?FORMAT_DEPTH_LIMIT]);
-ensure_source(Source0 = #'v1_0.source'{address = Address},
->>>>>>> 863ba8a (Logging: avoid very deeply nested log entries)
               _SndSettle,  LinkName,
               #cfg{container_id = ContainerId,
                    reader_pid = ConnPid,
@@ -3155,14 +3150,9 @@ ensure_target(#'v1_0.target'{
             exit_not_implemented("Dynamic target not supported: ~P", [Target0, ?FORMAT_DEPTH_LIMIT])
     end;
 ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _) ->
-<<<<<<< HEAD
-    exit_not_implemented("Dynamic target not supported: ~p", [Target]);
+    exit_not_implemented("Dynamic target not supported: ~P", [Target, ?FORMAT_DEPTH_LIMIT]);
 ensure_target(Target = #'v1_0.target'{address = Address,
                                       durable = Durable},
-=======
-    exit_not_implemented("Dynamic target not supported: ~P", [Target, ?FORMAT_DEPTH_LIMIT]);
-ensure_target(Target = #'v1_0.target'{address = Address},
->>>>>>> 863ba8a (Logging: avoid very deeply nested log entries)
               _LinkName,
               #cfg{user = User,
                    vhost = Vhost,
