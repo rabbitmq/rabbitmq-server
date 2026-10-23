@@ -880,7 +880,9 @@
 ##
 # proxy_protocol = false
 
-## Trusted proxy source IPs/CIDRs. When proxy_protocol is enabled, the
+## Trusted proxy source IP addresses and CIDRs for AMQP 0-9-1 and AMQP 1.0.
+## Other protocols use their own allowlists, such as
+## mqtt.proxy_protocol.trusted_proxies. When proxy_protocol is enabled, the
 ## PROXY protocol header is only honoured when the immediately-connecting
 ## peer (not the source address claimed in the header itself) matches one
 ## of these entries; connections from any other peer are rejected. If

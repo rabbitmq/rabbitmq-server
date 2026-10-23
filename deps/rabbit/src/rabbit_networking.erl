@@ -33,7 +33,7 @@
          close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, handshake/3, tcp_host/1,
-         proxy_protocol_options/0, warn_if_unconfigured_trusted_proxies/1,
+         proxy_protocol_options/1, warn_if_unconfigured_trusted_proxies/2,
          ranch_ref/1, ranch_ref/2, ranch_refs_of_protocol/1, ranch_ref_to_protocol/1,
          listener_ip_addresses/1, listener_per_ip_address/1,
          listeners_of_protocol/1, stop_ranch_listeners_of_protocol/1,
@@ -645,7 +645,7 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
                 {ok, ProxyInfo} ->
                     {ok, Sock} = ranch_handshake(Ref),
                     {ok, {PeerAddress, _}} = rabbit_net:peername(Sock),
-                    ok = warn_if_unconfigured_trusted_proxies(PeerAddress),
+                    ok = warn_if_unconfigured_trusted_proxies(Ref, PeerAddress),
                     ok = tune_buffer_size(Sock, BufferStrategy),
                     {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
@@ -655,9 +655,9 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
             {ok, Sock}
     end.
 
--spec proxy_protocol_options() -> ranch:transport_opts(any()).
-proxy_protocol_options() ->
-    case application:get_env(rabbit, proxy_protocol_trusted_proxies, []) of
+-spec proxy_protocol_options(atom()) -> ranch:transport_opts(any()).
+proxy_protocol_options(Application) ->
+    case application:get_env(Application, proxy_protocol_trusted_proxies, []) of
         [] ->
             %% Omit the option to preserve acceptance of any peer until the
             %% allowlist becomes mandatory. Ranch rejects all peers for [].
@@ -666,17 +666,17 @@ proxy_protocol_options() ->
             #{trusted_proxies => lists:filtermap(fun parse_trusted_proxy/1, Entries)}
     end.
 
--spec warn_if_unconfigured_trusted_proxies(inet:ip_address()) -> ok.
-warn_if_unconfigured_trusted_proxies(PeerAddress) ->
-    case application:get_env(rabbit, proxy_protocol_trusted_proxies, []) of
-        [] ->
+-spec warn_if_unconfigured_trusted_proxies(ranch:ref(), inet:ip_address()) -> ok.
+warn_if_unconfigured_trusted_proxies(Ref, PeerAddress) ->
+    case maps:is_key(trusted_proxies, ranch:get_transport_options(Ref)) of
+        false ->
             ?LOG_WARNING(
-               "Accepting PROXY protocol header from ~ts even though "
+               "Accepting PROXY protocol header from ~ts on listener ~tp even though "
                "proxy_protocol_trusted_proxies is not configured; "
                "configure it to restrict which peers may use the "
                "PROXY protocol header",
-               [rabbit_misc:ntoa(PeerAddress)]);
-        _ ->
+               [rabbit_misc:ntoa(PeerAddress), Ref]);
+        true ->
             ok
     end.
 

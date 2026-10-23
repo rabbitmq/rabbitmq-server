@@ -30,6 +30,9 @@ tests() ->
      proxy_protocol_v1,
      proxy_protocol_v1_tls,
      proxy_protocol_v2_local,
+     proxy_protocol_untrusted_source_rejected,
+     proxy_protocol_tls_untrusted_source_rejected,
+     proxy_protocol_unconfigured_trusted_proxies_accepted,
      loopback_user_via_non_loopback_proxy_is_rejected,
      loopback_user_via_local_proxy_is_accepted
     ].
@@ -44,7 +47,7 @@ init_per_suite(Config) ->
         {start_rmq_with_plugins_disabled, true}
     ]),
     MqttConfig = mqtt_config(),
-    RabbitConfig = {rabbit, [{proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]}]},
+    RabbitConfig = {rabbit, [{proxy_protocol_trusted_proxies, ["192.0.2.0/24"]}]},
     Config2 = rabbit_ct_helpers:run_setup_steps(
                 Config1,
                 [ fun(Conf) -> merge_app_env(MqttConfig, Conf) end,
@@ -60,6 +63,7 @@ init_per_suite(Config) ->
 mqtt_config() ->
     {rabbitmq_mqtt, [
         {proxy_protocol,  true},
+        {proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]},
         {ssl_cert_login,  true},
         {allow_anonymous, true}]}.
 
@@ -79,6 +83,52 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+proxy_protocol_untrusted_source_rejected(Config) ->
+    reject_untrusted_proxy(Config, tcp_port_mqtt).
+
+proxy_protocol_tls_untrusted_source_rejected(Config) ->
+    reject_untrusted_proxy(Config, tcp_port_mqtt_tls).
+
+reject_untrusted_proxy(Config, PortKey) ->
+    ok = set_trusted_proxies(Config, ["192.0.2.0/24"], ["127.0.0.1", "::1"]),
+    try
+        Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, PortKey),
+        {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port, [binary, {active, false}]),
+        try
+            ok = gen_tcp:send(Socket, "PROXY TCP4 192.0.2.1 192.0.2.2 80 81\r\n"),
+            expect_closed(Socket)
+        after
+            gen_tcp:close(Socket)
+        end
+    after
+        ok = set_trusted_proxies(Config, ["127.0.0.1", "::1"], ["192.0.2.0/24"])
+    end.
+
+proxy_protocol_unconfigured_trusted_proxies_accepted(Config) ->
+    ok = set_trusted_proxies(Config, [], ["192.0.2.0/24"]),
+    try
+        proxy_protocol_v1(Config)
+    after
+        ok = set_trusted_proxies(Config, ["127.0.0.1", "::1"], ["192.0.2.0/24"])
+    end.
+
+set_trusted_proxies(Config, TrustedProxies, AmqpTrustedProxies) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                     [rabbit, proxy_protocol_trusted_proxies, AmqpTrustedProxies]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                     [rabbitmq_mqtt, proxy_protocol_trusted_proxies, TrustedProxies]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, stop, [rabbitmq_mqtt]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, start, [rabbitmq_mqtt]).
+
+expect_closed(Socket) ->
+    case gen_tcp:recv(Socket, 7, 1000) of
+        {error, closed} ->
+            ok;
+        %% Closing an SSL socket before its handshake may send these alerts.
+        {ok, <<21, 3, _Minor, 0, 2, 1, Alert>>} when Alert =:= 90; Alert =:= 0 ->
+            expect_closed(Socket)
+    end.
 
 proxy_protocol_v1(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),

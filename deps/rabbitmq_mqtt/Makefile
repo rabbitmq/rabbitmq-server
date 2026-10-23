@@ -27,6 +27,7 @@ define PROJECT_ENV
 	                          {send_timeout, 15000},
 	                          {send_timeout_close, true}
 	                         ]},
+	    {proxy_protocol_trusted_proxies, []},
 	    {proxy_protocol, false},
 	    {sparkplug, false},
 	    {mailbox_soft_limit, 200},

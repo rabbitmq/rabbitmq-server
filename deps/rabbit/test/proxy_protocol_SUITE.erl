@@ -56,7 +56,9 @@ init_per_group(Group, Config) ->
         {rabbit, [
             {proxy_protocol, true},
             {proxy_protocol_trusted_proxies, TrustedProxies}
-        ]}
+        ]},
+        {rabbitmq_mqtt, [{proxy_protocol_trusted_proxies, ["127.0.0.1"]}]},
+        {rabbitmq_stomp, [{proxy_protocol_trusted_proxies, ["127.0.0.1"]}]}
     ]),
     Config3 = rabbit_ct_helpers:set_config(Config2, {rabbitmq_ct_tls_verify, verify_none}),
     rabbit_ct_helpers:run_setup_steps(Config3,

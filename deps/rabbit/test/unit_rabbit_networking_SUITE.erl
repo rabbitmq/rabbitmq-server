@@ -28,6 +28,7 @@ groups() ->
           ip_tuple_is_used_as_is,
           ip_string_is_parsed,
           ip_binary_is_parsed,
+          trusted_proxies_are_scoped_to_each_application,
           trusted_proxies_unconfigured_omits_option,
           trusted_proxies_addresses_and_cidrs,
           trusted_proxies_invalid_entries_are_ignored,
@@ -86,14 +87,40 @@ ip_binary_is_parsed(_Config) ->
                  rabbit_networking:listener_ip_addresses(
                    [{port, 15672}, {ip, <<"127.0.0.1">>}])).
 
+trusted_proxies_are_scoped_to_each_application(_Config) ->
+    Applications = [rabbit, rabbitmq_mqtt, rabbitmq_stomp, rabbitmq_stream,
+                    rabbitmq_web_mqtt, rabbitmq_web_stomp],
+    Previous = [{App, application:get_env(App, proxy_protocol_trusted_proxies)}
+                || App <- Applications],
+    try
+        lists:foreach(fun({App, N}) ->
+            ok = application:set_env(App, proxy_protocol_trusted_proxies,
+                                     ["10.0." ++ integer_to_list(N) ++ ".0/24"])
+        end, lists:zip(Applications, lists:seq(1, length(Applications)))),
+        lists:foreach(fun({App, N}) ->
+            ?assertEqual(#{trusted_proxies => [{{10, 0, N, 0}, 24}]},
+                         rabbit_networking:proxy_protocol_options(App)),
+            ok = application:unset_env(App, proxy_protocol_trusted_proxies),
+            ?assertEqual(#{}, rabbit_networking:proxy_protocol_options(App)),
+            ok = application:set_env(App, proxy_protocol_trusted_proxies, ["invalid"]),
+            ?assertEqual(#{trusted_proxies => []},
+                         rabbit_networking:proxy_protocol_options(App))
+        end, lists:zip(lists:reverse(Applications), lists:reverse(lists:seq(1, length(Applications)))))
+    after
+        lists:foreach(fun
+            ({App, {ok, Value}}) -> application:set_env(App, proxy_protocol_trusted_proxies, Value);
+            ({App, undefined}) -> application:unset_env(App, proxy_protocol_trusted_proxies)
+        end, Previous)
+    end.
+
 trusted_proxies_unconfigured_omits_option(_Config) ->
     with_trusted_proxies([], fun() ->
-        ?assertEqual(#{}, rabbit_networking:proxy_protocol_options())
+        ?assertEqual(#{}, rabbit_networking:proxy_protocol_options(rabbit))
     end),
     Previous = application:get_env(rabbit, proxy_protocol_trusted_proxies),
     try
         application:unset_env(rabbit, proxy_protocol_trusted_proxies),
-        ?assertEqual(#{}, rabbit_networking:proxy_protocol_options())
+        ?assertEqual(#{}, rabbit_networking:proxy_protocol_options(rabbit))
     after
         restore_trusted_proxies(Previous)
     end.
@@ -111,7 +138,7 @@ trusted_proxies_addresses_and_cidrs(_Config) ->
                {{0, 0, 0, 0, 0, 0, 0, 1}, 128},
                {{0, 0, 0, 0, 0, 0, 0, 0}, 0},
                {{127, 0, 0, 1}, 32}]},
-              rabbit_networking:proxy_protocol_options())
+              rabbit_networking:proxy_protocol_options(rabbit))
       end).
 
 trusted_proxies_invalid_entries_are_ignored(_Config) ->
@@ -119,17 +146,17 @@ trusted_proxies_invalid_entries_are_ignored(_Config) ->
       invalid_trusted_proxies() ++ ["10.0.0.0/8"],
       fun() ->
           ?assertEqual(#{trusted_proxies => [{{10, 0, 0, 0}, 8}]},
-                       rabbit_networking:proxy_protocol_options())
+                       rabbit_networking:proxy_protocol_options(rabbit))
       end).
 
 trusted_proxies_invalid_entries_do_not_allow_any_peer(_Config) ->
     with_trusted_proxies(invalid_trusted_proxies(), fun() ->
-        ?assertEqual(#{trusted_proxies => []}, rabbit_networking:proxy_protocol_options())
+        ?assertEqual(#{trusted_proxies => []}, rabbit_networking:proxy_protocol_options(rabbit))
     end).
 
 trusted_proxies_mapped_ipv6_entries_are_ignored(_Config) ->
     with_trusted_proxies(["::ffff:127.0.0.1", "::ffff:127.0.0.0/104"], fun() ->
-        ?assertEqual(#{trusted_proxies => []}, rabbit_networking:proxy_protocol_options())
+        ?assertEqual(#{trusted_proxies => []}, rabbit_networking:proxy_protocol_options(rabbit))
     end).
 
 invalid_trusted_proxies() ->

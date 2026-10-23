@@ -370,7 +370,7 @@ warn_if_unconfigured_trusted_proxies(Req) ->
             ok;
         true ->
             {PeerAddress, _} = cowboy_req:peer(Req),
-            rabbit_networking:warn_if_unconfigured_trusted_proxies(PeerAddress)
+            rabbit_networking:warn_if_unconfigured_trusted_proxies(maps:get(ref, Req), PeerAddress)
     end.
 
 handle_data(Data, State0 = #state{}) ->

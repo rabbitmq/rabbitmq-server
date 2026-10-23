@@ -22,6 +22,7 @@ define PROJECT_ENV
 	    {trailing_lf, true},
 	    %% see rabbitmq/rabbitmq-stomp#57
 	    {hide_server_info, false},
+	    {proxy_protocol_trusted_proxies, []},
 	    {proxy_protocol, false}
 	  ]
 endef

@@ -37,7 +37,8 @@ init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, On
     {ok, AckTimeout} = application:get_env(rabbit, ssl_handshake_timeout),
     MaxConnections = max_conn(rabbit_misc:get_env(rabbit, ranch_connection_max, infinity),
                               ConcurrentConnsSups),
-    RanchListenerOpts = (rabbit_networking:proxy_protocol_options())#{
+    {ok, Application} = application:get_application(ProtoSup),
+    RanchListenerOpts = (rabbit_networking:proxy_protocol_options(Application))#{
       num_acceptors => ConcurrentAcceptorCount,
       max_connections => MaxConnections,
       handshake_timeout => AckTimeout,

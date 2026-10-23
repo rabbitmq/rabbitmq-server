@@ -398,7 +398,7 @@ warn_if_unconfigured_trusted_proxies(Req) ->
             ok;
         true ->
             {PeerAddress, _} = cowboy_req:peer(Req),
-            rabbit_networking:warn_if_unconfigured_trusted_proxies(PeerAddress)
+            rabbit_networking:warn_if_unconfigured_trusted_proxies(maps:get(ref, Req), PeerAddress)
     end.
 
 %% The protocols v10.stomp, v11.stomp and v12.stomp are registered

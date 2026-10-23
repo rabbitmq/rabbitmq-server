@@ -64,13 +64,16 @@ init_per_group(Group, Config) ->
         ]).
 
 configure_proxy_protocol(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, proxy_protocol_trusted_proxies, ["192.0.2.0/24"]]),
     ok = set_trusted_proxies(Config, ["127.0.0.1", "::1"]),
     Config.
 
 set_trusted_proxies(Config, TrustedProxies) ->
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0, application, set_env,
-           [rabbit, proxy_protocol_trusted_proxies, TrustedProxies]),
+           [rabbitmq_web_mqtt, proxy_protocol_trusted_proxies, TrustedProxies]),
     rabbit_ws_test_util:update_app_env(Config, proxy_protocol, true).
 
 %% Keep guest unrestricted by default so the other tests pass; the

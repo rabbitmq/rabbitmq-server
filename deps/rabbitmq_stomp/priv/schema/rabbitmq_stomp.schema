@@ -151,15 +151,28 @@ end}.
 {mapping, "stomp.login_timeout", "rabbitmq_stomp.login_timeout",
     [{datatype, {integer, non_negative}}]}.
 
-%% Whether or not to enable proxy protocol support. This also requires
-%% the core proxy_protocol.trusted_proxies setting (see rabbit.schema);
-%% until it is set, the PROXY header is accepted from any peer with a
-%% warning logged, but this will become a hard requirement in future.
+%% Whether or not to enable proxy protocol support.
 %%
 %% Defaults to false.
 
 {mapping, "stomp.proxy_protocol", "rabbitmq_stomp.proxy_protocol",
     [{datatype, boolean}]}.
+
+%% Trusted proxy source IP addresses and CIDRs for STOMP TCP and TLS listeners.
+%% If unset, PROXY headers are accepted from any peer with a warning.
+%% This setting will become mandatory in a future release.
+%% Changes take effect when the listeners restart.
+%%
+%% {proxy_protocol_trusted_proxies, ["10.0.0.0/8", "127.0.0.1", "::1"]}
+
+{mapping, "stomp.proxy_protocol.trusted_proxies.$index",
+    "rabbitmq_stomp.proxy_protocol_trusted_proxies", [{datatype, string}]}.
+
+{translation, "rabbitmq_stomp.proxy_protocol_trusted_proxies",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("stomp.proxy_protocol.trusted_proxies", Conf),
+    [V || {_, V} <- Settings]
+end}.
 
 %% Whether or not to hide server info
 %%
