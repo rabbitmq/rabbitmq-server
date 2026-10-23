@@ -651,10 +651,7 @@ mqtt_expirable_token0(Port, AdditionalOpts, Connect, Config) ->
     after Millis * 2 -> ct:fail("missing DISCONNECT packet from server")
     end.
 
-%% Test that the token can be renewed and that RabbitMQ closes the connection
-%% when the token expires although the OAuth 2 backend is used for
-%% authentication only and the internal backend, which knows nothing about
-%% the token, for authorisation.
+%% Token renewal and expiry with the internal backend used for authorisation.
 expirable_token_with_internal_authz_backend(Config) ->
     Seconds = 3,
     Millis = Seconds * 1000,
