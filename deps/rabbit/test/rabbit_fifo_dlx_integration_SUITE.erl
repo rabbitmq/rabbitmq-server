@@ -154,7 +154,7 @@ end_per_testcase(Testcase, Config) ->
     ?awaitMatch(
        true,
        begin
-           DlxWorkers = rabbit_ct_broker_helpers:rpc_all(Config, supervisor, which_children, [rabbit_fifo_dlx_sup]),
+           DlxWorkers = rabbit_ct_broker_helpers:rpc_all(Config, ?MODULE, dlx_workers, []),
            lists:all(fun(L) -> L =:= [] end, DlxWorkers)
        end, 60000),
 
@@ -513,7 +513,7 @@ drop_head_falls_back_to_at_most_once(Config) ->
     consistently(
       ?_assertMatch(
          [_, {active, 0}, _, _],
-         rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup]))).
+         rpc(Config, Server, ?MODULE, dlx_count_children, []))).
 
 %% Test that dynamically switching dead-letter-strategy works.
 switch_strategy(Config) ->
@@ -935,7 +935,7 @@ single_dlx_worker(Config) ->
        [[_, {active, 1}, _, _],
         [_, {active, 0}, _, _],
         [_, {active, 0}, _, _]],
-       rabbit_ct_broker_helpers:rpc_all(Config, supervisor, count_children, [rabbit_fifo_dlx_sup])),
+       rabbit_ct_broker_helpers:rpc_all(Config, ?MODULE, dlx_count_children, [])),
 
     ok = rabbit_ct_broker_helpers:stop_broker(Config, Server1),
     RaName = ra_name(SourceQ),
@@ -948,7 +948,7 @@ single_dlx_worker(Config) ->
     consistently(
       ?_assertEqual(
          0,
-         length(rpc(Config, Server1, supervisor, which_children, [rabbit_fifo_dlx_sup], 1000)))),
+         length(rpc(Config, Server1, ?MODULE, dlx_workers, [], 1000)))),
 
     %% Kill the leader node to verify the DLX worker follows leadership.
     %% We kill the node rather than just the Ra process: killing only the process
@@ -965,7 +965,7 @@ single_dlx_worker(Config) ->
 
 assert_active_dlx_workers(N, Config, Server) ->
     ?awaitMatch(N,
-                length(rpc(Config, Server, supervisor, which_children, [rabbit_fifo_dlx_sup], 5000)),
+                length(rpc(Config, Server, ?MODULE, dlx_workers, [], 5000)),
                 60_000).
 
 declare_queue(Channel, Queue, Args) ->
@@ -999,3 +999,18 @@ counted(Metric, Config) ->
 metric(Metric, Counters) ->
     Metrics = maps:get(#{queue_type => rabbit_quorum_queue, dead_letter_strategy => at_least_once}, Counters),
     maps:get(Metric, Metrics).
+
+%% Returns the list of DLX worker children, handling both the old
+%% (rabbit_fifo_dlx_sup) and new (rabbit_fifo_dlx_sup_sup) supervisor names
+%% for mixed-cluster compatibility.
+dlx_workers() ->
+    supervisor:which_children(dlx_sup_name()).
+
+dlx_count_children() ->
+    supervisor:count_children(dlx_sup_name()).
+
+dlx_sup_name() ->
+    case whereis(rabbit_fifo_dlx_sup_sup) of
+        undefined -> rabbit_fifo_dlx_sup;
+        _         -> rabbit_fifo_dlx_sup_sup
+    end.

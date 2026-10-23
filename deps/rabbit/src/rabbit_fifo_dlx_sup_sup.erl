@@ -1,0 +1,38 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+
+-module(rabbit_fifo_dlx_sup_sup).
+
+-behaviour(supervisor).
+
+-rabbit_boot_step(
+   {?MODULE,
+    [{description, "supervisor of quorum queue at-least-once dead-letter workers"},
+     {mfa, {rabbit_sup, start_supervisor_child, [?MODULE]}},
+     {requires, kernel_ready},
+     {enables, core_initialized}]}).
+
+%% supervisor callback
+-export([init/1]).
+%% client API
+-export([start_link/0, start_worker/1]).
+
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+-spec start_worker(rabbit_amqqueue:name()) -> {ok, pid()}.
+start_worker(QRef) ->
+    {ok, SupPid} = supervisor:start_child(?MODULE, [QRef]),
+    [{_, Pid, worker, _}] = supervisor:which_children(SupPid),
+    {ok, Pid}.
+
+init([]) ->
+    SupFlags = #{strategy => simple_one_for_one},
+    ChildSpec = #{id => rabbit_fifo_dlx_worker_sup,
+                  start => {rabbit_fifo_dlx_worker_sup, start_link, []},
+                  type => supervisor,
+                  restart => temporary},
+    {ok, {SupFlags, [ChildSpec]}}.
