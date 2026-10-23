@@ -104,20 +104,8 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) 
 init(Req, Opts) ->
     case check_origin(Req) of
         ok ->
-            case check_proxy_header_trusted(Req) of
-                ok ->
-                    init0(Req, Opts);
-                {error, untrusted_proxy_source} ->
-                    {PeerAddress, _} = cowboy_req:peer(Req),
-                    ?LOG_WARNING(
-                       "Web MQTT: WebSocket connection rejected, PROXY protocol "
-                       "header received from ~ts, which is not a configured "
-                       "proxy_protocol_trusted_proxies entry",
-                       [rabbit_misc:ntoa(PeerAddress)]),
-                    {ok,
-                     cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req),
-                     #state{}}
-            end;
+            warn_if_unconfigured_trusted_proxies(Req),
+            init0(Req, Opts);
         {error, origin_not_allowed} ->
             ?LOG_WARNING("Web MQTT: WebSocket connection rejected, "
                          "origin not in allow_origins: ~tp",
@@ -376,33 +364,13 @@ check_origin(Req) ->
             end
     end.
 
-%% Cowboy's `proxy_header` transport option (set from our own
-%% `proxy_protocol` config) unconditionally trusts the PROXY protocol
-%% header from whoever connected (see cowboy_clear/cowboy_tls
-%% `get_proxy_info/2`), with no equivalent of rabbit_networking's
-%% trusted-proxy allowlist. Gate on that allowlist here before `Req`'s
-%% `proxy_header` is trusted for anything (connection naming, access
-%% control).
-check_proxy_header_trusted(Req) ->
-    case maps:get(proxy_header, Req, undefined) of
-        undefined ->
+warn_if_unconfigured_trusted_proxies(Req) ->
+    case maps:is_key(proxy_header, Req) of
+        false ->
             ok;
-        _ProxyHeader ->
-            {PeerAddress, _PeerPort} = cowboy_req:peer(Req),
-            case rabbit_networking:trusted_proxies_configured() of
-                false ->
-                    %% Temporary leniency, see rabbit_networking:check_proxy_protocol_trusted_source/2.
-                    ?LOG_WARNING(
-                       "Web MQTT: accepting PROXY protocol header from ~ts "
-                       "even though proxy_protocol_trusted_proxies is not "
-                       "configured", [rabbit_misc:ntoa(PeerAddress)]),
-                    ok;
-                true ->
-                    case rabbit_networking:is_trusted_proxy_source(PeerAddress) of
-                        true -> ok;
-                        false -> {error, untrusted_proxy_source}
-                    end
-            end
+        true ->
+            {PeerAddress, _} = cowboy_req:peer(Req),
+            rabbit_networking:warn_if_unconfigured_trusted_proxies(PeerAddress)
     end.
 
 handle_data(Data, State0 = #state{}) ->

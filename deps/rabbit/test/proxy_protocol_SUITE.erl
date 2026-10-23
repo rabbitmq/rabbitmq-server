@@ -17,29 +17,45 @@
 -define(TIMEOUT, 5000).
 
 all() ->
-    [
-        {group, sequential_tests}
-    ].
+    [{group, trusted},
+     {group, untrusted},
+     {group, invalid},
+     {group, cidr},
+     {group, unconfigured}].
 
-groups() -> [
-        {sequential_tests, [], [
-            proxy_protocol_v1,
-            proxy_protocol_v1_tls,
-            proxy_protocol_v2_local,
-            proxy_protocol_v1_untrusted_source_rejected,
-            proxy_protocol_v1_unconfigured_trusted_proxies_is_accepted
-        ]}
-    ].
+groups() ->
+    Accepted = [proxy_protocol_v1, proxy_protocol_v1_tls, proxy_protocol_v2_local],
+    [{trusted, [], Accepted},
+     {untrusted, [], [proxy_protocol_v1_untrusted_source_rejected,
+                     proxy_protocol_v1_tls_untrusted_source_rejected,
+                     proxy_protocol_tls_untrusted_source_rejected_without_header,
+                     proxy_protocol_v2_local_untrusted_source_rejected]},
+     {invalid, [], [proxy_protocol_v1_untrusted_source_rejected]},
+     {cidr, [], Accepted},
+     {unconfigured, [], Accepted}].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
+    Config.
+
+end_per_suite(Config) ->
+    Config.
+
+init_per_group(Group, Config) ->
+    TrustedProxies = case Group of
+        trusted -> ["127.0.0.1", "::1"];
+        untrusted -> ["10.0.0.0/8"];
+        invalid -> ["not-an-ip"];
+        cidr -> ["127.0.0.0/8"];
+        unconfigured -> []
+    end,
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
+        {rmq_nodename_suffix, Group}
     ]),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1, [
         {rabbit, [
             {proxy_protocol, true},
-            {proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]}
+            {proxy_protocol_trusted_proxies, TrustedProxies}
         ]}
     ]),
     Config3 = rabbit_ct_helpers:set_config(Config2, {rabbitmq_ct_tls_verify, verify_none}),
@@ -47,13 +63,10 @@ init_per_suite(Config) ->
         rabbit_ct_broker_helpers:setup_steps() ++
         rabbit_ct_client_helpers:setup_steps()).
 
-end_per_suite(Config) ->
+end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
         rabbit_ct_client_helpers:teardown_steps() ++
         rabbit_ct_broker_helpers:teardown_steps()).
-
-init_per_group(_, Config) -> Config.
-end_per_group(_, Config) -> Config.
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -112,52 +125,42 @@ proxy_protocol_v2_local(Config) ->
     wait_for_connection_close(Config),
     ok.
 
-%% The test peer always connects from loopback, which is normally in
-%% proxy_protocol_trusted_proxies (see init_per_suite); temporarily
-%% pointing the allowlist elsewhere simulates the PROXY header arriving
-%% from a peer that isn't a trusted proxy, which must be rejected outright
-%% rather than trusting the header's claimed source.
 proxy_protocol_v1_untrusted_source_rejected(Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, 0, application, set_env,
-           [rabbit, proxy_protocol_trusted_proxies, ["10.0.0.0/8"]]),
+    reject_untrusted_proxy(Config, tcp_port_amqp,
+                           "PROXY TCP4 10.1.2.3 192.168.1.2 80 81\r\n").
+
+proxy_protocol_v1_tls_untrusted_source_rejected(Config) ->
+    reject_untrusted_proxy(Config, tcp_port_amqp_tls,
+                           "PROXY TCP4 10.1.2.3 192.168.1.2 80 81\r\n").
+
+proxy_protocol_tls_untrusted_source_rejected_without_header(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
+    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port, [binary, {active, false}]),
     try
-        Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-        {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
-            [binary, {active, false}, {packet, raw}]),
-        ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
-        ok = inet:send(Socket, <<"AMQP", 0, 0, 9, 1>>),
-        {error, closed} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-        gen_tcp:close(Socket)
+        ok = expect_closed(Socket, 1000)
     after
-        ok = rabbit_ct_broker_helpers:rpc(
-               Config, 0, application, set_env,
-               [rabbit, proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]])
+        gen_tcp:close(Socket)
     end.
 
-%% Unconfigured proxy_protocol_trusted_proxies must still accept the PROXY
-%% header (with a warning), not reject it, to avoid breaking deployments
-%% upgrading from before this allowlist existed.
-proxy_protocol_v1_unconfigured_trusted_proxies_is_accepted(Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, 0, application, set_env,
-           [rabbit, proxy_protocol_trusted_proxies, []]),
-    try
-        Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-        {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
-            [binary, {active, false}, {packet, raw}]),
-        ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
-        ok = inet:send(Socket, <<"AMQP", 0, 0, 9, 1>>),
-        {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-        ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-            ?MODULE, connection_name, []),
-        match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
-        gen_tcp:close(Socket),
-        wait_for_connection_close(Config)
-    after
-        ok = rabbit_ct_broker_helpers:rpc(
-               Config, 0, application, set_env,
-               [rabbit, proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]])
+proxy_protocol_v2_local_untrusted_source_rejected(Config) ->
+    reject_untrusted_proxy(Config, tcp_port_amqp,
+                           ranch_proxy_header:header(#{command => local, version => 2})).
+
+reject_untrusted_proxy(Config, PortKey, Header) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, PortKey),
+    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
+        [binary, {active, false}, {packet, raw}]),
+    ok = gen_tcp:send(Socket, Header),
+    ok = expect_closed(Socket, 1000),
+    gen_tcp:close(Socket).
+
+expect_closed(Socket, Timeout) ->
+    case gen_tcp:recv(Socket, 7, Timeout) of
+        {error, closed} ->
+            ok;
+        %% Closing an SSL socket before its handshake may send these alerts.
+        {ok, <<21, 3, _Minor, 0, 2, 1, Alert>>} when Alert =:= 90; Alert =:= 0 ->
+            expect_closed(Socket, Timeout)
     end.
 
 connection_name() ->

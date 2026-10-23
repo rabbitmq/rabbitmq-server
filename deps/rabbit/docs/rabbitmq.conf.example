@@ -887,6 +887,7 @@
 ## left at the default (empty), the header is accepted from any peer but
 ## a warning is logged; this will become a hard requirement in a future
 ## release, so set this now if proxy_protocol is enabled.
+## Changes to this setting take effect when the listeners restart.
 ##
 # proxy_protocol.trusted_proxies.1 = 10.0.0.0/8
 # proxy_protocol.trusted_proxies.2 = 127.0.0.1

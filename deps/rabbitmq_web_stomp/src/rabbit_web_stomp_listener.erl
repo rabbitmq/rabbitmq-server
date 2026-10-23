@@ -107,7 +107,7 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
                             non_neg_integer()) -> new | existing.
 start_tcp_listener_on(TCPConf, CowboyOpts0, Routes, NumTcpAcceptors) ->
   Port = rabbit_misc:pget(port, TCPConf),
-  RanchTransportOpts = #{
+  RanchTransportOpts = (rabbit_networking:proxy_protocol_options())#{
     socket_opts     => TCPConf,
     connection_type => supervisor,
     max_connections => get_max_connections(),
@@ -155,7 +155,7 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
                             non_neg_integer()) -> new | existing.
 start_tls_listener_on(TLSConf, CowboyOpts0, Routes, NumSslAcceptors) ->
   TLSPort = proplists:get_value(port, TLSConf),
-  RanchTransportOpts = #{
+  RanchTransportOpts = (rabbit_networking:proxy_protocol_options())#{
     socket_opts     => [{alpn_preferred_protocols, [<<"h2">>, <<"http/1.1">>]}|TLSConf],
     connection_type => supervisor,
     max_connections => get_max_connections(),
