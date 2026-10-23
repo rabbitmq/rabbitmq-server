@@ -40,6 +40,7 @@ groups() ->
         validate_chain,
         validate_longer_chain,
         validate_chain_without_whitelisted,
+        certificate_issued_by_whitelisted_certificate_denied,
         whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root,
         removed_certificate_denied_from_AMQP_client,
         installed_certificate_accepted_from_AMQP_client,
@@ -531,6 +532,63 @@ validate_chain_without_whitelisted1(Config) ->
 
     ok = rabbit_networking:stop_tcp_listener(Port).
 
+certificate_issued_by_whitelisted_certificate_denied(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE, certificate_issued_by_whitelisted_certificate_denied1, [Config]).
+
+certificate_issued_by_whitelisted_certificate_denied1(Config) ->
+    %% Given: a whitelisted certificate issued by a CA the server does not know,
+    %% and a certificate signed with its private key that is not whitelisted.
+    {ServerCACerts, Cert, Key} = ct_helper:make_certs(),
+    KeyTrustedRecord = public_key:generate_key({rsa, 2048, 17}),
+    TestDataTrusted = public_key:pkix_test_data(#{
+        root => [],
+        peer => [{digest, sha256}, {key, KeyTrustedRecord}]
+    }),
+    CertTrusted = proplists:get_value(cert, TestDataTrusted),
+    KeyTrusted = proplists:get_value(key, TestDataTrusted),
+    TestDataIssued = public_key:pkix_test_data(#{
+        root => #{cert => CertTrusted, key => KeyTrustedRecord},
+        peer => [{digest, sha256}, {key, {rsa, 2048, 17}}]
+    }),
+    CertIssued = proplists:get_value(cert, TestDataIssued),
+    KeyIssued = proplists:get_value(key, TestDataIssued),
+
+    Port = port(Config),
+    Host = rabbit_ct_helpers:get_config(Config, rmq_hostname),
+
+    ok = whitelist(Config, "alice", CertTrusted),
+    rabbit_trust_store:refresh(),
+
+    catch rabbit_networking:stop_tcp_listener(Port),
+    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, ServerCACerts},
+                                                     {cert, Cert},
+                                                     {key, Key} | cfg()], 1, 1),
+
+    Connect = fun(Certs, ClientKey, Version) ->
+                      amqp_connection:start(
+                        #amqp_params_network{host = Host,
+                                             port = Port,
+                                             ssl_options = [{cert, Certs},
+                                                            {key, ClientKey},
+                                                            {verify, verify_none},
+                                                            {versions, [Version]}]})
+              end,
+    [begin
+         {ok, Con} = Connect(CertTrusted, KeyTrusted, Version),
+         ok = amqp_connection:close(Con),
+         {error, _} = Connect([CertIssued, CertTrusted], KeyIssued, Version)
+     end || Version <- ['tlsv1.2', 'tlsv1.3']],
+
+    ok = whitelist(Config, "bob", CertIssued),
+    rabbit_trust_store:refresh(),
+    [begin
+         {ok, Con} = Connect([CertIssued, CertTrusted], KeyIssued, Version),
+         ok = amqp_connection:close(Con)
+     end || Version <- ['tlsv1.2', 'tlsv1.3']],
+
+    ok = rabbit_networking:stop_tcp_listener(Port).
+
 whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
            ?MODULE, whitelisted_certificate_accepted_from_AMQP_client,
@@ -632,7 +690,6 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
         {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
-    %% Clean: server TLS/TCP
     ok = rabbit_networking:stop_tcp_listener(Port).
 
 
