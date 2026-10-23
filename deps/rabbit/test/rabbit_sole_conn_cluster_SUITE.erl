@@ -40,7 +40,8 @@ groups() ->
         conflict_should_resolve_when_existing_conns_node_is_unreachable,
         expand_cluster_should_skip_unreachable_node,
         bootstrap_should_be_delegated_to_oldest_node,
-        bootstrap_delegation_failure_should_not_bootstrap_locally
+        bootstrap_delegation_failure_should_not_bootstrap_locally,
+        join_should_be_refused_when_local_machine_version_is_older
     ]}].
 
 init_per_suite(Config) ->
@@ -128,6 +129,12 @@ end_per_testcase(_Testcase, Config) ->
 
             try
                 call(Config, Node, meck, unload, [rabbit_sole_conn])
+            catch
+                _:_ -> ok
+            end,
+
+            try
+                call(Config, Node, meck, unload, [khepri_machine])
             catch
                 _:_ -> ok
             end
@@ -844,6 +851,51 @@ bootstrap_delegation_failure_should_not_bootstrap_locally(Config) ->
                       [coordination, ?STORE_ID])),
 
     kill_disposable(Config, Node2, Pid1),
+    ok.
+
+join_should_be_refused_when_local_machine_version_is_older(Config) ->
+    Nodes = ?config(peer_nodes, Config),
+    [Node1, Node2, Node3] = [N || {N, _Peer} <- Nodes],
+
+    lists:foreach(
+      fun(Node) ->
+              call(Config, Node, meck, expect,
+                   [rabbit_nodes, list_reachable, fun() -> [Node1, Node2] end])
+      end, [Node1, Node2]),
+
+    Pid1 = spawn_disposable(Config, Node1),
+    ?assertEqual(ok, acq_ref_conn(Config, Node1, ?VH, ?CID1, ?USER, Pid1)),
+    ?assertEqual(2, length(kh_members(Config, Node1))),
+
+    MacVer = call(Config, Node3, khepri_machine, version, []),
+    OldMacVer = MacVer - 1,
+    call(Config, Node3, meck, new, [khepri_machine, [passthrough, no_link]]),
+    call(Config, Node3, meck, expect,
+         [khepri_machine, version, fun() -> OldMacVer end]),
+
+    ?assertEqual({error, {machine_version_too_old,
+                          #{local => OldMacVer, effective => MacVer}}},
+                 call(Config, Node3, ?SOLE_CONN_MOD, join_cluster, [Node1])),
+    ?assertEqual(undefined,
+                 call(Config, Node3, ra_directory, uid_of,
+                      [coordination, ?STORE_ID])),
+
+    Result = call(Config, Node3, erlang, apply,
+                  [fun() ->
+                           try
+                               ?SOLE_CONN_MOD:ensure_running()
+                           catch
+                               error:Reason -> Reason
+                           end
+                   end, []]),
+    ?assertMatch({cannot_join_peer, Node1, {machine_version_too_old, _}}, Result),
+    ?assertEqual(undefined,
+                 call(Config, Node3, ra_directory, uid_of,
+                      [coordination, ?STORE_ID])),
+    ?assertEqual(undefined, call(Config, Node3, erlang, whereis, [?SOLE_CONN_MOD])),
+    ?assertEqual(2, length(kh_members(Config, Node1))),
+
+    kill_disposable(Config, Node1, Pid1),
     ok.
 
 %% --------------------------------------------------------------

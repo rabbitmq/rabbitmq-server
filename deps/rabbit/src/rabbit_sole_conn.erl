@@ -674,6 +674,13 @@ start_local_store() ->
                     expand_cluster();
                 PeerNode ->
                     %% Existing Cluster
+                    case check_machine_version(StoreId, PeerNode) of
+                        ok ->
+                            ok;
+                        {error, Reason} ->
+                            _ = khepri_cluster:reset(StoreId),
+                            erlang:error({cannot_join_peer, PeerNode, Reason})
+                    end,
                     ?LOG_DEBUG("Trying to join active peer: ~p", [PeerNode]),
                     ok = join_active_peer(StoreId, PeerNode, RaServerConfig, RetryTimeout),
 
@@ -772,23 +779,71 @@ join_cluster1(SeedNode) ->
     StoreId = get_store_id(),
     case ra_directory:uid_of(get_ra_system(), StoreId) of
         undefined ->
-            RaServerConfig = make_ra_server_config(),
-            RetryTimeout = leader_wait_retry_timeout(),
-            try
-                {ok, _} = khepri:start(?RA_SYSTEM, RaServerConfig),
-                ok = join_active_peer(StoreId, SeedNode, RaServerConfig, RetryTimeout),
-                ok = khepri_cluster:wait_for_effective_behaviour(
-                       StoreId, process_based_keep_while, RetryTimeout),
-                %% Only reached when the join succeeded.
-                start_gen_server()
-            catch
-                Class:Reason -> {error, {Class, Reason}}
+            case check_machine_version(StoreId, SeedNode) of
+                ok ->
+                    join_cluster2(StoreId, SeedNode);
+                {error, _} = Err ->
+                    Err
             end;
         _ ->
             %% A store already exists on disk here. khepri_cluster:join/2
             %% resets the joining store, which would destroy that data, so
             %% leave this node to recover/0 or to its own lazy bootstrap.
             {error, store_already_bootstrapped}
+    end.
+
+join_cluster2(StoreId, SeedNode) ->
+    RaServerConfig = make_ra_server_config(),
+    RetryTimeout = leader_wait_retry_timeout(),
+    try
+        {ok, _} = khepri:start(?RA_SYSTEM, RaServerConfig),
+        ok = join_active_peer(StoreId, SeedNode, RaServerConfig, RetryTimeout),
+        ok = khepri_cluster:wait_for_effective_behaviour(
+               StoreId, process_based_keep_while, RetryTimeout),
+        %% Only reached when the join succeeded.
+        start_gen_server()
+    catch
+        Class:Reason -> {error, {Class, Reason}}
+    end.
+
+%% A member whose machine version is lower than the effective machine
+%% version of the cluster does not apply any entry.
+check_machine_version(StoreId, PeerNode) ->
+    LocalMacVer = khepri_machine:version(),
+    case cluster_effective_machine_version(StoreId, PeerNode) of
+        {ok, EffectiveMacVer} when EffectiveMacVer > LocalMacVer ->
+            ?LOG_WARNING("~ts: not joining the sole_conn Khepri cluster of ~w, "
+                         "its effective Khepri machine version (~b) is newer "
+                         "than the local one (~b)",
+                         [?MODULE, PeerNode, EffectiveMacVer, LocalMacVer]),
+            {error, {machine_version_too_old,
+                     #{local => LocalMacVer, effective => EffectiveMacVer}}};
+        {ok, _} ->
+            ok;
+        {error, Reason} = Err ->
+            ?LOG_WARNING("~ts: not joining the sole_conn Khepri cluster of ~w, "
+                         "could not get its effective Khepri machine version. "
+                         "Error: ~p", [?MODULE, PeerNode, Reason]),
+            Err
+    end.
+
+cluster_effective_machine_version(StoreId, PeerNode) ->
+    case ra:members({StoreId, PeerNode}, ?RPC_TIMEOUT) of
+        {ok, _Members, Leader} ->
+            case ra:member_overview(Leader, ?RPC_TIMEOUT) of
+                {ok, #{effective_machine_version := MacVer}, _} ->
+                    {ok, MacVer};
+                {ok, _, _} ->
+                    {error, effective_machine_version_unknown};
+                {timeout, _} ->
+                    {error, timeout};
+                {error, _} = Err ->
+                    Err
+            end;
+        {timeout, _} ->
+            {error, timeout};
+        {error, _} = Err ->
+            Err
     end.
 
 %% -----------------------------------------
