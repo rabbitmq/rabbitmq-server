@@ -49,12 +49,23 @@ init_per_group(cluster, Config) ->
                 rabbit_ct_broker_helpers:setup_steps() ++
                 rabbit_ct_client_helpers:setup_steps()),
 
-    case enable_feature_flag(Config2, 'rabbitmq_4.4.0') of
-        ok ->
-            Config2;
-        _ ->
+    SameKhepriMacVers = (
+      rabbit_ct_broker_helpers:do_nodes_run_same_ra_machine_version(
+        Config2, khepri_machine)),
+    if
+        SameKhepriMacVers ->
+            case enable_feature_flag(Config2, 'rabbitmq_4.4.0') of
+                ok ->
+                    Config2;
+                _ ->
+                    tear_down_cluster(Config2),
+                    {skip, "sole conn feature not available cluster-wide"}
+            end;
+        true ->
             tear_down_cluster(Config2),
-            {skip, "sole conn feature not available cluster-wide"}
+            {skip,
+             "a proper sole conn cluster cannot be created when "
+             "running different Khepri machine versions"}
     end.
 
 end_per_group(_, Config) ->
