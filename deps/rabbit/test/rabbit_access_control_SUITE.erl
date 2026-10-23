@@ -224,8 +224,7 @@ update_state_rebuilds_tags(_) ->
     ?assertEqual([administrator], U4#user.tags),
     ok.
 
-%% With different authn and authz backends, credentials that only the authn
-%% backend knows the expiry of must still expire and be refreshable.
+%% Credential expiry and refresh with different authn and authz backends.
 authn_backend_expiry_with_different_authz_backend(_) ->
     Now = os:system_time(seconds),
     ModN = rabbit_expiring_authn_backend,
