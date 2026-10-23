@@ -170,6 +170,10 @@ Or using the classic config for both parameters:
                                 {cache_ttl, 5000}]}].
 ```
 
+When the cached backend reports an expiry time for the credentials (for example
+a JWT with the OAuth 2 backend), results are cached until that time at most, even
+if `cache_ttl` is longer.
+
 You can also use a custom cache module to store cached requests. This module
 should be an erlang module implementing `rabbit_auth_cache` behaviour and (optionally)
 define `start_link` function to start cache process.

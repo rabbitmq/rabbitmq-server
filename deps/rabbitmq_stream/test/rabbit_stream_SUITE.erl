@@ -76,6 +76,8 @@ groups() ->
        user_connection_limit,
        node_connection_limit,
        connection_should_be_closed_on_token_expiry,
+       connection_should_be_closed_if_token_expired_at_open,
+       connection_should_be_closed_if_token_expired_at_update_secret,
        should_receive_metadata_update_after_update_secret,
        store_offset_requires_read_access,
        metadata_requires_read_or_write_access,
@@ -1428,6 +1430,53 @@ connection_should_be_closed_on_token_expiry(Config) ->
     test_authenticate(T, S, C1),
     closed = wait_for_socket_close(T, S, 10),
     ok = rpc(Config, 0, meck, unload, [Mod]).
+
+connection_should_be_closed_if_token_expired_at_open(Config) ->
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_access_control,
+    ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_user_loopback, 2, ok]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_vhost_access, 4, ok]),
+    ok = rpc(Config, 0, meck, expect, [Mod, permission_cache_can_expire, 1, true]),
+    Expiry = os:system_time(seconds) - 60,
+    ok = rpc(Config, 0, meck, expect, [Mod, expiry_timestamp, 1, Expiry]),
+    try
+        T = gen_tcp,
+        Port = get_port(T, Config),
+        Opts = get_opts(T),
+        {ok, S} = T:connect("localhost", Port, Opts),
+        C0 = rabbit_stream_core:init(0),
+        C1 = test_peer_properties(T, S, C0),
+        test_authenticate(T, S, C1),
+        closed = wait_for_socket_close(T, S, 10)
+    after
+        ok = rpc(Config, 0, meck, unload, [Mod])
+    end.
+
+connection_should_be_closed_if_token_expired_at_update_secret(Config) ->
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_access_control,
+    ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_user_loopback, 2, ok]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_vhost_access, 4, ok]),
+    ok = rpc(Config, 0, meck, expect, [Mod, permission_cache_can_expire, 1, true]),
+    Now = os:system_time(seconds),
+    ok = rpc(Config, 0, meck, expect, [Mod, expiry_timestamp, 1, Now + 60]),
+    try
+        T = gen_tcp,
+        Port = get_port(T, Config),
+        Opts = get_opts(T),
+        {ok, S} = T:connect("localhost", Port, Opts),
+        C0 = rabbit_stream_core:init(0),
+        C1 = test_peer_properties(T, S, C0),
+        C2 = test_authenticate(T, S, C1),
+        ok = rpc(Config, 0, meck, expect, [Mod, expiry_timestamp, 1, Now - 60]),
+        expect_successful_authentication(
+          try_authenticate(T, S, C2, <<"PLAIN">>, <<"guest">>, <<"guest">>)),
+        closed = wait_for_socket_close(T, S, 10)
+    after
+        ok = rpc(Config, 0, meck, unload, [Mod])
+    end.
 
 should_receive_metadata_update_after_update_secret(Config) ->
     T = gen_tcp,
