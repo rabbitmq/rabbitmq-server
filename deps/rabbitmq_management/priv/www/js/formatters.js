@@ -975,7 +975,7 @@ function fmt_sort(display, sort) {
             (current_sort_reverse ? '&#9661; ' : '&#9651; ') +
             '</span>';
     }
-    return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
+    return '<a class="sort" sort="' + sort + '">' + prefix + t(display) + '</a>';
 }
 
 function group_count(mode, group, bools) {
