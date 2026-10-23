@@ -19,7 +19,7 @@
 
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4,
-         expiry_timestamp/1]).
+         expiry_timestamp/1, update_state/2]).
 
 -export([init/0, call_count/0]).
 
@@ -64,6 +64,11 @@ check_topic_access(#auth_user{impl = Impl}, #resource{}, _Permission, _TopicCont
 
 expiry_timestamp(#auth_user{impl = Impl}) ->
     Impl().
+
+update_state(_AuthUser, refuse) ->
+    {refused, "refused", []};
+update_state(#auth_user{impl = Impl} = AuthUser, Ts) when is_function(Impl, 0) ->
+    {ok, AuthUser#auth_user{impl = fun() -> Ts end}}.
 
 is_valid(Ts) ->
     Ts > os:system_time(second).
