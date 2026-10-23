@@ -17,40 +17,58 @@
 -define(TIMEOUT, 5000).
 
 all() ->
-    [
-        {group, sequential_tests}
-    ].
+    [{group, trusted},
+     {group, untrusted},
+     {group, invalid},
+     {group, cidr},
+     {group, unconfigured}].
 
-groups() -> [
-        {sequential_tests, [], [
-            proxy_protocol_v1,
-            proxy_protocol_v1_tls,
-            proxy_protocol_v2_local
-        ]}
-    ].
+groups() ->
+    Accepted = [proxy_protocol_v1, proxy_protocol_v1_tls, proxy_protocol_v2_local],
+    [{trusted, [], Accepted},
+     {untrusted, [], [proxy_protocol_v1_untrusted_source_rejected,
+                     proxy_protocol_v1_tls_untrusted_source_rejected,
+                     proxy_protocol_tls_untrusted_source_rejected_without_header,
+                     proxy_protocol_v2_local_untrusted_source_rejected]},
+     {invalid, [], [proxy_protocol_v1_untrusted_source_rejected]},
+     {cidr, [], Accepted},
+     {unconfigured, [], Accepted}].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
+    Config.
+
+end_per_suite(Config) ->
+    Config.
+
+init_per_group(Group, Config) ->
+    TrustedProxies = case Group of
+        trusted -> ["127.0.0.1", "::1"];
+        untrusted -> ["10.0.0.0/8"];
+        invalid -> ["not-an-ip"];
+        cidr -> ["127.0.0.0/8"];
+        unconfigured -> []
+    end,
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
+        {rmq_nodename_suffix, Group}
     ]),
     Config2 = rabbit_ct_helpers:merge_app_env(Config1, [
         {rabbit, [
-            {proxy_protocol, true}
-        ]}
+            {proxy_protocol, true},
+            {proxy_protocol_trusted_proxies, TrustedProxies}
+        ]},
+        {rabbitmq_mqtt, [{proxy_protocol_trusted_proxies, ["127.0.0.1"]}]},
+        {rabbitmq_stomp, [{proxy_protocol_trusted_proxies, ["127.0.0.1"]}]}
     ]),
     Config3 = rabbit_ct_helpers:set_config(Config2, {rabbitmq_ct_tls_verify, verify_none}),
     rabbit_ct_helpers:run_setup_steps(Config3,
         rabbit_ct_broker_helpers:setup_steps() ++
         rabbit_ct_client_helpers:setup_steps()).
 
-end_per_suite(Config) ->
+end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
         rabbit_ct_client_helpers:teardown_steps() ++
         rabbit_ct_broker_helpers:teardown_steps()).
-
-init_per_group(_, Config) -> Config.
-end_per_group(_, Config) -> Config.
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -108,6 +126,44 @@ proxy_protocol_v2_local(Config) ->
     gen_tcp:close(Socket),
     wait_for_connection_close(Config),
     ok.
+
+proxy_protocol_v1_untrusted_source_rejected(Config) ->
+    reject_untrusted_proxy(Config, tcp_port_amqp,
+                           "PROXY TCP4 10.1.2.3 192.168.1.2 80 81\r\n").
+
+proxy_protocol_v1_tls_untrusted_source_rejected(Config) ->
+    reject_untrusted_proxy(Config, tcp_port_amqp_tls,
+                           "PROXY TCP4 10.1.2.3 192.168.1.2 80 81\r\n").
+
+proxy_protocol_tls_untrusted_source_rejected_without_header(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
+    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port, [binary, {active, false}]),
+    try
+        ok = expect_closed(Socket, 1000)
+    after
+        gen_tcp:close(Socket)
+    end.
+
+proxy_protocol_v2_local_untrusted_source_rejected(Config) ->
+    reject_untrusted_proxy(Config, tcp_port_amqp,
+                           ranch_proxy_header:header(#{command => local, version => 2})).
+
+reject_untrusted_proxy(Config, PortKey, Header) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, PortKey),
+    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
+        [binary, {active, false}, {packet, raw}]),
+    ok = gen_tcp:send(Socket, Header),
+    ok = expect_closed(Socket, 1000),
+    gen_tcp:close(Socket).
+
+expect_closed(Socket, Timeout) ->
+    case gen_tcp:recv(Socket, 7, Timeout) of
+        {error, closed} ->
+            ok;
+        %% Closing an SSL socket before its handshake may send these alerts.
+        {ok, <<21, 3, _Minor, 0, 2, 1, Alert>>} when Alert =:= 90; Alert =:= 0 ->
+            expect_closed(Socket, Timeout)
+    end.
 
 connection_name() ->
     Scope = rabbit:pg_scope_amqp091_connection(),

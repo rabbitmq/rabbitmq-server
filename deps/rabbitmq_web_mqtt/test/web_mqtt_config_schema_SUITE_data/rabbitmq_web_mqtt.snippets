@@ -315,5 +315,16 @@
 {proxy_protocol_enabled,
   "web_mqtt.proxy_protocol = true",
   [{rabbitmq_web_mqtt,[{proxy_protocol,true}]}],
-  [rabbitmq_web_mqtt]}
+  [rabbitmq_web_mqtt]},
+
+  {proxy_protocol_trusted_proxies,
+   "proxy_protocol.trusted_proxies.1 = 192.0.2.0/24
+    web_mqtt.proxy_protocol = true
+    web_mqtt.proxy_protocol.trusted_proxies.1 = 127.0.0.1
+    web_mqtt.proxy_protocol.trusted_proxies.2 = ::1",
+   [{rabbit, [{proxy_protocol_trusted_proxies, ["192.0.2.0/24"]}]},
+    {rabbitmq_web_mqtt, [{proxy_protocol, true},
+                       {proxy_protocol_trusted_proxies, ["127.0.0.1", "::1"]}]}],
+   [rabbitmq_web_mqtt]}
+
 ].

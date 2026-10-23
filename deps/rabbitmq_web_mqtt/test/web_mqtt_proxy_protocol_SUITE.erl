@@ -29,7 +29,10 @@ groups() ->
         proxy_protocol_v1,
         proxy_protocol_v2_local,
         loopback_user_via_non_loopback_proxy_is_rejected,
-        loopback_user_via_local_proxy_is_accepted
+        loopback_user_via_local_proxy_is_accepted,
+        proxy_protocol_v1_untrusted_source_rejected,
+        proxy_protocol_v2_local_untrusted_source_rejected,
+        proxy_protocol_v1_unconfigured_trusted_proxies_is_accepted
     ],
     [{https_tests, [], Tests},
      {http_tests, [], Tests}].
@@ -61,8 +64,17 @@ init_per_group(Group, Config) ->
         ]).
 
 configure_proxy_protocol(Config) ->
-    rabbit_ws_test_util:update_app_env(Config, proxy_protocol, true),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, proxy_protocol_trusted_proxies, ["192.0.2.0/24"]]),
+    ok = set_trusted_proxies(Config, ["127.0.0.1", "::1"]),
     Config.
+
+set_trusted_proxies(Config, TrustedProxies) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbitmq_web_mqtt, proxy_protocol_trusted_proxies, TrustedProxies]),
+    rabbit_ws_test_util:update_app_env(Config, proxy_protocol, true).
 
 %% Keep guest unrestricted by default so the other tests pass; the
 %% dedicated tests set their own value.
@@ -120,6 +132,54 @@ proxy_protocol_v2_local(Config) ->
       Config, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>),
     {close, _} = rfc6455_client:close(WS),
     ok.
+
+proxy_protocol_v1_untrusted_source_rejected(Config) ->
+    reject_untrusted_proxy(Config, "PROXY TCP4 10.1.2.3 192.168.1.2 80 81\r\n").
+
+proxy_protocol_v2_local_untrusted_source_rejected(Config) ->
+    reject_untrusted_proxy(Config,
+                           ranch_proxy_header:header(#{command => local, version => 2})).
+
+reject_untrusted_proxy(Config, Header) ->
+    ok = set_trusted_proxies(Config, ["10.0.0.0/8"]),
+    try
+        Port = list_to_integer(rabbit_ws_test_util:get_web_mqtt_port_str(Config)),
+        {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port, [binary, {active, false}]),
+        ok = gen_tcp:send(Socket, Header),
+        ok = expect_closed(Socket, 1000),
+        gen_tcp:close(Socket)
+    after
+        ok = set_trusted_proxies(Config, ["127.0.0.1", "::1"])
+    end.
+
+expect_closed(Socket, Timeout) ->
+    case gen_tcp:recv(Socket, 7, Timeout) of
+        {error, closed} ->
+            ok;
+        %% Closing an SSL socket before its handshake may send these alerts.
+        {ok, <<21, 3, _Minor, 0, 2, 1, Alert>>} when Alert =:= 90; Alert =:= 0 ->
+            expect_closed(Socket, Timeout)
+    end.
+
+%% Unconfigured proxy_protocol_trusted_proxies must still accept the PROXY
+%% header (with a warning), not reject it, to avoid breaking deployments
+%% upgrading from before this allowlist existed.
+proxy_protocol_v1_unconfigured_trusted_proxies_is_accepted(Config) ->
+    ok = set_trusted_proxies(Config, []),
+    try
+        PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
+        Protocol = ?config(protocol, Config),
+        WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
+            undefined, ["mqtt"], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        {ok, _} = rfc6455_client:open(WS),
+        rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
+        {binary, _P} = rfc6455_client:recv(WS),
+        await_connection_name_match(
+          Config, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>),
+        {close, _} = rfc6455_client:close(WS)
+    after
+        ok = set_trusted_proxies(Config, ["127.0.0.1", "::1"])
+    end.
 
 %% A loopback-only user must be evaluated against the PROXY source, not the
 %% immediate peer (the proxy connection itself).

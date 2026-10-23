@@ -33,6 +33,7 @@
          close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, handshake/3, tcp_host/1,
+         proxy_protocol_options/1, warn_if_unconfigured_trusted_proxies/2,
          ranch_ref/1, ranch_ref/2, ranch_refs_of_protocol/1, ranch_ref_to_protocol/1,
          listener_ip_addresses/1, listener_per_ip_address/1,
          listeners_of_protocol/1, stop_ranch_listeners_of_protocol/1,
@@ -621,17 +622,13 @@ force_non_amqp_connection_event_refresh(Ref) ->
   [gen_server:cast(Pid, {force_event_refresh, Ref}) || Pid <- non_amqp_connections()],
   ok.
 
--spec failed_to_recv_proxy_header(_, _) -> no_return().
-failed_to_recv_proxy_header(Ref, Error) ->
+-spec failed_to_recv_proxy_header(_) -> no_return().
+failed_to_recv_proxy_header(Error) ->
     Msg = case Error of
         closed -> "error when receiving proxy header: TCP socket was ~tp prematurely";
         _Other -> "error when receiving proxy header: ~tp"
     end,
     ?LOG_DEBUG(Msg, [Error]),
-    % The following call will clean up resources then exit
-    _ = try ranch:handshake(Ref) catch
-            _:_ -> ok
-        end,
     exit({shutdown, failed_to_recv_proxy_header}).
 
 handshake(Ref, ProxyProtocolEnabled) ->
@@ -642,11 +639,13 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
         true ->
             case ranch:recv_proxy_header(Ref, 3000) of
                 {error, Error} ->
-                    failed_to_recv_proxy_header(Ref, Error);
+                    failed_to_recv_proxy_header(Error);
                 {error, protocol_error, Error} ->
-                    failed_to_recv_proxy_header(Ref, Error);
+                    failed_to_recv_proxy_header(Error);
                 {ok, ProxyInfo} ->
                     {ok, Sock} = ranch_handshake(Ref),
+                    {ok, {PeerAddress, _}} = rabbit_net:peername(Sock),
+                    ok = warn_if_unconfigured_trusted_proxies(Ref, PeerAddress),
                     ok = tune_buffer_size(Sock, BufferStrategy),
                     {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
@@ -655,6 +654,59 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
             ok = tune_buffer_size(Sock, BufferStrategy),
             {ok, Sock}
     end.
+
+-spec proxy_protocol_options(atom()) -> ranch:transport_opts(any()).
+proxy_protocol_options(Application) ->
+    case application:get_env(Application, proxy_protocol_trusted_proxies, []) of
+        [] ->
+            %% Omit the option to preserve acceptance of any peer until the
+            %% allowlist becomes mandatory. Ranch rejects all peers for [].
+            #{};
+        Entries ->
+            #{trusted_proxies => lists:filtermap(fun parse_trusted_proxy/1, Entries)}
+    end.
+
+-spec warn_if_unconfigured_trusted_proxies(ranch:ref(), inet:ip_address()) -> ok.
+warn_if_unconfigured_trusted_proxies(Ref, PeerAddress) ->
+    case maps:is_key(trusted_proxies, ranch:get_transport_options(Ref)) of
+        false ->
+            ?LOG_WARNING(
+               "Accepting PROXY protocol header from ~ts on listener ~tp even though "
+               "proxy_protocol_trusted_proxies is not configured; "
+               "configure it to restrict which peers may use the "
+               "PROXY protocol header",
+               [rabbit_misc:ntoa(PeerAddress), Ref]);
+        true ->
+            ok
+    end.
+
+parse_trusted_proxy(Entry) ->
+    try
+        case string:split(rabbit_data_coercion:to_list(Entry), "/") of
+            [AddrStr] ->
+                {ok, Addr} = inet:parse_address(AddrStr),
+                trusted_proxy(Addr, address_bits(Addr));
+            [AddrStr, PrefixLenStr] ->
+                {ok, Addr} = inet:parse_address(AddrStr),
+                {PrefixLen, ""} = string:to_integer(PrefixLenStr),
+                trusted_proxy(Addr, PrefixLen);
+            _ ->
+                false
+        end
+    catch
+        _:_ -> false
+    end.
+
+trusted_proxy({0, 0, 0, 0, 0, 16#ffff, _, _}, _) ->
+    false;
+trusted_proxy(Addr, PrefixLen) ->
+    case PrefixLen >= 0 andalso PrefixLen =< address_bits(Addr) of
+        true -> {true, {Addr, PrefixLen}};
+        false -> false
+    end.
+
+address_bits(Addr) when tuple_size(Addr) =:= 4 -> 32;
+address_bits(Addr) when tuple_size(Addr) =:= 8 -> 128.
 
 ranch_handshake(Ref) ->
     try ranch:handshake(Ref) catch

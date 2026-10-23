@@ -110,7 +110,7 @@ start_tcp_listener_on(TCPConf, CowboyOpts) ->
     Port = rabbit_misc:pget(port, TCPConf),
     RanchRef = rabbit_networking:ranch_ref(TCPConf),
     RanchTransportOpts =
-    #{
+    (rabbit_networking:proxy_protocol_options(rabbitmq_web_mqtt))#{
       socket_opts => TCPConf,
       max_connections => get_max_connections(),
       num_acceptors => get_env(num_tcp_acceptors, 10),
@@ -147,7 +147,7 @@ start_tls_listener_on(TLSConf, CowboyOpts0) ->
     TLSPort = rabbit_misc:pget(port, TLSConf),
     RanchRef = rabbit_networking:ranch_ref(TLSConf),
     RanchTransportOpts =
-    #{
+    (rabbit_networking:proxy_protocol_options(rabbitmq_web_mqtt))#{
       socket_opts => TLSConf,
       max_connections => get_max_connections(),
       num_acceptors => get_env(num_ssl_acceptors, 10),

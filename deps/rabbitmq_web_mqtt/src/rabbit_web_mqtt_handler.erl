@@ -104,25 +104,8 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) 
 init(Req, Opts) ->
     case check_origin(Req) of
         ok ->
-            case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
-                undefined ->
-                    no_supported_sub_protocol(undefined, Req);
-                Protocol ->
-                    case lists:search(fun(P) -> P =:= <<"mqtt">> orelse P =:= <<"mqttv3.1">> end, Protocol) of
-                        false ->
-                            no_supported_sub_protocol(Protocol, Req);
-                        {value, MatchedProtocol} ->
-                            Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, MatchedProtocol, Req),
-                            State = #state{socket = maps:get(proxy_header, Req, undefined),
-                                           stats_timer = rabbit_event:init_stats_timer()},
-                            WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-                            MaxFrameSize = persistent_term:get(
-                                ?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED) + 4096,
-                            WsOpts = maps:merge(#{compress => true,
-                                                  max_frame_size => MaxFrameSize}, WsOpts0),
-                            {?MODULE, Req1, State, WsOpts#{data_delivery => relay}}
-                    end
-            end;
+            warn_if_unconfigured_trusted_proxies(Req),
+            init0(Req, Opts);
         {error, origin_not_allowed} ->
             ?LOG_WARNING("Web MQTT: WebSocket connection rejected, "
                          "origin not in allow_origins: ~tp",
@@ -130,6 +113,27 @@ init(Req, Opts) ->
             {ok,
              cowboy_req:reply(403, #{<<"connection">> => <<"close">>}, Req),
              #state{}}
+    end.
+
+init0(Req, Opts) ->
+    case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
+        undefined ->
+            no_supported_sub_protocol(undefined, Req);
+        Protocol ->
+            case lists:search(fun(P) -> P =:= <<"mqtt">> orelse P =:= <<"mqttv3.1">> end, Protocol) of
+                false ->
+                    no_supported_sub_protocol(Protocol, Req);
+                {value, MatchedProtocol} ->
+                    Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, MatchedProtocol, Req),
+                    State = #state{socket = maps:get(proxy_header, Req, undefined),
+                                   stats_timer = rabbit_event:init_stats_timer()},
+                    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+                    MaxFrameSize = persistent_term:get(
+                        ?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED) + 4096,
+                    WsOpts = maps:merge(#{compress => true,
+                                          max_frame_size => MaxFrameSize}, WsOpts0),
+                    {?MODULE, Req1, State, WsOpts#{data_delivery => relay}}
+            end
     end.
 
 %% We cannot use a gen_server call, because the handler process is a
@@ -358,6 +362,15 @@ check_origin(Req) ->
                         false -> {error, origin_not_allowed}
                     end
             end
+    end.
+
+warn_if_unconfigured_trusted_proxies(Req) ->
+    case maps:is_key(proxy_header, Req) of
+        false ->
+            ok;
+        true ->
+            {PeerAddress, _} = cowboy_req:peer(Req),
+            rabbit_networking:warn_if_unconfigured_trusted_proxies(maps:get(ref, Req), PeerAddress)
     end.
 
 handle_data(Data, State0 = #state{}) ->

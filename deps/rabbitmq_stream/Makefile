@@ -5,6 +5,8 @@ PROJECT_MOD = rabbit_stream
 define PROJECT_ENV
 [
 	{tcp_listeners, [5552]},
+	{proxy_protocol, false},
+	{proxy_protocol_trusted_proxies, []},
 	{num_tcp_acceptors, 10},
 	{tcp_listen_options, [{backlog,   128},
                           {nodelay,   true}]},

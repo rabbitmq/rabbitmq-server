@@ -179,6 +179,22 @@ end}.
 {mapping, "web_mqtt.proxy_protocol", "rabbitmq_web_mqtt.proxy_protocol",
     [{datatype, boolean}]}.
 
+%% Trusted proxy source IP addresses and CIDRs for Web MQTT TCP and TLS listeners.
+%% If unset, PROXY headers are accepted from any peer with a warning.
+%% This setting will become mandatory in a future release.
+%% Changes take effect when the listeners restart.
+%%
+%% {proxy_protocol_trusted_proxies, ["10.0.0.0/8", "127.0.0.1", "::1"]}
+
+{mapping, "web_mqtt.proxy_protocol.trusted_proxies.$index",
+    "rabbitmq_web_mqtt.proxy_protocol_trusted_proxies", [{datatype, string}]}.
+
+{translation, "rabbitmq_web_mqtt.proxy_protocol_trusted_proxies",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("web_mqtt.proxy_protocol.trusted_proxies", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
 %%
 %% File Handle Cache (no-op, kept for compatibility).
 %%
