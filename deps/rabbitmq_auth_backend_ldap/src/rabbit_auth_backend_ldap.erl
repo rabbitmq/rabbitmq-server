@@ -631,8 +631,6 @@ login({UserDN, Password}, LDAP, Fun) ->
 search(LDAP, Args) ->
     ldap_result(LDAP, eldap:search(LDAP, Args)).
 
-%% Abort the whole query before an operator can turn a connection error into
-%% an access decision or issue another request on the same connection.
 ldap_result(LDAP, {error, Reason} = Error) ->
     case Reason of
         ldap_closed        -> throw({ldap_connection_error, LDAP, Error});
@@ -650,7 +648,7 @@ ldap_result(_LDAP, Result) ->
 is_late_reply({ok, Msg}) ->
     is_tuple(Msg) andalso element(1, Msg) =:= 'LDAPMessage';
 is_late_reply({Op, _}) ->
-    lists:member(Op, [searchResEntry, searchResDone, searchResRef,
+    lists:member(Op, [bindResponse, searchResEntry, searchResDone, searchResRef,
                      modifyResponse, addResponse, delResponse, modDNResponse,
                      compareResponse, extendedResp, intermediateResponse]);
 is_late_reply(_) ->

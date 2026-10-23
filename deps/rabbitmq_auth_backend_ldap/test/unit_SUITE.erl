@@ -41,10 +41,10 @@ all() ->
      one_off_connection_is_replaced_after_failed_operation,
      connection_is_closed_after_failed_starttls,
      connection_error_inside_a_query_is_retried_on_a_new_connection,
-     connection_errors_abort_negated_query,
+     repeated_connection_errors_exhaust_retries,
      connection_error_in_second_operand_is_retried_on_a_new_connection,
      connection_error_in_nested_group_search_is_retried_on_a_new_connection,
-     tag_query_does_not_read_a_late_answer,
+     tag_queries_are_retried_on_a_new_connection,
      user_dn_pattern_gh_7161,
      missing_password_is_not_a_passwordless_login,
      format_different_types_of_ldap_attribute_values,
@@ -454,8 +454,6 @@ connection_is_purged_after_failed_operation(_Config) ->
     with_mocked_eldap(
       fun() ->
               [begin
-                   %% The response to a request that timed out can still arrive,
-                   %% the retry must not read it in place of its own response.
                    {retried, Conn1, Conn2} = with_login_failing_once(Error, Opts),
                    ?assertNotEqual(Conn1, Conn2),
                    ?assertNot(is_process_alive(Conn1)),
@@ -586,7 +584,7 @@ connection_error_inside_a_query_is_retried_on_a_new_connection(_Config) ->
                                                 [true, true, false, true, true])]
       end).
 
-connection_errors_abort_negated_query(_Config) ->
+repeated_connection_errors_exhaust_retries(_Config) ->
     [with_mocked_eldap(
        fun() ->
                Opts = [{idle_timeout, IdleTimeout}, {port, 389},
@@ -608,6 +606,7 @@ connection_errors_abort_negated_query(_Config) ->
      || Error <- [{error, {gen_tcp_error, timeout}},
                   {error, ldap_closed},
                   {error, {searchResDone, result}},
+                  {error, {bindResponse, result}},
                   {error, {ok, {'LDAPMessage', 7, {bindResponse, result},
                                 asn1_NOVALUE}}}],
         Creds <- [anon, {"cn=alice", <<"password">>}],
@@ -705,7 +704,7 @@ connection_error_in_nested_group_search_is_retried_on_a_new_connection(_Config) 
               ?assertEqual([Conn2], maps:values(get(ldap_conns)))
       end).
 
-tag_query_does_not_read_a_late_answer(_Config) ->
+tag_queries_are_retried_on_a_new_connection(_Config) ->
     Monitoring = "cn=monitoring,ou=groups,dc=example,dc=com",
     Administrator = "cn=administrator,ou=groups,dc=example,dc=com",
     Env = [{servers, ["localhost"]}, {port, 389}, {idle_timeout, infinity},
@@ -722,9 +721,6 @@ tag_query_does_not_read_a_late_answer(_Config) ->
         [ok = application:set_env(rabbitmq_auth_backend_ldap, K, V) || {K, V} <- Env],
         with_mocked_eldap(
           fun() ->
-                  %% alice is in monitoring but not in administrator. The answer to
-                  %% a search that times out is read by the next search on the
-                  %% same connection, as eldap does not check the message ID.
                   erase(timed_out),
                   meck:expect(eldap, search,
                               fun(LDAP, SearchArgs) ->
