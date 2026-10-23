@@ -116,6 +116,7 @@ groups() ->
        detach_requeues_one_session_quorum_queue,
        detach_requeues_drop_head_classic_queue,
        detach_receiver_quorum_queue_down,
+       detach_receiver_cancel_error,
        resource_alarm_before_session_begin,
        resource_alarm_after_session_begin,
        resource_alarm_send_many,
@@ -4433,6 +4434,37 @@ detach_receiver_quorum_queue_down(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = CQ}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+detach_receiver_cancel_error(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 30000 -> ct:fail("missing attached")
+    end,
+
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_queue_type,
+    ok = rpc(Config, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, meck, expect, [Mod, cancel, 3, {error, boom}]),
+    ok = amqp10_client:detach_link(Receiver),
+    receive {amqp10_event, {link, Receiver, {detached, Err}}} ->
+                ?assertMatch(#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR}, Err)
+    after 30000 -> ct:fail("missing detached")
+    end,
+    ok = rpc(Config, meck, unload, [Mod]),
+
+    DTag = <<"t1">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag, <<"m1">>, false)),
+    ok = wait_for_accepted(DTag),
+
+    ok = amqp10_client:detach_link(Sender),
+    {ok, #{message_count := 1}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = close({Connection, Session, LinkPair}).
 
 detach_requeues_drop_head_classic_queue(Config) ->
     QName1 = <<"q1">>,
