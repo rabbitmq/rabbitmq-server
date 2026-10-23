@@ -34,6 +34,7 @@ groups() ->
           direct_uri_nonexistent_vhost,
           direct_uri_no_user,
           direct_uri_without_username_denied,
+          direct_uri_own_username_without_password_denied,
           direct_uri_other_username_denied,
           direct_uri_other_username_and_password_allowed,
           direct_uri_administrator_allowed,
@@ -110,6 +111,11 @@ direct_uri_no_user(Config) ->
 direct_uri_without_username_denied(Config) ->
     ?assertMatch([{error, _, _}],
                  validate_with_user(Config, <<"amqp:///", ?ALLOWED_VHOST/binary>>)).
+
+direct_uri_own_username_without_password_denied(Config) ->
+    [?assertMatch([{error, _, _}], validate_with_user(Config, Uri))
+     || Uri <- [<<"amqp://", ?USER/binary, "@/", ?ALLOWED_VHOST/binary>>,
+                <<"amqp://", ?USER/binary, ":@/", ?ALLOWED_VHOST/binary>>]].
 
 %% Such a connection would log in as another user without authenticating.
 direct_uri_other_username_denied(Config) ->
@@ -229,7 +235,7 @@ vhost_for(denied)      -> ?DENIED_VHOST;
 vhost_for(nonexistent) -> ?NONEXISTENT_VHOST.
 
 direct_uri(VHost) ->
-    <<"amqp://", ?USER/binary, "@/", VHost/binary>>.
+    <<"amqp://", ?USER/binary, ":", ?PASSWORD/binary, "@/", VHost/binary>>.
 
 network_uri(VHost) ->
     <<"amqp://", ?USER/binary, ":", ?PASSWORD/binary, "@localhost:5672/", VHost/binary>>.

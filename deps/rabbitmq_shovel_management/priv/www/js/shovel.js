@@ -15,6 +15,17 @@ dispatcher_add(function(sammy) {
                    'dynamic-shovel', '#/dynamic-shovels');
         });
     sammy.put('#/shovel-parameters-move-messages', function() {
+            if (!user_administrator) {
+                var password = this.params['move-password'];
+                if (!password) {
+                    throw('Please specify a password or token.');
+                }
+                var uri = 'amqp://' + esc(user.name) + ':' + esc(password) +
+                    '@/' + esc(this.params['vhost']);
+                this.params['src-uri'] = uri;
+                this.params['dest-uri'] = uri;
+            }
+            delete this.params['move-password'];
             var num_keys = ['src-prefetch-count', 'reconnect-delay'];
             var bool_keys = ['dest-add-forward-headers'];
             var arrayable_keys = ['src-uri', 'dest-uri'];

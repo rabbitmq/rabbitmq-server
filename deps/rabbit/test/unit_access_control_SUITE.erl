@@ -673,11 +673,12 @@ check_login_as(Config) ->
     ok = Check(none, none, false),
     [ok = Check(User(Tags), none, false)
      || Tags <- [[administrator], [<<"administrator">>]]],
-    ok = Check(User([<<"policymaker">>]), <<"pm">>, false),
+    ok = Check(User([<<"policymaker">>]), <<"pm">>, true),
     ok = Check(User([<<"policymaker">>]), <<"other">>, true),
     [{error, _, _} = Check(User(Tags), Username, PasswordChecked)
      || Tags <- [[policymaker], [<<"policymaker">>]],
-        {Username, PasswordChecked} <- [{none, true}, {<<"other">>, false},
+        {Username, PasswordChecked} <- [{none, true}, {<<"pm">>, false},
+                                        {<<"other">>, false},
                                         {<<"guest">>, true}]],
     ok = Check(User([<<"administrator">>]), <<"guest">>, true),
     ok = Check(#user{username = <<"guest">>, tags = [], authz_backends = []},

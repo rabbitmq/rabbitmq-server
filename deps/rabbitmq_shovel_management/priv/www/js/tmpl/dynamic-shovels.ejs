@@ -440,10 +440,10 @@
         connect to local server as default user (administrators only)
       </li><br />
       <li>
-        <code>amqp://user@/my-vhost</code><br/>
-        connect to local server with alternate user and virtual host
-        (passwords are only required for other users, unless you are an
-        administrator)
+        <code>amqp://user:password@/my-vhost</code><br/>
+        connect to local server with a username, password or token, and
+        virtual host (only administrators may omit the password, including
+        when connecting as their own user)
       </li><br />
       <li>
         <code>amqp://server-name</code><br/>

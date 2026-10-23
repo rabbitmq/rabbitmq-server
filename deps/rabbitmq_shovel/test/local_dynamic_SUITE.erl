@@ -348,14 +348,17 @@ security_validation(Config) ->
                        {<<"src-uri">>, SrcUri},
                        {<<"src-queue">>, <<"src">>},
                        {<<"dest-protocol">>, <<"local">>},
-                       {<<"dest-uri">>, <<"amqp://a@/a">>},
+                       {<<"dest-uri">>, <<"amqp://a:pass@/a">>},
                        {<<"dest-queue">>, <<"dest">>}]
               end,
         [shovel_test_utils:valid_param(Config, Def(Uri), A)
-         || Uri <- [<<"amqp://a@unused-host/a">>,
+         || Uri <- [<<"amqp://a:pass@unused-host/a">>,
                     <<"amqp://b:pass@unused-host/a">>]],
         [shovel_test_utils:invalid_param(Config, Def(Uri), A)
-         || Uri <- [<<"amqp://unused-host/a">>,
+         || Uri <- [<<"amqp://a@/a">>,
+                    <<"amqp://a:@/a">>,
+                    <<"amqp://a:@unused-host/a">>,
+                    <<"amqp://unused-host/a">>,
                     <<"amqp:///a">>,
                     <<"amqp://guest:guest@unused-host/a">>,
                     <<"amqp://b:@unused-host/a">>,
