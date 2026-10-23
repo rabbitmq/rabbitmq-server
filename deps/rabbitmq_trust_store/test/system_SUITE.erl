@@ -537,9 +537,8 @@ certificate_issued_by_whitelisted_certificate_denied(Config) ->
            ?MODULE, certificate_issued_by_whitelisted_certificate_denied1, [Config]).
 
 certificate_issued_by_whitelisted_certificate_denied1(Config) ->
-    %% Given: a whitelisted certificate `CertTrusted` issued by a CA the server does not know
-    %% AND a certificate `CertIssued` that is NOT whitelisted and was signed with the
-    %% private key of `CertTrusted`.
+    %% Given: a whitelisted certificate issued by a CA the server does not know,
+    %% and a certificate signed with its private key that is not whitelisted.
     {ServerCACerts, Cert, Key} = ct_helper:make_certs(),
     KeyTrustedRecord = public_key:generate_key({rsa, 2048, 17}),
     TestDataTrusted = public_key:pkix_test_data(#{
@@ -576,17 +575,11 @@ certificate_issued_by_whitelisted_certificate_denied1(Config) ->
                                                             {versions, [Version]}]})
               end,
     [begin
-         %% When: a client presents the whitelisted certificate `CertTrusted`
-         %% Then: the connection is successful
          {ok, Con} = Connect(CertTrusted, KeyTrusted, Version),
          ok = amqp_connection:close(Con),
-         %% When: a client presents `CertIssued` followed by `CertTrusted` as its issuer
-         %% Then: the connection is not successful, a whitelisted certificate is not a CA
          {error, _} = Connect([CertIssued, CertTrusted], KeyIssued, Version)
      end || Version <- ['tlsv1.2', 'tlsv1.3']],
 
-    %% When: `CertIssued` is whitelisted as well
-    %% Then: the same chain is accepted
     ok = whitelist(Config, "bob", CertIssued),
     rabbit_trust_store:refresh(),
     [begin
@@ -594,7 +587,6 @@ certificate_issued_by_whitelisted_certificate_denied1(Config) ->
          ok = amqp_connection:close(Con)
      end || Version <- ['tlsv1.2', 'tlsv1.3']],
 
-    %% Clean: server TLS/TCP
     ok = rabbit_networking:stop_tcp_listener(Port).
 
 whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root(Config) ->
@@ -698,7 +690,6 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
         {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
     end,
 
-    %% Clean: server TLS/TCP
     ok = rabbit_networking:stop_tcp_listener(Port).
 
 
