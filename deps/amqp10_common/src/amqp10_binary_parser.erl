@@ -148,8 +148,7 @@ parse_array1(UnitSize, Count, <<?DESCRIBED, Rest/binary>>) ->
     {Descriptor, B1} = parse_array_descriptor(Count, Rest),
     case Rest of
         <<_ParsedDescriptorBin:B1/binary, ?DESCRIBED, _/binary>> ->
-            %% Each further described constructor costs as little as two bytes
-            %% on the wire, but would wrap each of the Count elements once more.
+            %% Only a single level of described element constructor is supported.
             throw({array_of_nested_described_elements_unsupported, Count});
         <<_ParsedDescriptorBin:B1/binary, Rest1/binary>> ->
             case parse_array1(UnitSize, Count, Rest1) of
@@ -186,9 +185,7 @@ parse_array1(_UnitSize, Count, <<Type, ArrayBin/binary>>) ->
 parse_array1(_UnitSize, Count, <<>>) ->
     throw({failed_to_parse_array_element_constructor, Count}).
 
-%% The descriptor is encoded once but becomes part of each of the Count parsed
-%% elements, and the sharing is lost once the array is serialised or copied to
-%% another process.
+%% Array element descriptors are limited to small primitive values.
 parse_array_descriptor(Count, <<Type, _/binary>>)
   when Type =:= ?DESCRIBED orelse Type >= 16#c0 ->
     throw({array_descriptor_type_unsupported, Type, Count});
@@ -216,8 +213,7 @@ parse_array2(Count, Type, Bin, Acc) ->
             throw({failed_to_parse_array_insufficient_input, Type, Count, Acc})
     end.
 
-%% A list32, map32 or array32 element is parsed in place: putting the constructor
-%% back in front of it would copy what is nested within once per nesting level.
+%% list32, map32 and array32 elements are parsed without copying the element.
 parse_array_element(16#d0, <<_Size:32, _IgnoreCount:32, Value/binary>>) ->
     {list, parse_many(Value, [])};
 parse_array_element(16#d1, <<_Size:32, _IgnoreCount:32, Value/binary>>) ->
