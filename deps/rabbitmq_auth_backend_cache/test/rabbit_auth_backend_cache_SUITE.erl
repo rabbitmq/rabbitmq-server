@@ -20,7 +20,8 @@ all() ->
     cache_expiration_topic,
     cache_hit_across_reconnections,
     expiry_timestamp_delegation,
-    cache_entries_do_not_outlive_credentials
+    cache_entries_do_not_outlive_credentials,
+    expiry_timestamp_of_different_authn_backend
     ].
 
 init_per_suite(Config) ->
@@ -66,6 +67,17 @@ init_per_testcase(cache_entries_do_not_outlive_credentials, Config) ->
        rabbit_auth_backend_cache_expiring_mock]),
     ok = rpc(Config, rabbit_auth_backend_cache, clear_cache, []),
     Config;
+init_per_testcase(expiry_timestamp_of_different_authn_backend, Config) ->
+    ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(
+           Config, rabbit_auth_backend_cache_expiring_mock),
+    ok = rpc(Config, rabbit_auth_backend_cache_expiring_mock, init, []),
+    ok = rpc(
+      Config, application, set_env,
+      [rabbitmq_auth_backend_cache, cached_backend,
+       {rabbit_auth_backend_cache_expiring_mock,
+        rabbit_auth_backend_internal}]),
+    ok = rpc(Config, rabbit_auth_backend_cache, clear_cache, []),
+    Config;
 init_per_testcase(_TestCase, Config) ->
     Config.
 
@@ -79,7 +91,9 @@ end_per_testcase(cache_expiration, Config) ->
     rabbit_ct_broker_helpers:add_user(Config, <<"guest">>),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"/">>),
     Config;
-end_per_testcase(cache_hit_across_reconnections, Config) ->
+end_per_testcase(TestCase, Config)
+  when TestCase == cache_hit_across_reconnections;
+       TestCase == expiry_timestamp_of_different_authn_backend ->
     %% Restore the default cached_backend defined in the application's
     %% PROJECT_ENV so that subsequent test cases are unaffected.
     ok = rpc(
@@ -260,6 +274,21 @@ cache_entries_do_not_outlive_credentials(Config) ->
     false = rpc(Config,rabbit_auth_backend_cache, check_vhost_access, [Auth, <<"/">>, undefined]),
     false = rpc(Config,rabbit_auth_backend_cache, check_resource_access, [Auth, Resource, read, #{}]),
     false = rpc(Config,rabbit_auth_backend_cache, check_topic_access, [Auth, Resource, read, #{}]).
+
+expiry_timestamp_of_different_authn_backend(Config) ->
+    Ts = os:system_time(seconds) + 60,
+    {ok, User} = rpc(Config, rabbit_access_control, check_user_login,
+                     [<<"guest">>, [{password, Ts}],
+                      [rabbit_auth_backend_cache]]),
+    Ts = rpc(Config, rabbit_access_control, expiry_timestamp, [User]),
+    %% Refreshes go to the authn backend, which keeps the expiry.
+    {ok, User1} = rpc(Config, rabbit_access_control, update_state, [User, Ts + 60]),
+    Ts1 = Ts + 60,
+    Ts1 = rpc(Config, rabbit_access_control, expiry_timestamp, [User1]),
+    {ok, User2} = rpc(Config, rabbit_access_control, update_state, [User1, Ts + 120]),
+    Ts2 = Ts + 120,
+    Ts2 = rpc(Config, rabbit_access_control, expiry_timestamp, [User2]),
+    {refused, _, _} = rpc(Config, rabbit_access_control, update_state, [User2, refuse]).
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).

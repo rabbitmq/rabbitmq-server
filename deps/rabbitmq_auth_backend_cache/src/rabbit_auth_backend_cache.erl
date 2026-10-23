@@ -18,6 +18,8 @@
          clear_cache_cluster_wide/0, clear_cache/0,
          init_key_salt/0, cache_key/2]).
 
+-define(AUTHN_IMPL(Impl), {?MODULE, authn, Impl}).
+
 %% API
 
 -spec user_login_authentication(rabbit_types:username(), [term()] | map()) ->
@@ -25,12 +27,13 @@
     {'refused', string(), [any()]} |
     {'error', any()}.
 user_login_authentication(Username, AuthProps) ->
-    with_cache(authn, {user_login_authentication, [Username, AuthProps]},
+    Result = with_cache(authn, {user_login_authentication, [Username, AuthProps]},
         fun({ok, _})          -> success;
            ({refused, _, _})  -> refusal;
            ({error, _} = Err) -> Err;
            (_)                -> unknown
-        end).
+        end),
+    tag_authn_impl(Result).
 
 -spec user_login_authorization(rabbit_types:username(), [term()] | map()) ->
     {'ok', any()} |
@@ -75,6 +78,12 @@ check_topic_access(#auth_user{} = AuthUser,
                fun convert_backend_result/1).
 
 -spec expiry_timestamp(rabbit_types:auth_user()) -> integer() | never.
+expiry_timestamp(#auth_user{impl = ?AUTHN_IMPL(Impl)} = AuthUser) ->
+    Backend = get_cached_backend(authn),
+    case erlang:function_exported(Backend, expiry_timestamp, 1) of
+        true  -> Backend:expiry_timestamp(AuthUser#auth_user{impl = Impl});
+        false -> never
+    end;
 expiry_timestamp(AuthUser) ->
     Backend = get_cached_backend(authz),
     Backend:expiry_timestamp(AuthUser).
@@ -83,6 +92,10 @@ expiry_timestamp(AuthUser) ->
     {'ok', rabbit_types:auth_user()} |
     {'refused', string(), [any()]} |
     {'error', any()}.
+update_state(#auth_user{impl = ?AUTHN_IMPL(Impl)} = AuthUser, NewState) ->
+    Backend = get_cached_backend(authn),
+    tag_authn_impl(
+      Backend:update_state(AuthUser#auth_user{impl = Impl}, NewState));
 update_state(AuthUser, NewState) ->
     Backend = get_cached_backend(authz),
     Backend:update_state(AuthUser, NewState).
@@ -90,6 +103,17 @@ update_state(AuthUser, NewState) ->
 %%
 %% Implementation
 %%
+
+%% When different backends are cached for authn and authz, mark the state
+%% returned by the former so that `expiry_timestamp/1' and `update_state/2'
+%% hand it back to the backend it belongs to.
+tag_authn_impl({ok, #auth_user{impl = Impl} = AuthUser} = Result) ->
+    case get_cached_backend(authn) =:= get_cached_backend(authz) of
+        true  -> Result;
+        false -> {ok, AuthUser#auth_user{impl = ?AUTHN_IMPL(Impl)}}
+    end;
+tag_authn_impl(Result) ->
+    Result.
 
 convert_backend_result(true) -> success;
 convert_backend_result(false) -> refusal;
