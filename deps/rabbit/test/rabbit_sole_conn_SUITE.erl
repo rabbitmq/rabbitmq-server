@@ -51,7 +51,8 @@ groups() ->
         khepri_cas,
         acquire_with_none_policy_should_always_succeed,
         refuse_connection_should_return_refuse_connection_on_unexpected_khepri_error,
-        is_feature_enabled_reflects_flag_state
+        is_feature_enabled_reflects_flag_state,
+        pick_bootstrap_node
       ]}
     ].
 
@@ -403,6 +404,17 @@ is_feature_enabled_reflects_flag_state(_) ->
                  rabbit_sole_conn:force_delete(?VH, ?CID1)),
 
     ok = meck:expect(rabbit_feature_flags, is_enabled, fun(_) -> true end),
+    ok.
+
+pick_bootstrap_node(_) ->
+    Pick = fun rabbit_sole_conn:pick_bootstrap_node/3,
+    ?assertEqual(local, Pick(local, 4, [])),
+    ?assertEqual(local, Pick(local, 4, [{n1, 4}, {n2, 4}])),
+    ?assertEqual(local, Pick(local, 4, [{n1, 5}, {n2, 5}])),
+    ?assertEqual(n2, Pick(local, 5, [{n1, 5}, {n2, 4}, {n3, 6}])),
+    ?assertEqual(n2, Pick(local, 5, [{n1, 4}, {n2, 3}, {n3, 4}])),
+    ?assertEqual(n1, Pick(local, 5, [{n3, 4}, {n1, 4}, {n2, 4}])),
+    ?assertEqual(n1, Pick(local, 5, [{n2, 4}, {n1, 4}])),
     ok.
 
 %% --------------------------------------------------------------

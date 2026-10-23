@@ -80,7 +80,8 @@
 %% for testing
 -export([conn/2,
          try_put/3,
-         conn_path/2]).
+         conn_path/2,
+         pick_bootstrap_node/3]).
 
 -type container_id() :: binary().
 -type wipe_status() :: ok | not_started | {error, term()}.
@@ -586,24 +587,64 @@ recover() ->
 ensure_running() ->
     case whereis(?GEN_SERVER_NAME) of
         undefined ->
-            ?LOG_DEBUG("sole_conn not running on ~p, "
-                       "trying to acquire bootstrap lock", [node()]),
-            global:set_lock(?BOOTSTRAP_LOCK),
-            try
-                case whereis(?GEN_SERVER_NAME) of
-                    undefined ->
-                        start_local_store();
-                    _Pid ->
-                        ?LOG_DEBUG("sole_conn has started on ~p, skipping bootstrap sequence",
-                                   [node()]),
-                        ok
-                end
-            after
-                %% Lock is released even if an exception occurs
-                global:del_lock(?BOOTSTRAP_LOCK)
+            ok = maybe_delegate_bootstrap(),
+            ensure_running_locked();
+        _ ->
+            ok
+    end.
+
+ensure_running_locked() ->
+    ?LOG_DEBUG("sole_conn not running on ~p, "
+               "trying to acquire bootstrap lock", [node()]),
+    global:set_lock(?BOOTSTRAP_LOCK),
+    try
+        case whereis(?GEN_SERVER_NAME) of
+            undefined ->
+                start_local_store();
+            _Pid ->
+                ?LOG_DEBUG("sole_conn has started on ~p, skipping bootstrap sequence",
+                           [node()]),
+                ok
+        end
+    after
+        %% Lock is released even if an exception occurs
+        global:del_lock(?BOOTSTRAP_LOCK)
+    end.
+
+%% A Ra leader without peers upgrades to its latest machine version at once,
+%% so the node with the oldest Khepri machine version bootstraps the store.
+maybe_delegate_bootstrap() ->
+    case ra_directory:uid_of(get_ra_system(), get_store_id()) of
+        undefined ->
+            OtherNodes = rabbit_nodes:list_running() -- [node()],
+            case find_active_peer(OtherNodes) of
+                undefined -> delegate_bootstrap(OtherNodes);
+                _PeerNode -> ok
             end;
         _ ->
             ok
+    end.
+
+delegate_bootstrap(OtherNodes) ->
+    MacVers = machine_versions(OtherNodes),
+    case pick_bootstrap_node(node(), khepri_machine:version(), MacVers) of
+        Node when Node =:= node() ->
+            ok;
+        Node ->
+            ?LOG_INFO("~ts: node ~w runs an older Khepri machine version, "
+                      "asking it to bootstrap the sole_conn Khepri store",
+                      [?MODULE, Node]),
+            %% The remote node may run an older version of this module.
+            try
+                ok = erpc:call(Node, ?MODULE, ensure_running, [],
+                               leader_wait_retry_timeout())
+            catch
+                Class:Reason ->
+                    ?LOG_WARNING("~ts: node ~w failed to bootstrap the sole_conn "
+                                 "Khepri store. Error: ~p:~p",
+                                 [?MODULE, Node, Class, Reason]),
+                    erlang:error({bootstrap_delegation_failed, Node, Reason})
+            end
     end.
 
 start_local_store() ->
@@ -972,6 +1013,21 @@ find_active_peer([Node | Rest]) ->
         error:{erpc, _Reason} ->
             %% Node is unreachable or timed out, move on to the next one
             find_active_peer(Rest)
+    end.
+
+-spec machine_versions([node()]) -> [{node(), non_neg_integer()}].
+machine_versions(Nodes) ->
+    Results = erpc:multicall(Nodes, khepri_machine, version, [],
+                             ?MAC_VER_RPC_TIMEOUT),
+    [{Node, MacVer} || {Node, {ok, MacVer}} <- lists:zip(Nodes, Results),
+                       is_integer(MacVer)].
+
+-spec pick_bootstrap_node(node(), non_neg_integer(),
+                          [{node(), non_neg_integer()}]) -> node().
+pick_bootstrap_node(LocalNode, LocalMacVer, MacVers) ->
+    case [{MacVer, Node} || {Node, MacVer} <- MacVers, MacVer < LocalMacVer] of
+        []    -> LocalNode;
+        Older -> element(2, lists:min(Older))
     end.
 
 default_command_options() ->
