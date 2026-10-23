@@ -27,6 +27,7 @@ groups() ->
        run_bounded_by_caller_depth,
        run_accepts_leading_verbs,
        run_reports_compile_error_position,
+       run_refuses_heap_limit,
        run_converts_re_badarg_to_error_tuple,
        matches_returns_true_for_match,
        matches_returns_false_for_nomatch,
@@ -39,6 +40,7 @@ groups() ->
        compile_rejects_charlist_just_over_cap,
        compile_returns_re_error_for_invalid_pattern,
        compile_returns_error_for_invalid_utf8,
+       compile_refuses_heap_limit,
        compile_with_options_passes_them_through,
        match_limit_constant,
        max_pattern_length_constant,
@@ -162,6 +164,14 @@ run_reports_compile_error_position(_Config) ->
     Error = rabbit_re:run(<<"a">>, <<"a(">>, [report_errors]),
     ok.
 
+run_refuses_heap_limit(_Config) ->
+    {error, heap_limit_not_allowed} =
+        rabbit_re:run(<<"a">>, <<"(*LIMIT_HEAP=1000)a">>),
+    {error, heap_limit_not_allowed} =
+        rabbit_re:run(<<"a">>, "(*UCP)(*LIMIT_HEAP=1000)a", [unicode]),
+    false = rabbit_re:matches(<<"a">>, <<"(*LIMIT_HEAP=1000)a">>),
+    ok.
+
 run_returns_after_yield(_Config) ->
     Groups = iolist_to_binary(["(?(DEFINE)((?2){40})((?3){40})((?4){40})())",
                                binary:copy(<<"()">>, 20), "(?1)(?!)"]),
@@ -211,6 +221,12 @@ compile_returns_error_for_invalid_utf8(_Config) ->
     {error, _} = Error = re:compile(<<"a", 255>>, [unicode]),
     Error = rabbit_re:compile(<<"a", 255>>, [unicode]),
     {ok, _} = rabbit_re:compile([$a, 16#101], [unicode]),
+    ok.
+
+compile_refuses_heap_limit(_Config) ->
+    {error, heap_limit_not_allowed} = rabbit_re:compile(<<"(*LIMIT_HEAP=1000)a">>),
+    {error, heap_limit_not_allowed} = rabbit_re:compile([<<"(*LIMIT_">>, "HEAP=1000)a"]),
+    {ok, _} = rabbit_re:compile(<<"(*LIMIT_MATCH=1000)a">>),
     ok.
 
 compile_with_options_passes_them_through(_Config) ->
