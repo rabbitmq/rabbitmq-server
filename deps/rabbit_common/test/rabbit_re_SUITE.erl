@@ -130,8 +130,6 @@ run_bounded_in_memory(_Config) ->
         <<"8.", _/binary>> ->
             {skip, "PCRE 8 frames differ from PCRE2's"};
         _ ->
-            %% Well within the match limits, but every backtracking frame has
-            %% room for the offsets of 500 capture groups.
             Pat   = iolist_to_binary([binary:copy(<<"()">>, 500), "(?:a|b)*$"]),
             Input = binary:copy(<<"a">>, 4000),
             match = re:run(Input, Pat, [{match_limit, rabbit_re:match_limit()},
@@ -164,8 +162,6 @@ run_reports_compile_error_position(_Config) ->
     Error = rabbit_re:run(<<"a">>, <<"a(">>, [report_errors]),
     ok.
 
-%% A limit reached after `re:run/3` has yielded must not kill the caller, as
-%% an exceeded PCRE2 heap limit does.
 run_returns_after_yield(_Config) ->
     Groups = iolist_to_binary(["(?(DEFINE)((?2){40})((?3){40})((?4){40})())",
                                binary:copy(<<"()">>, 20), "(?1)(?!)"]),
