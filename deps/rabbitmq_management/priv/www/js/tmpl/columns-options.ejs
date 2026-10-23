@@ -16,6 +16,9 @@
       <th><label><%= group %>:</label></th>
       <td>
       <% for (var i = 0; i < options.length; i++) {
+           if (is_modern_only_column(mode, options[i][0])) {
+             continue;
+           }
            if (mode === 'connections' && options[i][0] === 'channels' &&
                !channels_visible()) {
              continue;

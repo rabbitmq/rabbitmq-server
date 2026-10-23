@@ -173,6 +173,7 @@ all_tests() -> [
     permissions_test,
     multiple_invalid_connections_test,
     quorum_queues_test,
+    queue_message_rates_test,
     stream_queues_have_consumers_field,
     bindings_post_test,
     bindings_post_non_object_body_test,
@@ -252,6 +253,7 @@ all_tests() -> [
     connections_amqpl,
     connections_amqp,
     amqp_sessions,
+    amqp_message_rates,
     amqp_consumer_channel_details,
     amqpl_sessions,
     enable_plugin_amqp,
@@ -1301,6 +1303,90 @@ connections_amqp(Config) ->
     eventually(?_assertEqual([], http_get(Config, "/connections")), 10, 5),
     ?assertEqual(0, length(rpc(Config, rabbit_amqp_reader, local_connections, []))).
 
+amqp_message_rates(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => ?config(rmq_hostname, Config),
+                port => Port,
+                container_id => <<"rates container">>,
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    {ok, C} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, C, opened}} -> ok
+    after 5000 -> ct:fail(opened_timeout)
+    end,
+    {ok, Session} = amqp10_client:begin_session_sync(C),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
+                       Session, <<"link pair">>),
+    QName = <<"amqp rates">>,
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}},
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(
+                     Session, <<"sender">>, Address),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:flow_link_credit(Receiver, 1000, never),
+    NumMsgs = 100,
+    [begin
+         Msg = amqp10_msg:new(<<N:32>>, <<"payload">>, false),
+         ok = amqp10_client:send_msg(Sender, Msg),
+         receive {amqp10_disposition, {accepted, <<N:32>>}} -> ok
+         after 5000 -> ct:fail({missing_disposition, N})
+         end
+     end || N <- lists:seq(1, NumMsgs)],
+    [receive {amqp10_msg, Receiver, M} -> ok = amqp10_client:accept_msg(Receiver, M)
+     after 5000 -> ct:fail({missing_message, N})
+     end || N <- lists:seq(1, NumMsgs)],
+
+    [begin
+         ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<N:32>>, <<"payload">>, false)),
+         receive {amqp10_disposition, {accepted, <<N:32>>}} -> ok
+         after 5000 -> ct:fail({missing_disposition, N})
+         end,
+         receive {amqp10_msg, Receiver, M1} ->
+                     ok = amqp10_client:settle_msg(Receiver, M1, rejected)
+         after 5000 -> ct:fail({missing_message, N})
+         end
+     end || N <- lists:seq(NumMsgs + 1, NumMsgs + 10)],
+    [begin
+         ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<N:32>>, <<"payload">>, false)),
+         receive {amqp10_disposition, {accepted, <<N:32>>}} -> ok
+         after 5000 -> ct:fail({missing_disposition, N})
+         end,
+         receive {amqp10_msg, Receiver, M2} ->
+                     ok = amqp10_client:settle_msg(Receiver, M2, released)
+         after 5000 -> ct:fail({missing_message, N})
+         end,
+         receive {amqp10_msg, Receiver, M3} ->
+                     ok = amqp10_client:accept_msg(Receiver, M3)
+         after 5000 -> ct:fail({missing_redelivery, N})
+         end
+     end || N <- lists:seq(NumMsgs + 11, NumMsgs + 20)],
+
+    await_condition(
+      fun() ->
+              [#{message_rates := #{publish := Publish,
+                                    deliver := Deliver,
+                                    redeliver := Redeliver,
+                                    ack := Ack,
+                                    reject := Reject}}] = http_get(Config, "/connections"),
+              Publish > 0 andalso Deliver > 0 andalso Redeliver > 0 andalso
+              Ack > 0 andalso Reject > 0
+      end),
+    await_condition(
+      fun() ->
+              #{message_rates := #{publish := Publish,
+                                   deliver := Deliver,
+                                   redeliver := Redeliver,
+                                   ack := Ack,
+                                   reject := Reject}} = http_get(Config, "/queues/%2F/amqp%20rates"),
+              Publish > 0 andalso Deliver > 0 andalso Redeliver > 0 andalso
+              Ack > 0 andalso Reject > 0
+      end),
+    ok = amqp10_client:close_connection(C).
+
 %% Test that AMQP 1.0 sessions and links can be listed via the rabbitmq_management plugin.
 amqp_sessions(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
@@ -1727,6 +1813,66 @@ quorum_queues_test_loop(Config, N) ->
     http_delete(Config, "/queues/%2f/qq", {group, '2xx'}),
     close_connection(Conn),
     quorum_queues_test_loop(Config, N-1).
+
+queue_message_rates_test(Config) ->
+    http_put(Config, "/queues/%2f/rates-idle", [{durable, true}], {group, '2xx'}),
+    lists:foreach(
+      fun(Type) ->
+              Q = <<"rates-", Type/binary>>,
+              Path = "/queues/%2f/" ++ binary_to_list(Q),
+              Args = [{durable, true},
+                      {arguments, [{'x-queue-type', binary_to_atom(Type)}]}],
+              http_put(Config, Path, Args, {group, '2xx'}),
+              {Conn, Ch} = open_connection_and_channel(Config),
+              amqp_channel:subscribe(
+                Ch, #'basic.consume'{queue = Q, no_ack = true}, self()),
+              Tag = receive #'basic.consume_ok'{consumer_tag = T} -> T
+                    after 5000 -> ct:fail(consume_ok_timeout)
+                    end,
+              Publish = fun() ->
+                                amqp_channel:call(
+                                  Ch, #'basic.publish'{exchange = <<"">>,
+                                                       routing_key = Q},
+                                  #amqp_msg{payload = <<"message">>})
+                        end,
+              [Publish() || _ <- lists:seq(1, 100)],
+              await_condition(
+                fun() ->
+                        #{message_rates := #{publish := P,
+                                             deliver := D,
+                                             ack := A}} = http_get(Config, Path),
+                        P > 0 andalso D > 0 andalso A > 0
+                end),
+              #'basic.cancel_ok'{} =
+                  amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = Tag}),
+              [Publish() || _ <- lists:seq(1, 10)],
+              Get = fun() ->
+                            {#'basic.get_ok'{delivery_tag = DTag}, _} =
+                                amqp_channel:call(Ch, #'basic.get'{queue = Q,
+                                                                   no_ack = false}),
+                            DTag
+                    end,
+              [amqp_channel:call(Ch, #'basic.reject'{delivery_tag = Get(),
+                                                     requeue = false})
+               || _ <- lists:seq(1, 5)],
+              [amqp_channel:call(Ch, #'basic.reject'{delivery_tag = Get(),
+                                                     requeue = true})
+               || _ <- lists:seq(1, 5)],
+              [amqp_channel:call(Ch, #'basic.ack'{delivery_tag = Get()})
+               || _ <- lists:seq(1, 5)],
+              await_condition(
+                fun() ->
+                        #{message_rates := #{redeliver := Redeliver,
+                                             reject := Reject}} = http_get(Config, Path),
+                        Redeliver > 0 andalso Reject > 0
+                end),
+              [#{name := Q}, #{name := <<"rates-idle">>}] =
+                  http_get(Config, "/queues?sort=message_rates.publish&sort_reverse=true"),
+              http_delete(Config, Path, {group, '2xx'}),
+              close_connection(Conn)
+      end, [<<"classic">>, <<"quorum">>]),
+    http_delete(Config, "/queues/%2f/rates-idle", {group, '2xx'}),
+    passed.
 
 stream_queues_have_consumers_field(Config) ->
     Good = [{durable, true}, {arguments, [{'x-queue-type', 'stream'}]}],

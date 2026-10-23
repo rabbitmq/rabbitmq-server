@@ -90,6 +90,10 @@
          %% exported for testability, the aux ingress state is otherwise opaque
          update_ingress/3,
          compute_ingress_rates/1,
+         new_rates_aux/0,
+         update_rates/3,
+         rates_snapshot/1,
+         rates_snapshot/2,
          % queries
          query_messages_ready/1,
          query_messages_checked_out/1,
@@ -338,7 +342,9 @@ apply_(Meta, #discard{consumer_key = ConsumerKey,
       #?STATE{consumers = Consumers } = State0) ->
     case find_consumer(ConsumerKey, Consumers) of
         {ActualConsumerKey, #consumer{} = Con} ->
-            discard(Meta, MsgIds, ActualConsumerKey, Con, true, #{}, State0);
+            with_rate_event(reject, Meta, MsgIds,
+                            discard(Meta, MsgIds, ActualConsumerKey, Con,
+                                    true, #{}, State0));
         _ ->
             handle_waiting_timedout_consumers(Meta, ConsumerKey,
                                               MsgIds, State0)
@@ -348,8 +354,9 @@ apply_(Meta, #return{consumer_key = ConsumerKey,
        #?STATE{consumers = Cons} = State) ->
     case find_consumer(ConsumerKey, Cons) of
         {ActualConsumerKey, Consumer} ->
-            return(Meta, ActualConsumerKey, Consumer, MsgIds, false,
-                   #{}, [], State);
+            with_rate_event(redeliver, Meta, MsgIds,
+                            return(Meta, ActualConsumerKey, Consumer, MsgIds,
+                                   false, #{}, [], State));
         _ ->
             handle_waiting_timedout_consumers(Meta, ConsumerKey, MsgIds, State)
     end;
@@ -362,12 +369,14 @@ apply_(Meta, #modify{consumer_key = ConsumerKey,
     case find_consumer(ConsumerKey, Cons) of
         {ActualConsumerKey, Consumer}
           when UndelHere == false ->
-            return(Meta, ActualConsumerKey, Consumer, MsgIds, DeliveryFailed,
-                   Anns, [], State);
+            with_rate_event(redeliver, Meta, MsgIds,
+                            return(Meta, ActualConsumerKey, Consumer, MsgIds,
+                                   DeliveryFailed, Anns, [], State));
         {ActualConsumerKey, Consumer}
           when UndelHere == true ->
-            discard(Meta, MsgIds, ActualConsumerKey,
-                    Consumer, DeliveryFailed, Anns, State);
+            with_rate_event(reject, Meta, MsgIds,
+                            discard(Meta, MsgIds, ActualConsumerKey,
+                                    Consumer, DeliveryFailed, Anns, State));
         _ ->
             handle_waiting_timedout_consumers(Meta, ConsumerKey, MsgIds, State)
     end;
@@ -1322,7 +1331,7 @@ which_module(7) -> rabbit_fifo_v7;
 which_module(8) -> rabbit_fifo_v8;
 which_module(9) -> ?MODULE.
 
--define(AUX, aux_v5).
+-define(AUX, aux_v6).
 -define(DEFAULT_INGRESS_DECAY_MS, 60_000).
 
 -record(ingress_aux,
@@ -1335,6 +1344,16 @@ which_module(9) -> ?MODULE.
                    messages_total = 0 :: non_neg_integer(),
                    reclaimable_bytes = 0 :: non_neg_integer(),
                    min_reclaimable = ?SNAP_MIN_RECLAIMABLE_B :: non_neg_integer()}).
+-define(RATE_EVENT_MAX_AGE_MS, 30_000).
+
+-record(rates_aux,
+        {last_ts :: undefined | integer(),
+         events = #{redeliver => 0, reject => 0} ::
+             #{redeliver | reject => non_neg_integer()},
+         enqueuers = #{} :: #{pid() => msg_seqno()},
+         consumers = #{} :: #{consumer_key() => msg_id()},
+         messages_total = 0 :: non_neg_integer(),
+         rates :: rabbit_msg_rates:state()}).
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(?AUX, {name :: atom(),
                last_decorators_state :: term(),
@@ -1345,7 +1364,8 @@ which_module(9) -> ?MODULE.
                cache = #{} :: map(),
                last_checkpoint :: tuple() | #snapshot{},
                ingress = #ingress_aux{} :: #ingress_aux{},
-               has_decorators = unknown :: unknown | boolean()
+               has_decorators = unknown :: unknown | boolean(),
+               rates :: #rates_aux{}
               }).
 
 init_aux(Name) when is_atom(Name) ->
@@ -1366,7 +1386,83 @@ init_aux(Name) when is_atom(Name) ->
                                       timestamp = erlang:system_time(millisecond),
                                       messages_total = 0,
                                       min_reclaimable = MinReclaimable},
-          ingress = #ingress_aux{decay_ms = DecayMs}}.
+          ingress = #ingress_aux{decay_ms = DecayMs},
+          rates = new_rates_aux()}.
+
+new_rates_aux() ->
+    #rates_aux{rates = rabbit_msg_rates:new()}.
+
+rates_snapshot(#rates_aux{rates = Rates}) ->
+    rabbit_msg_rates:snapshot(Rates).
+
+rates_snapshot(#rates_aux{rates = Rates}, Ts) ->
+    rabbit_msg_rates:snapshot(Rates, Ts).
+
+%% Rates come from the per-enqueuer sequence numbers and per-consumer message
+%% ids, so the machine needs no counters. The first observation only sets the
+%% baseline.
+update_rates(#?STATE{enqueuers = Enqueuers,
+                     consumers = Consumers,
+                     messages_total = Total},
+             Ts, #rates_aux{last_ts = undefined} = R) ->
+    R#rates_aux{last_ts = Ts,
+                enqueuers = enqueuer_seqnos(Enqueuers),
+                consumers = consumer_msg_ids(Consumers),
+                messages_total = Total,
+                rates = rabbit_msg_rates:new(Ts)};
+update_rates(#?STATE{enqueuers = Enqueuers,
+                     consumers = Consumers,
+                     messages_total = Total},
+             Ts, #rates_aux{last_ts = LastTs,
+                            events = Events,
+                            enqueuers = LastEnqueuers,
+                            consumers = LastConsumers,
+                            messages_total = LastTotal,
+                            rates = Rates0} = R)
+  when Ts > LastTs ->
+    Interval = Ts - LastTs,
+    NewEnqueuers = enqueuer_seqnos(Enqueuers),
+    NewConsumers = consumer_msg_ids(Consumers),
+    Enqueued = counter_delta(NewEnqueuers, LastEnqueuers, 1),
+    Delivered = counter_delta(NewConsumers, LastConsumers, 0),
+    %% Any message that left the queue counts, including expired ones.
+    Removed = max(0, Enqueued - (Total - LastTotal)),
+    #{reject := Rejected} = Events,
+    Deltas = Events#{publish => Enqueued,
+                     deliver => Delivered,
+                     ack => max(0, Removed - Rejected)},
+    Rates = rabbit_msg_rates:observe_deltas(Deltas, Interval, Ts, Rates0),
+    R#rates_aux{last_ts = Ts,
+                events = #{redeliver => 0, reject => 0},
+                enqueuers = NewEnqueuers,
+                consumers = NewConsumers,
+                messages_total = Total,
+                rates = Rates};
+update_rates(_State, _Ts, R) ->
+    R.
+
+enqueuer_seqnos(Enqueuers) ->
+    maps:map(fun(_, #enqueuer{next_seqno = Next}) -> Next end, Enqueuers).
+
+consumer_msg_ids(Consumers) ->
+    maps:map(fun(_, #consumer{next_msg_id = Next}) -> Next end, Consumers).
+
+counter_delta(New, Old, Initial) ->
+    maps:fold(fun(Key, Value, Acc) ->
+                      case Old of
+                          #{Key := Last} when Value >= Last ->
+                              Acc + Value - Last;
+                          _ ->
+                              Acc + Value - Initial
+                      end
+              end, 0, New).
+
+with_rate_event(Kind, #{system_time := Ts}, MsgIds, {State, Reply}) ->
+    {State, Reply, [{aux, {rate_event, Kind, length(MsgIds), Ts}}]};
+with_rate_event(Kind, #{system_time := Ts}, MsgIds, {State, Reply, Effects}) ->
+    {State, Reply, Effects ++ [{aux, {rate_event, Kind, length(MsgIds), Ts}}]};
+with_rate_event(_, _, _, Result) ->
+    Result.
 
 update_ingress(Overview, Nodes, #ingress_aux{last_totals = LastTotals,
                                               estimators = Estimators0,
@@ -1419,6 +1515,19 @@ handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
                   last_checkpoint = element(8, AuxV3)
                  },
     handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux);
+handle_aux(RaftState, Tag, Cmd, AuxV5, RaAux)
+  when element(1, AuxV5) == aux_v5 ->
+    AuxV6 = #?AUX{name = element(2, AuxV5),
+                  last_decorators_state = element(3, AuxV5),
+                  last_consumer_timeout = element(4, AuxV5),
+                  gc = element(5, AuxV5),
+                  tick_pid = element(6, AuxV5),
+                  cache = element(7, AuxV5),
+                  last_checkpoint = element(8, AuxV5),
+                  ingress = element(9, AuxV5),
+                  has_decorators = element(10, AuxV5),
+                  rates = new_rates_aux()},
+    handle_aux(RaftState, Tag, Cmd, AuxV6, RaAux);
 handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux)
   when element(1, AuxV4) == aux_v4 ->
     DecayMs = persistent_term:get(rabbit_fifo_ingress_decay_ms,
@@ -1430,7 +1539,8 @@ handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux)
                   tick_pid = element(6, AuxV4),
                   cache = element(7, AuxV4),
                   last_checkpoint = element(8, AuxV4),
-                  ingress = #ingress_aux{decay_ms = DecayMs}},
+                  ingress = #ingress_aux{decay_ms = DecayMs},
+                  rates = new_rates_aux()},
     handle_aux(RaftState, Tag, Cmd, AuxV5, RaAux);
 handle_aux(leader, cast, eval,
            #?AUX{last_decorators_state = LastDec0,
@@ -1522,11 +1632,14 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
     end;
 
 handle_aux(RaftState, _, {handle_tick, [QName, Overview0, Nodes]},
-           #?AUX{tick_pid = Pid, ingress = Ingress0,
+           #?AUX{tick_pid = Pid, ingress = Ingress0, rates = Rates0,
                  last_decorators_state = LastDec0} = Aux, RaAux) ->
-    Overview = Overview0#{members_info => ra_aux:members_info(RaAux)},
     Ingress = update_ingress(Overview0, Nodes, Ingress0),
-    Aux1 = Aux#?AUX{ingress = Ingress},
+    Rates = update_rates(ra_aux:machine_state(RaAux),
+                         erlang:monotonic_time(millisecond), Rates0),
+    Overview = Overview0#{members_info => ra_aux:members_info(RaAux),
+                          message_rates => rates_snapshot(Rates)},
+    Aux1 = Aux#?AUX{ingress = Ingress, rates = Rates},
     case RaftState of
         leader ->
             NewPid =
@@ -1645,6 +1758,20 @@ handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
 handle_aux(_, _, {dlx, teardown, Pid}, Aux, RaAux) ->
     terminate_dlx_worker(Pid),
     {no_reply, Aux, RaAux};
+handle_aux(_, cast, {rate_event, Kind, Count, CmdTs},
+           #?AUX{rates = #rates_aux{events = Events} = R} = Aux, RaAux) ->
+    %% Commands that a member applies while catching up are not recent events.
+    case is_integer(CmdTs) andalso
+         erlang:system_time(millisecond) - CmdTs =< ?RATE_EVENT_MAX_AGE_MS of
+        true ->
+            {no_reply,
+             Aux#?AUX{rates = R#rates_aux{events = maps:update_with(
+                                                     Kind, fun(N) -> N + Count end,
+                                                     Count, Events)}},
+             RaAux};
+        false ->
+            {no_reply, Aux, RaAux}
+    end;
 handle_aux(_, {call, _From}, get_ingress_rates,
            #?AUX{ingress = Ingress} = Aux, RaAux) ->
     Rates = compute_ingress_rates(Ingress),

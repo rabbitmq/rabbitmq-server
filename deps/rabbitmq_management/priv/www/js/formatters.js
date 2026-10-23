@@ -306,6 +306,20 @@ function fmt_detail_rate(obj, name, mode) {
     return pick_rate(fmt_rate, obj, name, mode);
 }
 
+function fmt_message_rate(rates, name) {
+    if (rates == undefined || rates[name] == undefined) return '';
+    return fmt_rate(rates[name]);
+}
+
+// In modern mode the smoothed rate is shown, if the queue has one.
+function fmt_queue_rate(queue, stats_name, rates_name) {
+    if (is_modern_terminology()) {
+        var smoothed = fmt_message_rate(queue.message_rates, rates_name);
+        if (smoothed != '') return smoothed;
+    }
+    return fmt_detail_rate(queue.message_stats, stats_name);
+}
+
 function fmt_detail_rate_bytes(obj, name, mode) {
     return pick_rate(fmt_rate_bytes, obj, name, mode);
 }
@@ -996,13 +1010,13 @@ function group_count(mode, group, bools) {
     return count;
 }
 
-function group_heading(mode, group, bools) {
+function group_heading(mode, group, bools, label) {
     var count = group_count(mode, group, bools);
     if (count == 0) {
         return '';
     }
     else {
-        return '<th colspan="' + count + '">' + group + '</th>';
+        return '<th colspan="' + count + '">' + (label || group) + '</th>';
     }
 }
 

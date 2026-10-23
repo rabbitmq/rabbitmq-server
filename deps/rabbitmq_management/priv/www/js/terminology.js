@@ -14,6 +14,7 @@ const MODERN_TERMS = {
     'Unacked':                  'Acquired',
     'Unacknowledged':           'Acquired',
     'ack':                      'accept',
+    'Ack':                      'Accept',
     'deliver / get':            'deliver',
     'Consumer ack':             'Consumer accept',
     'Publisher confirm':        'Accepted by queue',
@@ -134,6 +135,23 @@ function check_channels_present() {
         }
     };
     req.send(null);
+}
+
+// Rates that only exist as smoothed rates.
+function is_modern_only_column(mode, column) {
+    return mode === 'queues' && column === 'rate-reject' &&
+        !is_modern_terminology();
+}
+
+// The queue rate columns are smoothed in modern mode.
+function queue_rates_heading() {
+    return is_modern_terminology() ?
+        'Message rates (smoothed) <span class="help" id="smoothed-message-rates"></span>' :
+        'Message rates';
+}
+
+function queue_rate_sort(stats_key, rates_name) {
+    return is_modern_terminology() ? 'message_rates.' + rates_name : stats_key;
 }
 
 function toggle_terminology() {
