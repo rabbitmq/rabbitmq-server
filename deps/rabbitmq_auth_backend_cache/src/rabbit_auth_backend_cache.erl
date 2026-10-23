@@ -121,11 +121,50 @@ with_cache(BackendType, {F, A}, Fun) ->
                                             cache_ttl),
             BackendResult = apply(Backend, F, A),
             case should_cache(BackendResult, Fun) of
-                true  -> ok = AuthCache:put(Key, BackendResult, TTL);
+                true  ->
+                    case entry_ttl(Backend, A, BackendResult, TTL) of
+                        EntryTTL when EntryTTL > 0 ->
+                            ok = AuthCache:put(Key, BackendResult, EntryTTL);
+                        _ ->
+                            ok
+                    end;
                 false -> ok
             end,
             BackendResult
     end.
+
+%% Entries expire no later than the credentials they were computed for.
+entry_ttl(Backend, A, BackendResult, TTL) ->
+    case credentials_expiry_timestamp(Backend, auth_user(A, BackendResult)) of
+        never ->
+            TTL;
+        Ts when is_integer(Ts) ->
+            %% Backends reject credentials once `Ts =< now` (in seconds) while
+            %% `rabbit_auth_cache:expired/1` keeps an entry until `now > Exp`
+            %% (in milliseconds), hence the extra millisecond.
+            min(TTL, Ts * 1000 - os:system_time(millisecond) - 1)
+    end.
+
+credentials_expiry_timestamp(_Backend, undefined) ->
+    never;
+credentials_expiry_timestamp(Backend, #auth_user{} = AuthUser) ->
+    %% An authentication-only backend may not implement this
+    %% `rabbit_authz_backend` callback.
+    case erlang:function_exported(Backend, expiry_timestamp, 1) of
+        true  -> Backend:expiry_timestamp(AuthUser);
+        false -> never
+    end.
+
+auth_user([#auth_user{} = AuthUser | _], _BackendResult) ->
+    AuthUser;
+auth_user([_Username, _AuthProps], {ok, #auth_user{} = AuthUser}) ->
+    AuthUser;
+auth_user([Username, _AuthProps], {ok, Impl}) ->
+    #auth_user{username = Username, tags = [], impl = Impl};
+auth_user([Username, _AuthProps], {ok, Impl, Tags}) ->
+    #auth_user{username = Username, tags = Tags, impl = Impl};
+auth_user(_A, _BackendResult) ->
+    undefined.
 
 %% Keep plaintext credentials out of the cache key. The full args are still
 %% passed to the underlying backend; only the lookup key is redacted.
