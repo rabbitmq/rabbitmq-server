@@ -23,7 +23,11 @@ dep_amqp10_client = git https://github.com/rabbitmq/rabbitmq-amqp1.0-client.git 
 
 LOCAL_DEPS = crypto
 
+<<<<<<< HEAD
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_amqp1_0 meck
+=======
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers meck rabbitmq_auth_backend_oauth2
+>>>>>>> 105cad9 (Shovel and federation: require credentials for same-user direct URIs)
 
 PLT_APPS += rabbitmq_cli
 

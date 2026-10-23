@@ -337,7 +337,7 @@ check_login_as(#user{username = ActingUsername, tags = Tags},
                Username, PasswordChecked) ->
     IsAdmin = lists:member(<<"administrator">>,
                            [rabbit_data_coercion:to_binary(T) || T <- Tags]),
-    case IsAdmin orelse Username =:= ActingUsername of
+    case IsAdmin orelse (Username =:= ActingUsername andalso PasswordChecked) of
         true ->
             ok;
         false when Username =:= none ->
