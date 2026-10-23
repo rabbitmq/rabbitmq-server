@@ -133,8 +133,7 @@ with_cache(BackendType, {F, A}, Fun) ->
             BackendResult
     end.
 
-%% A cached result must not outlive the credentials it was computed for,
-%% such as a JWT that expires before `cache_ttl` elapses.
+%% Entries expire no later than the credentials they were computed for.
 entry_ttl(Backend, A, BackendResult, TTL) ->
     case credentials_expiry_timestamp(Backend, auth_user(A, BackendResult)) of
         never ->
