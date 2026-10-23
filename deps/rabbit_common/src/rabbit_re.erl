@@ -46,8 +46,13 @@ run(Subject, Pattern, Opts) ->
         error ->
             {error, badarg};
         Bin ->
-            %% Every capture group starts with a parenthesis.
-            run1(Subject, Bin, length(binary:matches(Bin, <<"(">>)), Opts)
+            case sets_heap_limit(Bin) of
+                true ->
+                    {error, heap_limit_not_allowed};
+                false ->
+                    %% Every capture group starts with a parenthesis.
+                    run1(Subject, Bin, length(binary:matches(Bin, <<"(">>)), Opts)
+            end
     end.
 
 run1(Subject, Pattern, Captures, Opts) ->
@@ -86,6 +91,11 @@ to_binary(Pattern, Opts) ->
     catch
         error:badarg -> error
     end.
+
+sets_heap_limit(Bin) when is_binary(Bin) ->
+    binary:match(Bin, <<"(*LIMIT_HEAP=">>) =/= nomatch;
+sets_heap_limit(error) ->
+    false.
 
 -spec matches(iodata() | unicode:charlist(), re:mp() | iodata()) -> boolean().
 matches(Subject, Pattern) ->
@@ -135,4 +145,7 @@ compile(Pattern, _Opts) when is_list(Pattern),
                              length(Pattern) > ?MAX_PATTERN_LENGTH ->
     {error, pattern_too_long};
 compile(Pattern, Opts) ->
-    re:compile(Pattern, Opts).
+    case sets_heap_limit(to_binary(Pattern, Opts)) of
+        true  -> {error, heap_limit_not_allowed};
+        false -> re:compile(Pattern, Opts)
+    end.
