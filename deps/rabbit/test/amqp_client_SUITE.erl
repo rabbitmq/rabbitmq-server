@@ -115,6 +115,7 @@ groups() ->
        detach_requeues_one_session_classic_queue,
        detach_requeues_one_session_quorum_queue,
        detach_requeues_drop_head_classic_queue,
+       detach_receiver_quorum_queue_down,
        resource_alarm_before_session_begin,
        resource_alarm_after_session_begin,
        resource_alarm_send_many,
@@ -4378,6 +4379,59 @@ detach_requeue_one_session(QType, Config) ->
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection),
     #'queue.delete_ok'{message_count = 0} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+detach_receiver_quorum_queue_down(Config) ->
+    QQ = atom_to_binary(?FUNCTION_NAME),
+    CQ = <<QQ/binary, "-classic">>,
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = QQ,
+                                     durable = true,
+                                     arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = CQ, durable = true}),
+
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, SenderQQ} = amqp10_client:attach_sender_link(
+                       Session, <<"sender qq">>, rabbitmq_amqp_address:queue(QQ), settled),
+    ok = wait_for_credit(SenderQQ),
+    {ok, SenderCQ} = amqp10_client:attach_sender_link(
+                       Session, <<"sender cq">>, rabbitmq_amqp_address:queue(CQ), unsettled),
+    ok = wait_for_credit(SenderCQ),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, rabbitmq_amqp_address:queue(QQ), unsettled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 30000 -> ct:fail("missing attached")
+    end,
+
+    ok = amqp10_client:send_msg(SenderQQ, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
+    [Msg1] = receive_messages(Receiver, 1),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(Msg1)),
+
+    ServerId = {ra_name(QQ), get_node_config(Config, 0, nodename)},
+    ok = rpc(Config, rabbit_quorum_queue, stop_server, [ServerId]),
+    ok = amqp10_client:detach_link(Receiver),
+    receive {amqp10_event, {link, Receiver, {detached, normal}}} -> ok
+    after 30000 -> ct:fail("missing detached")
+    end,
+
+    DTag = <<"t2">>,
+    ok = amqp10_client:send_msg(SenderCQ, amqp10_msg:new(DTag, <<"m2">>, false)),
+    ok = wait_for_accepted(DTag),
+
+    ok = rpc(Config, rabbit_quorum_queue, restart_server, [ServerId]),
+    assert_messages(QQ, 1, 0, Config),
+
+    ok = amqp10_client:detach_link(SenderQQ),
+    ok = amqp10_client:detach_link(SenderCQ),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = CQ}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 detach_requeues_drop_head_classic_queue(Config) ->

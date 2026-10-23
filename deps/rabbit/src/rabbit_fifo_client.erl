@@ -394,10 +394,18 @@ modify(ConsumerTag, [_|_] = MsgIds, DelFailed, Undel, Anns,
                state()) ->
     {ok, ConsumerInfos :: map(), state()} |
     {error | timeout, term()}.
-checkout(ConsumerTag, CreditMode, #{} = Meta,
-         #state{consumers = CDels0} = State0)
+checkout(ConsumerTag, CreditMode, #{} = Meta, State0)
   when is_binary(ConsumerTag) andalso
        is_tuple(CreditMode) ->
+    case process_pending_cancels(ConsumerTag, State0) of
+        {ok, State} ->
+            checkout0(ConsumerTag, CreditMode, Meta, State);
+        Err ->
+            Err
+    end.
+
+checkout0(ConsumerTag, CreditMode, Meta,
+          #state{consumers = CDels0} = State0) ->
     Servers = sorted_servers(State0),
     ConsumerId = consumer_id(ConsumerTag),
     Spec = case CreditMode of
@@ -525,12 +533,15 @@ credit(ConsumerTag, DeliveryCount, Credit, Drain, State)
 %% This is a synchronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
 %%
+%% If the call fails or times out, the command is kept as a pending command
+%% and resent when a new leader is detected.
+%%
 %% @param ConsumerTag a unique tag to identify this particular consumer.
 %% @param State The {@module} state.
 %%
-%% @returns `{ok, State}' or `{error | timeout, term()}'
+%% @returns `{ok, State}'
 -spec cancel_checkout(rabbit_types:ctag(), rabbit_queue_type:cancel_reason(), state()) ->
-    {ok, state()} | {error | timeout, term()}.
+    {ok, state()}.
 cancel_checkout(ConsumerTag, Reason,
                 #state{consumers = Consumers} = State0)
   when is_atom(Reason) ->
@@ -545,7 +556,11 @@ cancel_checkout(ConsumerTag, Reason,
                 {ok, _, Leader} ->
                     {ok, State#state{leader = Leader}};
                 Err ->
-                    Err
+                    ?LOG_WARNING("~ts: failed to cancel consumer ~ts on ~w: ~tp, "
+                                 "the cancel will be resent to the next leader",
+                                 [?MODULE, ConsumerTag, cluster_name(State), Err]),
+                    {ok, send_command(pick_server(State), {cancel_checkout, ConsumerTag},
+                                      Cmd, normal, State)}
             end;
         _ ->
             %% TODO: when we implement the `delete' checkout spec we could
@@ -874,6 +889,8 @@ seq_applied({Seq, Response},
     %% command for a later resend
     {Actions, State} = maybe_add_action(Response, Actions0, State0),
     case maps:take(Seq, State#state.pending) of
+        {{{cancel_checkout, _}, _}, Pending} ->
+            {Corrs, Actions, State#state{pending = Pending}};
         {{undefined, _}, Pending}
           when Response =/= not_enqueued ->
             {Corrs, Actions, State#state{pending = Pending}};
@@ -889,6 +906,12 @@ seq_applied(_Seq, Acc) ->
 maybe_add_action(ok, Acc, State) ->
     {Acc, State};
 maybe_add_action(not_enqueued, Acc, State) ->
+    {Acc, State};
+%% Replies to cancels sent by `cancel_checkout/3`. A reply can arrive for a
+%% copy that has since been resent with another sequence number.
+maybe_add_action({ok, CancelInfo}, Acc, State) when is_map(CancelInfo) ->
+    {Acc, State};
+maybe_add_action({error, consumer_not_found}, Acc, State) ->
     {Acc, State};
 maybe_add_action({multi, Actions}, Acc0, State0) ->
     lists:foldl(fun (Act, {Acc, State}) ->
@@ -911,6 +934,26 @@ resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
 resend_all_pending(#state{pending = Pend} = State) ->
     Seqs = lists:sort(maps:keys(Pend)),
     lists:foldl(fun resend/2, State, Seqs).
+
+%% A new checkout with the same consumer tag has the same consumer ID, so a
+%% cancel applied after it would cancel the new consumer.
+process_pending_cancels(ConsumerTag, #state{pending = Pending} = State) ->
+    Seqs = [Seq || Seq := {{cancel_checkout, Tag}, _} <- Pending,
+                   Tag =:= ConsumerTag],
+    process_pending_cancels0(Seqs, State).
+
+process_pending_cancels0([], State) ->
+    {ok, State};
+process_pending_cancels0([Seq | Seqs], #state{pending = Pending} = State) ->
+    #{Seq := {_, Cmd}} = Pending,
+    case try_process_command(sorted_servers(State), Cmd, State) of
+        {ok, _, Leader} ->
+            process_pending_cancels0(
+              Seqs, State#state{leader = Leader,
+                                pending = maps:remove(Seq, Pending)});
+        Err ->
+            Err
+    end.
 
 maybe_auto_ack(true, Deliver, State0) ->
     %% manual ack is enabled
