@@ -63,9 +63,7 @@ run1(Subject, Pattern, Captures, Opts) ->
         error:Reason -> {error, Reason}
     end.
 
-%% Each level of depth keeps a copy of the offsets of every capture group. The
-%% PCRE2 heap limit is no alternative: when exceeded after `re:run/3` has
-%% yielded, the caller dies.
+%% Each level of depth keeps a copy of the offsets of every capture group.
 match_depth(Captures, Opts) ->
     Depth = lists:last([?MATCH_LIMIT | [D || {match_limit_recursion, D} <- Opts,
                                              is_integer(D)]]),
