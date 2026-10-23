@@ -943,14 +943,19 @@ track_channel(ChannelNum, SessionPid, #v1{tracked_channels = Channels} = State) 
     _Ref = erlang:monitor(process, SessionPid, [{tag, {'DOWN', ChannelNum}}]),
     State#v1{tracked_channels = maps:put(ChannelNum, SessionPid, Channels)}.
 
-untrack_channel(ChannelNum, SessionPid, #v1{tracked_channels = Channels0} = State) ->
+untrack_channel(ChannelNum, SessionPid, #v1{tracked_channels = Channels0} = State0) ->
     case maps:take(ChannelNum, Channels0) of
         {SessionPid, Channels} ->
             ?LOG_DEBUG("AMQP 1.0 closed session process ~p with channel number ~b",
                        [SessionPid, ChannelNum]),
+            State1 = update_msg_rates(State0),
+            State = State1#v1{session_counters =
+                              maps:remove(ChannelNum, State1#v1.session_counters),
+                              session_totals =
+                              maps:remove(ChannelNum, State1#v1.session_totals)},
             State#v1{tracked_channels = Channels};
         _ ->
-            State
+            State0
     end.
 
 send_to_new_session(
@@ -963,6 +968,7 @@ send_to_new_session(
                                   name = ConnName,
                                   is_jms = IsJms},
       writer = WriterPid} = State) ->
+    Counters = rabbit_msg_rates:new_counters(),
     ChildArgs = [WriterPid,
                  ChannelNum,
                  MaxFrame,
@@ -971,10 +977,14 @@ send_to_new_session(
                  ContainerId,
                  ConnName,
                  IsJms,
+                 Counters,
                  BeginFrame],
     case rabbit_amqp_session_sup:start_session(SessionSup, ChildArgs) of
         {ok, SessionPid} ->
-            track_channel(ChannelNum, SessionPid, State);
+            track_channel(ChannelNum, SessionPid,
+                          State#v1{session_counters =
+                                   maps:put(ChannelNum, Counters,
+                                            State#v1.session_counters)});
         {error, _} = E ->
             throw(E)
     end.
@@ -1268,17 +1278,45 @@ maybe_emit_stats(State) ->
            #v1.stats_timer,
            fun() -> emit_stats(State) end).
 
-emit_stats(State) ->
+emit_stats(State0) ->
+    State = update_msg_rates(State0),
     [{_, Pid},
      {_, RecvOct},
      {_, SendOct},
      {_, Reductions}] = infos(?SIMPLE_METRICS, State),
-    Infos = infos(?OTHER_METRICS, State),
+    Rates = rabbit_msg_rates:snapshot(State#v1.msg_rates),
+    Infos = [{message_rates, Rates} | infos(?OTHER_METRICS, State)],
     rabbit_core_metrics:connection_stats(Pid, Infos),
     rabbit_core_metrics:connection_stats(Pid, RecvOct, SendOct, Reductions),
     %% NB: Don't call ensure_stats_timer because it becomes expensive
     %% if all idle non-hibernating connections emit stats.
     rabbit_event:reset_stats_timer(State, #v1.stats_timer).
+
+update_msg_rates(#v1{session_counters = Counters,
+                     session_totals = Totals0,
+                     msg_rates = Rates0,
+                     msg_rates_ts = LastTs} = State) ->
+    Ts = erlang:monotonic_time(millisecond),
+    {Totals, Deltas} =
+        maps:fold(
+          fun(ChannelNum, Ref, {TotalsAcc, DeltasAcc}) ->
+                  Current = rabbit_msg_rates:totals(Ref),
+                  Last = maps:get(ChannelNum, Totals0, #{}),
+                  {TotalsAcc#{ChannelNum => Current},
+                   maps:fold(fun(Metric, Total, Acc) ->
+                                     Delta = Total - maps:get(Metric, Last, 0),
+                                     maps:update_with(Metric, fun(N) -> N + Delta end,
+                                                      Delta, Acc)
+                             end, DeltasAcc, Current)}
+          end, {#{}, #{}}, Counters),
+    if Ts > LastTs ->
+           Rates = rabbit_msg_rates:observe_deltas(Deltas, Ts - LastTs, Ts, Rates0),
+           State#v1{session_totals = Totals,
+                    msg_rates = Rates,
+                    msg_rates_ts = Ts};
+       true ->
+           State
+    end.
 
 ensure_stats_timer(State)
   when ?IS_RUNNING(State) ->

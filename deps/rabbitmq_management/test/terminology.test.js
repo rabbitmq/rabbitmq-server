@@ -206,3 +206,28 @@ describe('check_channels_present', () => {
     assert.equal(requests.length, 1);
   });
 });
+
+describe('queue rate columns', () => {
+  it('are smoothed and sorted by the smoothed rate in modern mode', () => {
+    assert.match(sandbox.queue_rates_heading(), /^Message rates \(smoothed\) <span class="help" id="smoothed-message-rates">/);
+    assert.equal(sandbox.queue_rate_sort('message_stats.ack_details.rate', 'ack'),
+                 'message_rates.ack');
+  });
+
+  it('are unchanged in legacy mode', () => {
+    pref = 'legacy';
+    assert.equal(sandbox.queue_rates_heading(), 'Message rates');
+    assert.equal(sandbox.queue_rate_sort('message_stats.ack_details.rate', 'ack'),
+                 'message_stats.ack_details.rate');
+  });
+});
+
+describe('is_modern_only_column', () => {
+  it('hides the reject rate column in legacy mode only', () => {
+    assert.equal(sandbox.is_modern_only_column('queues', 'rate-reject'), false);
+    pref = 'legacy';
+    assert.equal(sandbox.is_modern_only_column('queues', 'rate-reject'), true);
+    assert.equal(sandbox.is_modern_only_column('queues', 'rate-ack'), false);
+    assert.equal(sandbox.is_modern_only_column('channels', 'rate-reject'), false);
+  });
+});

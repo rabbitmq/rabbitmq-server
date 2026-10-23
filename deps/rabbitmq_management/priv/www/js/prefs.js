@@ -107,7 +107,8 @@ function section_pref(template, name) {
 }
 
 function show_column(mode, column) {
-    return get_pref('column-' + mode + '-' + column) == 'true';
+    return get_pref('column-' + mode + '-' + column) == 'true' &&
+        !is_modern_only_column(mode, column);
 }
 
 // ---------------------------------------------------------------------------

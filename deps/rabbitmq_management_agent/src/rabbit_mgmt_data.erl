@@ -131,7 +131,33 @@ overview_data(_Pid, User, Ranges, VHosts) ->
     maps:from_list(Raw ++
                    [{connections_count, count_created_stats(connection_created_stats, User)},
                     {channels_count, count_created_stats(channel_created_stats, User)},
-                    {consumers_count, ets:info(consumer_stats, size)}]).
+                    {consumers_count, ets:info(consumer_stats, size)},
+                    {message_rates, local_message_rates(VHosts)}]).
+
+%% The smoothed rates of the local queues, in hundredths of a message per
+%% second so that the totals of all nodes can be added up as integers.
+local_message_rates(VHosts) ->
+    Visible = maps:from_keys(VHosts, true),
+    Zero = #{publish => 0, deliver => 0, redeliver => 0, ack => 0, reject => 0},
+    ets:foldl(
+      fun({#resource{virtual_host = VHost}, Props}, Acc)
+            when is_map_key(VHost, Visible) ->
+              case proplists:get_value(message_rates, Props) of
+                  Rates when is_list(Rates) ->
+                      lists:foldl(
+                        fun({Metric, Rate}, A) when is_map_key(Metric, A) ->
+                                maps:update_with(Metric,
+                                                 fun(N) -> N + round(Rate * 100) end,
+                                                 A);
+                           (_, A) ->
+                                A
+                        end, Acc, Rates);
+                  _ ->
+                      Acc
+              end;
+         (_, Acc) ->
+              Acc
+      end, Zero, queue_stats).
 
 consumer_data(_Pid, VHost) ->
     maps:from_list(
