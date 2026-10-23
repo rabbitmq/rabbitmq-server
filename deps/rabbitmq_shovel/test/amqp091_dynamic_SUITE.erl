@@ -415,7 +415,7 @@ security_validation(Config) ->
     %% a loopback_users member logs in from this node, implicitly without
     %% credentials in a network URI
     [invalid_param(Config, [{<<"src-uri">>,  SrcUri},
-                            {<<"dest-uri">>, <<"amqp://a@/a">>} | Qs], A)
+                            {<<"dest-uri">>, <<"amqp://a:pass@/a">>} | Qs], A)
      || SrcUri <- [<<"amqp://localhost:5672/a">>,
                    <<"amqp://guest:guest@localhost:5672/a">>,
                    <<"amqp://guest:guest@/a">>]],
@@ -427,14 +427,14 @@ security_validation(Config) ->
     invalid_param(Config,
                   [{<<"src-uri">>,  <<"amqp://a:@localhost/a">>},
                    {<<"dest-uri">>, <<"amqp://a:@localhost/b">>}], A),
-    %% a direct URI logs in as the user it names, without a password check
-    valid_param(Config, [{<<"src-uri">>,  <<"amqp://a@/a">>},
+    valid_param(Config, [{<<"src-uri">>,  <<"amqp://a:pass@/a">>},
                          {<<"dest-uri">>, <<"amqp://b:pass@/a">>} | Qs], A),
     [invalid_param(Config, [{<<"src-uri">>,  SrcUri},
-                            {<<"dest-uri">>, <<"amqp://a@/a">>} | Qs], A)
-     || SrcUri <- [<<"amqp:///a">>, <<"amqp://b@/a">>, <<"amqp://b:@/a">>,
-                   [<<"amqp://a@/a">>, <<"amqp:///a">>]]],
-    invalid_param(Config, [{<<"src-uri">>,  <<"amqp://a@/a">>},
+                            {<<"dest-uri">>, <<"amqp://a:pass@/a">>} | Qs], A)
+     || SrcUri <- [<<"amqp://a@/a">>, <<"amqp://a:@/a">>, <<"amqp:///a">>,
+                   <<"amqp://b@/a">>, <<"amqp://b:@/a">>,
+                   [<<"amqp://a:pass@/a">>, <<"amqp:///a">>]]],
+    invalid_param(Config, [{<<"src-uri">>,  <<"amqp://a:pass@/a">>},
                            {<<"dest-uri">>, <<"amqp:///a">>} | Qs], A),
     ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, <<"a">>, [administrator]),
     Admin = lookup_user(Config, <<"a">>),
