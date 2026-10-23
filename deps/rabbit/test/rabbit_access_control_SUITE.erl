@@ -26,11 +26,7 @@
 
          expiry_timestamp/1,
          update_state_rebuilds_tags/1,
-<<<<<<< HEAD
-=======
          authn_backend_expiry_with_different_authz_backend/1,
-         check_user_id0_tag_representation/1,
->>>>>>> ef513f7 (Keep the authn backend's credential expiry with other authz backends)
          with_enabled_plugin/1,
          with_enabled_plugin_plus_internal/1,
          with_missing_plugin/1,
@@ -50,13 +46,8 @@ all() ->
 
 groups() ->
     [{unit_tests, [], [expiry_timestamp,
-<<<<<<< HEAD
-                       update_state_rebuilds_tags]},
-=======
                        update_state_rebuilds_tags,
-                       authn_backend_expiry_with_different_authz_backend,
-                       check_user_id0_tag_representation]},
->>>>>>> ef513f7 (Keep the authn backend's credential expiry with other authz backends)
+                       authn_backend_expiry_with_different_authz_backend]},
      {integration_tests, [], [with_enabled_plugin,
                               with_enabled_plugin_plus_internal,
                               with_missing_plugin,
@@ -231,10 +222,7 @@ update_state_rebuilds_tags(_) ->
     ?assertEqual([administrator], U4#user.tags),
     ok.
 
-<<<<<<< HEAD
-=======
-%% With different authn and authz backends, credentials that only the authn
-%% backend knows the expiry of must still expire and be refreshable.
+%% Credential expiry and refresh with different authn and authz backends.
 authn_backend_expiry_with_different_authz_backend(_) ->
     Now = os:system_time(seconds),
     ModN = rabbit_expiring_authn_backend,
@@ -308,22 +296,6 @@ authn_backend_expiry_with_different_authz_backend(_) ->
                  Login(Now + 60, [{ModN, ModZ}])),
     ok.
 
-%% `impersonator` may reach `#user.tags` as an atom (LDAP, HTTP, OAuth2
-%% backends) or a binary (the internal backend, which avoids interning
-%% admin-supplied tag strings); both must be honoured.
-check_user_id0_tag_representation(_) ->
-    Actual = #user{username = <<"actual">>, tags = [<<"impersonator">>]},
-    ?assertEqual(ok, rabbit_access_control:check_user_id0(<<"claimed">>, Actual)),
-
-    ActualAtomTag = #user{username = <<"actual">>, tags = [impersonator]},
-    ?assertEqual(ok, rabbit_access_control:check_user_id0(<<"claimed">>, ActualAtomTag)),
-
-    NonImpersonator = #user{username = <<"actual">>, tags = [<<"management">>]},
-    ?assertMatch({refused, _, _},
-                 rabbit_access_control:check_user_id0(<<"claimed">>, NonImpersonator)),
-    ok.
-
->>>>>>> ef513f7 (Keep the authn backend's credential expiry with other authz backends)
 with_enabled_plugin(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     ok = rabbit_ct_broker_helpers:enable_plugin(Config, Node, my_auth_plugin),

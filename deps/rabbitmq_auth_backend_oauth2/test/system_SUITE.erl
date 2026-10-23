@@ -49,13 +49,8 @@ groups() ->
                        more_than_one_resource_server_id_not_allowed_in_one_token,
                        mqtt_expired_token,
                        mqtt_expirable_token,
-<<<<<<< HEAD
-                       web_mqtt_expirable_token
-=======
                        web_mqtt_expirable_token,
-                       expirable_token_with_internal_authz_backend,
-                       mqtt_scope_pattern_syntax_regex_subscribe_denied
->>>>>>> ef513f7 (Keep the authn backend's credential expiry with other authz backends)
+                       expirable_token_with_internal_authz_backend
                       ]},
 
      {token_refresh, [], [
@@ -566,10 +561,7 @@ mqtt_expirable_token0(Port, AdditionalOpts, Connect, Config) ->
     after Millis * 2 -> ct:fail("missing DISCONNECT packet from server")
     end.
 
-%% Test that the token can be renewed and that RabbitMQ closes the connection
-%% when the token expires although the OAuth 2 backend is used for
-%% authentication only and the internal backend, which knows nothing about
-%% the token, for authorisation.
+%% Token renewal and expiry with the internal backend used for authorisation.
 expirable_token_with_internal_authz_backend(Config) ->
     Seconds = 3,
     Millis = Seconds * 1000,
