@@ -25,7 +25,10 @@ all_tests() ->
      array32_count_exceeds_data,
      array_of_zero_width_elements,
      array_of_described_zero_width_elements_unsupported,
+     array_of_nested_described_elements_unsupported,
+     array_descriptor_unsupported,
      array_element_widths,
+     array_compound_elements_parsed_in_place,
      unsupported_type,
      server_mode_symbolic_body_descriptors,
      server_mode_body_descriptor_prefix_collision,
@@ -176,6 +179,47 @@ array_of_described_zero_width_elements_unsupported(_Config) ->
     ?assertThrow({array_of_described_zero_width_elements_unsupported, Count},
                  amqp10_binary_parser:parse(Bin)).
 
+array_of_nested_described_elements_unsupported(_Config) ->
+    Count = 4040,
+    Elements = binary:copy(<<1>>, Count),
+    Array = fun(Depth) ->
+                    %% ?DESCRIBED, null descriptor
+                    Described = binary:copy(<<0, 16#40>>, Depth),
+                    CountAndV = <<Count:32, Described/binary, 16#50, Elements/binary>>,
+                    <<16#f0, (byte_size(CountAndV)):32, CountAndV/binary>>
+            end,
+    ?assertMatch({{array, {described, null, ubyte}, [{described, null, {ubyte, 1}} | _]}, _},
+                 amqp10_binary_parser:parse(Array(1))),
+    [begin
+         ?assertThrow({array_of_nested_described_elements_unsupported, Count},
+                      amqp10_binary_parser:parse(Array(Depth))),
+         ?assertThrow({array_of_nested_described_elements_unsupported, Count},
+                      amqp10_binary_parser:parse_many(Array(Depth), []))
+     end || Depth <- [2, 3]].
+
+array_descriptor_unsupported(_Config) ->
+    Count = 3,
+    Array = fun(Descriptor) ->
+                    CountAndV = <<Count:32, 0, Descriptor/binary, 16#50, 1, 2, 3>>,
+                    <<16#f0, (byte_size(CountAndV)):32, CountAndV/binary>>
+            end,
+    Nulls = binary:copy(<<16#40>>, 10),
+    [?assertThrow({array_descriptor_type_unsupported, Type, Count},
+                  amqp10_binary_parser:parse(Array(Descriptor)))
+     || <<Type, _/binary>> = Descriptor <- [<<0, 16#40, 16#40>>,
+                                            <<16#c0, 11, 10, Nulls/binary>>,
+                                            <<16#c1, 11, 10, Nulls/binary>>,
+                                            <<16#d0, 14:32, 10:32, Nulls/binary>>,
+                                            <<16#d1, 14:32, 10:32, Nulls/binary>>,
+                                            <<16#e0, 5, 3, 16#50, 1, 2, 3>>,
+                                            <<16#f0, 8:32, 3:32, 16#50, 1, 2, 3>>]],
+
+    Symbol = fun(Size) -> <<16#b3, Size:32, (binary:copy(<<"a">>, Size))/binary>> end,
+    ?assertMatch({{array, {described, {symbol, _}, ubyte}, [_, _, _]}, _},
+                 amqp10_binary_parser:parse(Array(Symbol(59)))),
+    ?assertThrow({array_descriptor_too_large, 65, Count},
+                 amqp10_binary_parser:parse(Array(Symbol(60)))).
+
 array_element_widths(_Config) ->
     Arrays = [
               {array, boolean, [true, false, true]},
@@ -216,6 +260,43 @@ array_element_widths(_Config) ->
               ?assertEqual({Array, byte_size(Bin)},
                            amqp10_binary_parser:parse(Bin))
       end, Arrays).
+
+array_compound_elements_parsed_in_place(_Config) ->
+    %% larger than a heap binary
+    Leaf = {binary, binary:copy(<<7>>, 100)},
+    Arrays = [
+              {array, list, [{list, [Leaf]}]},
+              {array, map, [{map, [{{utf8, <<"k">>}, Leaf}]}]},
+              {array, array, [{array, list, [{list, [Leaf]}]}]},
+              {array, list, [{list, [{array, map, [{map, [{{utf8, <<"k">>}, Leaf}]}]}]}]}
+             ],
+    lists:foreach(
+      fun(Array) ->
+              Bin = iolist_to_binary(amqp10_binary_generator:generate(Array)),
+              {Parsed, _} = amqp10_binary_parser:parse(Bin),
+              ?assertEqual(Array, Parsed),
+              ?assertEqual(byte_size(Bin),
+                           binary:referenced_byte_size(innermost_binary(Parsed)))
+      end, Arrays),
+
+    %% Each nesting level costs 9 bytes: size, count, and element constructor.
+    Depth = 1000,
+    Nested = lists:foldl(fun(_, Inner) ->
+                                 <<(5 + byte_size(Inner)):32, 1:32, 16#f0, Inner/binary>>
+                         end, <<6:32, 1:32, 16#50, 1>>, lists:seq(1, Depth)),
+    NestedBin = <<16#f0, Nested/binary>>,
+    {NestedParsed, Size} = amqp10_binary_parser:parse(NestedBin),
+    ?assertEqual(byte_size(NestedBin), Size),
+    ?assertEqual({Depth, {array, ubyte, [{ubyte, 1}]}},
+                 unnest_arrays(NestedParsed, 0)).
+
+innermost_binary({binary, Bin}) -> Bin;
+innermost_binary({array, _Type, [Elem]}) -> innermost_binary(Elem);
+innermost_binary({list, [Elem]}) -> innermost_binary(Elem);
+innermost_binary({map, [{_Key, Val}]}) -> innermost_binary(Val).
+
+unnest_arrays({array, array, [Elem]}, Depth) -> unnest_arrays(Elem, Depth + 1);
+unnest_arrays(Innermost, Depth) -> {Depth, Innermost}.
 
 unsupported_type(_Config) ->
     UnsupportedType = 16#02,
