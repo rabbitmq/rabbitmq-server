@@ -146,14 +146,17 @@ boot_step() ->
     init(#{queue_type => rabbit_volatile_queue, dead_letter_strategy => disabled},
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER]),
     %% Source classic queue dead letters.
+    %% Classic queues can dead letter due to delivery-limit exceeded.
     init(#{queue_type => rabbit_classic_queue, dead_letter_strategy => disabled},
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
-          ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER]),
+          ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER]),
     init(#{queue_type => rabbit_classic_queue, dead_letter_strategy => at_most_once},
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
-          ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER]),
+          ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER,
+          ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER]),
     %% Source quorum queue dead letters.
     %% Quorum queues can dead letter due to delivery-limit exceeded.
     %% Quorum queues support dead letter strategy at-least-once.
