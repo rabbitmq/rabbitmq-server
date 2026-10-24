@@ -52,6 +52,7 @@
 % It is a Prometheus best practice to use specific base units: https://prometheus.io/docs/practices/naming/#base-units
 % Extra context: https://github.com/prometheus/docs/pull/1414#issuecomment-522337895
 
+-define(QUEUE_FILTER_MATCH_LIMIT, 2000).
 -define(MILLISECOND, 1000).
 -define(MICROSECOND, 1000000).
 
@@ -966,7 +967,7 @@ queue_filter_from_pdict() ->
 matches_queue_filter(_QName, false) ->
     true;
 matches_queue_filter(QName, MP) ->
-    rabbit_re:matches(QName, MP).
+    rabbit_re:matches(QName, MP, [{match_limit, ?QUEUE_FILTER_MATCH_LIMIT}]).
 
 filter_by_queue_name(Rows, false) ->
     Rows;
