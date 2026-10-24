@@ -37,8 +37,6 @@ amqp091_queue_name(Name, S) when is_binary(S) ->
 amqp091_queue_name(Name, Term) ->
     {error, "~ts should be binary, actually was ~tp", [Name, Term]}.
 
-%% A URI is parsed as a list of characters, and again every time it is used.
-%% This is far more than TLS file paths and a token for a password need.
 -define(MAX_URI_LENGTH, 65536).
 
 uri(_Name, Term) when is_binary(Term), byte_size(Term) =< ?MAX_URI_LENGTH ->

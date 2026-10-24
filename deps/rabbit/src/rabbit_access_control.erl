@@ -327,9 +327,7 @@ check_user_loopback(Username, SockOrAddr) ->
         false -> not_allowed
     end.
 
-%% Shovels and federation links log in from this node, with their URI's
-%% credentials, on behalf of the user who set them up. A direct AMQP 0-9-1 login
-%% without a username passes every permission check.
+%% Shovels and federation links connect from this node with their URI's credentials.
 -spec check_login_as(rabbit_types:user() | none,
                      rabbit_types:username() | none,
                      PasswordChecked :: boolean()) ->

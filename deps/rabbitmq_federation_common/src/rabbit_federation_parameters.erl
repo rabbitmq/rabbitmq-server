@@ -135,8 +135,7 @@ validate_uri_in_list(Name, URI, User) when is_binary(URI) ->
 validate_uri_in_list(Name, _URI, _User) ->
     {error, "~ts should be a URI or a list of URIs", [Name]}.
 
-%% A direct URI carries its own virtual host and credentials; check them here.
-%% A network URI may point at this node.
+%% A direct URI carries its own virtual host and credentials.
 validate_uri_user(_Params, none) ->
     ok;
 validate_uri_user(#amqp_params_direct{username = ConnUsername,
