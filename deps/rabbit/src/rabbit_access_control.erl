@@ -341,7 +341,7 @@ get_authz_data_from(undefined) ->
 % is enabled and it's a direct connection.
 -spec check_vhost_access(User :: rabbit_types:user(),
                          VHostPath :: rabbit_types:vhost(),
-                         AuthzRawData :: {socket, rabbit_net:socket()} | {ip, inet:ip_address() | binary()} | undefined,
+                         AuthzRawData :: {socket, rabbit_net:socket() | rabbit_net:proxy_socket()} | {ip, inet:ip_address() | binary()} | undefined,
                          AuthzContext :: map()) ->
     'ok' | rabbit_types:channel_exit().
 check_vhost_access(User = #user{username       = Username,
