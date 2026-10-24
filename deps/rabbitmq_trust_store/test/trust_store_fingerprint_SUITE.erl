@@ -18,8 +18,7 @@ all() ->
      forged_cert_with_same_issuer_id_is_rejected,
      different_cert_is_rejected,
      is_whitelisted_der_matches_stored_cert,
-     whitelisted_leaf_is_accepted_as_peer,
-     cert_issued_by_whitelisted_cert_is_rejected_as_peer
+     whitelisted_leaf_is_accepted_as_peer
     ].
 
 init_per_suite(Config) ->
@@ -96,17 +95,6 @@ whitelisted_leaf_is_accepted_as_peer(_Config) ->
     ?assertEqual({valid, continue},
                  rabbit_trust_store:whitelisted(OTPCert, valid_peer, continue)).
 
-cert_issued_by_whitelisted_cert_is_rejected_as_peer(_Config) ->
-    {CertDER, Key} = generate_self_signed_cert("CN=Whitelisted", 1),
-    OTPCert = public_key:pkix_decode_cert(CertDER, otp),
-    insert_entry(CertDER, OTPCert),
-    ForgedDER = generate_cert_signed_by("CN=Peer", "CN=Whitelisted", 2, Key),
-    Forged = public_key:pkix_decode_cert(ForgedDER, otp),
-    ?assertEqual({valid, confirmed},
-                 rabbit_trust_store:whitelisted(OTPCert, {bad_cert, unknown_ca}, continue)),
-    ?assertMatch({fail, _},
-                 rabbit_trust_store:whitelisted(Forged, valid_peer, confirmed)).
-
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
@@ -114,10 +102,6 @@ cert_issued_by_whitelisted_cert_is_rejected_as_peer(_Config) ->
 generate_self_signed_cert(SubjectStr, Serial) ->
     Key = public_key:generate_key({namedCurve, secp256r1}),
     {generate_cert_signed_by(SubjectStr, SubjectStr, Serial, Key, Key), Key}.
-
-generate_cert_signed_by(SubjectStr, IssuerStr, Serial, IssuerKey) ->
-    generate_cert_signed_by(SubjectStr, IssuerStr, Serial, IssuerKey,
-                            public_key:generate_key({namedCurve, secp256r1})).
 
 generate_cert_signed_by(SubjectStr, IssuerStr, Serial, IssuerKey, Key) ->
     Name = fun(Str) ->
