@@ -1266,7 +1266,8 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                                       client_properties = ClientProperties},
                State0 = #v1{connection_state = starting,
                             connection       = Connection0,
-                            sock             = Sock}) ->
+                            sock             = Sock,
+                            proxy_socket     = ProxySock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
     Capabilities =
         case rabbit_misc:table_lookup(ClientProperties, <<"capabilities">>) of
@@ -1277,7 +1278,7 @@ handle_method0(#'connection.start_ok'{mechanism = Mechanism,
                     client_properties = ClientProperties,
                     capabilities      = Capabilities,
                     auth_mechanism    = {Mechanism, AuthMechanism},
-                    auth_state        = AuthMechanism:init(Sock)},
+                    auth_state        = AuthMechanism:init(client_socket(Sock, ProxySock))},
     Connection2 = augment_connection_log_name(Connection1),
     State = State0#v1{connection_state = securing,
                       connection       = Connection2},
@@ -1344,11 +1345,13 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                                                 user = User = #user{username = Username}},
                            helper_sup       = SupPid,
                            sock             = Sock,
+                           proxy_socket     = ProxySock,
                            throttle         = Throttle}) ->
     ok = is_over_node_connection_limit(RanchRef),
     ok = is_over_vhost_connection_limit(VHost, User),
     ok = is_over_user_connection_limit(User),
-    ok = rabbit_access_control:check_vhost_access(User, VHost, {socket, Sock}, #{}),
+    ok = rabbit_access_control:check_vhost_access(
+           User, VHost, {socket, client_socket(Sock, ProxySock)}, #{}),
     ok = is_vhost_alive(VHost, User),
     NewConnection = Connection#connection{vhost = VHost},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}),
@@ -1394,7 +1397,8 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
                State = #v1{connection =
                                #connection{user       = User = #user{username = Username},
                                            log_name   = ConnName} = Conn,
-                           sock       = Sock}) when ?IS_RUNNING(State) ->
+                           sock       = Sock,
+                           proxy_socket = ProxySock}) when ?IS_RUNNING(State) ->
     ?LOG_DEBUG(
       "connection ~ts of user '~ts': "
       "asked to update secret, reason: ~ts",
@@ -1406,7 +1410,8 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
         %% update its user state and re-check authorization for existing
         %% consumers, cancelling any that are no longer authorized.
         VHost = Conn#connection.vhost,
-        ok = rabbit_access_control:check_vhost_access(User1, VHost, {socket, Sock}, #{}),
+        ok = rabbit_access_control:check_vhost_access(
+               User1, VHost, {socket, client_socket(Sock, ProxySock)}, #{}),
         lists:foreach(fun(Ch) ->
           ?LOG_DEBUG("Updating user/auth backend state for channel ~tp", [Ch]),
           _ = rabbit_channel:update_user_state(Ch, User1)
@@ -1516,6 +1521,9 @@ get_env(Key) ->
 
 send_on_channel0(Sock, Method) ->
     ok = rabbit_writer:internal_send_command(Sock, 0, Method).
+
+client_socket(Sock, undefined) -> Sock;
+client_socket(_Sock, ProxySock) -> ProxySock.
 
 auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of

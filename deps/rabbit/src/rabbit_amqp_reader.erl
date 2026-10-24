@@ -487,7 +487,8 @@ handle_connection_frame(
                                   },
       ranch_ref = RanchRef,
       helper_sup = HelperSupPid,
-      sock = Sock} = State0) ->
+      sock = Sock,
+      proxy_socket = ProxySock} = State0) ->
     Vhost = vhost(Hostname),
     logger:update_process_metadata(#{amqp_container => ContainerId,
                                      vhost => Vhost,
@@ -497,7 +498,8 @@ handle_connection_frame(
     ok = check_node_connection_limit(RanchRef),
     ok = check_vhost_exists(Vhost, State0),
     ok = check_vhost_alive(Vhost),
-    ok = rabbit_access_control:check_vhost_access(User, Vhost, {socket, Sock}, #{}),
+    ok = rabbit_access_control:check_vhost_access(
+           User, Vhost, {socket, client_socket(Sock, ProxySock)}, #{}),
     ok = check_vhost_connection_limit(Vhost, Username),
     ok = check_user_connection_limit(Username),
     Timer = maybe_start_credential_expiry_timer(User),
@@ -654,13 +656,14 @@ handle_sasl_frame(#'v1_0.sasl_init'{mechanism = {symbol, Mechanism},
                                     hostname = _},
                   State0 = #v1{connection_state = waiting_sasl_init,
                                connection = Connection,
-                               sock = Sock}) ->
+                               sock = Sock,
+                               proxy_socket = ProxySock}) ->
     ResponseBin = case Response of
                       undefined -> <<>>;
                       {binary, Bin} -> Bin
                   end,
     AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
-    AuthState = AuthMechanism:init(Sock),
+    AuthState = AuthMechanism:init(client_socket(Sock, ProxySock)),
     State = State0#v1{
               connection = Connection#v1_connection{
                              auth_mechanism = {Mechanism, AuthMechanism},
@@ -791,6 +794,9 @@ heartbeat_send_fun(_, #v1{websocket = false,
             Frame = amqp10_binary_generator:build_heartbeat_frame(),
             try rabbit_net:send(Sock, Frame) catch _:_ -> ok end
     end.
+
+client_socket(Sock, undefined) -> Sock;
+client_socket(_Sock, ProxySock) -> ProxySock.
 
 auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
@@ -1005,11 +1011,13 @@ set_credential0(Cred,
                                             vhost = Vhost,
                                             credential_timer = OldTimer} = Conn,
                             tracked_channels = Chans,
-                            sock = Sock}) ->
+                            sock = Sock,
+                            proxy_socket = ProxySock}) ->
     ?LOG_INFO("updating credential", []),
     case rabbit_access_control:update_state(User0, Cred) of
         {ok, User} ->
-            try rabbit_access_control:check_vhost_access(User, Vhost, {socket, Sock}, #{}) of
+            try rabbit_access_control:check_vhost_access(
+                  User, Vhost, {socket, client_socket(Sock, ProxySock)}, #{}) of
                 ok ->
                     maps:foreach(fun(_ChanNum, Pid) ->
                                          rabbit_amqp_session:reset_authz(Pid, User)
