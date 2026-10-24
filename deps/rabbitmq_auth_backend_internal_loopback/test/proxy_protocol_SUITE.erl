@@ -15,8 +15,6 @@
 
 -define(TIMEOUT, 10000).
 
-%% The connection always comes from the proxy on the broker's host; the
-%% PROXY header names the client the proxy accepted.
 -define(NON_LOOPBACK_HEADER, "PROXY TCP4 203.0.113.5 127.0.0.1 40000 5672\r\n").
 -define(LOOPBACK_HEADER, "PROXY TCP4 127.0.0.1 127.0.0.1 40000 5672\r\n").
 
@@ -73,8 +71,6 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-%% The backend must judge the address in the PROXY header, not the
-%% proxy's own loopback socket.
 amqp091_login_via_non_loopback_proxy_is_refused(Config) ->
     ?assertEqual('connection.close',
                  amqp091_login(Config, ?NON_LOOPBACK_HEADER)).
@@ -83,12 +79,10 @@ amqp091_login_via_loopback_proxy_is_accepted(Config) ->
     ?assertEqual('connection.tune',
                  amqp091_login(Config, ?LOOPBACK_HEADER)).
 
-%% A LOCAL v2 header carries no addresses: the real (loopback) ends apply.
 amqp091_login_via_local_proxy_is_accepted(Config) ->
     Header = ranch_proxy_header:header(#{command => local, version => 2}),
     ?assertEqual('connection.tune', amqp091_login(Config, Header)).
 
-%% A loopback address in the header of a remote peer is not trusted either.
 amqp091_login_via_non_loopback_peer_is_refused(Config) ->
     case non_loopback_ipv4_address() of
         undefined ->
@@ -114,8 +108,6 @@ stream_login_via_loopback_proxy_is_accepted(Config) ->
     ?assertEqual(?RESPONSE_CODE_OK,
                  stream_login(Config, ?LOOPBACK_HEADER)).
 
-%% Returns the method the broker answers connection.start-ok with:
-%% 'connection.tune' if the login was accepted, 'connection.close' if not.
 amqp091_login(Config, ProxyHeader) ->
     amqp091_login(Config, {127, 0, 0, 1}, ProxyHeader).
 
@@ -140,7 +132,6 @@ recv_amqp091_method(Socket) ->
     {ok, <<ClassId:16, MethodId:16, _/binary>>} = gen_tcp:recv(Socket, Size + 1, ?TIMEOUT),
     rabbit_framing_amqp_0_9_1:lookup_method_name({ClassId, MethodId}).
 
-%% Returns the code of the sasl-outcome the broker answers sasl-init with.
 amqp10_login(Config, ProxyHeader) ->
     Socket = connect(Config, tcp_port_amqp, {127, 0, 0, 1}, ProxyHeader),
     ok = gen_tcp:send(Socket, <<"AMQP", 3, 1, 0, 0>>),
@@ -161,7 +152,6 @@ recv_amqp10_sasl_frame(Socket) ->
     [Performative] = amqp10_framing:decode_bin(Body),
     Performative.
 
-%% Returns the response code to sasl_authenticate.
 stream_login(Config, ProxyHeader) ->
     Socket = connect(Config, tcp_port_stream, {127, 0, 0, 1}, ProxyHeader),
     C0 = rabbit_stream_core:init(0),
