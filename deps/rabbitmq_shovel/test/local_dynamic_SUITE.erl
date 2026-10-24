@@ -41,6 +41,7 @@ groups() ->
                   local_to_local_counters,
                   local_to_local_alarms,
                   delete_after_duration_validation,
+                  security_validation,
                   delete_after_duration_autodeletes,
                   delete_after_duration_runs,
                   delete_after_duration_runs_long,
@@ -332,6 +333,47 @@ delete_after_duration_validation(Config) ->
     ?assertMatch({error_string, _}, Set(<<"whenever">>)),
     ?assertMatch({error_string, _}, Set(100 * 365 * 24 * 60 * 60)),
     ok.
+
+security_validation(Config) ->
+    [begin
+         ok = rabbit_ct_broker_helpers:add_vhost(Config, U),
+         ok = rabbit_ct_broker_helpers:add_user(Config, U, <<"pass">>),
+         ok = rabbit_ct_broker_helpers:set_full_permissions(Config, U, U)
+     end || U <- [<<"a">>, <<"b">>]],
+    try
+        A = lookup_user(Config, <<"a">>),
+        Def = fun(SrcUri) ->
+                      [{<<"src-protocol">>, <<"local">>},
+                       {<<"src-uri">>, SrcUri},
+                       {<<"src-queue">>, <<"src">>},
+                       {<<"dest-protocol">>, <<"local">>},
+                       {<<"dest-uri">>, <<"amqp://a:pass@/a">>},
+                       {<<"dest-queue">>, <<"dest">>}]
+              end,
+        [shovel_test_utils:valid_param(Config, Def(Uri), A)
+         || Uri <- [<<"amqp://a:pass@unused-host/a">>,
+                    <<"amqp://b:pass@unused-host/a">>]],
+        [shovel_test_utils:invalid_param(Config, Def(Uri), A)
+         || Uri <- [<<"amqp://a@/a">>,
+                    <<"amqp://a:@/a">>,
+                    <<"amqp://a:@unused-host/a">>,
+                    <<"amqp://unused-host/a">>,
+                    <<"amqp:///a">>,
+                    <<"amqp://guest:guest@unused-host/a">>,
+                    <<"amqp://b:@unused-host/a">>,
+                    <<"amqp://b@/a">>,
+                    <<"amqp://a@unused-host/b">>]]
+    after
+        [begin
+             rabbit_ct_broker_helpers:delete_user(Config, U),
+             rabbit_ct_broker_helpers:delete_vhost(Config, U)
+         end || U <- [<<"a">>, <<"b">>]]
+    end.
+
+lookup_user(Config, Name) ->
+    {ok, User} = rabbit_ct_broker_helpers:rpc(Config, 0,
+      rabbit_access_control, check_user_login, [Name, []]),
+    User.
 
 delete_after_duration_autodeletes(Config) ->
     Src = ?config(srcq, Config),

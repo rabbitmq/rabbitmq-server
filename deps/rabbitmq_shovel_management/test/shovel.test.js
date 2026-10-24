@@ -85,3 +85,53 @@ describe('shovel.js route registration', () => {
     }
   });
 });
+
+
+describe('Move messages credentials', () => {
+  function submit(administrator, password) {
+    const { sandbox, dispatcherCallback } = loadShovelModule();
+    const sammy = fakeSammy();
+    dispatcherCallback(sammy);
+    Object.assign(sandbox, {
+      user_administrator: administrator,
+      user: { name: 'policy@user' },
+      esc: encodeURIComponent,
+      put_parameter: (request) => { sandbox.submitted = { ...request.params }; }
+    });
+    const params = {
+      vhost: 'tenant/vhost',
+      'src-uri': 'amqp:///tenant%2Fvhost',
+      'dest-uri': 'amqp:///tenant%2Fvhost'
+    };
+    if (password !== undefined) params['move-password'] = password;
+    const route = sammy.routes.find(r => r.path === '#/shovel-parameters-move-messages');
+    route.handler.call({ params });
+    return sandbox.submitted;
+  }
+
+  it('encodes explicit credentials for both connections and removes the form field', () => {
+    const result = submit(false, 'secret:@/%?&');
+    const uri = 'amqp://policy%40user:secret%3A%40%2F%25%3F%26@/tenant%2Fvhost';
+    assert.equal(result['src-uri'], uri);
+    assert.equal(result['dest-uri'], uri);
+    assert.equal('move-password' in result, false);
+  });
+
+  it('accepts a token as the password', () => {
+    const result = submit(false, 'header.payload.signature');
+    assert.equal(result['src-uri'],
+      'amqp://policy%40user:header.payload.signature@/tenant%2Fvhost');
+  });
+
+  it('requires a nonempty credential from a non-administrator', () => {
+    for (const password of [undefined, '']) {
+      assert.throws(() => submit(false, password), /password or token/);
+    }
+  });
+
+  it('keeps administrator connections passwordless', () => {
+    const result = submit(true);
+    assert.equal(result['src-uri'], 'amqp:///tenant%2Fvhost');
+    assert.equal(result['dest-uri'], 'amqp:///tenant%2Fvhost');
+  });
+});

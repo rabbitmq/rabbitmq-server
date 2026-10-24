@@ -437,16 +437,18 @@
     <ul>
       <li>
         <code>amqp://</code><br/>
-        connect to local server as default user
+        connect to local server as default user (administrators only)
       </li><br />
       <li>
-        <code>amqp://user@/my-vhost</code><br/>
-        connect to local server with alternate user and virtual host
-        (passwords are not required for local connections)
+        <code>amqp://user:password@/my-vhost</code><br/>
+        connect to local server with a username, password or token, and
+        virtual host (only administrators may omit the password, including
+        when connecting as their own user)
       </li><br />
       <li>
         <code>amqp://server-name</code><br/>
         connect to server-name, without SSL and default credentials
+        (administrators only)
       </li><br />
       <li>
         <code>amqp://user:password@server-name/my-vhost</code><br/>
@@ -460,6 +462,7 @@
       <li>
         <code>amqps://server-name?cacertfile=/path/to/cacert.pem&certfile=/path/to/cert.pem&keyfile=/path/to/key.pem&verify=verify_peer&auth_mechanism=external</code><br/>
         connect to server-name, with SSL and EXTERNAL authentication
+        (administrators only)
       </li>
     </ul>
   </div>
