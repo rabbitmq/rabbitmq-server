@@ -13,6 +13,7 @@
 
 -export([ensure_auth_backends_are_enabled/0]).
 -export([check_user_pass_login/2, check_user_login/2, check_user_login/3, check_user_loopback/2,
+         check_login_as/3, is_admin/1,
          check_vhost_access/4, check_resource_access/4, check_topic_access/4,
          check_user_id/2]).
 
@@ -325,6 +326,42 @@ check_user_loopback(Username, SockOrAddr) ->
         true  -> ok;
         false -> not_allowed
     end.
+
+%% Shovels and federation links connect from this node with their URI's credentials.
+-spec check_login_as(rabbit_types:user() | none,
+                     rabbit_types:username() | none,
+                     PasswordChecked :: boolean()) ->
+    ok | {error, string(), [term()]}.
+
+check_login_as(none, _Username, _PasswordChecked) ->
+    ok;
+check_login_as(#user{username = ActingUsername, tags = Tags},
+               Username, PasswordChecked) ->
+    case is_admin(Tags) orelse (Username =:= ActingUsername andalso PasswordChecked) of
+        true ->
+            ok;
+        false when Username =:= none ->
+            {error, "user \"~ts\" may not use a URI without a hostname or "
+                    "a username", [ActingUsername]};
+        false ->
+            {ok, LoopbackUsers} = application:get_env(rabbit, loopback_users),
+            case lists:member(Username, LoopbackUsers) of
+                true ->
+                    {error, "user \"~ts\" may not use the credentials of user "
+                            "\"~ts\", who can only connect from localhost",
+                     [ActingUsername, Username]};
+                false when not PasswordChecked ->
+                    {error, "user \"~ts\" may not use the username \"~ts\" "
+                            "without a password", [ActingUsername, Username]};
+                false ->
+                    ok
+            end
+    end.
+
+-spec is_admin([atom() | binary()]) -> boolean().
+is_admin(Tags) ->
+    lists:member(<<"administrator">>,
+                 [rabbit_data_coercion:to_binary(T) || T <- Tags]).
 
 get_authz_data_from({ip, Address}) ->
     #{peeraddr => Address};

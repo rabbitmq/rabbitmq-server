@@ -108,19 +108,21 @@ validate_uri(User) ->
     fun (Name, Term) -> validate_uri(Name, Term, User) end.
 
 validate_uri(Name, Term, User) when is_binary(Term) ->
-    case rabbit_parameter_validation:binary(Name, Term) of
+    case rabbit_parameter_validation:uri(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
-                  {ok, Params} -> validate_uri_vhost_access(Params, User);
+                  {ok, Params} -> validate_uri_user(Params, User);
                   {error, {Info, _}} ->
                       {error, "\"~ts\" not a valid URI: ~tp",
                        [amqp_uri:remove_credentials(Term), Info]}
               end;
         E  -> E
     end;
+validate_uri(Name, [], _User) ->
+    {error, "~ts should not be an empty list", [Name]};
 validate_uri(Name, Term, User) ->
     case rabbit_parameter_validation:list(Name, Term) of
         ok -> case [V || U <- Term,
-                         V <- [validate_uri(Name, U, User)],
+                         V <- [validate_uri_in_list(Name, U, User)],
                          element(1, V) =:= error] of
                   []      -> ok;
                   [E | _] -> E
@@ -128,18 +130,27 @@ validate_uri(Name, Term, User) ->
         E  -> E
     end.
 
-%% A direct URI carries its own virtual host; check access to it here.
-validate_uri_vhost_access(#amqp_params_direct{}, none) ->
+validate_uri_in_list(Name, URI, User) when is_binary(URI) ->
+    validate_uri(Name, URI, User);
+validate_uri_in_list(Name, _URI, _User) ->
+    {error, "~ts should be a URI or a list of URIs", [Name]}.
+
+%% A direct URI carries its own virtual host and credentials.
+validate_uri_user(_Params, none) ->
     ok;
-validate_uri_vhost_access(#amqp_params_direct{virtual_host = VHost}, User = #user{}) ->
+validate_uri_user(#amqp_params_direct{username = ConnUsername,
+                                      password = ConnPassword,
+                                      virtual_host = VHost}, User = #user{}) ->
     try rabbit_access_control:check_vhost_access(User, VHost, undefined, #{}) of
-        ok -> ok
+        ok ->
+            rabbit_access_control:check_login_as(
+              User, ConnUsername, is_binary(ConnPassword) andalso ConnPassword =/= <<>>)
     catch
         _:_ -> {error, "user \"~ts\" may not connect to vhost \"~ts\"",
                 [User#user.username, VHost]}
     end;
-validate_uri_vhost_access(_Params, _User) ->
-    ok.
+validate_uri_user(#amqp_params_network{username = ConnUsername}, User) ->
+    rabbit_access_control:check_login_as(User, ConnUsername, true).
 
 %%----------------------------------------------------------------------------
 

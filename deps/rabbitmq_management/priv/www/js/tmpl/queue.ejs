@@ -145,7 +145,17 @@
           <th>Destination queue:</th>
           <td><input type="text" name="dest-queue"/></td>
         </tr>
+        <% if (!user_administrator) { %>
+        <tr>
+          <th>Password or token for <%= fmt_string(user.name) %>:</th>
+          <td><input type="password" name="move-password" autocomplete="off" required/></td>
+        </tr>
+        <% } %>
       </table>
+      <% if (!user_administrator) { %>
+      <p>The credential is stored in the temporary shovel definition and can
+        be read by users who can manage policies in this virtual host.</p>
+      <% } %>
       <input type="submit" value="Move messages"/>
     </form>
   <% } %>

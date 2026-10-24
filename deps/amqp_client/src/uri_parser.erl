@@ -83,7 +83,7 @@ parse_uri_rest(PathQueryFrag, _Bool) ->
 
 parse_authority(Authority) ->
     {UserInfo, HostPort} = split_uri(Authority, "@", {"", Authority}),
-    UserInfoSplit = case re:split(UserInfo, ":", [{return, list}]) of
+    UserInfoSplit = case string:split(UserInfo, ":", all) of
                         [""] -> [];
                         UIS  -> UIS
                     end,
@@ -107,9 +107,12 @@ parse_host_port(HostPort) ->
                     end].
 
 split_query(Query) ->
-    case re:split(Query, "&", [{return, list}]) of
+    case string:split(Query, "&", all) of
         [""]    -> [];
-        QParams -> [split_uri(Param, "=", Param) || Param <- QParams]
+        QParams -> [case string:split(Param, "=") of
+                        [Key, Value] -> {Key, Value};
+                        [_]          -> Param
+                    end || Param <- QParams]
     end.
 
 split_uri(UriPart, SplitChar, NoMatchResult) ->
