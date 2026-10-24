@@ -25,6 +25,7 @@ groups() ->
        run_bounded_in_memory,
        run_returns_after_yield,
        run_bounded_by_caller_depth,
+       run_bounded_by_caller_match_limit,
        run_accepts_leading_verbs,
        run_reports_compile_error_position,
        run_refuses_heap_limit,
@@ -152,6 +153,17 @@ run_bounded_by_caller_depth(_Config) ->
     nomatch = rabbit_re:run(Input, <<"^(?:a|b)*$">>, [{match_limit_recursion, 10},
                                                       {capture, none}]),
     {error, badarg} = rabbit_re:run(Input, <<"a">>, [{match_limit_recursion, foo}]),
+    ok.
+
+run_bounded_by_caller_match_limit(_Config) ->
+    Input = binary:copy(<<"a">>, 100),
+    Pat = <<"^(?:a|b)*$">>,
+    match = rabbit_re:run(Input, Pat),
+    nomatch = rabbit_re:run(Input, Pat, [{match_limit, 10}, {capture, none}]),
+    match = rabbit_re:run(Input, Pat, [{match_limit, 1_000_000}, {capture, none}]),
+    true = rabbit_re:matches(Input, Pat),
+    false = rabbit_re:matches(Input, Pat, [{match_limit, 10}]),
+    {error, badarg} = rabbit_re:run(Input, <<"a">>, [{match_limit, foo}]),
     ok.
 
 run_accepts_leading_verbs(_Config) ->
