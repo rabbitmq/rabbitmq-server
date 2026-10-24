@@ -23,11 +23,8 @@ all() ->
       amqp_uri_remove_credentials_malformed,
       amqp_uri_error_info_has_no_user_input,
       uri_parser_accepts_string_and_binaries,
-<<<<<<< HEAD
       route_destination_parsing,
-=======
       uri_parser_splits_userinfo_and_query,
->>>>>>> 9ed34be (Shovel and federation: parse URIs in one pass and cap their length)
       rabbit_channel_build_topic_variable_map,
       main_reader_rejects_oversized_frame,
       main_reader_rejects_oversized_frame_with_split_header,
