@@ -106,7 +106,6 @@ parse_host_port(HostPort) ->
                         _         -> [{port, list_to_integer(Port)}]
                     end].
 
-%% `re:split/3` would cost about 1 KB per separator, here and for the userinfo.
 split_query(Query) ->
     case string:split(Query, "&", all) of
         [""]    -> [];

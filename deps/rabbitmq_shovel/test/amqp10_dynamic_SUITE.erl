@@ -320,8 +320,7 @@ security_validation(Config) ->
                        {<<"dest-address">>, <<"dest">>}]
               end,
         shovel_test_utils:valid_param(Config, Def(<<"amqp://b:b@localhost:5672">>), A),
-        %% An anonymous login is anonymous_login_user, guest by default, which
-        %% loopback_users limits to localhost. The last URI is not valid.
+        %% The last URI is not valid.
         [shovel_test_utils:invalid_param(Config, Def(Uri), A)
          || Uri <- [<<"amqp://localhost:5672">>,
                     <<"amqp://a:a@localhost:5672?sasl=anon">>,
