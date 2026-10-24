@@ -290,7 +290,7 @@ vhost(ReqData) ->
         end
     end.
 
-is_admin(T)       -> intersects(T, [administrator]).
+is_admin(T)       -> rabbit_access_control:is_admin(T).
 is_policymaker(T) -> intersects(T, [administrator, policymaker]).
 is_monitor(T)     -> intersects(T, [administrator, monitoring]).
 is_mgmt_user(T)   -> intersects(T, [administrator, monitoring, policymaker,

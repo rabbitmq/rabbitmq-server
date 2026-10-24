@@ -33,11 +33,20 @@ groups() ->
           direct_uri_denied,
           direct_uri_nonexistent_vhost,
           direct_uri_no_user,
+          direct_uri_without_username_denied,
+          direct_uri_own_username_without_password_denied,
+          direct_uri_other_username_denied,
+          direct_uri_other_username_and_password_allowed,
+          direct_uri_administrator_allowed,
           network_uri_allowed,
+          loopback_user_denied,
           uri_list_denied,
           uri_list_allowed,
+          uri_list_empty,
+          uri_list_nested,
           map_uri_denied,
           uri_list_mixed_network_and_denied_direct,
+          uri_too_long,
           invalid_uri_error_has_no_credentials,
           prop_uri_list_validation
         ]}
@@ -98,9 +107,44 @@ direct_uri_nonexistent_vhost(Config) ->
 direct_uri_no_user(Config) ->
     ?assertEqual([ok], validate_with_none(Config, direct_uri(?DENIED_VHOST))).
 
-%% A network URI authenticates over the wire on connect, so it is unchecked here.
+direct_uri_without_username_denied(Config) ->
+    ?assertMatch([{error, _, _}],
+                 validate_with_user(Config, <<"amqp:///", ?ALLOWED_VHOST/binary>>)).
+
+direct_uri_own_username_without_password_denied(Config) ->
+    [?assertMatch([{error, _, _}], validate_with_user(Config, Uri))
+     || Uri <- [<<"amqp://", ?USER/binary, "@/", ?ALLOWED_VHOST/binary>>,
+                <<"amqp://", ?USER/binary, ":@/", ?ALLOWED_VHOST/binary>>]].
+
+direct_uri_other_username_denied(Config) ->
+    ?assertMatch([{error, _, _}],
+                 validate_with_user(Config, <<"amqp://other@/", ?ALLOWED_VHOST/binary>>)),
+    ?assertMatch([{error, _, _}],
+                 validate_with_user(Config, <<"amqp://other:@/", ?ALLOWED_VHOST/binary>>)).
+
+direct_uri_other_username_and_password_allowed(Config) ->
+    ?assertEqual([ok],
+                 validate_with_user(Config, <<"amqp://other:pass@/", ?ALLOWED_VHOST/binary>>)).
+
+direct_uri_administrator_allowed(Config) ->
+    Uris = [<<"amqp:///", ?ALLOWED_VHOST/binary>>,
+            <<"amqp://other@/", ?ALLOWED_VHOST/binary>>,
+            <<"amqp://localhost:5672/", ?DENIED_VHOST/binary>>],
+    ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, ?USER, [administrator]),
+    try
+        ?assertEqual([ok], validate_with_user(Config, Uris))
+    after
+        ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, ?USER, [])
+    end.
+
 network_uri_allowed(Config) ->
     ?assertEqual([ok], validate_with_user(Config, network_uri(?DENIED_VHOST))).
+
+loopback_user_denied(Config) ->
+    [?assertMatch([{error, _, _}], validate_with_user(Config, Uri))
+     || Uri <- [<<"amqp://localhost:5672/", ?DENIED_VHOST/binary>>,
+                <<"amqp://guest:guest@localhost:5672/", ?DENIED_VHOST/binary>>,
+                <<"amqp://guest:guest@/", ?ALLOWED_VHOST/binary>>]].
 
 uri_list_denied(Config) ->
     Uris = [direct_uri(?ALLOWED_VHOST), direct_uri(?DENIED_VHOST)],
@@ -110,6 +154,18 @@ uri_list_allowed(Config) ->
     Uris = [direct_uri(?ALLOWED_VHOST), direct_uri(?ALLOWED_VHOST)],
     ?assertEqual([ok], validate_with_user(Config, Uris)).
 
+uri_list_empty(Config) ->
+    ?assertMatch([{error, _, _}], validate_with_user(Config, [])),
+    ?assertMatch([{error, _, _}], validate_with_none(Config, [])).
+
+uri_list_nested(Config) ->
+    [begin
+         ?assertMatch([{error, _, _}], validate_with_user(Config, Uris)),
+         ?assertMatch([{error, _, _}], validate_with_none(Config, Uris))
+     end || Uris <- [[[]],
+                     [[network_uri(?ALLOWED_VHOST)]],
+                     [network_uri(?ALLOWED_VHOST), [network_uri(?ALLOWED_VHOST)]]]].
+
 map_uri_denied(Config) ->
     Term = #{<<"uri">> => direct_uri(?DENIED_VHOST)},
     ?assertMatch([{error, _, _}], validate_term_with_user(Config, Term)).
@@ -118,6 +174,14 @@ uri_list_mixed_network_and_denied_direct(Config) ->
     Uris = [network_uri(?DENIED_VHOST), direct_uri(?DENIED_VHOST)],
     ?assertMatch([{error, _, _}], validate_with_user(Config, Uris)).
 
+uri_too_long(Config) ->
+    ?assertEqual([ok], validate_with_user(Config, network_uri_of_size(65536))),
+    ?assertMatch([{error, _, [<<"uri">>, 65536]}],
+                 validate_with_user(Config, network_uri_of_size(65537))),
+    ?assertMatch([{error, _, [<<"uri">>, 65536]}],
+                 validate_with_user(Config, [network_uri(?ALLOWED_VHOST),
+                                             network_uri_of_size(65537)])).
+
 invalid_uri_error_has_no_credentials(Config) ->
     [begin
          [{error, Fmt, Args}] = validate_with_none(Config, Uri),
@@ -125,7 +189,8 @@ invalid_uri_error_has_no_credentials(Config) ->
          ?assertEqual(nomatch, string:find(Msg, "s3cret"))
      end || Uri <- [<<"amqp://alice:s3cret@:::">>,
                     <<"amqps://alice:s3cret@host/?depth=x&password=s3cret">>,
-                    <<"amqp://alice:s3cret%zz@host">>]],
+                    <<"amqp://alice:s3cret%zz@host">>,
+                    [[<<"amqp://alice:s3cret@host">>]]]],
     ok.
 
 %% -------------------------------------------------------------------
@@ -165,10 +230,14 @@ vhost_for(denied)      -> ?DENIED_VHOST;
 vhost_for(nonexistent) -> ?NONEXISTENT_VHOST.
 
 direct_uri(VHost) ->
-    <<"amqp:///", VHost/binary>>.
+    <<"amqp://", ?USER/binary, ":", ?PASSWORD/binary, "@/", VHost/binary>>.
 
 network_uri(VHost) ->
-    <<"amqp://localhost:5672/", VHost/binary>>.
+    <<"amqp://", ?USER/binary, ":", ?PASSWORD/binary, "@localhost:5672/", VHost/binary>>.
+
+network_uri_of_size(Size) ->
+    Prefix = <<"amqp://", ?USER/binary, ":", ?PASSWORD/binary, "@localhost?">>,
+    <<Prefix/binary, (binary:copy(<<"&">>, Size - byte_size(Prefix)))/binary>>.
 
 validate_with_user(Config, Uris) ->
     validate_term_with_user(Config, [{<<"uri">>, Uris}]).
