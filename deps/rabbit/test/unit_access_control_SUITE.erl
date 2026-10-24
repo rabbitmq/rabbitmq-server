@@ -35,14 +35,8 @@ groups() ->
           login_of_nonexistent_user,
           set_tags_for_passwordless_user,
           change_password,
-<<<<<<< HEAD
-          auth_backend_internal_expand_topic_permission
-=======
-          login_with_pbkdf2_sha256_hashed_password,
-          login_with_legacy_4_byte_salt_hashed_password,
           auth_backend_internal_expand_topic_permission,
           check_login_as
->>>>>>> 7ca5fb7 (Shovel and federation: check who a direct URI logs in as)
       ]}
     ].
 
