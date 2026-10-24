@@ -24,6 +24,7 @@ mise.toml
 cover/
 docs/*.html
 ebin/
+lock.mk
 logs/
 **/test/*.beam
 **/test/ct.cover.spec
