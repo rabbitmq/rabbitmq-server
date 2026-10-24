@@ -334,7 +334,6 @@ delete_after_duration_validation(Config) ->
     ?assertMatch({error_string, _}, Set(100 * 365 * 24 * 60 * 60)),
     ok.
 
-%% A local shovel logs in with the credentials of its URI whatever its host.
 security_validation(Config) ->
     [begin
          ok = rabbit_ct_broker_helpers:add_vhost(Config, U),

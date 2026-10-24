@@ -107,7 +107,6 @@ direct_uri_nonexistent_vhost(Config) ->
 direct_uri_no_user(Config) ->
     ?assertEqual([ok], validate_with_none(Config, direct_uri(?DENIED_VHOST))).
 
-%% Such a connection would not be subject to permission checks.
 direct_uri_without_username_denied(Config) ->
     ?assertMatch([{error, _, _}],
                  validate_with_user(Config, <<"amqp:///", ?ALLOWED_VHOST/binary>>)).
@@ -117,7 +116,6 @@ direct_uri_own_username_without_password_denied(Config) ->
      || Uri <- [<<"amqp://", ?USER/binary, "@/", ?ALLOWED_VHOST/binary>>,
                 <<"amqp://", ?USER/binary, ":@/", ?ALLOWED_VHOST/binary>>]].
 
-%% Such a connection would log in as another user without authenticating.
 direct_uri_other_username_denied(Config) ->
     ?assertMatch([{error, _, _}],
                  validate_with_user(Config, <<"amqp://other@/", ?ALLOWED_VHOST/binary>>)),
@@ -139,12 +137,9 @@ direct_uri_administrator_allowed(Config) ->
         ok = rabbit_ct_broker_helpers:set_user_tags(Config, 0, ?USER, [])
     end.
 
-%% A network URI is authenticated by the broker it points at.
 network_uri_allowed(Config) ->
     ?assertEqual([ok], validate_with_user(Config, network_uri(?DENIED_VHOST))).
 
-%% The link connects from this node, which loopback_users does not refuse.
-%% A network URI without credentials logs in as guest.
 loopback_user_denied(Config) ->
     [?assertMatch([{error, _, _}], validate_with_user(Config, Uri))
      || Uri <- [<<"amqp://localhost:5672/", ?DENIED_VHOST/binary>>,

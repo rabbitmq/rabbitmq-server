@@ -280,7 +280,6 @@ validation(Config) ->
                   [{<<"src-queue">>, <<"test">>},
                    {<<"src-uri">>,   [<<"derp">>]},
                    {<<"dest-uri">>,  <<"amqp://">>}]),
-    %% A list of URIs is neither empty nor nested
     [begin
          invalid_param(Config,
                        [{<<"src-queue">>, <<"test">>},
@@ -412,8 +411,6 @@ security_validation(Config) ->
     A = lookup_user(Config, <<"a">>),
     valid_param(Config, [{<<"src-uri">>,  <<"amqp://a:@localhost:5672/a">>},
                          {<<"dest-uri">>, <<"amqp://b:pass@localhost:5672/b">>} | Qs], A),
-    %% a loopback_users member logs in from this node, implicitly without
-    %% credentials in a network URI
     [invalid_param(Config, [{<<"src-uri">>,  SrcUri},
                             {<<"dest-uri">>, <<"amqp://a:pass@/a">>} | Qs], A)
      || SrcUri <- [<<"amqp://localhost:5672/a">>,
