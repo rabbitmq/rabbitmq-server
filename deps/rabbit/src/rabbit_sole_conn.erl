@@ -80,7 +80,8 @@
 %% for testing
 -export([conn/2,
          try_put/3,
-         conn_path/2]).
+         conn_path/2,
+         pick_bootstrap_node/3]).
 
 -type container_id() :: binary().
 -type wipe_status() :: ok | not_started | {error, term()}.
@@ -586,24 +587,64 @@ recover() ->
 ensure_running() ->
     case whereis(?GEN_SERVER_NAME) of
         undefined ->
-            ?LOG_DEBUG("sole_conn not running on ~p, "
-                       "trying to acquire bootstrap lock", [node()]),
-            global:set_lock(?BOOTSTRAP_LOCK),
-            try
-                case whereis(?GEN_SERVER_NAME) of
-                    undefined ->
-                        start_local_store();
-                    _Pid ->
-                        ?LOG_DEBUG("sole_conn has started on ~p, skipping bootstrap sequence",
-                                   [node()]),
-                        ok
-                end
-            after
-                %% Lock is released even if an exception occurs
-                global:del_lock(?BOOTSTRAP_LOCK)
+            ok = maybe_delegate_bootstrap(),
+            ensure_running_locked();
+        _ ->
+            ok
+    end.
+
+ensure_running_locked() ->
+    ?LOG_DEBUG("sole_conn not running on ~p, "
+               "trying to acquire bootstrap lock", [node()]),
+    global:set_lock(?BOOTSTRAP_LOCK),
+    try
+        case whereis(?GEN_SERVER_NAME) of
+            undefined ->
+                start_local_store();
+            _Pid ->
+                ?LOG_DEBUG("sole_conn has started on ~p, skipping bootstrap sequence",
+                           [node()]),
+                ok
+        end
+    after
+        %% Lock is released even if an exception occurs
+        global:del_lock(?BOOTSTRAP_LOCK)
+    end.
+
+%% A Ra leader without peers upgrades to its latest machine version at once,
+%% so the node with the oldest Khepri machine version bootstraps the store.
+maybe_delegate_bootstrap() ->
+    case ra_directory:uid_of(get_ra_system(), get_store_id()) of
+        undefined ->
+            OtherNodes = rabbit_nodes:list_running() -- [node()],
+            case find_active_peer(OtherNodes) of
+                undefined -> delegate_bootstrap(OtherNodes);
+                _PeerNode -> ok
             end;
         _ ->
             ok
+    end.
+
+delegate_bootstrap(OtherNodes) ->
+    MacVers = machine_versions(OtherNodes),
+    case pick_bootstrap_node(node(), khepri_machine:version(), MacVers) of
+        Node when Node =:= node() ->
+            ok;
+        Node ->
+            ?LOG_INFO("~ts: node ~w runs an older Khepri machine version, "
+                      "asking it to bootstrap the sole_conn Khepri store",
+                      [?MODULE, Node]),
+            %% The remote node may run an older version of this module.
+            try
+                ok = erpc:call(Node, ?MODULE, ensure_running, [],
+                               leader_wait_retry_timeout())
+            catch
+                Class:Reason ->
+                    ?LOG_WARNING("~ts: node ~w failed to bootstrap the sole_conn "
+                                 "Khepri store. Error: ~p:~p",
+                                 [?MODULE, Node, Class, Reason]),
+                    erlang:error({bootstrap_delegation_failed, Node, Reason})
+            end
     end.
 
 start_local_store() ->
@@ -633,6 +674,13 @@ start_local_store() ->
                     expand_cluster();
                 PeerNode ->
                     %% Existing Cluster
+                    case check_machine_version(StoreId, PeerNode) of
+                        ok ->
+                            ok;
+                        {error, Reason} ->
+                            _ = khepri_cluster:reset(StoreId),
+                            erlang:error({cannot_join_peer, PeerNode, Reason})
+                    end,
                     ?LOG_DEBUG("Trying to join active peer: ~p", [PeerNode]),
                     ok = join_active_peer(StoreId, PeerNode, RaServerConfig, RetryTimeout),
 
@@ -731,23 +779,71 @@ join_cluster1(SeedNode) ->
     StoreId = get_store_id(),
     case ra_directory:uid_of(get_ra_system(), StoreId) of
         undefined ->
-            RaServerConfig = make_ra_server_config(),
-            RetryTimeout = leader_wait_retry_timeout(),
-            try
-                {ok, _} = khepri:start(?RA_SYSTEM, RaServerConfig),
-                ok = join_active_peer(StoreId, SeedNode, RaServerConfig, RetryTimeout),
-                ok = khepri_cluster:wait_for_effective_behaviour(
-                       StoreId, process_based_keep_while, RetryTimeout),
-                %% Only reached when the join succeeded.
-                start_gen_server()
-            catch
-                Class:Reason -> {error, {Class, Reason}}
+            case check_machine_version(StoreId, SeedNode) of
+                ok ->
+                    join_cluster2(StoreId, SeedNode);
+                {error, _} = Err ->
+                    Err
             end;
         _ ->
             %% A store already exists on disk here. khepri_cluster:join/2
             %% resets the joining store, which would destroy that data, so
             %% leave this node to recover/0 or to its own lazy bootstrap.
             {error, store_already_bootstrapped}
+    end.
+
+join_cluster2(StoreId, SeedNode) ->
+    RaServerConfig = make_ra_server_config(),
+    RetryTimeout = leader_wait_retry_timeout(),
+    try
+        {ok, _} = khepri:start(?RA_SYSTEM, RaServerConfig),
+        ok = join_active_peer(StoreId, SeedNode, RaServerConfig, RetryTimeout),
+        ok = khepri_cluster:wait_for_effective_behaviour(
+               StoreId, process_based_keep_while, RetryTimeout),
+        %% Only reached when the join succeeded.
+        start_gen_server()
+    catch
+        Class:Reason -> {error, {Class, Reason}}
+    end.
+
+%% A member whose machine version is lower than the effective machine
+%% version of the cluster does not apply any entry.
+check_machine_version(StoreId, PeerNode) ->
+    LocalMacVer = khepri_machine:version(),
+    case cluster_effective_machine_version(StoreId, PeerNode) of
+        {ok, EffectiveMacVer} when EffectiveMacVer > LocalMacVer ->
+            ?LOG_WARNING("~ts: not joining the sole_conn Khepri cluster of ~w, "
+                         "its effective Khepri machine version (~b) is newer "
+                         "than the local one (~b)",
+                         [?MODULE, PeerNode, EffectiveMacVer, LocalMacVer]),
+            {error, {machine_version_too_old,
+                     #{local => LocalMacVer, effective => EffectiveMacVer}}};
+        {ok, _} ->
+            ok;
+        {error, Reason} = Err ->
+            ?LOG_WARNING("~ts: not joining the sole_conn Khepri cluster of ~w, "
+                         "could not get its effective Khepri machine version. "
+                         "Error: ~p", [?MODULE, PeerNode, Reason]),
+            Err
+    end.
+
+cluster_effective_machine_version(StoreId, PeerNode) ->
+    case ra:members({StoreId, PeerNode}, ?RPC_TIMEOUT) of
+        {ok, _Members, Leader} ->
+            case ra:member_overview(Leader, ?RPC_TIMEOUT) of
+                {ok, #{effective_machine_version := MacVer}, _} ->
+                    {ok, MacVer};
+                {ok, _, _} ->
+                    {error, effective_machine_version_unknown};
+                {timeout, _} ->
+                    {error, timeout};
+                {error, _} = Err ->
+                    Err
+            end;
+        {timeout, _} ->
+            {error, timeout};
+        {error, _} = Err ->
+            Err
     end.
 
 %% -----------------------------------------
@@ -972,6 +1068,21 @@ find_active_peer([Node | Rest]) ->
         error:{erpc, _Reason} ->
             %% Node is unreachable or timed out, move on to the next one
             find_active_peer(Rest)
+    end.
+
+-spec machine_versions([node()]) -> [{node(), non_neg_integer()}].
+machine_versions(Nodes) ->
+    Results = erpc:multicall(Nodes, khepri_machine, version, [],
+                             ?MAC_VER_RPC_TIMEOUT),
+    [{Node, MacVer} || {Node, {ok, MacVer}} <- lists:zip(Nodes, Results),
+                       is_integer(MacVer)].
+
+-spec pick_bootstrap_node(node(), non_neg_integer(),
+                          [{node(), non_neg_integer()}]) -> node().
+pick_bootstrap_node(LocalNode, LocalMacVer, MacVers) ->
+    case [{MacVer, Node} || {Node, MacVer} <- MacVers, MacVer < LocalMacVer] of
+        []    -> LocalNode;
+        Older -> element(2, lists:min(Older))
     end.
 
 default_command_options() ->

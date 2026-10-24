@@ -38,7 +38,10 @@ groups() ->
         wipe_should_reset_store_on_all_nodes,
         start_should_bootstrap_store_on_all_nodes,
         conflict_should_resolve_when_existing_conns_node_is_unreachable,
-        expand_cluster_should_skip_unreachable_node
+        expand_cluster_should_skip_unreachable_node,
+        bootstrap_should_be_delegated_to_oldest_node,
+        bootstrap_delegation_failure_should_not_bootstrap_locally,
+        join_should_be_refused_when_local_machine_version_is_older
     ]}].
 
 init_per_suite(Config) ->
@@ -126,6 +129,12 @@ end_per_testcase(_Testcase, Config) ->
 
             try
                 call(Config, Node, meck, unload, [rabbit_sole_conn])
+            catch
+                _:_ -> ok
+            end,
+
+            try
+                call(Config, Node, meck, unload, [khepri_machine])
             catch
                 _:_ -> ok
             end
@@ -784,6 +793,111 @@ expand_cluster_should_skip_unreachable_node(Config) ->
     kill_disposable(Config, Node1, Pid1),
     ok.
 
+bootstrap_should_be_delegated_to_oldest_node(Config) ->
+    Nodes = ?config(peer_nodes, Config),
+    [Node1, Node2, Node3] = [N || {N, _Peer} <- Nodes],
+
+    mock_older_machine_version(Config, Node2, Node1),
+
+    Pid1 = spawn_disposable(Config, Node2),
+    ?assertEqual(ok, acq_ref_conn(Config, Node2, ?VH, ?CID1, ?USER, Pid1)),
+
+    ?assertEqual({?STORE_ID, Node1},
+                 call(Config, Node1, ra_leaderboard, lookup_leader, [?STORE_ID])),
+    ?assertEqual(?NODE_COUNT, length(kh_members(Config, Node2))),
+    lists:foreach(
+      fun(Node) ->
+              ?assert(is_pid(call(Config, Node, erlang, whereis, [?SOLE_CONN_MOD])))
+      end, [Node1, Node2, Node3]),
+
+    Pid2 = spawn_disposable(Config, Node1),
+    ?assertEqual(ok, acq_ref_conn(Config, Node1, ?VH, ?CID2, ?USER, Pid2)),
+    Pid3 = spawn_disposable(Config, Node3),
+    ?assertEqual({error, refuse_connection},
+                 acq_ref_conn(Config, Node3, ?VH, ?CID1, ?USER, Pid3)),
+
+    kill_disposable(Config, Node2, Pid1),
+    kill_disposable(Config, Node1, Pid2),
+    kill_disposable(Config, Node3, Pid3),
+    ok.
+
+bootstrap_delegation_failure_should_not_bootstrap_locally(Config) ->
+    Nodes = ?config(peer_nodes, Config),
+    [Node1, Node2, _Node3] = [N || {N, _Peer} <- Nodes],
+
+    mock_older_machine_version(Config, Node2, Node1),
+    call(Config, Node2, meck, expect,
+         [erpc, call,
+          fun(N, ?SOLE_CONN_MOD, ensure_running, [], _Timeout)
+                when N =:= Node1 ->
+                  erlang:error({exception, boom, []});
+             (N, M, F, A, T) ->
+                  meck:passthrough([N, M, F, A, T])
+          end]),
+
+    Pid1 = spawn_disposable(Config, Node2),
+    Result = call(Config, Node2, erlang, apply,
+                  [fun() ->
+                           try
+                               ?SOLE_CONN_MOD:acquire(refuse_connection, ?VH,
+                                                      ?CID1, ?USER, Pid1)
+                           catch
+                               error:Reason -> Reason
+                           end
+                   end, []]),
+    ?assertMatch({bootstrap_delegation_failed, Node1, _}, Result),
+    ?assertEqual(undefined,
+                 call(Config, Node2, ra_directory, uid_of,
+                      [coordination, ?STORE_ID])),
+
+    kill_disposable(Config, Node2, Pid1),
+    ok.
+
+join_should_be_refused_when_local_machine_version_is_older(Config) ->
+    Nodes = ?config(peer_nodes, Config),
+    [Node1, Node2, Node3] = [N || {N, _Peer} <- Nodes],
+
+    lists:foreach(
+      fun(Node) ->
+              call(Config, Node, meck, expect,
+                   [rabbit_nodes, list_reachable, fun() -> [Node1, Node2] end])
+      end, [Node1, Node2]),
+
+    Pid1 = spawn_disposable(Config, Node1),
+    ?assertEqual(ok, acq_ref_conn(Config, Node1, ?VH, ?CID1, ?USER, Pid1)),
+    ?assertEqual(2, length(kh_members(Config, Node1))),
+
+    MacVer = call(Config, Node3, khepri_machine, version, []),
+    OldMacVer = MacVer - 1,
+    call(Config, Node3, meck, new, [khepri_machine, [passthrough, no_link]]),
+    call(Config, Node3, meck, expect,
+         [khepri_machine, version, fun() -> OldMacVer end]),
+
+    ?assertEqual({error, {machine_version_too_old,
+                          #{local => OldMacVer, effective => MacVer}}},
+                 call(Config, Node3, ?SOLE_CONN_MOD, join_cluster, [Node1])),
+    ?assertEqual(undefined,
+                 call(Config, Node3, ra_directory, uid_of,
+                      [coordination, ?STORE_ID])),
+
+    Result = call(Config, Node3, erlang, apply,
+                  [fun() ->
+                           try
+                               ?SOLE_CONN_MOD:ensure_running()
+                           catch
+                               error:Reason -> Reason
+                           end
+                   end, []]),
+    ?assertMatch({cannot_join_peer, Node1, {machine_version_too_old, _}}, Result),
+    ?assertEqual(undefined,
+                 call(Config, Node3, ra_directory, uid_of,
+                      [coordination, ?STORE_ID])),
+    ?assertEqual(undefined, call(Config, Node3, erlang, whereis, [?SOLE_CONN_MOD])),
+    ?assertEqual(2, length(kh_members(Config, Node1))),
+
+    kill_disposable(Config, Node1, Pid1),
+    ok.
+
 %% --------------------------------------------------------------
 %% Internal Helpers
 %% --------------------------------------------------------------
@@ -911,6 +1025,23 @@ setup_mocks(Config, Node) ->
     call(Config, Node, meck, expect, [rabbit_feature_flags, is_enabled,
                                       fun(_) -> true end]),
     ok.
+
+%% Mocking `khepri_machine:version/0` on `OlderNode` instead would change
+%% the machine version Ra uses there.
+mock_older_machine_version(Config, Node, OlderNode) ->
+    MacVer = call(Config, Node, khepri_machine, version, []),
+    call(Config, Node, meck, new, [erpc, [passthrough, unstick, no_link]]),
+    call(Config, Node, meck, expect,
+         [erpc, multicall,
+          fun(Nodes, khepri_machine, version, [], Timeout) ->
+                  [case N of
+                       OlderNode -> {ok, MacVer - 1};
+                       _ -> hd(meck:passthrough(
+                                 [[N], khepri_machine, version, [], Timeout]))
+                   end || N <- Nodes];
+             (Ns, M, F, A, T) ->
+                  meck:passthrough([Ns, M, F, A, T])
+          end]).
 
 node_names(Config) ->
     Nodes = ?config(peer_nodes, Config),
