@@ -258,8 +258,6 @@ close_linked_ports(Pid) ->
 sockname(Sock)   when ?IS_SSL(Sock) -> ssl:sockname(Sock);
 sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).
 
-%% The client named by a PROXY header, under the same rule as `socket_ends/2`
-%% but without reverse DNS lookups.
 peername({rabbit_proxy_socket, Sock, #{src_address := Addr, src_port := Port}})
   when is_tuple(Addr) ->
     case is_loopback(Addr) andalso not is_loopback(Sock) of
@@ -314,8 +312,7 @@ socket_ends({rabbit_proxy_socket, Sock, ProxyInfo}, Direction) ->
          } ->
             case is_loopback(FromAddress) andalso not is_loopback(Sock) of
                 true ->
-                    %% A PROXY header sent from another host cannot make the
-                    %% connection local: `loopback_users` is checked against it.
+                    %% The header is client-controlled.
                     socket_ends(Sock, Direction);
                 false ->
                     {ok, {rdns(FromAddress), FromPort,
@@ -383,8 +380,6 @@ is_loopback(Sock) when is_port(Sock) ; ?IS_SSL(Sock) ->
         {ok, {Addr, _Port}}     -> is_loopback(Addr);
         {error, _}              -> false
     end;
-%% The client is the one the PROXY header names, but as in `socket_ends/2`
-%% a header sent from another host cannot make the connection local.
 is_loopback({rabbit_proxy_socket, Sock, #{command := local}}) ->
     is_loopback(Sock);
 is_loopback({rabbit_proxy_socket, Sock, #{src_address := Addr}}) ->

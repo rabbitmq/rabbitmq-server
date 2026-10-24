@@ -1803,8 +1803,6 @@ unauthorized_vhost_access_should_close_with_delay(Config) ->
     closed = wait_for_socket_close(T, S, 10),
     ok.
 
-%% Authorization backends must be given the address of the client,
-%% i.e. the one from the PROXY protocol header, not the address of the proxy.
 vhost_access_check_uses_proxy_protocol_client_address(Config) ->
     T = gen_tcp,
     Port = get_port(T, Config),

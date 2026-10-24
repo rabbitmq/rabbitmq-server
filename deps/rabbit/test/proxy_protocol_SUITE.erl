@@ -192,8 +192,6 @@ proxy_protocol_v2_local(Config) ->
     wait_for_connection_close(Config),
     ok.
 
-%% Authorization backends must be given the address of the client,
-%% i.e. the one from the PROXY protocol header, not the address of the proxy.
 proxy_protocol_v1_vhost_access_peeraddr(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config,

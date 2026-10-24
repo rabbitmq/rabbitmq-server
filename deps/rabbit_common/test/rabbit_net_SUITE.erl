@@ -107,7 +107,6 @@ fast_close_recovers_from_stuck_recv(Config) ->
     stop_client(Client),
     ok.
 
-%% A proxy on this host announces local and remote clients alike.
 socket_ends_proxy_header_from_loopback_peer(_Config) ->
     S = new_tcp_pair({127, 0, 0, 1}),
     [?assertEqual({ok, {Src, 50000, {192, 168, 1, 2}, 5672}},

@@ -17,7 +17,9 @@ all() ->
      whitelisted_cert_is_accepted,
      forged_cert_with_same_issuer_id_is_rejected,
      different_cert_is_rejected,
-     is_whitelisted_der_matches_stored_cert
+     is_whitelisted_der_matches_stored_cert,
+     whitelisted_leaf_is_accepted_as_peer,
+     cert_issued_by_whitelisted_cert_is_rejected_as_peer
     ].
 
 init_per_suite(Config) ->
@@ -83,22 +85,55 @@ is_whitelisted_der_matches_stored_cert(_Config) ->
     {OtherDER, _} = generate_self_signed_cert("CN=DerTest", 42),
     ?assertNot(rabbit_trust_store:is_whitelisted_der(OtherDER)).
 
+whitelisted_leaf_is_accepted_as_peer(_Config) ->
+    {CertDER, _Key} = generate_self_signed_cert("CN=Leaf", 1),
+    OTPCert = public_key:pkix_decode_cert(CertDER, otp),
+    insert_entry(CertDER, OTPCert),
+    ?assertEqual({valid, confirmed},
+                 rabbit_trust_store:whitelisted(OTPCert, {bad_cert, unknown_ca}, continue)),
+    ?assertEqual({valid, confirmed},
+                 rabbit_trust_store:whitelisted(OTPCert, {bad_cert, selfsigned_peer}, continue)),
+    ?assertEqual({valid, continue},
+                 rabbit_trust_store:whitelisted(OTPCert, valid_peer, continue)).
+
+cert_issued_by_whitelisted_cert_is_rejected_as_peer(_Config) ->
+    {CertDER, Key} = generate_self_signed_cert("CN=Whitelisted", 1),
+    OTPCert = public_key:pkix_decode_cert(CertDER, otp),
+    insert_entry(CertDER, OTPCert),
+    ForgedDER = generate_cert_signed_by("CN=Peer", "CN=Whitelisted", 2, Key),
+    Forged = public_key:pkix_decode_cert(ForgedDER, otp),
+    ?assertEqual({valid, confirmed},
+                 rabbit_trust_store:whitelisted(OTPCert, {bad_cert, unknown_ca}, continue)),
+    ?assertMatch({fail, _},
+                 rabbit_trust_store:whitelisted(Forged, valid_peer, confirmed)).
+
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
 
 generate_self_signed_cert(SubjectStr, Serial) ->
     Key = public_key:generate_key({namedCurve, secp256r1}),
-    Subject = {rdnSequence, [[#'AttributeTypeAndValue'{
-                                  type = ?'id-at-commonName',
-                                  value = {utf8String, list_to_binary(SubjectStr)}}]]},
+    {generate_cert_signed_by(SubjectStr, SubjectStr, Serial, Key, Key), Key}.
+
+generate_cert_signed_by(SubjectStr, IssuerStr, Serial, IssuerKey) ->
+    generate_cert_signed_by(SubjectStr, IssuerStr, Serial, IssuerKey,
+                            public_key:generate_key({namedCurve, secp256r1})).
+
+generate_cert_signed_by(SubjectStr, IssuerStr, Serial, IssuerKey, Key) ->
+    Name = fun(Str) ->
+                   {rdnSequence, [[#'AttributeTypeAndValue'{
+                                      type = ?'id-at-commonName',
+                                      value = {utf8String, list_to_binary(Str)}}]]}
+           end,
+    Subject = Name(SubjectStr),
+    Issuer = Name(IssuerStr),
     TBS = #'OTPTBSCertificate'{
         version = v3,
         serialNumber = Serial,
         signature = #'SignatureAlgorithm'{
             algorithm = ?'ecdsa-with-SHA256',
             parameters = asn1_NOVALUE},
-        issuer = Subject,
+        issuer = Issuer,
         validity = #'Validity'{
             notBefore = {utcTime, "250101000000Z"},
             notAfter  = {utcTime, "350101000000Z"}},
@@ -110,8 +145,7 @@ generate_self_signed_cert(SubjectStr, Serial) ->
             subjectPublicKey = #'ECPoint'{point = Key#'ECPrivateKey'.publicKey}},
         extensions = []
     },
-    CertDER = public_key:pkix_sign(TBS, Key),
-    {CertDER, Key}.
+    public_key:pkix_sign(TBS, IssuerKey).
 
 extract_issuer_id(#'OTPCertificate'{} = C) ->
     {Serial, Issuer} = case public_key:pkix_issuer_id(C, other) of
