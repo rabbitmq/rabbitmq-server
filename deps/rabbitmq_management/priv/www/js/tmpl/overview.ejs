@@ -49,7 +49,7 @@
     <li>
       <a href="#/connections" class="button">Connections: <strong><%= overview.object_totals.connections %></strong></a>
     </li>
-<% if(!disable_stats) { %>
+<% if(!disable_stats && channels_visible()) { %>
     <li>
       <a href="#/channels" class="button">Channels: <strong><%= overview.object_totals.channels %></strong></a>
     </li>

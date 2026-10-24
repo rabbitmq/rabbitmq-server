@@ -102,7 +102,7 @@
 -define(CAP_TEMPORARY_TOPIC, <<"temporary-topic">>).
 -define(CAP_TEMPORARY_QUEUE, <<"temporary-queue">>).
 
--export([start_link/10,
+-export([start_link/11,
          process_frame/2,
          list_local/0,
          conserve_resources/3,
@@ -303,7 +303,9 @@
           max_queue_credit :: pos_integer(),
           msg_interceptor_ctx :: rabbit_msg_interceptor:context(),
           %% Whether the peer advertised itself as a JMS client.
-          is_jms :: boolean()
+          is_jms :: boolean(),
+          %% Read by the connection process for message rates.
+          rate_counters :: counters:counters_ref()
          }).
 
 -record(state, {
@@ -414,9 +416,9 @@
 -type state() :: #state{}.
 
 start_link(ReaderPid, WriterPid, ChannelNum, FrameMax,
-           User, Vhost, ContainerId, ConnName, IsJms, BeginFrame) ->
+           User, Vhost, ContainerId, ConnName, IsJms, RateCounters, BeginFrame) ->
     Args = {ReaderPid, WriterPid, ChannelNum, FrameMax,
-            User, Vhost, ContainerId, ConnName, IsJms, BeginFrame},
+            User, Vhost, ContainerId, ConnName, IsJms, RateCounters, BeginFrame},
     Opts = [{hibernate_after, ?HIBERNATE_AFTER}],
     gen_server:start_link(?MODULE, Args, Opts).
 
@@ -424,6 +426,7 @@ process_frame(Pid, FrameBody) ->
     gen_server:cast(Pid, {frame_body, FrameBody}).
 
 init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, ConnName, IsJms,
+      RateCounters,
       #'v1_0.begin'{
          %% "If a session is locally initiated, the remote-channel MUST NOT be set." [2.7.2]
          remote_channel = undefined,
@@ -511,6 +514,7 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, 
                            max_link_credit = MaxLinkCredit,
                            max_queue_credit = MaxQueueCredit,
                            is_jms = IsJms,
+                           rate_counters = RateCounters,
                            msg_interceptor_ctx = #{protocol => ?PROTOCOL,
                                                    vhost => Vhost,
                                                    username => User#user.username,
@@ -1209,13 +1213,14 @@ handle_frame(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
             end,
 
             SettleOp = settle_op_from_outcome(Outcome),
+            RateCounters = (State0#state.cfg)#cfg.rate_counters,
             {QStates, Actions} =
             maps:fold(
               fun({QName, Ctag}, MsgIdsRev, {QS0, ActionsAcc}) ->
                       MsgIds = lists:reverse(MsgIdsRev),
                       case rabbit_queue_type:settle(QName, SettleOp, Ctag, MsgIds, QS0) of
                           {ok, QS, Actions0} ->
-                              messages_acknowledged(SettleOp, QName, QS, MsgIds),
+                              messages_acknowledged(SettleOp, QName, QS, MsgIds, RateCounters),
                               {QS, ActionsAcc ++ Actions0};
                           {protocol_error, _ErrorType, Reason, ReasonArgs} ->
                               protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
@@ -2385,7 +2390,8 @@ handle_deliver(ConsumerTag, AckRequired,
                                  channel_num = ChannelNum,
                                  user = #user{username = Username},
                                  trace_state = Trace,
-                                 msg_interceptor_ctx = MsgIcptCtx}} = State) ->
+                                 msg_interceptor_ctx = MsgIcptCtx,
+                                 rate_counters = RateCounters}} = State) ->
     Handle = ctag_to_handle(ConsumerTag),
     case OutgoingLinks of
         #{Handle := #outgoing_link{queue_type = QType,
@@ -2404,7 +2410,7 @@ handle_deliver(ConsumerTag, AckRequired,
             Sections = mc:protocol_state(Mc),
             validate_message_size(Sections, MaxMessageSize),
             Frames = transfer_frames(Transfer, Sections, MaxFrameSize),
-            messages_delivered(Redelivered, QType),
+            messages_delivered(Redelivered, QType, AckRequired, RateCounters),
             rabbit_trace:tap_out(Msg, ConnName, ChannelNum, Username, Trace),
             Del = #outgoing_unsettled{msg_id = MsgId,
                                       consumer_tag = ConsumerTag,
@@ -2625,7 +2631,8 @@ incoming_link_transfer(
                              channel_num = ChannelNum,
                              max_link_credit = MaxLinkCredit,
                              msg_interceptor_ctx = MsgIcptCtx,
-                             is_jms = IsJms}}) ->
+                             is_jms = IsJms,
+                             rate_counters = RateCounters}}) ->
 
     {PayloadBin, DeliveryId, Settled} =
     case MultiTransfer of
@@ -2645,7 +2652,7 @@ incoming_link_transfer(
     PayloadSize = iolist_size(PayloadBin),
     validate_message_size(PayloadSize, MaxMessageSize),
     rabbit_msg_size_metrics:observe(?PROTOCOL, PayloadSize),
-    messages_received(Settled),
+    messages_received(Settled, RateCounters),
     Mc0 = try mc:init(mc_amqp, PayloadBin, #{})
           catch throw:Reason0 ->
                     link_error(?V_1_0_AMQP_ERROR_DECODE_ERROR,
@@ -3798,28 +3805,41 @@ remove_outgoing_link(Ctag, OutgoingUnsettledMap0, OutgoingPending0)
                         end, OutgoingPending0),
     {OutgoingUnsettledMap, OutgoingPending}.
 
-messages_received(Settled) ->
+messages_received(Settled, RateCounters) ->
+    rabbit_msg_rates:count(publish, 1, RateCounters),
     rabbit_global_counters:messages_received(?PROTOCOL, 1),
     case Settled of
         true -> ok;
         false -> rabbit_global_counters:messages_received_confirm(?PROTOCOL, 1)
     end.
 
-messages_delivered(Redelivered, QueueType) ->
+messages_delivered(Redelivered, QueueType, AckRequired, RateCounters) ->
+    rabbit_msg_rates:count(deliver, 1, RateCounters),
+    case Redelivered of
+        true -> rabbit_msg_rates:count(redeliver, 1, RateCounters);
+        false -> ok
+    end,
+    case AckRequired of
+        true -> ok;
+        false -> rabbit_msg_rates:count(ack, 1, RateCounters)
+    end,
     rabbit_global_counters:messages_delivered(?PROTOCOL, QueueType, 1),
     case Redelivered of
         true -> rabbit_global_counters:messages_redelivered(?PROTOCOL, QueueType, 1);
         false -> ok
     end.
 
-messages_acknowledged(complete, QName, QS, MsgIds) ->
+messages_acknowledged(complete, QName, QS, MsgIds, RateCounters) ->
+    rabbit_msg_rates:count(ack, length(MsgIds), RateCounters),
     case rabbit_queue_type:module(QName, QS) of
         {ok, QType} ->
             rabbit_global_counters:messages_acknowledged(?PROTOCOL, QType, length(MsgIds));
         _ ->
             ok
     end;
-messages_acknowledged(_, _, _, _) ->
+messages_acknowledged(discard, _, _, MsgIds, RateCounters) ->
+    rabbit_msg_rates:count(reject, length(MsgIds), RateCounters);
+messages_acknowledged(_, _, _, _, _) ->
     ok.
 
 publisher_or_consumer_deleted(#incoming_link{}) ->

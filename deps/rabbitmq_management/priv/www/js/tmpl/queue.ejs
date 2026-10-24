@@ -8,6 +8,7 @@
 <% if (rates_mode != 'none') { %>
     <%= message_rates('msg-rates-q', queue.message_stats) %>
 <% } %>
+    <%= format('smoothed-message-rates', {'rates': queue.message_rates}) %>
 <% } %>
 
     <h3>Details</h3>

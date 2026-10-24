@@ -97,7 +97,8 @@ var ALL_COLUMNS =
       'Message rates': [['rate-incoming',  'incoming',      true],
                         ['rate-deliver',   'deliver / get', true],
                         ['rate-redeliver', 'redelivered',   false],
-                        ['rate-ack',       'ack',           true]]},
+                        ['rate-ack',       'ack',           true],
+                        ['rate-reject',    'reject',        true]]},
      'channels' :
      {'Overview': [['user',  'User name', true],
                    ['mode',  'Mode',      true],
@@ -458,6 +459,13 @@ var HELP = {
         Note that you can set any tag here; the links for the above four \
         tags are just for convenience. \
       </p>',
+
+    'smoothed-message-rates':
+      'Rates are averaged over roughly the last 20 seconds, so they follow changes gradually.<br/>\
+       When messages stop, a rate falls towards zero over about 40 seconds instead of dropping to zero at once.<br/>\
+       In modern mode the message rate columns of the queue list show these rates. Streams do not report them and show sampled rates instead.<br/>\
+       For quorum queues the ack rate is inferred from the queue length, so it also \
+       counts messages that were removed in other ways, such as expired messages.',
 
     'queued-messages':
       '<dl>                          \

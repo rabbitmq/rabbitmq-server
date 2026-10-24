@@ -617,12 +617,22 @@ connection_stats(Ranges, Objs, Interval) ->
     [begin
      Id = id_lookup(connection_stats, Obj),
      ConnData = maps:get(Id, DataLookup),
-     Props = maps:get(connection_stats, ConnData),
+     Props = format_message_rates(maps:get(connection_stats, ConnData)),
      Stats = format_range(ConnData, connection_stats_coarse_conn_stats,
                           pick_range(coarse_conn_stats, Ranges), Interval),
      Details = augment_details(Obj, []), % TODO: not delegated
      combine(Props, Obj) ++ Details ++ Stats
      end || Obj <- Objs].
+
+format_message_rates(Props) when is_list(Props) ->
+    [case Prop of
+         {message_rates, Snapshot} when is_map(Snapshot) ->
+             {message_rates, rabbit_msg_rates:format(Snapshot)};
+         _ ->
+             Prop
+     end || Prop <- Props];
+format_message_rates(Props) ->
+    Props.
 
 list_channel_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(channel_stats, Obj) || Obj <- Objs],

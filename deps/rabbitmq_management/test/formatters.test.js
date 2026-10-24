@@ -204,3 +204,46 @@ describe('get_plugins_list', () => {
     assert.equal(sandbox.fmt_plugins_small(node), '');
   });
 });
+
+describe('fmt_message_rate', () => {
+  it('formats a rate', () => {
+    assert.equal(sandbox.fmt_message_rate({ publish: 12.5 }, 'publish'),
+                 sandbox.fmt_rate(12.5));
+  });
+
+  it('is empty without rates, such as for a stream', () => {
+    assert.equal(sandbox.fmt_message_rate(undefined, 'publish'), '');
+    assert.equal(sandbox.fmt_message_rate({}, 'publish'), '');
+  });
+});
+
+describe('fmt_queue_rate', () => {
+  const queue = { message_stats: { publish: 5, publish_details: { rate: 5 } },
+                  message_rates: { publish: 7 } };
+
+  it('prefers the smoothed rate in modern mode', () => {
+    sandbox.is_modern_terminology = () => true;
+    assert.equal(sandbox.fmt_queue_rate(queue, 'publish', 'publish'),
+                 sandbox.fmt_rate(7));
+  });
+
+  it('falls back to the sampled rate without a smoothed one', () => {
+    sandbox.is_modern_terminology = () => true;
+    assert.equal(sandbox.fmt_queue_rate({ message_stats: queue.message_stats },
+                                        'publish', 'publish'),
+                 sandbox.fmt_rate(5));
+  });
+
+  it('only uses the sampled rate in legacy mode', () => {
+    sandbox.is_modern_terminology = () => false;
+    assert.equal(sandbox.fmt_queue_rate(queue, 'publish', 'publish'),
+                 sandbox.fmt_rate(5));
+    assert.equal(sandbox.fmt_queue_rate({ message_rates: { publish: 7 } },
+                                        'publish', 'publish'), '');
+  });
+
+  it('is empty without either rate', () => {
+    sandbox.is_modern_terminology = () => true;
+    assert.equal(sandbox.fmt_queue_rate({}, 'publish', 'publish'), '');
+  });
+});
