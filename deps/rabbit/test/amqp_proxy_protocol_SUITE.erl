@@ -102,8 +102,6 @@ v2_local(Config) ->
     match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>, [{capture, none}]),
     ok = gen_tcp:close(Socket).
 
-%% Authorization backends must be given the address of the client,
-%% i.e. the one from the PROXY protocol header, not the address of the proxy.
 v1_vhost_access_peeraddr(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(
