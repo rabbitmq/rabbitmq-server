@@ -58,9 +58,9 @@ run(Subject, Pattern, Opts) ->
 run1(Subject, Pattern, Captures, Opts) ->
     try
         re:run(Subject, Pattern,
-               [{match_limit, ?MATCH_LIMIT},
+               [{match_limit, match_steps(Opts)},
                 {match_limit_recursion, match_depth(Captures, Opts)}
-                | [Opt || Opt <- Opts, not is_match_depth_option(Opt)]])
+                | [Opt || Opt <- Opts, not is_match_limit_option(Opt)]])
     catch
         %% `re:run/3` raises on malformed patterns and other shape errors.
         %% Surface them as a safe error tuple so callers do not need to
@@ -74,8 +74,13 @@ match_depth(Captures, Opts) ->
                                              is_integer(D)]]),
     min(min(Depth, ?MATCH_LIMIT), ?MAX_MATCH_MEMORY div (128 + 16 * (Captures + 1))).
 
-is_match_depth_option({match_limit_recursion, D}) -> is_integer(D);
-is_match_depth_option(_)                          -> false.
+%% Callers can lower the limit but not raise it.
+match_steps(Opts) ->
+    lists:min([?MATCH_LIMIT | [N || {match_limit, N} <- Opts, is_integer(N)]]).
+
+is_match_limit_option({match_limit, N})           -> is_integer(N);
+is_match_limit_option({match_limit_recursion, D}) -> is_integer(D);
+is_match_limit_option(_)                          -> false.
 
 to_binary(Pattern, _Opts) when is_binary(Pattern) ->
     Pattern;
