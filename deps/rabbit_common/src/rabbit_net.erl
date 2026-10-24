@@ -69,10 +69,10 @@
 -spec sockname(socket()) ->
           ok_val_or_error({inet:ip_address(), ip_port()} |
                           inet:returned_non_ip_address()).
--spec peername(socket()) ->
+-spec peername(socket() | proxy_socket()) ->
           ok_val_or_error({inet:ip_address(), ip_port()} |
                           inet:returned_non_ip_address()).
--spec peercert(socket()) ->
+-spec peercert(socket() | proxy_socket()) ->
           'nossl' | ok_val_or_error(rabbit_cert_info:certificate()).
 -spec connection_string(socket(), 'inbound' | 'outbound') ->
           ok_val_or_error(string()).
@@ -80,7 +80,7 @@
 %                   'inbound' | 'outbound') ->
 %           ok_val_or_error({host_or_ip(), ip_port(),
 %                            host_or_ip(), ip_port()}).
--spec is_loopback(socket() | inet:ip_address()) -> boolean().
+-spec is_loopback(socket() | proxy_socket() | inet:ip_address()) -> boolean().
 % -spec unwrap_socket(socket() | ranch_proxy:proxy_socket() | ranch_proxy_ssl:ssl_socket()) -> socket().
 
 -dialyzer({nowarn_function, [unwrap_socket/1]}).
@@ -258,9 +258,17 @@ close_linked_ports(Pid) ->
 sockname(Sock)   when ?IS_SSL(Sock) -> ssl:sockname(Sock);
 sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).
 
+peername({rabbit_proxy_socket, Sock, #{src_address := Addr, src_port := Port}})
+  when is_tuple(Addr) ->
+    case is_loopback(Addr) andalso not is_loopback(Sock) of
+        true  -> peername(Sock);
+        false -> {ok, {Addr, Port}}
+    end;
+peername({rabbit_proxy_socket, Sock, _ProxyInfo}) -> peername(Sock);
 peername(Sock)   when ?IS_SSL(Sock) -> ssl:peername(Sock);
 peername(Sock)   when is_port(Sock) -> inet:peername(Sock).
 
+peercert({rabbit_proxy_socket, Sock, _ProxyInfo}) -> peercert(Sock);
 peercert(Sock)   when ?IS_SSL(Sock) -> ssl:peercert(Sock);
 peercert(Sock)   when is_port(Sock) -> nossl.
 
@@ -302,8 +310,14 @@ socket_ends({rabbit_proxy_socket, Sock, ProxyInfo}, Direction) ->
           dest_address := ToAddress,
           dest_port := ToPort
          } ->
-            {ok, {rdns(FromAddress), FromPort,
-                  rdns(ToAddress),   ToPort}}
+            case is_loopback(FromAddress) andalso not is_loopback(Sock) of
+                true ->
+                    %% The header is client-controlled.
+                    socket_ends(Sock, Direction);
+                false ->
+                    {ok, {rdns(FromAddress), FromPort,
+                          rdns(ToAddress),   ToPort}}
+            end
     end.
 
 maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
@@ -366,6 +380,10 @@ is_loopback(Sock) when is_port(Sock) ; ?IS_SSL(Sock) ->
         {ok, {Addr, _Port}}     -> is_loopback(Addr);
         {error, _}              -> false
     end;
+is_loopback({rabbit_proxy_socket, Sock, #{command := local}}) ->
+    is_loopback(Sock);
+is_loopback({rabbit_proxy_socket, Sock, #{src_address := Addr}}) ->
+    is_loopback(Addr) andalso is_loopback(Sock);
 %% We could parse the results of inet:getifaddrs() instead. But that
 %% would be more complex and less maybe Windows-compatible...
 is_loopback({127,_,_,_})             -> true;
