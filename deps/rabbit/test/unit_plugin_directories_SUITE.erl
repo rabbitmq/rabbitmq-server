@@ -15,7 +15,8 @@
 
 all() ->
     [
-      {group, parallel_tests}
+      {group, parallel_tests},
+      find_module_in_unloaded_plugins
     ].
 
 groups() ->
@@ -29,6 +30,44 @@ groups() ->
 %% -------------------------------------------------------------------
 %% Test Cases
 %% -------------------------------------------------------------------
+
+find_module_in_unloaded_plugins(Config) ->
+    Dir = filename:join(?config(priv_dir, Config), ?FUNCTION_NAME),
+    AppPath = filename:join([Dir, "directory_provider", "ebin",
+                             "directory_provider.app"]),
+    ok = filelib:ensure_dir(AppPath),
+    ok = rabbit_file:write_term_file(
+           AppPath, [{application, directory_provider,
+                      [{vsn, "1"}, {modules, [directory_provider_module]},
+                       {applications, [kernel, stdlib, rabbit]}]}]),
+    ArchivedApp = {application, archive_provider,
+                   [{vsn, "1"}, {modules, [archive_provider_module]},
+                    {applications, [kernel, stdlib, rabbit]}]},
+    {ok, _} = zip:create(
+                filename:join(Dir, "archive_provider.ez"),
+                [{"archive_provider/ebin/archive_provider.app",
+                  iolist_to_binary(io_lib:format("~tp.", [ArchivedApp]))}]),
+    WasLoaded = lists:keymember(rabbit, 1, application:loaded_applications()),
+    PreviousDir = application:get_env(rabbit, plugins_dir),
+    application:set_env(rabbit, plugins_dir, Dir),
+    try
+        ?assertEqual({ok, archive_provider},
+                     rabbit_plugins:which_plugin(archive_provider_module)),
+        ?assertEqual({ok, directory_provider},
+                     rabbit_plugins:which_plugin(directory_provider_module)),
+        ?assertEqual({error, no_provider}, rabbit_plugins:which_plugin(no_provider_module)),
+        ?assertEqual(undefined, application:get_key(archive_provider, modules)),
+        ?assertEqual(undefined, application:get_key(directory_provider, modules))
+    after
+        case WasLoaded of
+            false -> application:unload(rabbit);
+            true -> ok
+        end,
+        case PreviousDir of
+            {ok, Value} -> application:set_env(rabbit, plugins_dir, Value);
+            undefined -> application:unset_env(rabbit, plugins_dir)
+        end
+    end.
 
 listing_plugins_from_multiple_directories(Config) ->
     %% Generate some fake plugins in .ez files
