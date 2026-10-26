@@ -33,6 +33,9 @@ all_tests() ->
      amqpl_table_x_header_array_of_tbls,
      amqpl_death_records,
      is_death_cycle,
+     death_hops,
+     death_hops_v1,
+     death_hops_compat,
      amqpl_amqp_bin_amqpl,
      amqpl_cc_amqp_bin_amqpl,
      amqp_amqpl_amqp_uuid_correlation_id,
@@ -322,6 +325,84 @@ is_death_cycle(_Config) ->
     ?assertMatch({_, longstr, <<"q3">>}, header(<<"queue">>, T3)),
     ?assertMatch({_, longstr, <<"expired">>}, header(<<"reason">>, T3)),
     ?assertMatch({_, long, 1}, header(<<"count">>, T3)).
+
+death_hops(_Config) ->
+    Content = #content{class_id = 60,
+                       properties = #'P_basic'{headers = []},
+                       properties_bin = none,
+                       payload_fragments_rev = [<<"data">>]},
+    Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, annotations())),
+    ?assertEqual(0, mc:death_hops(Msg0)),
+
+    Msg1 = mc:record_death(expired, <<"q1">>, Msg0),
+    ?assertEqual(1, mc:death_hops(Msg1)),
+    Msg2 = mc:record_death(maxlen, <<"q2">>, Msg1),
+    ?assertEqual(2, mc:death_hops(Msg2)),
+    Msg3 = mc:record_death(rejected, <<"q3">>, Msg2),
+    ?assertEqual(0, mc:death_hops(Msg3)),
+    Msg4 = mc:record_death(delivery_limit, <<"q4">>, Msg3),
+    ?assertEqual(1, mc:death_hops(Msg4)),
+    Msg5 = mc:record_death(expired, <<"q1">>, Msg4),
+    ?assertEqual(2, mc:death_hops(Msg5)),
+    Msg6 = mc:record_death(rejected, <<"q3">>, Msg5),
+    ?assertEqual(0, mc:death_hops(Msg6)),
+    Msg7 = mc:record_death(expired, <<"q2">>, Msg6),
+    ?assertEqual(1, mc:death_hops(Msg7)).
+
+death_hops_v1(_Config) ->
+    Content = #content{class_id = 60,
+                       properties = #'P_basic'{headers = []},
+                       properties_bin = none,
+                       payload_fragments_rev = [<<"data">>]},
+    Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, annotations())),
+    Death = fun(LastTime) ->
+                    #death{exchange = <<"exch">>,
+                           routing_keys = [<<"apple">>],
+                           count = 1,
+                           anns = #{first_time => 1,
+                                    last_time => LastTime}}
+            end,
+    Msg = fun(Records) ->
+                  mc:set_annotation(deaths,
+                                    #deaths{first = {<<"q1">>, expired},
+                                            last = {<<"q1">>, expired},
+                                            records = Records},
+                                    Msg0)
+          end,
+    ?assertEqual(2, mc:death_hops(Msg(#{{<<"q1">>, expired} => Death(10),
+                                        {<<"q2">>, maxlen} => Death(20)}))),
+    ?assertEqual(1, mc:death_hops(Msg(#{{<<"q1">>, expired} => Death(10),
+                                        {<<"q2">>, rejected} => Death(20),
+                                        {<<"q3">>, maxlen} => Death(30)}))),
+    ?assertEqual(0, mc:death_hops(Msg(#{{<<"q1">>, expired} => Death(10),
+                                        {<<"q2">>, maxlen} => Death(20),
+                                        {<<"q3">>, rejected} => Death(30)}))),
+    ?assertEqual(2, mc:death_hops(Msg(#{{<<"q1">>, expired} => Death(30),
+                                        {<<"q2">>, rejected} => Death(20),
+                                        {<<"q3">>, rejected} => Death(10),
+                                        {<<"q4">>, maxlen} => Death(20)}))).
+
+death_hops_compat(_Config) ->
+    Msg = fun(Headers) ->
+                  #basic_message{content = #content{class_id = 60,
+                                                    properties = #'P_basic'{headers = Headers},
+                                                    properties_bin = none,
+                                                    payload_fragments_rev = [<<"data">>]}}
+          end,
+    Death = fun(Q, Reason) ->
+                    {table, [{<<"queue">>, longstr, Q},
+                             {<<"reason">>, longstr, Reason}]}
+            end,
+    XDeath = fun(Deaths) -> [{<<"x-death">>, array, Deaths}] end,
+    ?assertEqual(0, mc:death_hops(Msg(undefined))),
+    ?assertEqual(0, mc:death_hops(Msg([]))),
+    ?assertEqual(2, mc:death_hops(Msg(XDeath([Death(<<"q2">>, <<"maxlen">>),
+                                              Death(<<"q1">>, <<"expired">>)])))),
+    ?assertEqual(1, mc:death_hops(Msg(XDeath([Death(<<"q1">>, <<"expired">>),
+                                              Death(<<"q3">>, <<"rejected">>),
+                                              Death(<<"q2">>, <<"maxlen">>)])))),
+    ?assertEqual(0, mc:death_hops(Msg(XDeath([Death(<<"q3">>, <<"rejected">>),
+                                              Death(<<"q1">>, <<"expired">>)])))).
 
 header(K, H) ->
     rabbit_basic:header(K, H).
