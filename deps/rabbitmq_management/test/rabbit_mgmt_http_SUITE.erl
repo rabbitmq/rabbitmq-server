@@ -230,6 +230,7 @@ all_tests() -> [
     issue67_test,
     extensions_test,
     cors_test,
+    cross_site_state_change_test,
     vhost_limits_list_test,
     vhost_limit_set_test,
     rates_test,
@@ -4461,6 +4462,65 @@ cors_test(Config) ->
     check_cors_all_endpoints(Config),
     %% Disable CORS again.
     rpc(Config, application, set_env, [rabbitmq_management, cors_allow_origins, []]),
+    passed.
+
+cross_site_state_change_test(Config) ->
+    Auth = auth_header("guest", "guest"),
+    Boundary = "----rmq-test-boundary",
+    Definitions = "{\"users\":[{\"name\":\"cross_site_user\","
+                  "\"password\":\"s3kRe7\",\"tags\":\"administrator\"}]}",
+    Body = "--" ++ Boundary ++ "\r\n"
+           "Content-Disposition: form-data; name=\"file\"; filename=\"definitions.json\"\r\n"
+           "Content-Type: application/json\r\n\r\n" ++
+           Definitions ++ "\r\n--" ++ Boundary ++ "--\r\n",
+    ContentType = {"content-type", "multipart/form-data; boundary=" ++ Boundary},
+    Import = fun(Headers) ->
+                     {ok, {{_, Code, _}, _, RespBody}} =
+                         req(Config, 0, post, "/definitions",
+                             [Auth, ContentType | Headers], Body),
+                     {Code, RespBody}
+             end,
+    UserExists = fun() ->
+                         {ok, {{_, Code, _}, _, _}} =
+                             req(Config, get, "/users/cross_site_user", [Auth]),
+                         Code =:= ?OK
+                 end,
+
+    lists:foreach(
+      fun(Headers) ->
+              {403, RespBody} = Import(Headers),
+              #{<<"error">> := <<"forbidden">>,
+                <<"reason">> := <<"HTTP access denied: cross-site request">>} =
+                  rabbit_json:decode(rabbit_data_coercion:to_binary(RespBody)),
+              ?assertNot(UserExists())
+      end,
+      [[{"sec-fetch-site", "cross-site"}, {"origin", "https://example.com"}],
+       [{"sec-fetch-site", "same-site"}, {"origin", "https://example.com"}],
+       [{"sec-fetch-site", "cross-site"}]]),
+
+    {?NO_CONTENT, _} = Import([{"sec-fetch-site", "same-origin"}]),
+    ?assert(UserExists()),
+    http_delete(Config, "/users/cross_site_user", ?NO_CONTENT),
+
+    {ok, {{_, ?OK, _}, _, _}} =
+        req(Config, get, "/overview", [Auth, {"sec-fetch-site", "cross-site"}]),
+
+    rpc(Config, application, set_env,
+        [rabbitmq_management, cors_allow_origins, ["https://rabbitmq.com"]]),
+    {403, _} = Import([{"sec-fetch-site", "cross-site"},
+                       {"origin", "https://example.com"}]),
+    ?assertNot(UserExists()),
+    {?NO_CONTENT, _} = Import([{"sec-fetch-site", "cross-site"},
+                               {"origin", "https://rabbitmq.com"}]),
+    http_delete(Config, "/users/cross_site_user", ?NO_CONTENT),
+
+    rpc(Config, application, set_env,
+        [rabbitmq_management, cors_allow_origins, ["*"]]),
+    {?NO_CONTENT, _} = Import([{"sec-fetch-site", "cross-site"},
+                               {"origin", "https://example.com"}]),
+    http_delete(Config, "/users/cross_site_user", ?NO_CONTENT),
+    rpc(Config, application, set_env,
+        [rabbitmq_management, cors_allow_origins, []]),
     passed.
 
 check_cors_all_endpoints(Config) ->
