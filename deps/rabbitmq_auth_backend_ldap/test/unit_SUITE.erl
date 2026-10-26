@@ -18,6 +18,8 @@ all() ->
      fill,
      ad_fill,
      fill_does_not_expand_substituted_values,
+     fill_re,
+     match_query_variables_in_regular_expression,
      rfc4514_escape_value,
      rfc4514_fill_dn,
      dn_lookup_fallback_dn_escaping,
@@ -76,6 +78,74 @@ fill_does_not_expand_substituted_values(_Config) ->
                   "${username}", [{username, Big}, {ad_domain, Big}, {ad_user, Big}]),
     ?assertEqual(length(Big), length(BigFilled)),
     ok.
+
+fill_re(_Config) ->
+    F = fun(Fmt, Args, Res) ->
+                ?assertEqual(Res, rabbit_auth_backend_ldap_util:fill_re(Fmt, Args))
+        end,
+    F("^${username}-", [{username, "bob"}],         "^bob-"),
+    F("^${username}-", [{username, <<"x|.*$|">>}],  "^x\\|\\.\\*\\$\\|-"),
+    F("^${username}-", [{username, "a.b"}],         "^a\\.b-"),
+    F("^${username}-", [{username, <<"CORP\\a">>}], "^CORP\\\\a-"),
+    F("^${ad_domain}-${ad_user}$",
+      rabbit_auth_backend_ldap_util:get_active_directory_args(<<"C.D\\a+b">>),
+      "^C\\.D-a\\+b$"),
+    F("^${resource}$", [{resource, queue}],          "^queue$"),
+    F("[${name}]",     [{name, <<"a-z">>}],          "[a\\-z]"),
+    F("^${name}$",     [{name, <<"ü.ö"/utf8>>}],
+      binary_to_list(<<"^ü\\.ö$"/utf8>>)),
+    F("^${user_dn}$",  [{user_dn, "cn=a\\,b+c"}],   "^cn=a\\\\,b\\+c$"),
+    F("^${username}$", [{username, "${name}"}, {name, "x"}], "^\\$\\{name\\}$"),
+    F("x${ip}x",       [{ip, {127,0,0,1}}],          "xx"),
+    F(<<"^${username}-">>, [{username, <<"a.b">>}],    "^a\\.b-"),
+    F("^${username}-", [{username, "a"}, {other, [{x, 1}]}], "^a-"),
+    ok.
+
+match_query_variables_in_regular_expression(_Config) ->
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    M = fun(Query, Args) ->
+                rabbit_auth_backend_ldap:evaluate(Query, Args, undefined, undefined)
+        end,
+    Queries = [{match, {string, "${name}"}, {string, "^${username}-"}},
+               {match, "${name}", {string, "^${username}-"}},
+               {match, {string, "${name}"}, "^${username}-"},
+               {match, "${name}", "^${username}-"},
+               {match, {for, [{resource, queue, {string, "${name}"}}]},
+                {string, "^${username}-"}},
+               {match, {string, "${name}"}, {string, <<"^${username}-">>}}],
+    Args = fun(Username, Name) ->
+                   [{username, Username}, {resource, queue}, {name, Name}]
+           end,
+    try
+        [begin
+             ?assert(M(Q, Args(<<"bob">>, <<"bob-q">>))),
+             ?assertNot(M(Q, Args(<<"bob">>, <<"alice-q">>))),
+             ?assertNot(M(Q, Args(<<"x|.*$|">>, <<"alice-q">>))),
+             ?assert(M(Q, Args(<<"x|.*$|">>, <<"x|.*$|-q">>))),
+             ?assertNot(M(Q, Args(<<"a.b">>, <<"axb-q">>))),
+             ?assert(M(Q, Args(<<"CORP\\alice">>, <<"CORP\\alice-q">>))),
+             ?assertNot(M(Q, Args(<<"CORP\\walter">>, <<"CORPxalter-q">>))),
+             ?assert(M(Q, Args(<<"john.smith@corp.example.com">>,
+                               <<"john.smith@corp.example.com-q">>))),
+             ?assertNot(M(Q, Args(<<"john.smith">>, <<"john_smith-q">>))),
+             ?assert(M(Q, Args(<<"svc-rabbit$">>, <<"svc-rabbit$-q">>))),
+             ?assert(M(Q, Args(<<"j+o(b)">>, <<"j+o(b)-q">>)))
+         end || Q <- Queries],
+        ?assert(M({match, {string, "${name}"}, {string, "^a\\.b$"}},
+                  Args(<<"bob">>, <<"a.b">>))),
+        Topic = {match, {string, "${routing_key}"},
+                 {string, "^devices\\.${variable_map.client_id}\\."}},
+        TopicArgs = fun(ClientId) ->
+                            [{username, <<"bob">>},
+                             {routing_key, <<"devices.d1.cmd">>},
+                             {'variable_map.client_id', ClientId}]
+                    end,
+        ?assert(M(Topic, TopicArgs(<<"d1">>))),
+        ?assertNot(M(Topic, TopicArgs(<<"x|.*">>)))
+    after
+        restore_env(log, PrevLog)
+    end.
 
 rfc4514_escape_value(_Config) ->
     E = fun(V, Res) ->
