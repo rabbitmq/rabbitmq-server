@@ -14,6 +14,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
 
+-define(DEFAULT_MAX_HOPS, 4).
+
 %%----------------------------------------------------------------------------
 
 -type reason() :: expired | rejected | maxlen | delivery_limit.
@@ -49,6 +51,20 @@ detect_cycles(rejected, _Msg, Queues) ->
     %% shortcut
     {[], Queues};
 detect_cycles(_Reason, Msg, Queues) ->
+    case mc:death_hops(Msg) > max_hops() of
+        true ->
+            log_once(dead_letter_max_hops_logged,
+                     "Message dropped because it was dead-lettered more "
+                     "than ~b times without being rejected. Use "
+                     "`dead_lettering.max_hops` in `rabbitmq.conf` to raise "
+                     "the limit as needed.",
+                     [max_hops()]),
+            {[], []};
+        false ->
+            detect_cycles0(Msg, Queues)
+    end.
+
+detect_cycles0(Msg, Queues) ->
     {Cycling,
      NotCycling} = lists:partition(fun(#resource{name = Queue}) ->
                                            mc:is_death_cycle(Queue, Msg);
@@ -63,18 +79,21 @@ detect_cycles(_Reason, Msg, Queues) ->
                        end, Cycling),
     {Cycles, NotCycling}.
 
+max_hops() ->
+    application:get_env(rabbit, dead_letter_max_hops, ?DEFAULT_MAX_HOPS).
+
 log_cycle_once(Cycle) ->
-    %% Using a hash won't eliminate this as a potential memory leak but it will
-    %% reduce the potential amount of memory used whilst probably being "good enough".
-    Key = {dead_letter_cycle, erlang:phash2(Cycle)},
+    log_once(dead_letter_cycle_logged,
+             "Message dropped because the following list of queues (ordered by "
+             "death recency) contains a dead letter cycle without reason "
+             "'rejected': ~tp",
+             [Cycle]).
+
+log_once(Key, Format, Args) ->
     case get(Key) of
         true ->
             ok;
         undefined ->
-            ?LOG_WARNING(
-              "Message dropped because the following list of queues (ordered by "
-              "death recency) contains a dead letter cycle without reason 'rejected'. "
-              "This list will not be logged again: ~tp",
-              [Cycle]),
+            ?LOG_WARNING(Format, Args),
             put(Key, true)
     end.
