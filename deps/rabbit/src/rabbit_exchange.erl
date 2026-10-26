@@ -37,6 +37,8 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments,
                     policy, user_who_performed_action]).
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
+%% A direct reply-to name in the routing key and one more in `CC`, `BCC` or `x-cc`.
+-define(MAX_VOLATILE_QUEUES, 2).
 
 -spec recover(rabbit_types:vhost()) -> [name()].
 
@@ -400,8 +402,10 @@ route(#exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME,
                                  virtual_host = VHost}},
       Message, _Opts) ->
     RKs0 = mc:routing_keys(Message),
-    RKs = lists:usort(RKs0),
-    [rabbit_misc:r(VHost, queue, RK) || RK <- RKs];
+    {VolatileRKs, RKs} = lists:partition(fun rabbit_volatile_queue:is/1,
+                                         lists:usort(RKs0)),
+    [rabbit_misc:r(VHost, queue, RK)
+     || RK <- RKs ++ lists:sublist(VolatileRKs, ?MAX_VOLATILE_QUEUES)];
 route(X = #exchange{name = XName,
                     decorators = Decorators},
       Message, Opts) ->

@@ -245,6 +245,8 @@
 
 -define(INVALID_HEADERS_KEY, <<"x-invalid-headers">>).
 -define(ROUTING_HEADERS, [<<"CC">>, <<"BCC">>]).
+%% Applies to each of `CC`, `BCC` and `x-cc` separately.
+-define(MAX_ROUTING_HEADER_ENTRIES, 64).
 -define(DELETED_HEADER, <<"BCC">>).
 
 -define(EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, <<"exchange-delete-in-progress">>).
