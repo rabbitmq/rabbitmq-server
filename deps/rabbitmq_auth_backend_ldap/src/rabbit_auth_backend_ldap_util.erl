@@ -7,11 +7,11 @@
 
 -module(rabbit_auth_backend_ldap_util).
 
--export([fill/2, get_active_directory_args/1, parse_query/1]).
+-export([fill/2, fill_re/2, get_active_directory_args/1, parse_query/1]).
 
-%% Raw substitution without escaping. Safe only for non-DN sinks (ACL string
-%% comparisons, eldap:equalityMatch/2 filter values). To build a DN, use
-%% rabbit_ldap_rfc4514:fill_dn/2, which RFC 4514-escapes substituted values.
+%% Raw substitution without escaping, for string comparisons and
+%% `eldap:equalityMatch/2` filter values. To build a DN, use
+%% `rabbit_ldap_rfc4514:fill_dn/2`. To build a regular expression, use `fill_re/2`.
 fill(Fmt, Args) ->
     Bin = iolist_to_binary(Fmt),
     Vars = [{atom_to_binary(K), to_repl(V)} || {K, V} <- Args],
@@ -32,6 +32,19 @@ fill(Bin, Pos, [[{Start, Len}, {NStart, NLen}] | T], Vars) ->
                       false  -> binary:part(Bin, Start, Len)
                   end,
     [Prefix, Replacement | fill(Bin, Start + Len, T, Vars)].
+
+fill_re(Fmt, Args) ->
+    fill(Fmt, [{K, escape_re(V)} || {K, V} <- Args]).
+
+escape_re(V) when is_atom(V)   -> escape_re(atom_to_binary(V));
+escape_re(V) when is_list(V) ->
+    try iolist_to_binary(V) of
+        Bin -> escape_re(Bin)
+    catch
+        error:badarg -> V
+    end;
+escape_re(V) when is_binary(V) -> rabbit_re:escape(V);
+escape_re(V)                   -> V.
 
 to_repl(V) when is_atom(V)   -> atom_to_list(V);
 to_repl(V) when is_binary(V) -> binary_to_list(V);
