@@ -27,7 +27,8 @@
 %% for tests
 -export([purge_connections/0,
          fill_user_dn_pattern/1, escaped_user_dn/1, simple_bind_fill_pattern/1,
-         fill_dn_with_username/2, invalid_credentials_refused/1, with_login/4]).
+         fill_dn_with_username/2, invalid_credentials_refused/1, with_login/4,
+         evaluate/4]).
 
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
@@ -338,21 +339,21 @@ evaluate0({match, {string, _} = StringQuery, {string, _} = REQuery}, Args, User,
                       do_match(String1, String2)
               end,
               evaluate(StringQuery, Args, User, LDAP),
-              evaluate(REQuery, Args, User, LDAP));
+              evaluate_re(REQuery, Args, User, LDAP));
 
 evaluate0({match, StringQuery, {string, _} = REQuery}, Args, User, LDAP) when is_list(StringQuery)->
     safe_eval(fun (String1, String2) ->
                       do_match(String1, String2)
               end,
         evaluate(StringQuery, Args, User, LDAP),
-        evaluate(REQuery, Args, User, LDAP));
+        evaluate_re(REQuery, Args, User, LDAP));
 
 evaluate0({match, {string, _} = StringQuery, REQuery}, Args, User, LDAP) when is_list(REQuery) ->
     safe_eval(fun (String1, String2) ->
                       do_match(String1, String2)
               end,
         evaluate(StringQuery, Args, User, LDAP),
-        evaluate(REQuery, Args, User, LDAP));
+        evaluate_re(REQuery, Args, User, LDAP));
 
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) when is_list(StringQuery),
                                                                 is_list(REQuery)  ->
@@ -360,14 +361,14 @@ evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) when is_list(StringQu
                       do_match(String1, String2)
               end,
         evaluate(StringQuery, Args, User, LDAP),
-        evaluate(REQuery, Args, User, LDAP));
+        evaluate_re(REQuery, Args, User, LDAP));
 
 evaluate0({match, StringQuery, REQuery}, Args, User, LDAP) ->
     safe_eval(fun (String1, String2) ->
                       do_match_multi(String1, String2)
               end,
         evaluate(StringQuery, Args, User, LDAP),
-        evaluate(REQuery, Args, User, LDAP));
+        evaluate_re(REQuery, Args, User, LDAP));
 
 evaluate0(StringPattern, Args, User, LDAP) when is_list(StringPattern) ->
     evaluate0({string, StringPattern}, Args, User, LDAP);
@@ -386,6 +387,15 @@ evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
 
 evaluate0(Q, Args, _User, _LDAP) ->
     {error, {unrecognised_query, Q, Args}}.
+
+evaluate_re(Pattern, Args, User, LDAP) when is_list(Pattern) ->
+    evaluate_re({string, Pattern}, Args, User, LDAP);
+evaluate_re({string, Pattern}, Args, _User, _LDAP) ->
+    R = rabbit_auth_backend_ldap_util:fill_re(Pattern, Args),
+    ?L1("evaluated regular expression for \"~ts\"", [R]),
+    R;
+evaluate_re(Query, Args, User, LDAP) ->
+    evaluate(Query, Args, User, LDAP).
 
 search_groups(LDAP, Desc, GroupsBase, Scope, DN) ->
     Filter = eldap:equalityMatch(Desc, DN),
