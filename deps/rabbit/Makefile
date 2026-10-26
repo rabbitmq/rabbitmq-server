@@ -116,6 +116,7 @@ define PROJECT_ENV
 		{credentials_obfuscation_fallback_secret, <<"nocookie">>},
       	{dead_letter_worker_consumer_prefetch, 32},
       	{dead_letter_worker_publisher_confirm_timeout, 180000},
+      	{dead_letter_max_hops, 4},
 		{vhost_process_reconciliation_run_interval, 30},
 		{stream_read_ahead, true},
 		%% for testing
