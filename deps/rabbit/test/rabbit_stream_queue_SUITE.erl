@@ -2146,6 +2146,16 @@ max_segment_size_bytes_validation(Config) ->
        declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                    {<<"x-stream-max-segment-size-bytes">>, long, ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}])),
 
+    [?assertExit(
+        {{shutdown, {server_initiated_close, 406, _}}, _},
+        declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                    {<<"x-stream-max-segment-size-bytes">>, long, Size}]))
+     || Size <- [0, 8, ?MIN_STREAM_MAX_SEGMENT_SIZE - 1]],
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-stream-max-segment-size-bytes">>, long, ?MIN_STREAM_MAX_SEGMENT_SIZE}])),
+
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 
@@ -2157,7 +2167,7 @@ max_age(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                              {<<"x-max-age">>, longstr, <<"5s">>},
-                                             {<<"x-stream-max-segment-size-bytes">>, long, 250}])),
+                                             {<<"x-stream-max-segment-size-bytes">>, long, ?MIN_STREAM_MAX_SEGMENT_SIZE}])),
 
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
 
@@ -2621,7 +2631,7 @@ update_retention_policy(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                             {<<"x-stream-max-segment-size-bytes">>, long, 200},
+                                             {<<"x-stream-max-segment-size-bytes">>, long, ?MIN_STREAM_MAX_SEGMENT_SIZE},
                                              {<<"x-stream-filter-size-bytes">>, long, 32}
                                             ])),
     check_leader_and_replicas(Config, Servers),
@@ -2686,6 +2696,23 @@ max_segment_size_bytes_policy_validation(Config) ->
                            0,
                            <<"queues">>,
                            <<"acting-user">>]),
+
+    [{error_string, _} = rabbit_ct_broker_helpers:rpc(
+                           Config, 0,
+                           rabbit_policy, set,
+                           [<<"/">>,
+                            PolicyName,
+                            Pattern,
+                            [{<<"stream-max-segment-size-bytes">>, Size}],
+                            0,
+                            <<"queues">>,
+                            <<"acting-user">>])
+     || Size <- [0, 8, ?MIN_STREAM_MAX_SEGMENT_SIZE - 1]],
+
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, PolicyName, Pattern, <<"queues">>,
+           [{<<"stream-max-segment-size-bytes">>, ?MIN_STREAM_MAX_SEGMENT_SIZE}]),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
     ok.
 
 max_segment_size_bytes_policy(Config) ->
