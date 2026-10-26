@@ -26,6 +26,9 @@
          reset/1,
          reset_removes_things/1,
          reset_in_minority/1,
+         init_after_reset_fails/1,
+         init_retries_while_store_restarts/1,
+         kill_store_then_init/0,
          force_boot/1,
          status_with_alarm/1,
          pid_file_and_await_node_startup/1,
@@ -72,6 +75,8 @@ groups() ->
                              reset,
                              reset_removes_things,
                              reset_in_minority,
+                             init_after_reset_fails,
+                             init_retries_while_store_restarts,
                              force_boot,
                              status_with_alarm,
                              pid_file_and_await_node_startup,
@@ -499,6 +504,34 @@ reset_in_minority(Config) ->
     is_in_minority(reset(Config, Rabbit)),
 
     ok.
+
+init_after_reset_fails(Config) ->
+    [Rabbit, _Hare] = cluster_members(Config),
+
+    ok = stop_app(Config, Rabbit),
+    ok = reset(Config, Rabbit),
+
+    ?assertEqual(
+       {error, noproc},
+       rabbit_ct_broker_helpers:rpc(
+         Config, Rabbit, rabbit_khepri, init, [false], 30_000)),
+
+    ok = start_app(Config, Rabbit),
+    assert_cluster_status({[Rabbit], [Rabbit]}, [Rabbit]).
+
+init_retries_while_store_restarts(Config) ->
+    [Rabbit, _Hare] = cluster_members(Config),
+    ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, ?MODULE),
+
+    ?assertEqual(
+       {{error, noproc}, ok},
+       rabbit_ct_broker_helpers:rpc(
+         Config, Rabbit, ?MODULE, kill_store_then_init, [], 30_000)).
+
+kill_store_then_init() ->
+    exit(whereis(rabbitmq_metadata), kill),
+    Seen = khepri_cluster:members(rabbitmq_metadata),
+    {Seen, rabbit_khepri:init(false)}.
 
 is_in_minority(Ret) ->
     ?assertMatch({error, 75, _}, Ret),

@@ -220,6 +220,10 @@
 -define(STORE_ID, ?RA_CLUSTER_NAME).
 -define(MIGRATION_ID, <<"rabbitmq_metadata">>).
 
+%% With the 1 s sleep in `init/2', this allows about 10 s for the supervisor
+%% to restart the Ra server.
+-define(INIT_NOPROC_RETRIES, 10).
+
 %% By default we should try to reply from the cluster member that makes a
 %% request to change the store. Projections are immediately consistent on the
 %% node that issues the reply effect and eventually consistent everywhere else.
@@ -334,7 +338,7 @@ retry_timeout() ->
 
 -spec init(IsVirgin) -> Ret when
       IsVirgin :: boolean(),
-      Ret :: ok | timeout_error().
+      Ret :: ok | khepri:error().
 %% @doc Ensures the store has caught up with the cluster.
 %%
 %% In addition to making sure the local Khepri store is on the same page as the
@@ -343,11 +347,25 @@ retry_timeout() ->
 %% Finally, it requests the deletion of transient queues on this node.
 
 init(IsVirgin) ->
-    case members() of
-        [] ->
+    init(IsVirgin, ?INIT_NOPROC_RETRIES).
+
+init(IsVirgin, NoprocRetries) ->
+    case khepri_cluster:members(?RA_CLUSTER_NAME) of
+        %% Khepri also returns `noproc' while the Ra server is restarted by
+        %% its supervisor, so only a store that stays stopped, e.g. after a
+        %% reset, fails the boot.
+        {error, noproc} = Error when NoprocRetries =:= 0 ->
+            ?LOG_ERROR(
+               "Khepri-based " ?RA_FRIENDLY_NAME " is not running",
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            Error;
+        {error, noproc} ->
             timer:sleep(1000),
-            init(IsVirgin);
-        Members ->
+            init(IsVirgin, NoprocRetries - 1);
+        {error, _} ->
+            timer:sleep(1000),
+            init(IsVirgin, NoprocRetries);
+        {ok, Members} ->
             ?LOG_NOTICE(
                "Found the following metadata store members: ~p", [Members],
                #{domain => ?RMQLOG_DOMAIN_DB}),
