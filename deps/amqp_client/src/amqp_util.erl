@@ -17,7 +17,6 @@ call_timeout() ->
     end.
 
 update_call_timeout(Timeout) ->
-    application:set_env(amqp_client, gen_server_call_timeout, Timeout),
     put(gen_server_call_timeout, Timeout),
     ok.
 
