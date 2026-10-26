@@ -24,6 +24,8 @@ all() ->
      non_body_frame_above_limit,
      header_class_mismatch_above_limit,
      empty_body,
+     empty_body_frame,
+     empty_body_frame_above_limit,
      body_size_above_hard_limit,
      process_2_applies_the_hard_limit_only
     ].
@@ -69,6 +71,21 @@ empty_body(_Config) ->
     {ok, S0} = publish_method(),
     ?assertMatch({ok, #'basic.publish'{}, #content{payload_fragments_rev = []}, method},
                  process3(header(0), S0)).
+
+empty_body_frame(_Config) ->
+    {ok, S0} = publish_method(),
+    {ok, S1} = process3(header(?MAX_BODY_SIZE), S0),
+    {ok, S2} = process3({content_body, <<"0123">>}, S1),
+    ?assertMatch({error, #amqp_error{name = frame_error, method = 'basic.publish'}},
+                 process3({content_body, <<>>}, S1)),
+    ?assertMatch({error, #amqp_error{name = frame_error, method = 'basic.publish'}},
+                 process3({content_body, <<>>}, S2)).
+
+empty_body_frame_above_limit(_Config) ->
+    {ok, S0} = publish_method(),
+    {too_large, _, _, S1} = process3(header(?MAX_BODY_SIZE + 1), S0),
+    ?assertMatch({error, #amqp_error{name = frame_error, method = 'basic.publish'}},
+                 process3({content_body, <<>>}, S1)).
 
 body_size_above_hard_limit(_Config) ->
     {ok, S0} = publish_method(),
