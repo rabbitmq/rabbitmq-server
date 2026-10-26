@@ -120,7 +120,8 @@ prop_pid_from_name_returns_error_when_there_are_no_suitable_candidates_() ->
 prop_pid_from_name_no_atom_growth_well_formed(_) ->
     %% Warm up before sampling the atom count.
     _ = rabbit_volatile_queue:pid_from_name(
-          <<"amq.rabbitmq.reply-to.", (base64:encode(<<>>))/binary, ".k">>,
+          <<"amq.rabbitmq.reply-to.", (base64:encode(<<>>))/binary, ".",
+            (base64:encode(<<0:128>>))/binary>>,
           #{}),
     rabbit_ct_proper_helpers:run_proper(
       fun prop_pid_from_name_no_atom_growth_well_formed_/0, [],
@@ -130,7 +131,7 @@ prop_pid_from_name_no_atom_growth_well_formed_() ->
     ?FORALL({NodeBytes, ID, Serial, Creation, Suffix},
             {?LET(L, integer(0, 200), binary(L)),
              uint32(), uint32(), uint32(),
-             ?LET(L, integer(1, 50), binary(L))},
+             ?LET(K, binary(16), base64:encode(K))},
             begin
                 QName = craft_reply_to_with_suffix(NodeBytes, ID, Serial,
                                                    Creation, Suffix),
@@ -168,11 +169,12 @@ prop_pid_from_name_decodes_well_formed_() ->
     Candidates = #{Hash => Candidate},
     ?FORALL({ID, Serial, Creation, Suffix},
             {uint32(), uint32(), uint32(),
-             ?LET(L, integer(1, 30), binary(L))},
+             binary(16)},
             begin
                 PidBin = make_pid_bin(SyntheticBin, ID, Serial, Creation),
                 QName = <<"amq.rabbitmq.reply-to.",
-                          (base64:encode(PidBin))/binary, ".", Suffix/binary>>,
+                          (base64:encode(PidBin))/binary, ".",
+                          (base64:encode(Suffix))/binary>>,
                 {ok, Pid} = rabbit_volatile_queue:pid_from_name(QName, Candidates),
                 node(Pid) =:= Candidate
             end).
