@@ -11,6 +11,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("rabbit_mqtt_packet.hrl").
 
+-define(MAX_ENTRIES, 10).
+
 all() ->
     [
      {group, tests}
@@ -26,13 +28,20 @@ groups() ->
        fragmentation_is_transparent,
        maximum_subscription_identifier_is_accepted,
        oversized_subscription_identifier_is_rejected,
-       five_byte_subscription_identifier_is_rejected
+       five_byte_subscription_identifier_is_rejected,
+       topic_filters_up_to_limit_are_accepted,
+       topic_filters_over_limit_are_rejected,
+       fragmented_topic_filters_over_limit_are_rejected,
+       user_properties_up_to_limit_are_accepted,
+       user_properties_over_limit_are_rejected
       ]}
     ].
 
 init_per_suite(Config) ->
     ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED, 65_536),
     ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, ?MAX_PACKET_SIZE),
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_TOPIC_FILTERS_PER_PACKET, ?MAX_ENTRIES),
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_USER_PROPERTIES_PER_PACKET, ?MAX_ENTRIES),
     Config.
 
 end_per_suite(_Config) ->
@@ -106,6 +115,43 @@ five_byte_subscription_identifier_is_rejected(_Config) ->
     ?assertThrow(malformed_variable_byte_integer,
                  rabbit_mqtt_packet:parse(subscribe_packet(<<16#FF, 16#FF, 16#FF, 16#FF, 16#7F>>), 5)).
 
+topic_filters_up_to_limit_are_accepted(_Config) ->
+    [begin
+         {ok, #mqtt_packet{variable = #mqtt_packet_subscribe{subscriptions = Subs}}, <<>>, _} =
+         rabbit_mqtt_packet:parse(subscribe_packet(?MAX_ENTRIES, Vsn), Vsn),
+         ?assertEqual(?MAX_ENTRIES, length(Subs)),
+         {ok, #mqtt_packet{variable = #mqtt_packet_unsubscribe{topic_filters = Topics}}, <<>>, _} =
+         rabbit_mqtt_packet:parse(unsubscribe_packet(?MAX_ENTRIES, Vsn), Vsn),
+         ?assertEqual(?MAX_ENTRIES, length(Topics))
+     end || Vsn <- [3, 4, 5]],
+    ok.
+
+topic_filters_over_limit_are_rejected(_Config) ->
+    [begin
+         ?assertEqual({error, {disconnect_reason_code, ?RC_QUOTA_EXCEEDED}},
+                      rabbit_mqtt_packet:parse(subscribe_packet(?MAX_ENTRIES + 1, Vsn), Vsn)),
+         ?assertEqual({error, {disconnect_reason_code, ?RC_QUOTA_EXCEEDED}},
+                      rabbit_mqtt_packet:parse(unsubscribe_packet(?MAX_ENTRIES + 1, Vsn), Vsn))
+     end || Vsn <- [3, 4, 5]],
+    ok.
+
+fragmented_topic_filters_over_limit_are_rejected(_Config) ->
+    ?assertEqual({error, {disconnect_reason_code, ?RC_QUOTA_EXCEEDED}},
+                 feed_until_error(subscribe_packet(?MAX_ENTRIES + 1, 5), 5, 1)).
+
+user_properties_up_to_limit_are_accepted(_Config) ->
+    [begin
+         {ok, #mqtt_packet{variable = #mqtt_packet_publish{props = Props}}, <<>>, _} =
+         rabbit_mqtt_packet:parse(publish_packet_with_user_properties(N), 5),
+         ?assertEqual([{<<"k">>, integer_to_binary(I)} || I <- lists:seq(1, N)],
+                      maps:get('User-Property', Props))
+     end || N <- [1, ?MAX_ENTRIES]],
+    ok.
+
+user_properties_over_limit_are_rejected(_Config) ->
+    ?assertEqual({error, {disconnect_reason_code, ?RC_QUOTA_EXCEEDED}},
+                 rabbit_mqtt_packet:parse(publish_packet_with_user_properties(?MAX_ENTRIES + 1), 5)).
+
 %%%%%%%%%%%%%%%
 %%% Helpers %%%
 %%%%%%%%%%%%%%%
@@ -157,6 +203,16 @@ feed(Bin, State, FragSize) ->
             ct:fail({parse_error, Reason})
     end.
 
+feed_until_error(Bin, State, FragSize) ->
+    N = min(FragSize, byte_size(Bin)),
+    <<Frag:N/binary, Undelivered/binary>> = Bin,
+    case rabbit_mqtt_packet:parse(Frag, State) of
+        {more, State1} when Undelivered =/= <<>> ->
+            feed_until_error(Undelivered, State1, FragSize);
+        Other ->
+            Other
+    end.
+
 %%%%%%%%%%%%%%%%
 %%% Builders %%%
 %%%%%%%%%%%%%%%%
@@ -183,6 +239,27 @@ subscribe_packet(SubscriptionId) ->
     Props = <<16#0B, SubscriptionId/binary>>,
     Body = <<1:16, (byte_size(Props)), Props/binary, 1:16, "a", 0>>,
     <<?SUBSCRIBE:4, 2:4, (byte_size(Body)), Body/binary>>.
+
+subscribe_packet(NumFilters, Vsn) ->
+    Filters = << <<1:16, "a", 0>> || _ <- lists:seq(1, NumFilters) >>,
+    Body = <<1:16, (props(Vsn))/binary, Filters/binary>>,
+    <<?SUBSCRIBE:4, 2:4, (remaining_length(byte_size(Body)))/binary, Body/binary>>.
+
+unsubscribe_packet(NumFilters, Vsn) ->
+    Filters = << <<1:16, "a">> || _ <- lists:seq(1, NumFilters) >>,
+    Body = <<1:16, (props(Vsn))/binary, Filters/binary>>,
+    <<?UNSUBSCRIBE:4, 2:4, (remaining_length(byte_size(Body)))/binary, Body/binary>>.
+
+props(5) -> <<0>>;
+props(_) -> <<>>.
+
+publish_packet_with_user_properties(N) ->
+    Topic = <<"a/b/c">>,
+    Props = << <<16#26, 1:16, "k", (byte_size(V)):16, V/binary>>
+               || I <- lists:seq(1, N), V <- [integer_to_binary(I)] >>,
+    Body = <<(byte_size(Topic)):16, Topic/binary,
+             (remaining_length(byte_size(Props)))/binary, Props/binary>>,
+    <<?PUBLISH:4, 0:4, (remaining_length(byte_size(Body)))/binary, Body/binary>>.
 
 pingreq_packet() ->
     <<?PINGREQ:4, 0:4, 0>>.
