@@ -32,6 +32,7 @@ groups() ->
         disconnect,
         disconnect_releases_counters,
         error_releases_counters,
+        transaction_body_limit,
         credential_expires,
         http_auth
     ],
@@ -77,7 +78,8 @@ init_per_testcase(http_auth, Config) ->
     Config;
 init_per_testcase(TestCase, Config)
   when TestCase =:= disconnect_releases_counters;
-       TestCase =:= error_releases_counters ->
+       TestCase =:= error_releases_counters;
+       TestCase =:= transaction_body_limit ->
     case rabbit_ct_helpers:is_mixed_versions() of
         false -> Config;
         true  -> {skip, "Should not run in mixed version environments"}
@@ -212,6 +214,24 @@ error_releases_counters(Config) ->
     {<<"ERROR">>, _, _} = raw_recv(WS),
     {close, _} = rfc6455_client:recv(WS),
     rabbit_ct_helpers:await_condition(fun() -> Counters() =:= Before end, 5_000).
+
+transaction_body_limit(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS, "CONNECT", [{"login","guest"}, {"passcode", "guest"}]),
+    {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+    Tx = {"transaction", "tx"},
+    Dst = {"destination", "/topic/transaction-body-limit"},
+    Body = binary:copy(<<"x">>, 2 * 1024 * 1024),
+    ok = raw_send(WS, "BEGIN", [Tx]),
+    [ok = raw_send(WS, "SEND", [Dst, Tx], Body) || _ <- lists:seq(1, 64)],
+    ok = raw_send(WS, "SEND", [Dst, Tx], <<"x">>),
+    {<<"ERROR">>, Hdrs, _} = raw_recv(WS),
+    ?assertEqual({<<"message">>, <<"Transaction too large">>},
+                 lists:keyfind(<<"message">>, 1, Hdrs)),
+    {close, _} = rfc6455_client:recv(WS).
 
 credential_expires(Config) ->
     Mod = rabbit_auth_backend_internal,
