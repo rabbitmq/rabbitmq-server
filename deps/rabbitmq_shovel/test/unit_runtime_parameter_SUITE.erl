@@ -37,6 +37,7 @@ groups() ->
           validate_amqp10,
           validate_amqp10_with_a_map,
           validate_uri_length,
+          validate_uri_connection_timeout,
           test_src_protocol_defaults,
           test_src_protocol_explicit,
           test_src_protocol_unknown,
@@ -466,6 +467,18 @@ validate_uri_length(_Config) ->
                  Validate(<<"src-uri">>, Uri(65537))),
     ?assertMatch({error, _, [<<"src-uri">>, 65536]},
                  Validate(<<"src-uri">>, [Prefix, Uri(65537)])).
+
+validate_uri_connection_timeout(_Config) ->
+    Validate = rabbit_shovel_util:validate_uri_fun(none),
+    Uri = fun(Timeout) ->
+                  iolist_to_binary(["amqp://localhost?connection_timeout=",
+                                    integer_to_list(Timeout)])
+          end,
+    ?assertEqual(ok, Validate(<<"src-uri">>, Uri(180000))),
+    ?assertMatch({error, _, [<<"src-uri">>, 180000]},
+                 Validate(<<"src-uri">>, Uri(180001))),
+    ?assertMatch({error, _, [<<"dest-uri">>, 180000]},
+                 Validate(<<"dest-uri">>, [Uri(1000), Uri(180001)])).
 
 validate_ok([ok | T]) ->
     validate_ok(T);
