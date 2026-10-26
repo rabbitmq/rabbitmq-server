@@ -26,6 +26,7 @@ groups() ->
       [
        amqp_1_0_amqp_connection,
        amqp_1_0_queue_created,
+       amqp_1_0_event_too_large,
        headers_exchange
       ]},
      {amqp_0_9_1, [],
@@ -108,6 +109,21 @@ amqp_1_0_queue_created(Config) ->
                  rabbit_misc:table_lookup(Headers, <<"x-opt-name">>)),
     ?assertEqual({table, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
                  rabbit_misc:table_lookup(Headers, <<"x-opt-arguments">>)).
+
+amqp_1_0_event_too_large(Config) ->
+    Ch = declare_event_queue(Config, <<"test.#">>),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_event, notify,
+           [test_too_large, [{value, binary:copy(<<"v">>, 200_000)}]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_event, notify, [test_regular, [{value, <<"v">>}]]),
+    receive
+        {#'basic.deliver'{routing_key = Key}, #amqp_msg{}} ->
+            ?assertEqual(<<"test.regular">>, Key)
+    after 5000 ->
+              ct:fail(missing_event)
+    end,
+    rabbit_ct_client_helpers:close_channel(Ch).
 
 amqp_0_9_1_queue_created(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),

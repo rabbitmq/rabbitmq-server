@@ -327,8 +327,12 @@ dest_endpoint(#{shovel_type := dynamic,
 handle_source({amqp10_msg, _LinkRef, RawMsg}, State) ->
     Tag = amqp10_raw_msg:delivery_tag(RawMsg),
     Payload = amqp10_raw_msg:payload(RawMsg),
-    Msg = mc:init(mc_amqp, Payload, #{}),
-    rabbit_shovel_behaviour:forward(Tag, Msg, State);
+    try mc:init(mc_amqp, Payload, #{}) of
+        Msg ->
+            rabbit_shovel_behaviour:forward(Tag, Msg, State)
+    catch throw:Reason ->
+              reject_source_msg(Tag, Reason, State)
+    end;
 handle_source({amqp10_event, {connection, Conn, opened}},
               State = #{source := #{current := #{conn := Conn}}}) ->
     State;
@@ -464,6 +468,19 @@ nack(Tags, State = #{source := #{current := #{link := LinkRef}}}) ->
                                  {modified, true, false, #{}})
                   end, serial_number:ranges(Tags)),
     State.
+
+reject_source_msg(Tag, Reason, State = #{name := Name,
+                                         ack_mode := AckMode,
+                                         source := #{current := #{link := LinkRef}}}) ->
+    ?LOG_WARNING("Shovel ~ts could not parse a source message: ~tp",
+                 [Name, Reason]),
+    case AckMode of
+        no_ack ->
+            ok;
+        _ ->
+            ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, rejected)
+    end,
+    rabbit_shovel_behaviour:decr_remaining(1, State).
 
 status(#{dest := #{current := #{link_state := attached}}}) ->
     flow;
