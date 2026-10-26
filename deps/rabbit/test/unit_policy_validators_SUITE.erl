@@ -8,6 +8,7 @@
 -module(unit_policy_validators_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -compile(nowarn_export_all).
 -compile(export_all).
@@ -32,6 +33,7 @@ groups() ->
           delivery_limit,
           classic_queue_lazy_mode,
           length_limit_overflow_mode,
+          stream_max_segment_size_bytes,
           delayed_retry_type,
           delayed_retry_min,
           delayed_retry_max,
@@ -115,6 +117,12 @@ length_limit_overflow_mode(_Config) ->
         [<<"drop-head">>, <<"reject-publish">>, <<"reject-publish-dlx">>],
         %% invalid values
         [<<"unknown">>, <<"publish">>, <<"overflow">>, <<"mode">>]).
+
+stream_max_segment_size_bytes(_Config) ->
+    test_valid_and_invalid_values(<<"stream-max-segment-size-bytes">>,
+        [?MIN_STREAM_MAX_SEGMENT_SIZE, 500_000_000, ?MAX_STREAM_MAX_SEGMENT_SIZE],
+        [-1, 0, 8, ?MIN_STREAM_MAX_SEGMENT_SIZE - 1,
+         ?MAX_STREAM_MAX_SEGMENT_SIZE + 1, <<"a.binary">>]).
 
 %%
 %% Implementation
