@@ -168,11 +168,12 @@ prop_pid_from_name_decodes_well_formed_() ->
     Candidates = #{Hash => Candidate},
     ?FORALL({ID, Serial, Creation, Suffix},
             {uint32(), uint32(), uint32(),
-             ?LET(L, integer(1, 30), binary(L))},
+             binary(16)},
             begin
                 PidBin = make_pid_bin(SyntheticBin, ID, Serial, Creation),
                 QName = <<"amq.rabbitmq.reply-to.",
-                          (base64:encode(PidBin))/binary, ".", Suffix/binary>>,
+                          (base64:encode(PidBin))/binary, ".",
+                          (base64:encode(Suffix))/binary>>,
                 {ok, Pid} = rabbit_volatile_queue:pid_from_name(QName, Candidates),
                 node(Pid) =:= Candidate
             end).
