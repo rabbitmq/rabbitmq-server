@@ -450,19 +450,24 @@ amqp_mqtt_unconvertible_properties(Config) ->
     ok = amqp10_client:send_msg(
            Sender,
            amqp_msg_from_sections(
-             [#'v1_0.properties'{correlation_id = {binary, TooLong},
-                                 content_type = {symbol, TooLong}},
+             [#'v1_0.properties'{correlation_id = {binary, TooLong}},
               #'v1_0.data'{content = <<"m2">>}])),
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp_msg_from_sections(
+             [#'v1_0.properties'{content_type = {symbol, TooLong}},
+              #'v1_0.data'{content = <<"m3">>}])),
     ok = amqp10_client:send_msg(
            Sender,
            amqp_msg_from_sections(
              [#'v1_0.properties'{content_type = {symbol, <<255>>},
                                  reply_to = {utf8, <<"/exchanges/amq.topic/a%00">>}},
-              #'v1_0.data'{content = <<"m3">>}])),
+              #'v1_0.data'{content = <<"m4">>}])),
 
     receive_mqtt_publish(C, <<"m1">>, #{'User-Property' => [{<<"k1">>, <<"v1">>}]}),
     receive_mqtt_publish(C, <<"m2">>, #{}),
     receive_mqtt_publish(C, <<"m3">>, #{}),
+    receive_mqtt_publish(C, <<"m4">>, #{}),
 
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),

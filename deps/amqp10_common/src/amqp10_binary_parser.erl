@@ -46,13 +46,17 @@
 %% Real world descriptors are either a ulong or a short symbol.
 -define(MAX_ARRAY_DESCRIPTOR_SIZE, 64).
 
+%% Matches the default `frame_max`, which bounds AMQP 0-9-1 headers.
+-define(MAX_PARSED_MSG_SECTION_SIZE, 131_072).
+
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
 %% AMQP message sections from an AMQP client. This mode:
 %% 1. stops parsing when the body starts, and
 %% 2. returns the start byte position of each parsed bare message section.
 %%
-%% If Validate is true, the order and cardinality of all message sections is
-%% additionally validated as defined in §3.2.
+%% If Validate is true, the order and cardinality of all message sections as
+%% defined in §3.2 and the size of the sections preceding the body are
+%% additionally validated.
 -type opt() :: {server_mode, Validate :: boolean()}.
 -type opts() :: [opt()].
 
@@ -546,6 +550,12 @@ section_value_kind(?DESCRIPTOR_CODE_AMQP_SEQUENCE) -> list;
 section_value_kind(?DESCRIPTOR_CODE_AMQP_VALUE) -> any;
 section_value_kind(?DESCRIPTOR_CODE_FOOTER) -> map.
 
+%% `State` is an integer for the sections preceding the body.
+validate_value(<<Constructor, Size:32, _/binary>>, Pos, State, _Kind, _Left)
+  when (Constructor =:= 16#d0 orelse Constructor =:= 16#d1) andalso
+       is_integer(State) andalso
+       Size > ?MAX_PARSED_MSG_SECTION_SIZE ->
+    throw({message_section_too_large, ?MAX_PARSED_MSG_SECTION_SIZE, {position, Pos}});
 %% Jumps over the section value: neither an Erlang term nor a sub binary is created.
 validate_value(<<16#45, R/binary>>, Pos, State, Kind, Left)
   when Kind =:= list orelse Kind =:= any ->
