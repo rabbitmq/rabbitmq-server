@@ -45,6 +45,8 @@ groups() ->
                        dead_letter_routing_key_header_BCC,
                        dead_letter_routing_key_cycle_max_length,
                        dead_letter_routing_key_cycle_with_reject,
+                       dead_letter_max_hops,
+                       dead_letter_max_hops_with_reject,
                        dead_letter_policy,
                        dead_letter_override_policy,
                        dead_letter_ignore_policy,
@@ -81,7 +83,9 @@ groups() ->
                                dead_letter_headers_reason_maxlen,
                                %% tested separately in rabbit_fifo_dlx_integration_SUITE
                                dead_letter_missing_exchange,
-                               dead_letter_routing_key_cycle_ttl
+                               dead_letter_routing_key_cycle_ttl,
+                               %% at-least-once keeps messages it cannot route in the source queue
+                               dead_letter_max_hops
                               ]}
                             ]
        },
@@ -192,6 +196,8 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    _ = rabbit_ct_broker_helpers:rpc_all(Config, application, unset_env,
+                                         [rabbit, dead_letter_max_hops]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     amqp_channel:call(Ch, #'exchange.delete'{exchange = ?config(dlx_exchange, Config)}),
@@ -965,6 +971,93 @@ dead_letter_routing_key_cycle_ttl(Config) ->
     wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
     consume_empty(Ch, QName),
     ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)).
+
+dead_letter_max_hops(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Args = ?config(queue_args, Config),
+    QName = ?config(queue_name, Config),
+    DLX = ?config(dlx_exchange, Config),
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX,
+                                                                         type = <<"fanout">>}),
+    QNames = [<<QName/binary, "_", (integer_to_binary(N))/binary>> || N <- lists:seq(1, 6)],
+    [begin
+         #'queue.declare_ok'{} = amqp_channel:call(
+                                   Ch, #'queue.declare'{
+                                          queue = Q,
+                                          arguments = Args ++ [{<<"x-message-ttl">>, long, 1},
+                                                               {<<"x-dead-letter-exchange">>, longstr, DLX}],
+                                          durable = true}),
+         ok = await_dead_letter_handler_applied(Config, Q),
+         #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
+                                                                  exchange = DLX})
+     end || Q <- QNames],
+    [Q1 | _] = QNames,
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    WaitForEmpty = fun() ->
+                           wait_for_messages(Config, [[Q, <<"0">>, <<"0">>, <<"0">>] || Q <- QNames])
+                   end,
+
+    %% 1 + 5 + 5*4 + 5*4*3 + 5*4*3*2
+    publish(Ch, Q1, [<<"msg1">>]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    ?awaitMatch(206, counted(messages_dead_lettered_expired_total, Config), 30_000, 300),
+    WaitForEmpty(),
+    rabbit_ct_helpers:consistently(
+      ?_assertEqual(206, counted(messages_dead_lettered_expired_total, Config))),
+
+    Config1 = rabbit_ct_helpers:set_config(Config, {counters, get_global_counters(Config)}),
+    set_max_hops(Config, 2),
+    %% 1 + 5 + 5*4
+    publish(Ch, Q1, [<<"msg2">>]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    ?awaitMatch(26, counted(messages_dead_lettered_expired_total, Config1), 30_000, 300),
+    WaitForEmpty(),
+    rabbit_ct_helpers:consistently(
+      ?_assertEqual(26, counted(messages_dead_lettered_expired_total, Config1))).
+
+dead_letter_max_hops_with_reject(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Args = ?config(queue_args, Config),
+    QName = ?config(queue_name, Config),
+    RetryQName = ?config(queue_name_dlx, Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = QName,
+                                     arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                          {<<"x-dead-letter-routing-key">>, longstr, RetryQName}],
+                                     durable = true}),
+    ok = await_dead_letter_handler_applied(Config, QName),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = RetryQName,
+                                     arguments = Args ++ [{<<"x-message-ttl">>, long, 1},
+                                                          {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                          {<<"x-dead-letter-routing-key">>, longstr, QName}],
+                                     durable = true}),
+    ok = await_dead_letter_handler_applied(Config, RetryQName),
+    set_max_hops(Config, 1),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    P = <<"msg">>,
+    publish(Ch, QName, [P]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName}, self()),
+    CTag = receive #'basic.consume_ok'{consumer_tag = C} -> C
+           after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+           end,
+    [receive {#'basic.deliver'{consumer_tag = CTag, delivery_tag = DTag}, #amqp_msg{payload = P}} ->
+                 amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag,
+                                                     requeue = false})
+     after ?TIMEOUT ->
+               ct:fail({missing_delivery, N})
+     end || N <- lists:seq(1, 3)],
+    receive {#'basic.deliver'{consumer_tag = CTag}, #amqp_msg{payload = P}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_delivery, 4})
+    end,
+    ?awaitMatch(3, counted(messages_dead_lettered_expired_total, Config), 30_000, 300).
+
+set_max_hops(Config, Hops) ->
+    rabbit_ct_broker_helpers:rpc_all(Config, application, set_env,
+                                     [rabbit, dead_letter_max_hops, Hops]).
 
 %% 5) Messages continue to be republished as there are manual rejections
 dead_letter_routing_key_cycle_with_reject(Config) ->
