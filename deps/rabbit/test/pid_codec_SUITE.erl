@@ -131,7 +131,8 @@ pid_from_name_happy_path(_) ->
     SyntheticNodeBin = atom_to_binary(SyntheticNode),
     PidBin = make_pid_bin(SyntheticNodeBin, 7, 0, 0),
     QName = <<"amq.rabbitmq.reply-to.",
-              (base64:encode(PidBin))/binary, ".somekey">>,
+              (base64:encode(PidBin))/binary, ".",
+              (base64:encode(crypto:strong_rand_bytes(16)))/binary>>,
     Candidate = node(),
     {ok, Pid} = rabbit_volatile_queue:pid_from_name(QName, #{Hash => Candidate}),
     ?assertEqual(Candidate, node(Pid)).
