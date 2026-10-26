@@ -38,6 +38,7 @@ all_tests() ->
      validate_duplicate_sections,
      validate_body_sections,
      validate_too_many_sections,
+     validate_section_too_large,
      validate_footer,
      validate_unknown_section,
      validate_section_value_type,
@@ -488,6 +489,51 @@ validate_too_many_sections(_Config) ->
     %% Without strict mode, parsing stops at the body: there is nothing to cap.
     ?assertMatch([{{pos, 0}, {body, ?DATA}}],
                  amqp10_binary_parser:parse_many(Sections(100_000), [{server_mode, false}])).
+
+validate_section_too_large(_Config) ->
+    Parse = fun(Sections) ->
+                    amqp10_binary_parser:parse_many(
+                      iolist_to_binary(Sections), [{server_mode, true}])
+            end,
+    Compound = fun(Constructor, Count, Elements, Size) ->
+                       Fill = Size - 4 - byte_size(Elements) - 5,
+                       <<Constructor, Size:32, Count:32, Elements/binary,
+                         16#b0, Fill:32, 0:Fill/unit:8>>
+               end,
+    List = fun(Size) -> Compound(16#d0, 1, <<>>, Size) end,
+    Map = fun(Size) -> Compound(16#d1, 2, <<16#a3, 3, "x-k">>, Size) end,
+    Max = try Parse([section(?APPLICATION_PROPERTIES, Map(1_000_000)), data()]) of
+              _ -> ct:fail(expected_message_section_too_large)
+          catch throw:{message_section_too_large, M, {position, 3}} ->
+                    M
+          end,
+    lists:foreach(
+      fun({Code, Value}) ->
+              ?assertMatch([_Section, {{pos, _}, {body, ?DATA}}],
+                           Parse([section(Code, Value(Max)), data()])),
+              ?assertThrow({message_section_too_large, Max, {position, 3}},
+                           Parse([section(Code, Value(Max + 1)), data()])),
+              ?assertThrow({message_section_too_large, Max, {position, 3}},
+                           Parse([section(Code, Value(Max + 1))]))
+      end, [{?HEADER, List},
+            {?DELIVERY_ANNOTATIONS, Map},
+            {?MESSAGE_ANNOTATIONS, Map},
+            {?PROPERTIES, List},
+            {?APPLICATION_PROPERTIES, Map}]),
+    lists:foreach(
+      fun({Code, Value}) ->
+              ?assertMatch([{{pos, 0}, {body, Code}}], Parse([section(Code, Value)]))
+      end, [{?DATA, <<16#b0, (Max + 1):32, 0:(Max + 1)/unit:8>>},
+            {?AMQP_SEQUENCE, List(Max + 1)},
+            {?AMQP_VALUE, List(Max + 1)},
+            {?AMQP_VALUE, Map(Max + 1)}]),
+    ?assertMatch([{{pos, 0}, {body, ?DATA}}],
+                 Parse([data(), section(?FOOTER, Map(Max + 1))])),
+    ?assertMatch([{{pos, 0}, _ApplicationProperties},
+                  {{pos, _}, {body, ?DATA}}],
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary([section(?APPLICATION_PROPERTIES, Map(Max + 1)), data()]),
+                   [{server_mode, false}])).
 
 %% "Zero or one footer sections." [§3.2] The footer terminates the message.
 validate_footer(_Config) ->
