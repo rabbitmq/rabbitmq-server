@@ -11,7 +11,7 @@
 %% * https://staticapps.org/articles/cross-domain-requests-with-cors/
 -module(rabbit_mgmt_cors).
 
--export([set_headers/2]).
+-export([set_headers/2, is_origin_allowed/1]).
 
 set_headers(ReqData, Module) ->
     %% Send vary: origin by default if nothing else was set.
@@ -36,6 +36,10 @@ set_headers(ReqData, Module) ->
                     ReqData3
             end
     end.
+
+-spec is_origin_allowed(binary() | undefined) -> boolean().
+is_origin_allowed(Origin) ->
+    do_match_origin(Origin) =/= false.
 
 %% Set max-age from configuration (default: 30 minutes).
 %% Set allow-methods from what is defined in Module:allowed_methods/2.
@@ -75,7 +79,10 @@ handle_options(ReqData0, Module) ->
 %% cors_allow_origins configuration variable, or if "*" is (it
 %% allows all origins).
 match_origin(ReqData) ->
-    case cowboy_req:header(<<"origin">>, ReqData) of
+    do_match_origin(cowboy_req:header(<<"origin">>, ReqData)).
+
+do_match_origin(Origin) ->
+    case Origin of
         undefined  -> false;
         <<"null">> -> false;
         <<"*">>    -> false;
