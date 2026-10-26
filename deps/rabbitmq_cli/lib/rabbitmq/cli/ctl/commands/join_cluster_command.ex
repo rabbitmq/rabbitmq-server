@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
-  alias RabbitMQ.CLI.Core.{Config, DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.{Config, DocGuide, Helpers, Validators}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -22,6 +22,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
   def validate(_, _), do: {:validation_failure, :too_many_args}
+
+  # `rabbit_db_cluster:join/2` resets the metadata store when the `rabbit`
+  # app is not running, which is also the case while the node boots.
+  def validate_execution_environment(args, opts) do
+    Validators.rabbit_is_not_booting_or_stopping(args, opts)
+  end
 
   def run([target_node], %{node: node_name} = opts) do
     node_type = :disc
