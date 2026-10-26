@@ -63,6 +63,8 @@ all_tests() ->
      amqp_amqpl_binary_map_key_dropped,
      amqp_amqpl_ulong_in_list_converted,
      amqp_amqpl_x_cc_unconvertible_value_dropped,
+     amqp_null_and_described_annotations,
+     amqpl_amqp_decimal,
      mc_amqpl_is_convertible,
      mc_amqpl_is_representable,
      mc_amqpl_is_representable_nested,
@@ -910,6 +912,62 @@ amqp_amqpl_x_cc_unconvertible_value_dropped(_Config) ->
     #content{properties = #'P_basic'{headers = HL}} = mc:protocol_state(MsgL),
     ?assertEqual(undefined, header(<<"CC">>, HL)),
     ?assertMatch({_, longstr, <<"still-here">>}, header(<<"x-other">>, HL)),
+    ok.
+
+amqp_null_and_described_annotations(_Config) ->
+    Described = {described, {ulong, 16#77}, {utf8, <<"v">>}},
+    MAC = [{{symbol, <<"x-null">>}, null},
+           {{symbol, <<"x-described">>}, Described},
+           {{symbol, <<"x-other">>}, {utf8, <<"still-here">>}}],
+    M = #'v1_0.message_annotations'{content = MAC},
+    D = #'v1_0.data'{content = <<"data">>},
+    Payload = serialize_sections([M, D]),
+
+    Msg = mc:init(mc_amqp, Payload, annotations()),
+    Sections = amqp10_framing:decode_bin(
+                 iolist_to_binary(mc:protocol_state(Msg))),
+    [#'v1_0.message_annotations'{content = MAC1}] =
+        [S || #'v1_0.message_annotations'{} = S <- Sections],
+    ?assertEqual(null, amqp_map_get({symbol, <<"x-null">>}, MAC1)),
+    ?assertEqual(Described, amqp_map_get({symbol, <<"x-described">>}, MAC1)),
+    ?assertEqual({utf8, <<"still-here">>},
+                 amqp_map_get({symbol, <<"x-other">>}, MAC1)),
+
+    MsgL = mc:convert(mc_amqpl, Msg),
+    #content{properties = #'P_basic'{headers = HL}} = mc:protocol_state(MsgL),
+    ?assertMatch({_, void, undefined}, header(<<"x-null">>, HL)),
+    ?assertEqual(undefined, header(<<"x-described">>, HL)),
+    ?assertMatch({_, longstr, <<"still-here">>}, header(<<"x-other">>, HL)),
+    ok.
+
+amqpl_amqp_decimal(_Config) ->
+    Headers = [{<<"d1">>, decimal, {2, 12345}},
+               {<<"x-d">>, decimal, {2, 1}},
+               {<<"x-table">>, table, [{<<"d">>, decimal, {1, 10}},
+                                       {<<"s">>, longstr, <<"ok">>}]},
+               {<<"x-array">>, array, [{decimal, {1, 1}}, {longstr, <<"ok">>}]},
+               {<<"a-string">>, longstr, <<"ok">>}],
+    Props = #'P_basic'{headers = Headers},
+    Content = #content{properties = Props,
+                       payload_fragments_rev = [<<"data">>]},
+    Msg = mc:init(mc_amqpl, Content, annotations()),
+    ?assertEqual(undefined, mc:x_header(<<"x-d">>, Msg)),
+    ?assertNot(maps:is_key(<<"x-d">>, mc:x_headers(Msg))),
+
+    Msg10 = mc:convert(mc_amqp, Msg),
+    Sections = amqp10_framing:decode_bin(
+                 iolist_to_binary(mc:protocol_state(Msg10))),
+    [#'v1_0.application_properties'{content = AP}] =
+        [S || #'v1_0.application_properties'{} = S <- Sections],
+    [#'v1_0.message_annotations'{content = MA}] =
+        [S || #'v1_0.message_annotations'{} = S <- Sections],
+    ?assertEqual(undefined, amqp_map_get(utf8(<<"d1">>), AP)),
+    ?assertEqual({utf8, <<"ok">>}, amqp_map_get(utf8(<<"a-string">>), AP)),
+    ?assertEqual(undefined, amqp_map_get({symbol, <<"x-d">>}, MA)),
+    ?assertEqual({map, [{{symbol, <<"s">>}, {utf8, <<"ok">>}}]},
+                 amqp_map_get({symbol, <<"x-table">>}, MA)),
+    ?assertEqual({list, [{utf8, <<"ok">>}]},
+                 amqp_map_get({symbol, <<"x-array">>}, MA)),
     ok.
 
 mc_amqpl_is_convertible(_Config) ->
