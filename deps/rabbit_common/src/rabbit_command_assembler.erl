@@ -150,6 +150,12 @@ process({content_header, ClassId, 0, BodySize, _PropertiesBin},
   when BodySize > MaxBodySize andalso BodySize =< ?MAX_MSG_SIZE ->
     {too_large, Method, BodySize,
      {content_body_over_limit, Method, BodySize}};
+process({content_body, <<>>}, {content_body, Method, _RemainingSize, _Content},
+        _MaxBodySize) ->
+    empty_body_frame(Method);
+process({content_body, <<>>}, {content_body_over_limit, Method, _RemainingSize},
+        _MaxBodySize) ->
+    empty_body_frame(Method);
 process(Frame, State, _MaxBodySize) ->
     process(Frame, State).
 
@@ -161,6 +167,13 @@ empty_content(ClassId, PropertiesBin) ->
              properties_bin        = PropertiesBin,
              protocol              = rabbit_framing_amqp_0_9_1,
              payload_fragments_rev = []}.
+
+empty_body_frame(Method) ->
+    {error, rabbit_misc:amqp_error(
+              frame_error,
+              "empty content body frame while content body is incomplete",
+              [],
+              rabbit_misc:method_record_type(Method))}.
 
 unexpected_frame(Format, Params, Method) when is_atom(Method) ->
     {error, rabbit_misc:amqp_error(unexpected_frame, Format, Params, Method)};
