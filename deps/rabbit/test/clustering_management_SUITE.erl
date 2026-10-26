@@ -27,6 +27,12 @@
          reset_removes_things/1,
          reset_and_join_while_booting/1,
          reset_in_minority/1,
+         init_after_reset_fails/1,
+         init_retries_while_store_restarts/1,
+         init_gives_up_without_leader/1,
+         boot_fails_when_store_stops_while_booting/1,
+         mock_store_stop_during_boot/0,
+         kill_store_then_init/0,
          force_boot/1,
          status_with_alarm/1,
          pid_file_and_await_node_startup/1,
@@ -74,6 +80,10 @@ groups() ->
                              reset_removes_things,
                              reset_and_join_while_booting,
                              reset_in_minority,
+                             init_after_reset_fails,
+                             init_retries_while_store_restarts,
+                             init_gives_up_without_leader,
+                             boot_fails_when_store_stops_while_booting,
                              force_boot,
                              status_with_alarm,
                              pid_file_and_await_node_startup,
@@ -514,6 +524,81 @@ reset_in_minority(Config) ->
     is_in_minority(reset(Config, Rabbit)),
 
     ok.
+
+init_after_reset_fails(Config) ->
+    [Rabbit, _Hare] = cluster_members(Config),
+
+    ok = stop_app(Config, Rabbit),
+    ok = reset(Config, Rabbit),
+    ok = rpc:call(Rabbit, application, set_env,
+                  [rabbit, khepri_leader_wait_retry_timeout, 1000]),
+
+    ?assertEqual(
+       {error, noproc},
+       rabbit_ct_broker_helpers:rpc(
+         Config, Rabbit, rabbit_khepri, init, [], 30_000)).
+
+init_retries_while_store_restarts(Config) ->
+    [Rabbit, _Hare] = cluster_members(Config),
+    ?assertEqual(
+       {{error, noproc}, ok},
+       rabbit_ct_broker_helpers:rpc(
+         Config, Rabbit, ?MODULE, kill_store_then_init, [], 30_000)).
+
+init_gives_up_without_leader(Config) ->
+    [Rabbit, Hare] = cluster_members(Config),
+    StoreId = rabbit_khepri:get_store_id(),
+    ?assertEqual({StoreId, Hare},
+                 rpc:call(Rabbit, ra_leaderboard, lookup_leader, [StoreId])),
+    ok = rpc:call(Rabbit, application, set_env,
+                  [rabbit, khepri_leader_wait_retry_timeout, 1000]),
+    ok = stop_app(Config, Hare),
+
+    {Elapsed, Ret} = timer:tc(
+                       rabbit_ct_broker_helpers, rpc,
+                       [Config, Rabbit, rabbit_khepri, init, [], 10_000],
+                       millisecond),
+    ?assertEqual({error, timeout}, Ret),
+    ?assertMatch(E when E >= 800, Elapsed).
+
+boot_fails_when_store_stops_while_booting(Config) ->
+    [Rabbit, _Hare] = cluster_members(Config),
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    ok = stop_app(Config, Rabbit),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, Rabbit, ?MODULE, mock_store_stop_during_boot, []),
+
+    {Elapsed, Ret} = timer:tc(
+                       fun() ->
+                               catch rabbit_ct_broker_helpers:rpc(
+                                       Config, Rabbit, rabbit, start, [], 25_000)
+                       end, millisecond),
+    true = rpc:call(Rabbit, meck, validate, [rabbit_db_cluster]),
+    ?assertMatch({error, {rabbit, {{error, noproc}, _}}}, Ret),
+    ?assertMatch(E when E >= 9_000, Elapsed).
+
+%% Stops the store right before `rabbit_db:init/0' calls `rabbit_khepri:init/0',
+%% as removing the booting node from its cluster would.
+mock_store_stop_during_boot() ->
+    ok = meck:new(rabbit_db_cluster, [passthrough, no_link]),
+    ok = meck:expect(rabbit_db_cluster, ensure_feature_flags_are_in_sync,
+                     fun(Nodes, IsVirgin) ->
+                             Ret = meck:passthrough([Nodes, IsVirgin]),
+                             ok = khepri_cluster:reset(rabbit_khepri:get_store_id()),
+                             Ret
+                     end).
+
+%% The outage is longer than the 5 s a supervisor restart can take, and
+%% shorter than the 10 s `rabbit_khepri:init/0' allows for `noproc'.
+kill_store_then_init() ->
+    StoreId = rabbit_khepri:get_store_id(),
+    Server = whereis(StoreId),
+    {parent, Sup} = process_info(Server, parent),
+    ok = sys:suspend(Sup),
+    exit(Server, kill),
+    Seen = khepri_cluster:members(StoreId),
+    {ok, _} = timer:apply_after(6000, sys, resume, [Sup]),
+    {Seen, rabbit_khepri:init()}.
 
 is_in_minority(Ret) ->
     ?assertMatch({error, 75, _}, Ret),
