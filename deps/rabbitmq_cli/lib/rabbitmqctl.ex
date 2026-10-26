@@ -403,6 +403,10 @@ defmodule RabbitMQCtl do
     do:
       "this command requires the 'rabbit' app to be stopped on the target node. Stop it with 'rabbitmqctl stop_app'."
 
+  defp format_validation_error({:rabbit_app_is_booting_or_stopping, {node, state}}),
+    do:
+      "node #{node} is in boot state '#{state}'. Run the command again once it has finished booting or stopping."
+
   defp format_validation_error(:node_running),
     do: "this command requires the target node to be stopped."
 

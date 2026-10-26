@@ -120,6 +120,34 @@ defmodule RabbitMQ.CLI.Core.Validators do
     end
   end
 
+  def rabbit_is_stopped(args, opts) do
+    case rabbit_boot_state(args, opts) do
+      :stopped -> :ok
+      :ready -> {:validation_failure, :rabbit_app_is_running}
+      other -> other
+    end
+  end
+
+  def rabbit_is_not_booting_or_stopping(args, opts) do
+    case rabbit_boot_state(args, opts) do
+      state when state in [:stopped, :ready] -> :ok
+      other -> other
+    end
+  end
+
+  defp rabbit_boot_state(_, %{node: node, timeout: timeout}) do
+    case :rabbit_misc.rpc_call(node, :rabbit_boot_state, :get, [], timeout) do
+      state when state in [:stopped, :ready] ->
+        state
+
+      state when state in [:booting, :core_started, :stopping] ->
+        {:validation_failure, {:rabbit_app_is_booting_or_stopping, {node, state}}}
+
+      other ->
+        {:error, other}
+    end
+  end
+
   def rabbit_app_state(_, opts) do
     case rabbit_app_running?(opts) do
       true -> :running

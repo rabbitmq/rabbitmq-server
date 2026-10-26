@@ -48,6 +48,43 @@ defmodule ResetCommandTest do
     assert vhost_exists?("some_vhost")
   end
 
+  test "validate_execution_environment: succeeds when the rabbit app is stopped", context do
+    opts = Map.put(context[:opts], :timeout, 10_000)
+    stop_rabbitmq_app()
+
+    try do
+      assert :ok == @command.validate_execution_environment([], opts)
+    after
+      start_rabbitmq_app()
+    end
+  end
+
+  test "validate_execution_environment: fails when the rabbit app is running", context do
+    opts = Map.put(context[:opts], :timeout, 10_000)
+
+    assert {:validation_failure, :rabbit_app_is_running} ==
+             @command.validate_execution_environment([], opts)
+  end
+
+  test "validate_execution_environment: fails while the node is booting", context do
+    opts = Map.put(context[:opts], :timeout, 10_000)
+    node = get_rabbit_hostname()
+    # `rabbit_boot_state:set/1` needs a supervisor that stops with the app,
+    # so the key `rabbit_boot_state:get/0` reads is set directly.
+    key = {:rabbit_boot_state, :boot_state}
+    stop_rabbitmq_app()
+
+    try do
+      :ok = :rabbit_misc.rpc_call(node, :persistent_term, :put, [key, :booting])
+
+      assert {:validation_failure, {:rabbit_app_is_booting_or_stopping, {node, :booting}}} ==
+               @command.validate_execution_environment([], opts)
+    after
+      :rabbit_misc.rpc_call(node, :persistent_term, :erase, [key])
+      start_rabbitmq_app()
+    end
+  end
+
   test "run: request to a non-existent node returns a badrpc" do
     opts = %{node: :jake@thedog, timeout: 200}
     assert match?({:badrpc, _}, @command.run([], opts))

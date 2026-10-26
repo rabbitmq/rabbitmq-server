@@ -5,12 +5,13 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 # Should be used by commands that require rabbit app to be stopped
-# but need no other execution environment validators.
+# but need no other execution environment validators. A node that is
+# still booting or stopping does not count as stopped.
 defmodule RabbitMQ.CLI.Core.RequiresRabbitAppStopped do
   defmacro __using__(_) do
     quote do
       def validate_execution_environment(args, opts) do
-        RabbitMQ.CLI.Core.Validators.rabbit_is_not_running(args, opts)
+        RabbitMQ.CLI.Core.Validators.rabbit_is_stopped(args, opts)
       end
     end
   end
