@@ -130,6 +130,7 @@ groups() ->
        trace_stream,
        user_id,
        sections_out_of_order,
+       message_section_too_large,
        message_ttl,
        plugin,
        idle_time_out_on_server,
@@ -6217,6 +6218,40 @@ sections_out_of_order(Config) ->
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
 
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
+
+message_section_too_large(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
+                       Session, <<"management link pair">>),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+
+    Encode = fun(Section) -> iolist_to_binary(amqp10_framing:encode_bin(Section)) end,
+    AppProperties = Encode(#'v1_0.application_properties'{
+                              content = [{{utf8, <<"k">>},
+                                          {utf8, binary:copy(<<"v">>, 131_072)}}]}),
+    Data = Encode(#'v1_0.data'{content = <<"m1">>}),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"sender">>, Address, settled),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_raw_msg:new(true, 0, <<AppProperties/binary, Data/binary>>)),
+    receive
+        {amqp10_event,
+         {link, Sender, {detached, #'v1_0.error'{condition = Cond}}}} ->
+            ?assertEqual(?V_1_0_AMQP_ERROR_DECODE_ERROR, Cond)
+    after 9000 -> flush(missing_detached),
+                  ct:fail("expected the link to be detached")
+    end,
+
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
 
