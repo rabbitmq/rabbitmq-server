@@ -33,19 +33,25 @@ init_state() -> unauthenticated.
     {more, state()} |
     {ok, mqtt_packet(), Rest :: binary(), state()} |
     {error, any()}.
-parse(<<?CONNECT:4, 0:4, Rest/binary>>, unauthenticated) ->
+parse(Bin, State) ->
+    try parse0(Bin, State)
+    catch throw:{disconnect_reason_code, _} = Reason ->
+              {error, Reason}
+    end.
+
+parse0(<<?CONNECT:4, 0:4, Rest/binary>>, unauthenticated) ->
     parse_remaining_len(Rest, #mqtt_packet_fixed{type = ?CONNECT}, proto_ver_uninitialised);
-parse(<<>>, ProtoVer)
+parse0(<<>>, ProtoVer)
   when is_number(ProtoVer) ->
     {more, fun(Bin) -> parse(Bin, ProtoVer) end};
-parse(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, ProtoVer)
+parse0(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, ProtoVer)
   when is_number(ProtoVer) ->
     Fixed = #mqtt_packet_fixed{type = MessageType,
                                dup = int_to_bool(Dup),
                                qos = QoS,
                                retain = int_to_bool(Retain)},
     parse_remaining_len(Rest, Fixed, ProtoVer);
-parse(Bin, Cont)
+parse0(Bin, Cont)
   when is_function(Cont) ->
     Cont(Bin).
 
@@ -140,15 +146,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
             Id = maps:get('Subscription-Identifier', Props, undefined),
-            Subscriptions = [#mqtt_subscription{
-                                topic_filter = Topic,
-                                options = #mqtt_subscription_opts{
-                                             qos = QoS,
-                                             no_local = int_to_bool(Nl),
-                                             retain_as_published = int_to_bool(Rap),
-                                             retain_handling = Rh,
-                                             id = Id}} ||
-                             <<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2>> <= Rest1],
+            Subscriptions = parse_subscriptions(Rest1, Id, max_topic_filters(), []),
             Subscribe = #mqtt_packet_subscribe{packet_id = PacketId,
                                                props = Props,
                                                subscriptions = Subscriptions},
@@ -157,7 +155,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             %% "UNSUBSCRIBE messages use QoS level 1 to acknowledge multiple unsubscribe requests."
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
-            Topics = [Topic || <<Len:16, Topic:Len/binary>> <= Rest1],
+            Topics = parse_topic_filters(Rest1, max_topic_filters(), []),
             Unsubscribe = #mqtt_packet_unsubscribe{packet_id = PacketId,
                                                    props = Props,
                                                    topic_filters = Topics},
@@ -197,6 +195,39 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
                                    parse_packet(Joined, Fixed, Length, ProtoVer)
                            end)
     end.
+
+max_topic_filters() ->
+    persistent_term:get(?PERSISTENT_TERM_MAX_TOPIC_FILTERS_PER_PACKET).
+
+parse_subscriptions(<<Len:16, _:Len/binary, _:8, _/binary>>, _Id, 0, _Acc) ->
+    topic_filter_limit_exceeded();
+parse_subscriptions(<<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2, Rest/binary>>,
+                    Id, Remaining, Acc) ->
+    Sub = #mqtt_subscription{
+             topic_filter = Topic,
+             options = #mqtt_subscription_opts{
+                          qos = QoS,
+                          no_local = int_to_bool(Nl),
+                          retain_as_published = int_to_bool(Rap),
+                          retain_handling = Rh,
+                          id = Id}},
+    parse_subscriptions(Rest, Id, Remaining - 1, [Sub | Acc]);
+parse_subscriptions(_, _Id, _Remaining, Acc) ->
+    lists:reverse(Acc).
+
+parse_topic_filters(<<Len:16, _:Len/binary, _/binary>>, 0, _Acc) ->
+    topic_filter_limit_exceeded();
+parse_topic_filters(<<Len:16, Topic:Len/binary, Rest/binary>>, Remaining, Acc) ->
+    parse_topic_filters(Rest, Remaining - 1, [Topic | Acc]);
+parse_topic_filters(_, _Remaining, Acc) ->
+    lists:reverse(Acc).
+
+-spec topic_filter_limit_exceeded() -> no_return().
+topic_filter_limit_exceeded() ->
+    ?LOG_ERROR("MQTT packet contains more topic filters than "
+               "mqtt.max_topic_filters_per_packet (~b)",
+               [max_topic_filters()]),
+    throw({disconnect_reason_code, ?RC_QUOTA_EXCEEDED}).
 
 parse_connect(Bin, Fixed, Length) ->
     case Bin of
@@ -315,7 +346,7 @@ parse_props(Bin, 5, Type) ->
 
 -spec parse_prop(binary(), packet_type() | will_props, properties()) ->
     properties().
-parse_prop(<<>>, _Type, #{'User-Property' := UserProps} = Props) ->
+parse_prop(<<>>, _Type, #{'User-Property' := {_Remaining, UserProps}} = Props) ->
     %% "The Server MUST maintain the order of User Properties"
     maps:update('User-Property', lists:reverse(UserProps), Props);
 parse_prop(<<>>, _Type, Props) ->
@@ -376,17 +407,27 @@ parse_prop(<<16#26, LenName:16, Name:LenName/binary, LenVal:16, Val:LenVal/binar
     %% "The User Property is allowed to appear multiple times to represent multiple
     %% name, value pairs. The same name is allowed to appear more than once."
     Pair = {Name, Val},
-    Props = maps:update_with('User-Property',
-                             fun(UserProps) -> [Pair | UserProps] end,
-                             [Pair],
-                             Props0),
-    parse_prop(Rest, Type, Props);
+    UserProps = case Props0 of
+                    #{'User-Property' := {0, _}} ->
+                        ?LOG_ERROR("MQTT packet contains more User Properties than "
+                                   "mqtt.max_user_properties_per_packet (~b)",
+                                   [max_user_properties()]),
+                        throw({disconnect_reason_code, ?RC_QUOTA_EXCEEDED});
+                    #{'User-Property' := {Remaining, L}} ->
+                        {Remaining - 1, [Pair | L]};
+                    _ ->
+                        {max_user_properties() - 1, [Pair]}
+                end,
+    parse_prop(Rest, Type, Props0#{'User-Property' => UserProps});
 parse_prop(<<16#27, Val:32, Bin/binary>>, ?CONNECT = Type, Props) ->
     %% "It is a Protocol Error [...] for the value to be set to zero." [MQTT 5.0 3.1.2.11.4]
     true = Val > 0,
     parse_prop(Bin, Type, Props#{'Maximum-Packet-Size' => Val});
 parse_prop(<<PropId, _Rest/binary>>, Type, _Props) ->
     throw({invalid_property_id, PropId, Type}).
+
+max_user_properties() ->
+    persistent_term:get(?PERSISTENT_TERM_MAX_USER_PROPERTIES_PER_PACKET).
 
 -spec parse_variable_byte_integer(binary()) ->
     {integer(), Rest :: binary()}.

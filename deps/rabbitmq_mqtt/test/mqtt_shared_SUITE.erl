@@ -120,6 +120,7 @@ cluster_size_1_tests() ->
      ,trace_large_message
      ,max_packet_size_unauthenticated
      ,max_packet_size_authenticated
+     ,max_topic_filters_per_packet
      ,default_queue_type
      ,message_interceptors
      ,utf8
@@ -1803,6 +1804,26 @@ max_packet_size_authenticated(Config) ->
               end
     end,
     ok = rpc(Config, persistent_term, put, [Key, OldMaxSize]).
+
+max_topic_filters_per_packet(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    Key = mqtt_max_topic_filters_per_packet,
+    OldMax = rpc(Config, persistent_term, get, [Key]),
+    ok = rpc(Config, persistent_term, put, [Key, 2]),
+
+    C = connect(ClientId, Config),
+    ?assertMatch({ok, _, [0, 0]},
+                 emqtt:subscribe(C, [{<<"t/1">>, qos0}, {<<"t/2">>, qos0}])),
+    process_flag(trap_exit, true),
+    _ = catch emqtt:subscribe(C, [{<<"t/3">>, qos0}, {<<"t/4">>, qos0}, {<<"t/5">>, qos0}]),
+    await_exit(C),
+    case ?config(mqtt_version, Config) of
+        v5 -> receive {disconnected, _ReasonCodeQuotaExceeded = 151, _} -> ok
+              after ?TIMEOUT -> ct:fail("missing DISCONNECT packet from server")
+              end;
+        _ -> ok
+    end,
+    ok = rpc(Config, persistent_term, put, [Key, OldMax]).
 
 %% Test that the per vhost default queue type introduced in
 %% https://github.com/rabbitmq/rabbitmq-server/pull/5305
