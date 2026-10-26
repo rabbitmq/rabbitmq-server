@@ -232,14 +232,18 @@ forget_member(Node, RemoveWhenOffline) ->
     end.
 
 forget_member0(Node, RemoveWhenOffline) ->
-    case rabbit:is_running(Node) of
-        false ->
+    %% Removing a reachable member resets its metadata store, which fails or
+    %% hangs a boot in progress.
+    case rpc:call(Node, rabbit_boot_state, get, []) of
+        ready ->
+            {error, {failed_to_remove_node, Node, rabbit_still_running}};
+        BootState when is_atom(BootState) andalso BootState =/= stopped ->
+            {error, {failed_to_remove_node, Node, {boot_state, BootState}}};
+        _ ->
             ?LOG_DEBUG(
                "DB: removing cluster member `~ts`", [Node],
                #{domain => ?RMQLOG_DOMAIN_DB}),
-            forget_member_using_khepri(Node, RemoveWhenOffline);
-        true ->
-            {error, {failed_to_remove_node, Node, rabbit_still_running}}
+            forget_member_using_khepri(Node, RemoveWhenOffline)
     end.
 
 forget_member_using_khepri(_Node, true) ->

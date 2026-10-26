@@ -22,6 +22,7 @@
          end_per_testcase/2,
 
          forget_node/1,
+         forget_booting_node/1,
          forget_removes_things/1,
          reset/1,
          reset_removes_things/1,
@@ -72,6 +73,7 @@ groups() ->
       [
        {cluster_size_2, [], [
                              forget_node,
+                             forget_booting_node,
                              forget_removes_things,
                              reset,
                              reset_removes_things,
@@ -368,6 +370,21 @@ forget_node(Config) ->
     assert_cluster_status({[Hare], [Hare]}, [Hare]),
 
     ok.
+
+forget_booting_node(Config) ->
+    [Rabbit, Hare] = cluster_members(Config),
+    BootStateKey = {rabbit_boot_state, boot_state},
+
+    ok = stop_app(Config, Hare),
+    ok = rpc:call(Hare, persistent_term, put, [BootStateKey, booting]),
+    Ret = rpc:call(Rabbit, rabbit_db_cluster, forget_member, [Hare, false]),
+    true = rpc:call(Hare, persistent_term, erase, [BootStateKey]),
+    ?assertEqual(
+       {error, {failed_to_remove_node, Hare, {boot_state, booting}}}, Ret),
+
+    ok = start_app(Config, Hare),
+    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Rabbit, Hare]},
+                          [Rabbit, Hare]).
 
 forget_removes_things(Config) ->
     ClassicQueue = <<"classic-queue">>,

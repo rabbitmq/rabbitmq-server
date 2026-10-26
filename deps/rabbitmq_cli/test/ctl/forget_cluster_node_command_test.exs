@@ -125,6 +125,30 @@ defmodule ForgetClusterNodeCommandTest do
            )
   end
 
+  test "run: online request to remove a running node fails", context do
+    node = get_rabbit_hostname()
+    assert {:error, msg} = @command.run([Atom.to_string(node)], context[:opts])
+    assert msg =~ "must be stopped"
+  end
+
+  test "run: online request to remove a booting node fails", context do
+    node = get_rabbit_hostname()
+    # `rabbit_boot_state:set/1` needs a supervisor that stops with the app,
+    # so the key `rabbit_boot_state:get/0` reads is set directly.
+    key = {:rabbit_boot_state, :boot_state}
+    stop_rabbitmq_app()
+
+    try do
+      :ok = :rabbit_misc.rpc_call(node, :persistent_term, :put, [key, :booting])
+
+      assert {:error, 75, msg} = @command.run([Atom.to_string(node)], context[:opts])
+      assert msg =~ "boot state 'booting'"
+    after
+      :rabbit_misc.rpc_call(node, :persistent_term, :erase, [key])
+      start_rabbitmq_app()
+    end
+  end
+
   test "banner", context do
     assert @command.banner(["a"], context[:opts]) =~
              ~r/Removing node a from the cluster/
