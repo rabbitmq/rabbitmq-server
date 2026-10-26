@@ -167,6 +167,14 @@
       {max_packet_size_authenticated, 5678}]}],
    [rabbitmq_mqtt]},
 
+ {max_entries_per_packet,
+  "mqtt.max_topic_filters_per_packet = 10
+   mqtt.max_user_properties_per_packet = 20",
+  [{rabbitmq_mqtt,[
+      {max_topic_filters_per_packet, 10},
+      {max_user_properties_per_packet, 20}]}],
+   [rabbitmq_mqtt]},
+
   {topic_alias_maximum,
   "mqtt.topic_alias_maximum = 0",
   [{rabbitmq_mqtt,[

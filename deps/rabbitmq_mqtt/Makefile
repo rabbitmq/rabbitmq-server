@@ -34,6 +34,8 @@ define PROJECT_ENV
 	    %% 256 MB is upper limit defined by MQTT spec
 	    %% We set 16 MB as defined in deps/rabbit/Makefile max_message_size
 	    {max_packet_size_authenticated, 16777216},
+	    {max_topic_filters_per_packet, 512},
+	    {max_user_properties_per_packet, 512},
 	    {topic_alias_maximum, 16}
 	  ]
 endef

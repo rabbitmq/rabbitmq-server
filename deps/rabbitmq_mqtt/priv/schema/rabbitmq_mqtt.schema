@@ -250,6 +250,14 @@ end}.
     {datatype, {integer, positive}}
 ]}.
 
+{mapping, "mqtt.max_topic_filters_per_packet", "rabbitmq_mqtt.max_topic_filters_per_packet", [
+    {datatype, {integer, positive}}
+]}.
+
+{mapping, "mqtt.max_user_properties_per_packet", "rabbitmq_mqtt.max_user_properties_per_packet", [
+    {datatype, {integer, positive}}
+]}.
+
 %% Topic Aliax Maximum
 
 {mapping, "mqtt.topic_alias_maximum", "rabbitmq_mqtt.topic_alias_maximum", [
