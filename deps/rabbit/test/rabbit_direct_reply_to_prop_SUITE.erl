@@ -56,9 +56,12 @@ prop_volatile_queue_detection(_) ->
         end).
 
 prop_decode_reply_to(_) ->
-    ?FORALL({Len, Random}, {pos_integer(), binary()},
+    ?FORALL({Len, Random, KeyBin, BadKeyBin},
+            {pos_integer(), binary(), binary(16),
+             ?SUCHTHAT(B, binary(), byte_size(B) =/= 16)},
         begin
-            Key      = <<"apple">>,
+            Key      = base64:encode(KeyBin),
+            BadKey   = base64:encode(BadKeyBin),
             NodeList = lists:map(
                          fun(I) -> {I, list_to_atom(integer_to_list(I))} end,
                          lists:seq(1, Len)
@@ -70,6 +73,7 @@ prop_decode_reply_to(_) ->
             IxParts    = PidParts#{node := rabbit_nodes_common:make("banana", Ix)},
             IxPartsEnc = base64:encode(rabbit_pid_codec:recompose_to_binary(IxParts)),
             QNameBin = <<"amq.rabbitmq.reply-to.", IxPartsEnc/binary, ".", Key/binary>>,
+            BadKeyQNameBin = <<"amq.rabbitmq.reply-to.", IxPartsEnc/binary, ".", BadKey/binary>>,
 
             NodeMap   = maps:from_list(NodeList),
             NoNodeMap = maps:from_list(NoNodeList),
@@ -81,6 +85,8 @@ prop_decode_reply_to(_) ->
                 rabbit_volatile_queue:pid_from_name(QNameBin, NodeMap)
             andalso error =:=
                 rabbit_volatile_queue:pid_from_name(QNameBin, NoNodeMap)
+            andalso error =:=
+                rabbit_volatile_queue:pid_from_name(BadKeyQNameBin, NodeMap)
             andalso error =:=
                 rabbit_volatile_queue:pid_from_name(NonB64, NodeMap)
         end).

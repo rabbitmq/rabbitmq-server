@@ -2800,6 +2800,8 @@ lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
             RKeys = [RKey],
             Mc = mc:set_annotation(?ANN_ROUTING_KEYS, RKeys, Mc1),
             {ok, X, RKeys, Mc, PermCache};
+        {list, CCs0} when length(CCs0) > ?MAX_ROUTING_HEADER_ENTRIES ->
+            {error, {anonymous_terminus, AnonTerm}, too_many_x_cc(length(CCs0))};
         {list, CCs0} = L ->
             try lists:map(fun({utf8, CC}) -> CC end, CCs0) of
                 CCs ->
@@ -2818,6 +2820,13 @@ bad_x_cc(Value) ->
              lists:flatten(
                io_lib:format(
                  "bad value for 'x-cc' message-annotation: ~tP", [Value, ?FORMAT_DEPTH_LIMIT]))),
+    #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                  description = {utf8, Desc}}.
+
+too_many_x_cc(Len) ->
+    Desc = unicode:characters_to_binary(
+             io_lib:format("'x-cc' message-annotation has ~b entries, the limit is ~b",
+                           [Len, ?MAX_ROUTING_HEADER_ENTRIES])),
     #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
                   description = {utf8, Desc}}.
 
