@@ -40,6 +40,7 @@ test_cases() ->
 
 init_per_suite(Config) ->
     ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, ?MAX_PACKET_SIZE),
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_USER_PROPERTIES_PER_PACKET, 512),
     Config.
 
 end_per_suite(_) ->

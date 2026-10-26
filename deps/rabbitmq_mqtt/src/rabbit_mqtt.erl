@@ -118,6 +118,14 @@ persist_static_configuration() ->
     ?assert(MaxSizeAuth =< MaxMsgSize),
     ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth),
 
+    {ok, MaxTopicFilters} = application:get_env(?APP_NAME, max_topic_filters_per_packet),
+    ?assert(is_integer(MaxTopicFilters) andalso MaxTopicFilters > 0),
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_TOPIC_FILTERS_PER_PACKET, MaxTopicFilters),
+
+    {ok, MaxUserProps} = application:get_env(?APP_NAME, max_user_properties_per_packet),
+    ?assert(is_integer(MaxUserProps) andalso MaxUserProps > 0),
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_USER_PROPERTIES_PER_PACKET, MaxUserProps),
+
     ok = rabbit_msg_interceptor:add(mqtt_message_interceptors()).
 
 assert_valid_max_packet_size(Val) ->
