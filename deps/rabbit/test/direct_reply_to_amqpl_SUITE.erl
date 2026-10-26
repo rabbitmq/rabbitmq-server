@@ -46,7 +46,12 @@ groups() ->
        failure_reuse_consumer_tag,
        failure_publish,
        amqpl_amqp_amqpl,
-       amqp_amqpl_amqp
+       amqp_amqpl_amqp,
+       routing_header_entry_limit,
+       reply_to_targets_limit,
+       reply_to_targets_limit_dead_letter,
+       reply_to_name_bad_key,
+       reply_to_name_local_pid_without_consumer
       ]},
 
      {cluster_size_3, [shuffle],
@@ -280,6 +285,148 @@ failure_publish(Config) ->
               ct:fail("expected channel error")
     end,
     ok = rabbit_ct_client_helpers:close_connection(Conn).
+
+routing_header_entry_limit(Config) ->
+    Q = atom_to_binary(?FUNCTION_NAME),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q, durable = true}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    Routes64 = [{longstr, integer_to_binary(I)} || I <- lists:seq(1, 64)],
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = Q},
+                      #amqp_msg{props = #'P_basic'{
+                                           headers = [{<<"CC">>, array, Routes64},
+                                                      {<<"BCC">>, array, Routes64}]}}),
+    true = amqp_channel:wait_for_confirms(Ch, ?TIMEOUT),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+
+    Routes65 = [{longstr, integer_to_binary(I)} || I <- lists:seq(1, 65)],
+    [begin
+         Ch1 = rabbit_ct_client_helpers:open_channel(Config),
+         Ref = monitor(process, Ch1),
+         amqp_channel:cast(Ch1, #'basic.publish'{routing_key = Q},
+                           #amqp_msg{props = #'P_basic'{
+                                                headers = [{Header, array, Routes65}]}}),
+         receive {'DOWN', Ref, process, Ch1, {_, {_, _, Text}}} ->
+                     ?assertEqual(<<"PRECONDITION_FAILED - header '", Header/binary,
+                                    "' has 65 entries, the limit is 64">>,
+                                  Text)
+         after ?TIMEOUT ->
+                   ct:fail({missing_channel_error, Header})
+         end
+     end || Header <- [<<"CC">>, <<"BCC">>]],
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config),
+    ?assertMatch(#'queue.delete_ok'{message_count = 1},
+                 amqp_channel:call(Ch2, #'queue.delete'{queue = Q})),
+    ok = rabbit_ct_client_helpers:close_channel(Ch2).
+
+reply_to_targets_limit(Config) ->
+    {Chs, [R1, R2, R3]} = reply_to_consumers(Config, 3),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = R1},
+                      #amqp_msg{props = #'P_basic'{
+                                           headers = [{<<"CC">>, array, [{longstr, R2}]},
+                                                      {<<"BCC">>, array, [{longstr, R3}]}]},
+                                payload = <<"m1">>}),
+    ?assertEqual([<<"m1">>, <<"m1">>], receive_reply_to_deliveries()),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"nowhere">>},
+                      #amqp_msg{props = #'P_basic'{
+                                           headers = [{<<"CC">>, array,
+                                                       [{longstr, R} || R <- [R1, R2, R3]]}]},
+                                payload = <<"m2">>}),
+    ?assertEqual([<<"m2">>, <<"m2">>], receive_reply_to_deliveries()),
+    [ok = rabbit_ct_client_helpers:close_channel(C) || C <- [Ch | Chs]],
+    ok.
+
+reply_to_targets_limit_dead_letter(Config) ->
+    Q = atom_to_binary(?FUNCTION_NAME),
+    {Chs, ReplyTos} = reply_to_consumers(Config, 3),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = Q,
+                                     durable = true,
+                                     arguments = [{<<"x-dead-letter-exchange">>, longstr, <<>>}]}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = Q},
+                      #amqp_msg{props = #'P_basic'{
+                                           headers = [{<<"CC">>, array,
+                                                       [{longstr, R} || R <- ReplyTos]}]},
+                                payload = <<"m1">>}),
+    true = amqp_channel:wait_for_confirms(Ch, ?TIMEOUT),
+    ?assertEqual([<<"m1">>, <<"m1">>], receive_reply_to_deliveries()),
+
+    {#'basic.get_ok'{delivery_tag = Tag}, _} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
+    ok = amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = Tag, requeue = false}),
+    ?assertEqual([<<"m1">>, <<"m1">>], receive_reply_to_deliveries()),
+
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
+    [ok = rabbit_ct_client_helpers:close_channel(C) || C <- [Ch | Chs]],
+    ok.
+
+reply_to_name_bad_key(Config) ->
+    {Chs, [ReplyTo]} = reply_to_consumers(Config, 1),
+    <<"amq.rabbitmq.reply-to.", Suffix/binary>> = ReplyTo,
+    [EncodedPid, _Key] = binary:split(Suffix, <<".">>),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:register_return_handler(Ch, self()),
+    [begin
+         Name = <<"amq.rabbitmq.reply-to.", EncodedPid/binary, ".", Key/binary>>,
+         amqp_channel:cast(Ch, #'basic.publish'{routing_key = Name, mandatory = true},
+                           #amqp_msg{payload = <<"m1">>}),
+         receive {#'basic.return'{reply_text = <<"NO_ROUTE">>}, _} -> ok
+         after ?TIMEOUT -> ct:fail({missing_return, Name})
+         end
+     end || Key <- [<<"forged">>,
+                    base64:encode(<<0:136>>),
+                    <<"!!!!!!!!!!!!!!!!!!!!!!!!">>]],
+
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = ReplyTo, mandatory = true},
+                      #amqp_msg{payload = <<"m2">>}),
+    ?assertEqual([<<"m2">>], receive_reply_to_deliveries()),
+    [ok = rabbit_ct_client_helpers:close_channel(C) || C <- [Ch | Chs]],
+    ok.
+
+reply_to_name_local_pid_without_consumer(Config) ->
+    Name = rabbit_ct_broker_helpers:rpc(Config, rabbit_volatile_queue, new_name, []),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:register_return_handler(Ch, self()),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = Name, mandatory = true},
+                      #amqp_msg{payload = <<"m1">>}),
+    receive {#'basic.return'{reply_text = <<"NO_ROUTE">>}, _} -> ok
+    after ?TIMEOUT -> ct:fail(missing_return)
+    end,
+    ok = rabbit_ct_client_helpers:close_channel(Ch).
+
+reply_to_consumers(Config, N) ->
+    RequestQ = <<"request queue">>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = RequestQ, durable = true}),
+    Result = lists:unzip(
+               [begin
+                    C = rabbit_ct_client_helpers:open_channel(Config),
+                    #'basic.consume_ok'{} = amqp_channel:subscribe(
+                                              C, #'basic.consume'{queue = ?REPLY_QUEUE,
+                                                                  no_ack = true},
+                                              self()),
+                    #'confirm.select_ok'{} = amqp_channel:call(C, #'confirm.select'{}),
+                    amqp_channel:call(C, #'basic.publish'{routing_key = RequestQ},
+                                      #amqp_msg{props = #'P_basic'{reply_to = ?REPLY_QUEUE}}),
+                    true = amqp_channel:wait_for_confirms(C, ?TIMEOUT),
+                    {#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{reply_to = ReplyTo}}} =
+                        amqp_channel:call(Ch, #'basic.get'{queue = RequestQ, no_ack = true}),
+                    {C, ReplyTo}
+                end || _ <- lists:seq(1, N)]),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = RequestQ}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+    Result.
+
+receive_reply_to_deliveries() ->
+    receive {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
+                [Payload | receive_reply_to_deliveries()]
+    after 1000 ->
+              []
+    end.
 
 %% Test that Direct Reply-To works when the requester is an AMQP 0.9.1 client
 %% and the responder is an AMQP 1.0 client.

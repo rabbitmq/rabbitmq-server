@@ -968,6 +968,19 @@ check_expiration_header(Props) ->
                                                       [Props#'P_basic'.expiration, E])
     end.
 
+check_routing_headers(#'P_basic'{headers = Headers}) ->
+    lists:foreach(
+      fun(Key) ->
+              case rabbit_basic:header(Key, Headers) of
+                  {_, array, Routes} when length(Routes) > ?MAX_ROUTING_HEADER_ENTRIES ->
+                      rabbit_misc:precondition_failed(
+                        "header '~ts' has ~b entries, the limit is ~b",
+                        [Key, length(Routes), ?MAX_ROUTING_HEADER_ENTRIES]);
+                  _ ->
+                      ok
+              end
+      end, ?ROUTING_HEADERS).
+
 check_internal_exchange(#exchange{name = Name, internal = true}) ->
     rabbit_misc:protocol_error(access_refused,
                                "cannot publish to internal ~ts",
@@ -1251,6 +1264,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     DecContent0 = rabbit_binary_parser:ensure_content_decoded(Content),
     DecContent = #content{properties = Props} = override_reply_to(DecContent0, State1),
     check_expiration_header(Props),
+    check_routing_headers(Props),
     DoConfirm = Tx =/= none orelse ConfirmEnabled,
     {DeliveryOptions, State} =
         case DoConfirm of
