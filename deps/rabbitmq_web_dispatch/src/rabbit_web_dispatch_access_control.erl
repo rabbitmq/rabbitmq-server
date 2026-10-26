@@ -83,7 +83,32 @@ is_authorized_vhost_visible_for_monitoring(ReqData, Context, AuthConfig) ->
 is_authorized(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->
     case cowboy_req:method(ReqData) of
         <<"OPTIONS">> -> {true, ReqData, Context};
-        _             -> is_authorized1(ReqData, Context, ErrorMsg, Fun, AuthConfig)
+        _             -> reject_cross_site_or_authorize(ReqData, Context, ErrorMsg, Fun, AuthConfig)
+    end.
+
+reject_cross_site_or_authorize(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->
+    case is_cross_site_state_change(ReqData, AuthConfig) of
+        true ->
+            Msg = "HTTP access denied: cross-site request",
+            ?LOG_WARNING(Msg, [], #{domain => ?RMQLOG_DOMAIN_USER}),
+            halt_response(403, forbidden, Msg, ReqData, Context);
+        false ->
+            is_authorized1(ReqData, Context, ErrorMsg, Fun, AuthConfig)
+    end.
+
+is_cross_site_state_change(_ReqData, #auth_settings{cross_site_origin_allowed = undefined}) ->
+    false;
+is_cross_site_state_change(ReqData, #auth_settings{cross_site_origin_allowed = IsAllowed}) ->
+    case cowboy_req:method(ReqData) of
+        M when M =:= <<"GET">>; M =:= <<"HEAD">> ->
+            false;
+        _ ->
+            case cowboy_req:header(<<"sec-fetch-site">>, ReqData) of
+                Site when Site =:= <<"cross-site">>; Site =:= <<"same-site">> ->
+                    not IsAllowed(cowboy_req:header(<<"origin">>, ReqData));
+                _ ->
+                    false
+            end
     end.
 
 is_authorized1(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->

@@ -20,5 +20,6 @@
 -record(auth_settings, {
     auth_realm          = "Basic realm=\"RabbitMQ undefined\"",
     basic_auth_enabled  = false,
-    bearer_token_parser = undefined :: undefined | bearer_token_parser()
+    bearer_token_parser = undefined :: undefined | bearer_token_parser(),
+    cross_site_origin_allowed = undefined :: undefined | fun((binary() | undefined) -> boolean())
 }).

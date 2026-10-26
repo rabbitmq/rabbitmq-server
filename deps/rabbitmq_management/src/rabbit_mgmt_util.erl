@@ -159,7 +159,8 @@ auth_config() ->
         end,
     #auth_settings{auth_realm          = ?AUTH_REALM,
                    basic_auth_enabled  = BasicAuthEnabled,
-                   bearer_token_parser = BearerTokenParser}.
+                   bearer_token_parser = BearerTokenParser,
+                   cross_site_origin_allowed = fun rabbit_mgmt_cors:is_origin_allowed/1}.
 
 disable_stats() ->
     not rabbit_mgmt_agent_config:is_metrics_collector_enabled() orelse
