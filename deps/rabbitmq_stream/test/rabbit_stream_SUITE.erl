@@ -1194,7 +1194,14 @@ max_segment_size_bytes_validation(Config) ->
     ?assertMatch({response, 1,
                   {create_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
                  Cmd),
-    test_close(Transport, S, C3),
+    ok = Transport:send(S, request(2, {create_stream, Stream,
+                                       #{<<"stream-max-segment-size-bytes">> =>
+                                         <<"8">>}})),
+    {Cmd2, C4} = receive_commands(Transport, S, C3),
+    ?assertMatch({response, 2,
+                  {create_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd2),
+    test_close(Transport, S, C4),
     ok.
 
 close_connection_on_consumer_update_timeout(Config) ->
