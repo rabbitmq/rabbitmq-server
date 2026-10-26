@@ -373,23 +373,21 @@ death_queue_names(#basic_message{content = Content}) ->
     end.
 
 death_hops(#basic_message{content = Content}) ->
-    case rabbit_binary_parser:ensure_content_decoded(Content) of
-        #content{properties = #'P_basic'{headers = Headers}}
-          when is_list(Headers) ->
-            death_hops0(rabbit_misc:table_lookup(Headers, <<"x-death">>));
+    #content{properties = #'P_basic'{headers = Headers}} =
+        rabbit_binary_parser:ensure_content_decoded(Content),
+    case is_list(Headers) andalso
+         rabbit_misc:table_lookup(Headers, <<"x-death">>) of
+        {array, Deaths} ->
+            length(lists:takewhile(
+                     fun({table, D}) ->
+                             {longstr, <<"rejected">>} =/=
+                                 rabbit_misc:table_lookup(D, <<"reason">>);
+                        (_) ->
+                             false
+                     end, Deaths));
         _ ->
             0
     end.
-
-death_hops0({array, Deaths}) ->
-    length(lists:takewhile(fun({table, D}) ->
-                                   {longstr, <<"rejected">>} =/=
-                                       rabbit_misc:table_lookup(D, <<"reason">>);
-                              (_) ->
-                                   false
-                           end, Deaths));
-death_hops0(_) ->
-    0.
 
 get_property(P, #content{properties = none} = Content) ->
     %% this is inefficient but will only apply to old messages that are
