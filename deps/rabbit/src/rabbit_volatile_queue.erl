@@ -97,7 +97,12 @@ new0(Name, Pid, Vhost) ->
 new_target(#resource{name = NameBin} = Name) ->
     case pid_from_name(NameBin) of
         {ok, Pid} when is_pid(Pid) ->
-            amqqueue:new_target(Name, {?MODULE, Pid, none});
+            case node(Pid) =/= node() orelse is_local(Pid) of
+                true ->
+                    amqqueue:new_target(Name, {?MODULE, Pid, none});
+                false ->
+                    error
+            end;
         _ ->
             error
     end.
@@ -405,7 +410,8 @@ pid_from_name(<<?PREFIX, Bin/binary>>, CandidateNodes) ->
                  P
          end,
     try
-        [PidBase64, _KeyBase64] = binary:split(Bin, Cp),
+        [PidBase64, <<_:24/binary>> = KeyBase64] = binary:split(Bin, Cp),
+        <<_:16/binary>> = base64:decode(KeyBase64),
         PidBin = base64:decode(PidBase64),
         case rabbit_pid_codec:decompose_from_binary(PidBin) of
             {ok, #{node := ShortenedNodename} = PidParts0} ->

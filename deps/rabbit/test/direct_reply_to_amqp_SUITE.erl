@@ -40,7 +40,9 @@ groups() ->
        many_replies,
        many_volatile_queues_same_session,
        failure_multiple_consumers_same_session_same_queue,
-       failure_multiple_consumers_different_session_same_queue
+       failure_multiple_consumers_different_session_same_queue,
+       x_cc_entry_limit,
+       x_cc_reply_to_targets_limit
       ]},
      {cluster_size_3, [shuffle],
       [
@@ -665,6 +667,79 @@ rpc(RequesterNode, ResponderNode, Config) ->
 
     ok = close_connection_sync(ConnResponder),
     ok = close_connection_sync(ConnRequester).
+
+x_cc_entry_limit(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, null),
+    ok = wait_for_credit(Sender),
+    CCs = fun(N) -> {list, [{utf8, integer_to_binary(I)} || I <- lists:seq(1, N)]} end,
+    ok = amqp10_client:send_msg(Sender, x_cc_msg(<<"t1">>, rabbitmq_amqp_address:queue(QName), CCs(64))),
+    ok = wait_for_accepts(1),
+    ok = amqp10_client:send_msg(Sender, x_cc_msg(<<"t2">>, rabbitmq_amqp_address:queue(QName), CCs(65))),
+    receive {amqp10_disposition, {{rejected, Error}, <<"t2">>}} ->
+                ?assertMatch(
+                   #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                      description = {utf8, <<"'x-cc' message-annotation has 65 entries, the limit is 64">>}},
+                   Error)
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = detach_link_sync(Sender),
+    ?assertEqual({ok, #{message_count => 1}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = close_connection_sync(Connection).
+
+x_cc_reply_to_targets_limit(Config) ->
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{notify_with_performative => true},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    Receivers = [begin
+                     {ok, S} = amqp10_client:begin_session_sync(Connection),
+                     {ok, R} = amqp10_client:attach_link(S, attach_args()),
+                     receive {amqp10_event, {link, R, {attached, Attach}}} ->
+                                 #'v1_0.attach'{
+                                    source = #'v1_0.source'{address = {utf8, Addr}}} = Attach,
+                                 ok = amqp10_client:flow_link_credit(R, 2, never),
+                                 {S, Addr}
+                     after 9000 -> ct:fail({missing_event, ?LINE})
+                     end
+                 end || _ <- lists:seq(1, 3)],
+    [{_, Addr1} | _] = Receivers,
+    Names = [begin
+                 <<"/queues/", Encoded/binary>> = Addr,
+                 uri_string:unquote(Encoded)
+             end || {_, Addr} <- Receivers],
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, null),
+    ok = wait_for_credit(Sender),
+
+    [_ | CCNames] = Names,
+    ok = amqp10_client:send_msg(
+           Sender, x_cc_msg(<<"t1">>, Addr1, {list, [{utf8, N} || N <- CCNames]})),
+    ok = wait_for_accepts(1),
+    ?assertEqual(2, length(receive_volatile_queue_msgs())),
+
+    ok = amqp10_client:send_msg(
+           Sender, x_cc_msg(<<"t2">>, rabbitmq_amqp_address:queue(<<"nowhere">>),
+                            {list, [{utf8, N} || N <- Names]})),
+    ok = wait_for_accepts(1),
+    ?assertEqual(2, length(receive_volatile_queue_msgs())),
+    ok = close_connection_sync(Connection).
+
+x_cc_msg(Tag, To, CCs) ->
+    amqp10_msg:set_message_annotations(
+      #{<<"x-cc">> => CCs},
+      amqp10_msg:set_properties(#{to => To}, amqp10_msg:new(Tag, <<"m">>))).
+
+receive_volatile_queue_msgs() ->
+    receive {amqp10_msg, _Receiver, Msg} ->
+                [Msg | receive_volatile_queue_msgs()]
+    after 1000 ->
+              []
+    end.
 
 attach_args() ->
     attach_args(<<"receiver requester">>).
