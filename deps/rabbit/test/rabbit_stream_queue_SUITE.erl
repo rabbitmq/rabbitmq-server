@@ -255,6 +255,10 @@ init_per_group1(Group, Config) ->
                        %% the replica reader sends it. The replica exits and is restarted.
                        rabbit_ct_helpers:set_config(
                          Config1c, {ignored_crashes, ["accept_chunk_out_of_order"]});
+                   cluster_size_3 ->
+                       %% A replica still starting when the nodes stop finds its writer gone.
+                       rabbit_ct_helpers:set_config(
+                         Config1c, {ignored_crashes, ["** {badrpc,{'EXIT',noproc}}"]});
                    _ ->
                        Config1c
                end,
