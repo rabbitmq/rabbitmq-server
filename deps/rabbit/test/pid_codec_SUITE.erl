@@ -175,4 +175,5 @@ fresh_node_bytes(I) ->
 
 craft_reply_to(NodeBytes, ID) ->
     PidBin = make_pid_bin(NodeBytes, ID, 0, 0),
-    <<"amq.rabbitmq.reply-to.", (base64:encode(PidBin))/binary, ".k">>.
+    <<"amq.rabbitmq.reply-to.", (base64:encode(PidBin))/binary, ".",
+      (base64:encode(<<0:128>>))/binary>>.
