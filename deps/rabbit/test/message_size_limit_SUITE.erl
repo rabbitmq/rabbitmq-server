@@ -23,7 +23,8 @@ groups() ->
      {tests, [], [
                   max_message_size,
                   max_message_size_raw_frames,
-                  max_message_size_on_closing_channel
+                  max_message_size_on_closing_channel,
+                  empty_body_frame
                  ]},
      {default, [], [
                     default_max_message_size
@@ -144,6 +145,16 @@ max_message_size_on_closing_channel(Config) ->
     ok = send_method(Sock, 1, #'channel.close_ok'{}),
     ok = send_method(Sock, 2, #'channel.open'{}),
     ?assertMatch({2, #'channel.open_ok'{}}, recv_method(Sock)),
+    ok = gen_tcp:close(Sock).
+
+empty_body_frame(Config) ->
+    Sock = raw_connect(Config),
+    ok = send_method(Sock, 1, #'basic.publish'{routing_key = <<"none">>}),
+    ok = gen_tcp:send(Sock, rabbit_binary_generator:create_frame(
+                              ?FRAME_HEADER, 1, <<60:16, 0:16, 10:64, 0:16>>)),
+    ok = gen_tcp:send(Sock, rabbit_binary_generator:create_frame(?FRAME_BODY, 1, <<"x">>)),
+    ok = gen_tcp:send(Sock, rabbit_binary_generator:create_frame(?FRAME_BODY, 1, <<>>)),
+    ?assertMatch({0, #'connection.close'{reply_code = ?FRAME_ERROR}}, recv_method(Sock)),
     ok = gen_tcp:close(Sock).
 
 default_max_message_size(Config) ->
