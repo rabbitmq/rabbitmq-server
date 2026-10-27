@@ -88,6 +88,7 @@ groups() ->
         ack_auto_delivery_errors,
         reused_subscription_id_keeps_ack_mode,
         send,
+        send_with_negative_priority,
         send_body_larger_than_max_message_size_is_rejected,
         delete_queue_subscribe,
         durable_resubscribe_pipelined_classic,
@@ -1729,6 +1730,29 @@ send(Config) ->
       Client1, 'SEND', [{<<"destination">>, ?DESTINATION}], ["hello"]),
 
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
+    ok.
+
+send_with_negative_priority(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue     = ?QUEUE,
+                                                    durable   = true,
+                                                    arguments = [{<<"x-max-priority">>, byte, 5}]}),
+    [rabbit_stomp_client:send(
+       Client, 'SEND', [{<<"destination">>, ?DESTINATION},
+                        {<<"priority">>, integer_to_binary(P)}], [integer_to_list(P)])
+     || P <- [-1, -1, -1, -1, -1, -1, -1, 2]],
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION}, {<<"receipt">>, <<"foo">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+    {ok, Client2, _, [<<"2">>]} = stomp_receive(Client1, 'MESSAGE'),
+    lists:foldl(fun(_, C) ->
+                        {ok, C1, _, [<<"-1">>]} = stomp_receive(C, 'MESSAGE'),
+                        C1
+                end, Client2, lists:seq(1, 7)),
+    #'queue.delete_ok'{} =
+        amqp_channel:call(Channel, #'queue.delete'{queue = ?QUEUE}),
     ok.
 
 send_body_larger_than_max_message_size_is_rejected(Config) ->
