@@ -85,7 +85,8 @@ some_tests() ->
         queues_test,
         bindings_test,
         policy_test,
-        policy_permissions_test
+        policy_permissions_test,
+        restricted_parameter_components_test
     ].
 
 definitions_group1_tests() ->
@@ -4287,6 +4288,27 @@ disabled_operator_policy_test(Config) ->
                    priority   => 10},
     http_put(Config, "/operator-policies/%2F/policy_pos", PolicyPos, ?METHOD_NOT_ALLOWED),
     http_delete(Config, "/operator-policies/%2F/policy_pos", ?METHOD_NOT_ALLOWED),
+    %% The runtime parameter component is `operator_policy`, the HTTP API path is `/operator-policies`.
+    OpPolicyParam = #{value => #{pattern    => <<".*">>,
+                                 definition => #{<<"max-length">> => 10},
+                                 priority   => 0,
+                                 'apply-to' => <<"queues">>}},
+    http_put(Config, "/parameters/operator_policy/%2F/policy_pos",
+             OpPolicyParam, ?METHOD_NOT_ALLOWED),
+    http_delete(Config, "/parameters/operator_policy/%2F/policy_pos",
+                ?METHOD_NOT_ALLOWED),
+    rabbit_ct_broker_helpers:set_operator_policy(
+      Config, 0, <<"policy_pos">>, <<".*">>, <<"queues">>, [{<<"max-length">>, 10}]),
+    http_get(Config, "/parameters/operator_policy/%2F/policy_pos", ?OK),
+    http_delete(Config, "/parameters/operator_policy/%2F/policy_pos",
+                ?METHOD_NOT_ALLOWED),
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"policy_pos">>),
+
+    LimitsPath = "/parameters/vhost-limits/%2F/limits",
+    http_put(Config, LimitsPath, #{value => #{<<"max-queues">> => 10}}, {group, '2xx'}),
+    http_get(Config, LimitsPath, ?OK),
+    http_delete(Config, LimitsPath, {group, '2xx'}),
+    http_get(Config, LimitsPath, ?NOT_FOUND),
     0 = length(http_get(Config, "/operator-policies",     ?OK)),
     0 = length(http_get(Config, "/operator-policies/%2F", ?OK)),
     unregister_parameters_and_policy_validator(Config),
@@ -4421,6 +4443,51 @@ policy_permissions_test(Config) ->
     http_delete(Config, "/users/mgmt", {group, '2xx'}),
     http_delete(Config, "/policies/%2F/HA", {group, '2xx'}),
 
+    unregister_parameters_and_policy_validator(Config),
+    passed.
+
+restricted_parameter_components_test(Config) ->
+    register_parameters_and_policy_validator(Config),
+    http_put(Config, "/users/policy", [{password, <<"policy">>},
+                                       {tags, <<"policymaker">>}], {group, '2xx'}),
+    http_put(Config, "/vhosts/v", none, {group, '2xx'}),
+    http_put(Config, "/permissions/v/policy", [{configure, <<".*">>},
+                                               {write,     <<".*">>},
+                                               {read,      <<".*">>}], {group, '2xx'}),
+    OpPolicy = #{value => #{pattern    => <<".*">>,
+                            definition => #{<<"max-length">> => 10},
+                            priority   => 0,
+                            'apply-to' => <<"queues">>}},
+    Limits = #{value => #{<<"max-queues">> => 10}},
+    %% The runtime parameter component is `operator_policy`, the HTTP API path is `/operator-policies`.
+    OpPolicyPath = "/parameters/operator_policy/v/op",
+    LimitsPath = "/parameters/vhost-limits/v/limits",
+
+    http_put(Config, OpPolicyPath, OpPolicy, "policy", "policy", ?NOT_AUTHORISED),
+    http_put(Config, LimitsPath, Limits, "policy", "policy", ?NOT_AUTHORISED),
+    [] = http_get(Config, "/operator-policies/v"),
+    [] = http_get(Config, "/vhost-limits/v"),
+
+    http_put(Config, OpPolicyPath, OpPolicy, {group, '2xx'}),
+    http_put(Config, LimitsPath, Limits, {group, '2xx'}),
+    http_get(Config, OpPolicyPath, "policy", "policy", ?OK),
+    http_get(Config, LimitsPath, "policy", "policy", ?OK),
+    http_delete(Config, OpPolicyPath, "policy", "policy", ?NOT_AUTHORISED),
+    http_delete(Config, LimitsPath, "policy", "policy", ?NOT_AUTHORISED),
+    http_get(Config, OpPolicyPath, ?OK),
+    http_get(Config, LimitsPath, ?OK),
+
+    http_put(Config, "/parameters/test/v/good", [{value, <<"">>}],
+             "policy", "policy", {group, '2xx'}),
+    http_delete(Config, "/parameters/test/v/good", "policy", "policy", {group, '2xx'}),
+
+    http_delete(Config, OpPolicyPath, {group, '2xx'}),
+    http_delete(Config, LimitsPath, {group, '2xx'}),
+    [] = http_get(Config, "/operator-policies/v"),
+    [] = http_get(Config, "/vhost-limits/v"),
+
+    http_delete(Config, "/vhosts/v", {group, '2xx'}),
+    http_delete(Config, "/users/policy", {group, '2xx'}),
     unregister_parameters_and_policy_validator(Config),
     passed.
 
