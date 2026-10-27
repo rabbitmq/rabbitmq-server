@@ -62,8 +62,7 @@
     pending,
     %% defines how often gc will be executed
     writer_gc_threshold,
-    command_acks = 0 :: non_neg_integer(),
-    command_ack_bytes = 0 :: non_neg_integer()
+    command_acks = none :: none | {pid(), pos_integer(), non_neg_integer()}
 }).
 
 -define(HIBERNATE_AFTER, 6_000).
@@ -298,15 +297,21 @@ flush(W) -> call(W, flush).
 call(Pid, Msg) ->
     gen_server:call(Pid, Msg, infinity).
 
-ack_command(Sender, Bytes, State = #wstate{command_acks = Count,
-                                            command_ack_bytes = AckBytes})
-  when Count + 1 >= ?COMMAND_ACK_BATCH_SIZE orelse
-       AckBytes + Bytes >= ?COMMAND_ACK_BATCH_BYTES ->
-    Sender ! {writer_acks, self(), Count + 1, AckBytes + Bytes},
-    State#wstate{command_acks = 0, command_ack_bytes = 0};
-ack_command(_Sender, Bytes, State = #wstate{command_acks = Count,
-                                            command_ack_bytes = AckBytes}) ->
-    State#wstate{command_acks = Count + 1, command_ack_bytes = AckBytes + Bytes}.
+ack_command(Sender, Bytes, State = #wstate{command_acks = {Sender, Count, AckBytes}}) ->
+    ack_command(Sender, Count + 1, AckBytes + Bytes, State);
+ack_command(Sender, Bytes, State = #wstate{command_acks = {Other, Count, AckBytes}}) ->
+    Other ! {writer_acks, self(), Count, AckBytes},
+    ack_command(Sender, 1, Bytes, State);
+ack_command(Sender, Bytes, State = #wstate{command_acks = none}) ->
+    ack_command(Sender, 1, Bytes, State).
+
+ack_command(Sender, Count, Bytes, State)
+  when Count >= ?COMMAND_ACK_BATCH_SIZE orelse
+       Bytes >= ?COMMAND_ACK_BATCH_BYTES ->
+    Sender ! {writer_acks, self(), Count, Bytes},
+    State#wstate{command_acks = none};
+ack_command(Sender, Count, Bytes, State) ->
+    State#wstate{command_acks = {Sender, Count, Bytes}}.
 
 %%---------------------------------------------------------------------------
 

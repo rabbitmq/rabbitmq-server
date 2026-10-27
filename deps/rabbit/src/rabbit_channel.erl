@@ -172,7 +172,7 @@
              publishing_mode = false :: boolean(),
              %% for clients that do not respond to a `basic.cancel` with a `basic.cancel_ok`
              pending_consumer_cancels = #{} :: #{rabbit_types:ctag() => reference()},
-             pending_replies :: {non_neg_integer(), non_neg_integer()} | untracked
+             pending_replies = {0, 0} :: {non_neg_integer(), non_neg_integer()} | untracked
             }).
 
 -define(QUEUE, lqueue).
@@ -891,6 +891,7 @@ check_pending_replies(#ch{pending_replies = {Count, Bytes}})
 check_pending_replies(_State) ->
     ok.
 
+-spec pending_replies_error(non_neg_integer(), non_neg_integer()) -> no_return().
 pending_replies_error(Count, Bytes) ->
     rabbit_misc:protocol_error(
       resource_error,
