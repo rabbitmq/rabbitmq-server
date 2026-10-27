@@ -374,10 +374,15 @@ amqp_to_mqtt_oversized_user_property(_Config) ->
 
     AP1 = #'v1_0.application_properties'{
              content = [{{utf8, <<"keep">>}, {utf8, <<"val">>}},
-                        {{utf8, <<"big-value">>}, {utf8, OverLimitVal}},
-                        {{utf8, OverLimitKey}, {utf8, <<"val">>}}]},
+                        {{utf8, <<"big-value">>}, {utf8, OverLimitVal}}]},
     #mqtt_msg{props = Props1} = amqp_to_mqtt([AP1, D]),
     ?assertEqual({ok, [{<<"keep">>, <<"val">>}]}, maps:find('User-Property', Props1)),
+
+    AP3 = #'v1_0.application_properties'{
+             content = [{{utf8, <<"keep">>}, {utf8, <<"val">>}},
+                        {{utf8, OverLimitKey}, {utf8, <<"val">>}}]},
+    #mqtt_msg{props = Props3} = amqp_to_mqtt([AP3, D]),
+    ?assertEqual({ok, [{<<"keep">>, <<"val">>}]}, maps:find('User-Property', Props3)),
 
     %% The whole 'User-Property' entry disappears once no pair is left.
     AP2 = #'v1_0.application_properties'{

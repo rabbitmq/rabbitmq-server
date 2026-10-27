@@ -14,6 +14,7 @@
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("rabbit/include/mc.hrl").
 -include("rabbit_event_exchange.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([register/0, unregister/0]).
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
@@ -95,8 +96,13 @@ handle_event(#event{type = Type,
             {ok, State};
         Key ->
             XName = exchange(VHost),
-            Mc = mc_init(Protocol, XName, Key, Props, Timestamp),
-            _ = rabbit_queue_type:publish_at_most_once(XName, Mc),
+            try mc_init(Protocol, XName, Key, Props, Timestamp) of
+                Mc ->
+                    _ = rabbit_queue_type:publish_at_most_once(XName, Mc)
+            catch throw:Reason ->
+                      ?LOG_WARNING("Event exchange failed to publish a ~ts event: ~tp",
+                                   [Key, Reason])
+            end,
             {ok, State}
     end;
 handle_event(_Event, State) ->
