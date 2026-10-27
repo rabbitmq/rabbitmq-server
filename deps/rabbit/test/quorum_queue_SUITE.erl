@@ -3184,7 +3184,7 @@ recover_from_single_failure(Config) ->
     wait_for_messages_ready(Servers, RaName, 3),
     wait_for_messages_pending_ack(Servers, RaName, 0).
 
-recover_missing_member_machine_version(Config) ->
+declare_published_qq_on_3_nodes(Config) ->
     [Server, _, Server2] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -3196,6 +3196,10 @@ recover_missing_member_machine_version(Config) ->
     publish(Ch, QQ),
     amqp_channel:wait_for_confirms_or_die(Ch, 30),
     ?awaitMatch(3, count_online_nodes(Server, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    {Servers, Server, Server2, QQ, RaName}.
+
+recover_missing_member_machine_version(Config) ->
+    {Servers, Server, Server2, QQ, RaName} = declare_published_qq_on_3_nodes(Config),
 
     ?assertEqual(ok, rpc:call(Server2, ra, force_delete_server,
                               [quorum_queues, {RaName, Server2}])),
@@ -3207,17 +3211,7 @@ recover_missing_member_machine_version(Config) ->
                 ?DEFAULT_AWAIT).
 
 add_member_machine_version(Config) ->
-    [Server, _, Server2] = Servers =
-        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    QQ = ?config(queue_name, Config),
-    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    publish(Ch, QQ),
-    amqp_channel:wait_for_confirms_or_die(Ch, 30),
-    ?awaitMatch(3, count_online_nodes(Server, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    {Servers, Server, Server2, QQ, RaName} = declare_published_qq_on_3_nodes(Config),
 
     ?assertEqual(ok, rpc:call(Server, rabbit_queue_type_ra, delete_member,
                               [<<"/">>, QQ, Server2])),
