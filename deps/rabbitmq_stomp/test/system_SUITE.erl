@@ -29,6 +29,8 @@ groups() ->
         publish_no_dest_error,
         publish_unauthorized_error,
         subscribe_error,
+        subscribe_to_exclusive_queue_of_another_connection,
+        subscribe_to_own_exclusive_queue,
         subscribe,
         subscribe_with_x_priority,
         unsubscribe_ack,
@@ -143,6 +145,30 @@ subscribe_error(Config) ->
       Client, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
     "not_found" = proplists:get_value("message", Hdrs),
+    ok.
+
+subscribe_to_exclusive_queue_of_another_connection(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    #'queue.declare_ok'{queue = QName} =
+        amqp_channel:call(Channel, #'queue.declare'{exclusive = true}),
+    rabbit_stomp_client:send(
+      Client, "SUBSCRIBE", [{"destination", "/amq/queue/" ++ binary_to_list(QName)}]),
+    {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
+    "resource_locked" = proplists:get_value("message", Hdrs),
+    ok.
+
+subscribe_to_own_exclusive_queue(Config) ->
+    Client = ?config(stomp_client, Config),
+    Name = "own-exclusive-" ++ integer_to_list(rand:uniform(1_000_000)),
+    rabbit_stomp_client:send(
+      Client, "SUBSCRIBE", [{"destination", "/queue/" ++ Name}, {"id", "s1"},
+                            {"exclusive", "true"}]),
+    rabbit_stomp_client:send(
+      Client, "SUBSCRIBE", [{"destination", "/amq/queue/" ++ Name}, {"id", "s2"}]),
+    rabbit_stomp_client:send(
+      Client, "SEND", [{"destination", "/queue/" ++ Name}], ["hello"]),
+    {ok, _Client1, _, [<<"hello">>]} = stomp_receive(Client, "MESSAGE"),
     ok.
 
 subscribe(Config) ->
