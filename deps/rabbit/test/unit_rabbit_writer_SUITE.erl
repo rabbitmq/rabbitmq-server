@@ -24,7 +24,8 @@ groups() ->
      {tests, [parallel], [
                           commands_are_acked_in_batches,
                           commands_with_content_are_acked_in_batches,
-                          large_content_is_acked_immediately
+                          large_content_is_acked_immediately,
+                          acks_go_to_the_sender_of_the_commands
                          ]}
     ].
 
@@ -66,6 +67,15 @@ large_content_is_acked_immediately(_Config) ->
     ?assertEqual({1, byte_size(Payload)}, receive_acks(Writer)),
     stop_writer(Writer, Client).
 
+acks_go_to_the_sender_of_the_commands(_Config) ->
+    {Writer, Client} = start_writer(),
+    A = send_from_new_process(Writer, 50),
+    B = send_from_new_process(Writer, 200),
+    ?assertEqual({50, 0}, receive_acks_of(A)),
+    ?assertEqual({200, 0}, receive_acks_of(B)),
+    ok = assert_qos_ok_frames_received(Client, 250),
+    stop_writer(Writer, Client).
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
@@ -88,6 +98,22 @@ send_commands_and_ack(Writer, N) ->
     [ok = rabbit_writer:send_command_and_ack(Writer, #'basic.qos_ok'{})
      || _ <- lists:seq(1, N)],
     ok.
+
+send_from_new_process(Writer, N) ->
+    Self = self(),
+    Pid = spawn_link(fun() ->
+                             send_commands_and_ack(Writer, N),
+                             Self ! {sent, self()},
+                             Self ! {acks, self(), receive_acks(Writer)}
+                     end),
+    receive {sent, Pid} -> Pid
+    after ?TIMEOUT -> ct:fail(send_timeout)
+    end.
+
+receive_acks_of(Pid) ->
+    receive {acks, Pid, Acks} -> Acks
+    after ?TIMEOUT -> ct:fail(ack_timeout)
+    end.
 
 receive_acks(Writer) ->
     receive {writer_acks, Writer, Count, Bytes} -> {Count, Bytes}
