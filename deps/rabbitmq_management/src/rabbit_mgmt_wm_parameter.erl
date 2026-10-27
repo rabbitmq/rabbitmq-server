@@ -82,7 +82,15 @@ delete_resource(ReqData, Context = #context{user = #user{username = Username}}) 
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_policies(ReqData, Context).
+    IsAWrite = lists:member(cowboy_req:method(ReqData), [<<"PUT">>, <<"DELETE">>]),
+    case component(ReqData) of
+        <<"operator_policy">> when IsAWrite ->
+            rabbit_mgmt_wm_operator_policy:is_authorized(ReqData, Context);
+        <<"vhost-limits">> when IsAWrite ->
+            rabbit_mgmt_wm_limit:is_authorized(ReqData, Context);
+        _ ->
+            rabbit_mgmt_util:is_authorized_policies(ReqData, Context)
+    end.
 
 %%--------------------------------------------------------------------
 
