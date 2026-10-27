@@ -399,7 +399,7 @@ evaluate_re(Query, Args, User, LDAP) ->
 
 search_groups(LDAP, Desc, GroupsBase, Scope, DN) ->
     Filter = eldap:equalityMatch(Desc, DN),
-    case eldap:search(LDAP,
+    case search(LDAP,
                       [{base, GroupsBase},
                        {filter, Filter},
                        {attributes, ["dn"]},
@@ -493,7 +493,7 @@ log_match(String, RE, Result) ->
          format_multi_attr(RE), Result]).
 
 object_exists(DN, Filter, LDAP) ->
-    case eldap:search(LDAP,
+    case search(LDAP,
                       [{base, DN},
                        {filter, Filter},
                        {attributes, ["objectClass"]}, %% Reduce verbiage
@@ -507,7 +507,7 @@ object_exists(DN, Filter, LDAP) ->
     end.
 
 attribute(DN, AttributeName, LDAP) ->
-    case eldap:search(LDAP,
+    case search(LDAP,
                       [{base, DN},
                        {filter, eldap:present("objectClass")},
                        {attributes, [AttributeName]}]) of
@@ -593,49 +593,22 @@ with_login(_Creds, _Servers, _Opts, _Fun, 0 = _RetriesLeft) ->
 with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
     case get_or_create_conn(Creds == anon, Servers, Opts) of
         {ok, {ConnType, LDAP}} ->
-            Result = case Creds of
-                         anon ->
-                             ?L1("anonymous bind", []),
-                             case call_ldap_fun(Fun, LDAP) of
-                                 {error, ldap_closed} ->
-                                     purge_connection(Creds, Servers, Opts),
-                                     with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                                 Other -> Other
-                             end;
-                         {UserDN, Password} ->
-                             case eldap:simple_bind(LDAP, UserDN, Password) of
-                                 ok ->
-                                     ?L1("bind succeeded: ~ts",
-                                         [scrub_dn(UserDN, env(log))]),
-                                     case call_ldap_fun(Fun, LDAP, UserDN) of
-                                         {error, ldap_closed} ->
-                                             with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                                         {error, {gen_tcp_error, _}} ->
-                                             with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                                         Other -> Other
-                                     end;
-                                 {error, invalidCredentials} ->
-                                     ?L1("bind returned \"invalid credentials\": ~ts",
-                                         [scrub_dn(UserDN, env(log))]),
-                                     invalid_credentials_refused(UserDN);
-                                 {error, ldap_closed} ->
-                                     purge_connection(Creds, Servers, Opts),
-                                     with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                                 {error, {gen_tcp_error, _}} ->
-                                     purge_connection(Creds, Servers, Opts),
-                                     with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
-                                 {error, E} ->
-                                     ?L1("bind error: ~tp ~tp",
-                                         [scrub_dn(UserDN, env(log)), E]),
-                                     %% Do not report internal bind error to a client
-                                     {error, ldap_bind_error}
-                             end
-                     end,
-            ok = case ConnType of
-                     eldap_transient -> eldap:close(LDAP);
-                     _ -> ok
-                 end,
-            Result;
+            try
+                login(Creds, LDAP, Fun)
+            catch
+                throw:{ldap_connection_error, LDAP, _} ->
+                    case ConnType of
+                        eldap_transient -> unlink(LDAP), exit(LDAP, closed);
+                        _               -> ok
+                    end,
+                    purge_connection(Creds, Servers, Opts),
+                    with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1)
+            after
+                case ConnType of
+                    eldap_transient -> eldap:close(LDAP);
+                    _               -> ok
+                end
+            end;
         Error ->
             ?L1("connect error: ~tp", [Error]),
             case Error of
@@ -645,6 +618,49 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
             end
     end.
 
+login(anon, LDAP, Fun) ->
+    ?L1("anonymous bind", []),
+    call_ldap_fun(Fun, LDAP, "");
+login({UserDN, Password}, LDAP, Fun) ->
+    case ldap_result(LDAP, eldap:simple_bind(LDAP, UserDN, Password)) of
+        ok ->
+            ?L1("bind succeeded: ~ts", [scrub_dn(UserDN, env(log))]),
+            call_ldap_fun(Fun, LDAP, UserDN);
+        {error, invalidCredentials} ->
+            ?L1("bind returned \"invalid credentials\": ~ts",
+                [scrub_dn(UserDN, env(log))]),
+            invalid_credentials_refused(UserDN);
+        {error, E} ->
+            ?L1("bind error: ~tp ~tp", [scrub_dn(UserDN, env(log)), E]),
+            {error, ldap_bind_error}
+    end.
+
+search(LDAP, Args) ->
+    ldap_result(LDAP, eldap:search(LDAP, Args)).
+
+ldap_result(LDAP, {error, Reason} = Error) ->
+    case Reason of
+        ldap_closed        -> throw({ldap_connection_error, LDAP, Error});
+        {gen_tcp_error, _} -> throw({ldap_connection_error, LDAP, Error});
+        _ ->
+            case is_late_reply(Reason) of
+                true  -> throw({ldap_connection_error, LDAP, Error});
+                false -> Error
+            end
+    end;
+ldap_result(_LDAP, Result) ->
+    Result.
+
+%% eldap wraps a reply to a different request in an error tuple.
+is_late_reply({ok, Msg}) ->
+    is_tuple(Msg) andalso element(1, Msg) =:= 'LDAPMessage';
+is_late_reply({Op, _}) ->
+    lists:member(Op, [bindResponse, searchResEntry, searchResDone, searchResRef,
+                     modifyResponse, addResponse, delResponse, modDNResponse,
+                     compareResponse, extendedResp, intermediateResponse]);
+is_late_reply(_) ->
+    false.
+
 purge_connection(Creds, Servers, Opts) ->
     %% purge and retry with a new connection
     ?LOG_WARNING("TCP connection to a LDAP server was closed or otherwise defunct.",
@@ -653,17 +669,8 @@ purge_connection(Creds, Servers, Opts) ->
     ?LOG_WARNING("LDAP will retry with a new connection.",
                  #{domain => ?RMQLOG_DOMAIN_LDAP}).
 
-call_ldap_fun(Fun, LDAP) ->
-    call_ldap_fun(Fun, LDAP, "").
-
 call_ldap_fun(Fun, LDAP, UserDN) ->
-    case Fun(LDAP) of
-        {error, ldap_closed} ->
-            %% LDAP connection was close, let with_login/5 retry
-            {error, ldap_closed};
-        {error, {gen_tcp_error, E}} ->
-            %% ditto
-            {error, {gen_tcp_error, E}};
+    case ldap_result(LDAP, Fun(LDAP)) of
         {error, E} ->
             ?L1("evaluate error: ~ts ~tp", [scrub_dn(UserDN, env(log)), E]),
             {error, ldap_evaluate_error};
@@ -762,19 +769,27 @@ is_multi_attr_member(Str1, Str2) ->
     lists:member(Str1, Str2) orelse lists:member(Str2, Str1).
 
 purge_conn(IsAnon, Servers, Opts) ->
-    Conns = get(ldap_conns),
+    Conns = case get(ldap_conns) of
+                undefined -> #{};
+                Dict      -> Dict
+            end,
     Key = {IsAnon, Servers, Opts},
-    {ok, Conn} = maps:find(Key, Conns),
-    ?LOG_WARNING("LDAP will purge an already closed or defunct LDAP server connection from the pool",
-                 #{domain => ?RMQLOG_DOMAIN_LDAP}),
-    % We cannot close the connection with eldap:close/1 because as of OTP-13327
-    % eldap will try to do_unbind first and will fail with a `{gen_tcp_error, closed}`.
-    % Since we know that the connection is already closed, we just
-    % kill its process.
-    unlink(Conn),
-    exit(Conn, closed),
-    put(ldap_conns, maps:remove(Key, Conns)),
-    ok.
+    case maps:find(Key, Conns) of
+        {ok, Conn} ->
+            ?LOG_WARNING("LDAP will purge an already closed or defunct LDAP server connection from the pool",
+                         #{domain => ?RMQLOG_DOMAIN_LDAP}),
+            % We cannot close the connection with eldap:close/1 because as of OTP-13327
+            % eldap will try to do_unbind first, which fails or waits on a defunct
+            % connection, so we kill its process.
+            unlink(Conn),
+            exit(Conn, closed),
+            put(ldap_conns, maps:remove(Key, Conns)),
+            ok;
+        error ->
+            %% One-off connections (`idle_timeout = 0`) are never pooled, and
+            %% nothing is pooled when the connection could not be opened.
+            ok
+    end.
 
 eldap_open(Servers, Opts) ->
     case eldap:open(Servers, ssl_conf() ++ Opts) of
@@ -787,7 +802,9 @@ eldap_open(Servers, Opts) ->
                                   ELDAP = eldap, %% Fool xref
                                   case ELDAP:start_tls(LDAP, TLSOpts) of
                                       ok    -> {ok, LDAP};
-                                      Error -> Error
+                                      Error -> unlink(LDAP),
+                                               exit(LDAP, closed),
+                                               Error
                                   end
             end;
         Error ->
@@ -920,7 +937,7 @@ dn_lookup(Username, LDAP) ->
     Filled = fill_user_dn_pattern(Username),
     DnLookupBase = get_expected_env_str(dn_lookup_base, none),
     DnLookupAttribute = get_expected_env_str(dn_lookup_attribute, none),
-    case eldap:search(LDAP,
+    case search(LDAP,
                       [{base, DnLookupBase},
                        {filter, eldap:equalityMatch(DnLookupAttribute, Filled)},
                        {attributes, ["distinguishedName"]}]) of
