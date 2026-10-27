@@ -47,6 +47,7 @@ groups() ->
           map_uri_denied,
           uri_list_mixed_network_and_denied_direct,
           uri_too_long,
+          uri_connection_timeout_too_large,
           invalid_uri_error_has_no_credentials,
           prop_uri_list_validation
         ]}
@@ -181,6 +182,18 @@ uri_too_long(Config) ->
     ?assertMatch([{error, _, [<<"uri">>, 65536]}],
                  validate_with_user(Config, [network_uri(?ALLOWED_VHOST),
                                              network_uri_of_size(65537)])).
+
+uri_connection_timeout_too_large(Config) ->
+    Uri = fun(Timeout) ->
+                  Base = network_uri(?ALLOWED_VHOST),
+                  <<Base/binary, "?connection_timeout=",
+                    (integer_to_binary(Timeout))/binary>>
+          end,
+    ?assertEqual([ok], validate_with_user(Config, Uri(180000))),
+    ?assertMatch([{error, _, [<<"uri">>, 180000]}],
+                 validate_with_user(Config, Uri(180001))),
+    ?assertMatch([{error, _, [<<"uri">>, 180000]}],
+                 validate_with_none(Config, [Uri(1000), Uri(180001)])).
 
 invalid_uri_error_has_no_credentials(Config) ->
     [begin
