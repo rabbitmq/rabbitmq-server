@@ -35,6 +35,11 @@ groups() ->
         subscribe_ack,
         publisher_headers_do_not_override_server_headers,
         send,
+<<<<<<< HEAD
+=======
+        send_with_negative_priority,
+        send_body_larger_than_max_message_size_is_rejected,
+>>>>>>> 3d0a38d (CQ priorities: treat negative values as 0)
         delete_queue_subscribe,
         temp_destination_queue,
         temp_destination_in_send,
@@ -368,6 +373,71 @@ send(Config) ->
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
     ok.
 
+<<<<<<< HEAD
+=======
+send_with_negative_priority(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue     = ?QUEUE,
+                                                    durable   = true,
+                                                    arguments = [{<<"x-max-priority">>, byte, 5}]}),
+    [rabbit_stomp_client:send(
+       Client, 'SEND', [{<<"destination">>, ?DESTINATION},
+                        {<<"priority">>, integer_to_binary(P)}], [integer_to_list(P)])
+     || P <- [-1, -1, -1, -1, -1, -1, -1, 2]],
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION}, {<<"receipt">>, <<"foo">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+    {ok, Client2, _, [<<"2">>]} = stomp_receive(Client1, 'MESSAGE'),
+    lists:foldl(fun(_, C) ->
+                        {ok, C1, _, [<<"-1">>]} = stomp_receive(C, 'MESSAGE'),
+                        C1
+                end, Client2, lists:seq(1, 7)),
+    #'queue.delete_ok'{} =
+        amqp_channel:call(Channel, #'queue.delete'{queue = ?QUEUE}),
+    ok.
+
+send_body_larger_than_max_message_size_is_rejected(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue       = ?MAX_MSG_SIZE_QUEUE,
+                                                    durable     = true,
+                                                    auto_delete = true}),
+    Original = rabbit_ct_broker_helpers:rpc(
+                 Config, 0, persistent_term, get, [max_message_size]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, persistent_term, put, [max_message_size, 1024]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, stop, [rabbitmq_stomp]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, start, [rabbitmq_stomp]),
+    try
+        {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+        LargeBody = binary:copy(<<"A">>, 2000),
+        rabbit_stomp_client:send(
+          Client, 'SEND', [{<<"destination">>, ?MAX_MSG_SIZE_DESTINATION}], [LargeBody]),
+        {Sock, _} = Client,
+        ?assertEqual({error, closed}, gen_tcp:recv(Sock, 0, 5000)),
+
+        {ok, Client1} = rabbit_stomp_client:connect(Version, StompPort),
+        rabbit_stomp_client:send(
+          Client1, 'SUBSCRIBE', [{<<"destination">>, ?MAX_MSG_SIZE_DESTINATION},
+                                 {<<"receipt">>, <<"max-message-size-sub">>}]),
+        {ok, Client2, _, _} = stomp_receive(Client1, 'RECEIPT'),
+        SmallBody = binary:copy(<<"A">>, 100),
+        rabbit_stomp_client:send(
+          Client2, 'SEND', [{<<"destination">>, ?MAX_MSG_SIZE_DESTINATION}], [SmallBody]),
+        {ok, _Client3, _, [SmallBody]} = stomp_receive(Client2, 'MESSAGE'),
+        ok
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, stop, [rabbitmq_stomp]),
+        ok = rabbit_ct_broker_helpers:rpc(
+               Config, 0, persistent_term, put, [max_message_size, Original]),
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, start, [rabbitmq_stomp])
+    end.
+
+>>>>>>> 3d0a38d (CQ priorities: treat negative values as 0)
 delete_queue_subscribe(Config) ->
     Channel = ?config(amqp_channel, Config),
     Client = ?config(stomp_client, Config),

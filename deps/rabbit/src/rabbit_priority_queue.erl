@@ -36,6 +36,10 @@
          zip_msgs_and_acks/4,
          format_state/1]).
 
+-ifdef(TEST).
+-export([priority/2]).
+-endif.
+
 -record(state, {bq, bqss, max_priority}).
 -record(passthrough, {bq, bqs}).
 
@@ -553,6 +557,8 @@ priority_bq(Priority, [{MaxP, _} | _] = BQSs) ->
 %% Messages with a priority which is higher than the queue's maximum are treated
 %% as if they were published with the maximum priority.
 priority(undefined, _MaxP) ->
+    0;
+priority(Priority, _MaxP) when is_integer(Priority), Priority < 0 ->
     0;
 priority(Priority, MaxP) when is_integer(Priority), Priority =< MaxP ->
     Priority;
