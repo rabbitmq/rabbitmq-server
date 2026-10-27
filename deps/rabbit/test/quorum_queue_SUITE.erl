@@ -82,6 +82,8 @@ groups() ->
                                             publishing_to_unavailable_queue,
                                             confirm_availability_on_leader_change,
                                             recover_from_single_failure,
+                                            recover_missing_member_machine_version,
+                                            add_member_machine_version,
                                             recover_from_multiple_failures,
                                             leadership_takeover,
                                             delete_declare,
@@ -3181,6 +3183,58 @@ recover_from_single_failure(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
     wait_for_messages_ready(Servers, RaName, 3),
     wait_for_messages_pending_ack(Servers, RaName, 0).
+
+recover_missing_member_machine_version(Config) ->
+    [Server, _, Server2] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    RaName = ra_name(QQ),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    publish(Ch, QQ),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    ?awaitMatch(3, count_online_nodes(Server, <<"/">>, QQ), ?DEFAULT_AWAIT),
+
+    ?assertEqual(ok, rpc:call(Server2, ra, force_delete_server,
+                              [quorum_queues, {RaName, Server2}])),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+
+    ?awaitMatch(3, count_online_nodes(Server, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    ?awaitMatch(true, effective_machine_versions_match(Config, Servers, RaName),
+                ?DEFAULT_AWAIT).
+
+add_member_machine_version(Config) ->
+    [Server, _, Server2] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    RaName = ra_name(QQ),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    publish(Ch, QQ),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    ?awaitMatch(3, count_online_nodes(Server, <<"/">>, QQ), ?DEFAULT_AWAIT),
+
+    ?assertEqual(ok, rpc:call(Server, rabbit_queue_type_ra, delete_member,
+                              [<<"/">>, QQ, Server2])),
+    ?assertEqual(ok, rpc:call(Server, rabbit_queue_type_ra, add_member,
+                              [<<"/">>, QQ, Server2, voter, 30_000])),
+
+    ?awaitMatch(3, count_online_nodes(Server, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    ?awaitMatch(true, effective_machine_versions_match(Config, Servers, RaName),
+                ?DEFAULT_AWAIT).
+
+effective_machine_versions_match(Config, Servers, RaName) ->
+    Versions = [rabbit_ct_broker_helpers:rpc(Config, S, ra, member_overview,
+                                             [{RaName, S}], 5000)
+                || S <- Servers],
+    Effective = [V || {ok, #{effective_machine_version := V}, _} <- Versions],
+    length(Effective) =:= length(Servers) andalso
+        length(lists:usort(Effective)) =:= 1.
 
 recover_from_multiple_failures(Config) ->
     [Server1, Server, Server2] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
