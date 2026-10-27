@@ -104,7 +104,9 @@ build_filter_fun(VHostFilterFun, undefined) ->
     VHostFilterFun;
 build_filter_fun(VHostFilterFun, QueueFilter) ->
     fun(#{queue := Q} = Labels) ->
-            VHostFilterFun(Labels) andalso rabbit_re:matches(Q, QueueFilter);
+            VHostFilterFun(Labels) andalso
+                prometheus_rabbitmq_core_metrics_collector:matches_queue_filter(
+                  Q, QueueFilter);
        (_) ->
             false
     end.

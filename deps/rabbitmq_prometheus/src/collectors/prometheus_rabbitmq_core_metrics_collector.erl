@@ -8,7 +8,8 @@
 -export([register/0,
          deregister_cleanup/1,
          collect_mf/2,
-         collect_metrics/2]).
+         collect_metrics/2,
+         matches_queue_filter/2]).
 
 -import(prometheus_model_helpers, [create_mf/4,
                                    create_mf/5,
