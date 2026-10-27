@@ -368,7 +368,25 @@ safe_call_timeouts_test(Params = #amqp_params_network{}) ->
 
     ?assertEqual(TestConnTimeout + ?CALL_TIMEOUT_DEVIATION, amqp_util:call_timeout()),
 
-    meck:unload(amqp_network_connection);
+    meck:unload(amqp_network_connection),
+
+    EnvBefore = application:get_env(amqp_client, gen_server_call_timeout),
+    Self = self(),
+    spawn_link(fun() -> Self ! {call_timeout, amqp_util:call_timeout()} end),
+    OtherBefore = receive {call_timeout, T0} -> T0 end,
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    LargeConnTimeout = 300000,
+    Params2 = Params#amqp_params_network{connection_timeout = LargeConnTimeout},
+    {ok, Connection2} = amqp_connection:start(Params2),
+    ?assertEqual(LargeConnTimeout + ?CALL_TIMEOUT_DEVIATION, amqp_util:call_timeout()),
+    ?assertEqual(EnvBefore,
+                 application:get_env(amqp_client, gen_server_call_timeout)),
+    spawn_link(fun() -> Self ! {call_timeout, amqp_util:call_timeout()} end),
+    ?assertEqual(OtherBefore, receive {call_timeout, T1} -> T1 end),
+
+    ?assertEqual(ok, amqp_connection:close(Connection2)),
+    wait_for_death(Connection2);
 
 safe_call_timeouts_test(Params = #amqp_params_direct{}) ->
     %% We must mock net_kernel:get_net_ticktime/0 as changing

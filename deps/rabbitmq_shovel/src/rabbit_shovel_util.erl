@@ -213,6 +213,10 @@ validate_uri_fun(Protocol, User) ->
 validate_uri(Name, Term, Protocol, User) when is_binary(Term) ->
     case rabbit_parameter_validation:uri(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
+                  {ok, #amqp_params_network{connection_timeout = T}}
+                    when T > ?MAX_CONNECTION_TIMEOUT ->
+                      {error, "~ts connection_timeout must not exceed ~b ms",
+                       [Name, ?MAX_CONNECTION_TIMEOUT]};
                   {ok, P}    -> validate_params_user(Protocol, P, Term, User);
                   {error, {Info, _}} ->
                       {error, "\"~ts\" not a valid URI: ~tp",

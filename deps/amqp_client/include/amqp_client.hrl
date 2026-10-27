@@ -13,6 +13,8 @@
 
 -record(amqp_msg, {props = #'P_basic'{}, payload = <<>>}).
 
+-define(MAX_CONNECTION_TIMEOUT, 180000).
+
 -record(amqp_params_network, {username           = <<"guest">>,
                               password           = <<"guest">>,
                               virtual_host       = <<"/">>,
