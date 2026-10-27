@@ -20,10 +20,21 @@ all() ->
 groups() ->
     [
       {sequential_tests, [], [
-          priority_queue
+          priority_queue,
+          message_priority_is_within_bounds
         ]}
     ].
 
+
+message_priority_is_within_bounds(_Config) ->
+    ?assertEqual(0, rabbit_priority_queue:priority(undefined, 5)),
+    ?assertEqual(0, rabbit_priority_queue:priority(-1, 5)),
+    ?assertEqual(0, rabbit_priority_queue:priority(-1000, 5)),
+    ?assertEqual(0, rabbit_priority_queue:priority(0, 5)),
+    ?assertEqual(3, rabbit_priority_queue:priority(3, 5)),
+    ?assertEqual(5, rabbit_priority_queue:priority(5, 5)),
+    ?assertEqual(5, rabbit_priority_queue:priority(6, 5)),
+    ?assertEqual(5, rabbit_priority_queue:priority(255, 5)).
 
 priority_queue(_Config) ->
 
