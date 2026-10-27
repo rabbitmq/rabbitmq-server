@@ -99,6 +99,8 @@ groups() ->
         blank_destination_in_send,
         stream_filtering,
         transaction_limit,
+        transaction_body_limit,
+        transaction_body_limit_is_released,
         commit_of_failed_transaction_has_no_receipt,
         send_unroutable_with_receipt,
         global_counters,
@@ -191,6 +193,8 @@ tests_with_new_behavior() ->
      error_frame_with_utf8_encoded_text,
      stream_offset_is_refused_for_classic_queue,
      commit_of_failed_transaction_has_no_receipt,
+     transaction_body_limit,
+     transaction_body_limit_is_released,
      send_unroutable_with_receipt,
      global_counters_after_close,
      consumer_counter_after_server_cancel,
@@ -354,6 +358,52 @@ transaction_limit(Config) ->
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, 'ERROR'),
     <<"Transaction limit exceeded">> = maps:get(<<"message">>, Hdrs),
     ok.
+
+transaction_body_limit(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    {ok, Client} = rabbit_stomp_client:connect(Version, StompPort),
+    Dest = {<<"destination">>, <<"/topic/transaction-body-limit">>},
+    Body = binary:copy(<<"x">>, 2 * 1024 * 1024),
+    Tx1 = [{<<"transaction">>, <<"tx1">>}],
+    Tx2 = [{<<"transaction">>, <<"tx2">>}],
+    rabbit_stomp_client:send(Client, 'BEGIN', Tx1),
+    rabbit_stomp_client:send(Client, 'BEGIN', Tx2),
+    [rabbit_stomp_client:send(Client, 'SEND', [Dest | Tx], [Body])
+     || Tx <- [Tx1, Tx2], _ <- lists:seq(1, 32)],
+    rabbit_stomp_client:send(Client, 'SEND', [Dest | Tx2], ["x"]),
+    {ok, {Sock, _}, Hdrs, _} = stomp_receive(Client, 'ERROR'),
+    ?assertEqual(<<"Transaction too large">>, maps:get(<<"message">>, Hdrs)),
+    ?assertEqual({error, closed}, gen_tcp:recv(Sock, 0, 30_000)).
+
+transaction_body_limit_is_released(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    {ok, Client0} = rabbit_stomp_client:connect(Version, StompPort),
+    Dest = {<<"destination">>, <<"/topic/transaction-body-limit-released">>},
+    Body = binary:copy(<<"x">>, 2 * 1024 * 1024),
+    Tx = [{<<"transaction">>, <<"tx">>}],
+    FillTx = fun(Client) ->
+                     [rabbit_stomp_client:send(Client, 'SEND', [Dest | Tx], [Body])
+                      || _ <- lists:seq(1, 60)]
+             end,
+    rabbit_stomp_client:send(Client0, 'BEGIN', Tx),
+    FillTx(Client0),
+    rabbit_stomp_client:send(Client0, 'COMMIT', [{<<"receipt">>, <<"commit">>} | Tx]),
+    Client1 = stomp_receive_receipt(Client0, <<"commit">>),
+    rabbit_stomp_client:send(Client1, 'BEGIN', Tx),
+    FillTx(Client1),
+    rabbit_stomp_client:send(Client1, 'ABORT', [{<<"receipt">>, <<"abort">>} | Tx]),
+    Client2 = stomp_receive_receipt(Client1, <<"abort">>),
+    rabbit_stomp_client:send(Client2, 'BEGIN', Tx),
+    FillTx(Client2),
+    rabbit_stomp_client:send(Client2, 'BEGIN', Tx),
+    FillTx(Client2),
+    rabbit_stomp_client:send(Client2, 'SEND', [Dest, {<<"receipt">>, <<"send">>}], [Body]),
+    Client3 = stomp_receive_receipt(Client2, <<"send">>),
+    rabbit_stomp_client:send(Client3, 'COMMIT', [{<<"receipt">>, <<"commit2">>} | Tx]),
+    Client4 = stomp_receive_receipt(Client3, <<"commit2">>),
+    rabbit_stomp_client:disconnect(Client4).
 
 commit_of_failed_transaction_has_no_receipt(Config) ->
     Version = ?config(version, Config),

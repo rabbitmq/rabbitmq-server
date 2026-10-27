@@ -46,6 +46,7 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(MAX_TRANSACTIONS, 16).
 -define(MAX_TRANSACTION_ACTIONS, 1024).
+-define(MAX_TRANSACTION_BODY_BYTES, 128 * 1024 * 1024).
 
 -record(conn_info, {
          conn_name    :: binary(),
@@ -1616,6 +1617,7 @@ begin_transaction(Transaction, State) ->
                   "Too many concurrent transactions (limit ~B)",
                   [?MAX_TRANSACTIONS], State);
         false ->
+            discard_transaction(Transaction),
             put({transaction, Transaction}, []),
             ok(State)
     end.
@@ -1630,10 +1632,40 @@ extend_transaction(Transaction, Fun, Frame, State0) ->
                             "Too many actions in transaction (limit ~B)",
                             [?MAX_TRANSACTION_ACTIONS], State);
                   false ->
-                      put({transaction, Transaction}, [{Frame, Fun} | Funs]),
-                      ok(State)
+                      Total = transaction_bytes() + frame_body_size(Frame),
+                      case Total > ?MAX_TRANSACTION_BODY_BYTES of
+                          true ->
+                              Message = "Transaction too large",
+                              Detail = rabbit_misc:format(
+                                         "Too many message body bytes in transactions (limit ~B)",
+                                         [?MAX_TRANSACTION_BODY_BYTES]),
+                              log_error(Message, Detail, none),
+                              {stop, error_close, send_error(Message, Detail, State)};
+                          false ->
+                              put(transaction_bytes, Total),
+                              put({transaction, Transaction}, [{Frame, Fun} | Funs]),
+                              ok(State)
+                      end
               end
       end).
+
+frame_body_size(#stomp_frame{body_iolist_rev = Body}) ->
+    iolist_size(Body).
+
+transaction_bytes() ->
+    case get(transaction_bytes) of
+        undefined -> 0;
+        N         -> N
+    end.
+
+discard_transaction(Transaction) ->
+    case erase({transaction, Transaction}) of
+        undefined ->
+            ok;
+        Funs ->
+            Size = lists:sum([frame_body_size(Frame) || {Frame, _} <- Funs]),
+            put(transaction_bytes, transaction_bytes() - Size)
+    end.
 
 transaction_count() ->
     length([1 || {{transaction, _}, _} <- get()]).
@@ -1656,7 +1688,7 @@ commit_transaction(Transaction, State0) ->
                            after
                                erase(tx_settled_delivery_tags)
                            end,
-              erase({transaction, Transaction}),
+              discard_transaction(Transaction),
               FinalState
       end).
 
@@ -1664,7 +1696,7 @@ abort_transaction(Transaction, State0) ->
     with_transaction(
       Transaction, State0,
       fun (_Frames, State) ->
-              erase({transaction, Transaction}),
+              discard_transaction(Transaction),
               ok(State)
       end).
 
