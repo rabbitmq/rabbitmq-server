@@ -897,15 +897,14 @@ maybe_set_queue_qos1(_, State) ->
 
 -spec init_subscriptions(boolean(), state()) ->
     {ok, state()} | {error, reason_code()}.
-init_subscriptions(_SessionPresent = _SubscriptionsPresent = true,
-                   State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
+init_subscriptions(_SessionPresent = true, State) ->
     maybe
         {ok, SubsQos0} ?= init_subscriptions0(?QOS_0, State),
         {ok, SubsQos1} ?= init_subscriptions0(?QOS_1, State),
         Subs = maps:merge(SubsQos0, SubsQos1),
-        rabbit_global_counters:consumer_created(ProtoVer),
-        %% Cache subscriptions in process state to perform fewer queries.
-        {ok, State#state{subscriptions = Subs}}
+        State1 = State#state{subscriptions = Subs},
+        maybe_increment_consumer(State, State1),
+        {ok, State1}
     end;
 init_subscriptions(_, State) ->
     {ok, State}.
