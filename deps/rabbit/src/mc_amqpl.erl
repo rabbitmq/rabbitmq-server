@@ -253,6 +253,8 @@ x_header(Key, #content{properties = #'P_basic'{headers = Headers}}) ->
     case rabbit_misc:table_lookup(Headers, Key) of
         undefined ->
             undefined;
+        {decimal, _} ->
+            undefined;
         {Type, Value} ->
             from_091(Type, Value)
     end;
@@ -265,7 +267,7 @@ x_headers(#content{properties = #'P_basic'{headers = undefined}}) ->
 x_headers(#content{properties = #'P_basic'{headers = Headers}}) ->
     L = lists:filtermap(
           fun({Name, Type, Val}) ->
-                  case mc_util:is_x_header(Name) of
+                  case mc_util:is_x_header(Name) andalso Type =/= decimal of
                       true ->
                           {true, {Name, from_091(Type, Val)}};
                       false ->
@@ -361,7 +363,9 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
 
     %% x- headers are stored as message annotations
     MAC0 = lists:filtermap(
-             fun({<<"x-", _/binary>> = K, T, V}) ->
+             fun({_, decimal, _}) ->
+                     false;
+                ({<<"x-", _/binary>> = K, T, V}) ->
                      %% All message annotation keys need to be either a symbol or ulong
                      %% but 0.9.1 field-table names are always strings.
                      {true, {{symbol, K}, from_091(T, V)}};
@@ -681,15 +685,17 @@ from_091(timestamp, V) -> {timestamp, V * 1000};
 from_091(byte, V) -> {byte, V};
 from_091(void, _V) -> null;
 from_091(array, L) ->
-    {list, [from_091(T, V) || {T, V} <- L]};
+    {list, [from_091(T, V) || {T, V} <- L, T =/= decimal]};
 from_091(table, L) ->
-    {map, [{wrap(symbol, K), from_091(T, V)} || {K, T, V} <- L]}.
+    {map, [{wrap(symbol, K), from_091(T, V)} || {K, T, V} <- L, T =/= decimal]}.
 
 map_add(_T, _Key, _Type, undefined, Acc) ->
     Acc;
 map_add(KeyType, Key, Type, Value, Acc) ->
     [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].
 
+supported_header_value_type(decimal) ->
+    false;
 supported_header_value_type(array) ->
     false;
 supported_header_value_type(table) ->
