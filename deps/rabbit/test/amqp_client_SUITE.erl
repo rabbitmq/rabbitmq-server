@@ -1895,9 +1895,11 @@ amqp091_to_amqp10_header_conversion(Session, Ch, QName, Address) ->
                       {<<"x-string">>, longstr, "my-string"},
                       {<<"x-int">>, long, 92},
                       {<<"x-bool">>, bool, true},
+                      {<<"x-table">>, table, [{<<"decimal">>, decimal, {2, 12345}}]},
                       {<<"string">>, longstr, "my-str"},
                       {<<"int">>, long, 101},
-                      {<<"bool">>, bool, false}],
+                      {<<"bool">>, bool, false},
+                      {<<"decimal">>, decimal, {2, 12345}}],
 
     amqp_channel:cast(
       Ch,
@@ -1917,11 +1919,13 @@ amqp091_to_amqp10_header_conversion(Session, Ch, QName, Address) ->
     ?assertEqual(<<"my-string">>, maps:get(<<"x-string">>, Amqp10MA, undefined)),
     ?assertEqual(92, maps:get(<<"x-int">>, Amqp10MA, undefined)),
     ?assertEqual(true, maps:get(<<"x-bool">>, Amqp10MA, undefined)),
+    ?assertEqual([], maps:get(<<"x-table">>, Amqp10MA, undefined)),
 
     Amqp10Props = amqp10_msg:application_properties(Msg),
     ?assertEqual(<<"my-str">>, maps:get(<<"string">>, Amqp10Props, undefined)),
     ?assertEqual(101, maps:get(<<"int">>, Amqp10Props, undefined)),
-    ?assertEqual(false, maps:get(<<"bool">>, Amqp10Props, undefined)).
+    ?assertEqual(false, maps:get(<<"bool">>, Amqp10Props, undefined)),
+    ?assertNot(maps:is_key(<<"decimal">>, Amqp10Props)).
 
 %% Test sending and receiving concurrently on multiple sessions of the same connection.
 multiple_sessions(Config) ->

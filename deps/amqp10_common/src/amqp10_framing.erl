@@ -163,8 +163,8 @@ decode_map(Fields) ->
 %% Since we already parse annotations here and neither the client nor server uses
 %% reserved keys, we perform strict validation and throw if any reserved keys are used.
 decode_annotations(Fields) ->
-    lists:map(fun({{symbol, <<"x-", _/binary>>} = K, V}) ->
-                      {K, decode(V)};
+    lists:map(fun({{symbol, <<"x-", _/binary>>}, _V} = KV) ->
+                      KV;
                  ({ReservedKey, _V}) ->
                       throw({reserved_annotation_key, ReservedKey})
               end, Fields).
