@@ -112,7 +112,7 @@ publish_packet() ->
          #mqtt_packet{
             fixed = #mqtt_packet_fixed{
                        type = ?PUBLISH,
-                       dup = boolean(),
+                       dup = case Qos of 0 -> false; _ -> boolean() end,
                        qos = Qos,
                        retain = boolean()},
             variable = #mqtt_packet_publish{

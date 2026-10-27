@@ -11,7 +11,8 @@
 -include("rabbit_mqtt_packet.hrl").
 
 all() ->
-    [connect_reserved_flag, fixed_header_flags, connect_will_flags, connect_password_flag,
+    [connect_reserved_flag, fixed_header_flags, publish_fixed_header_flags,
+     connect_will_flags, connect_password_flag,
      utf8_strings, publish_utf8_unchecked, topic_names_and_filters,
      subscription_payloads, subscription_identifier_zero].
 
@@ -51,6 +52,18 @@ fixed_header_flags(_Config) ->
                  rabbit_mqtt_packet:parse(<<16#8B, 6, 0, 1, 0, 1, "a", 0>>, 3)),
     ?assertMatch({ok, _, <<>>, 3},
                  rabbit_mqtt_packet:parse(<<16#AB, 5, 0, 1, 0, 1, "a">>, 3)),
+    ok.
+
+publish_fixed_header_flags(_Config) ->
+    [begin
+         PacketId = case QoS of 0 -> <<>>; _ -> <<0, 1>> end,
+         Packet = packet(16#30 bor (Dup bsl 3) bor (QoS bsl 1) bor Retain,
+                         <<0, 1, "a", PacketId/binary, (properties(Vsn))/binary>>),
+         case QoS =:= 3 orelse (QoS =:= 0 andalso Dup =:= 1) of
+             true -> ?assertThrow(invalid_fixed_header, rabbit_mqtt_packet:parse(Packet, Vsn));
+             false -> ?assertMatch({ok, _, <<>>, Vsn}, rabbit_mqtt_packet:parse(Packet, Vsn))
+         end
+     end || Vsn <- [4, 5], QoS <- lists:seq(0, 3), Dup <- [0, 1], Retain <- [0, 1]],
     ok.
 
 connect_will_flags(_Config) ->

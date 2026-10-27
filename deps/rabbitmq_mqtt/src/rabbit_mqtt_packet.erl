@@ -58,7 +58,8 @@ parse0(Bin, Cont)
 
 validate_fixed_header(_Type, _Dup, _QoS, _Retain, 3) ->
     ok;
-validate_fixed_header(?PUBLISH, _Dup, QoS, _Retain, _) when QoS < 3 ->
+validate_fixed_header(?PUBLISH, Dup, QoS, _Retain, _)
+  when QoS < 3 andalso (QoS > 0 orelse Dup =:= 0) ->
     ok;
 validate_fixed_header(Type, 0, 1, 0, _)
   when Type =:= ?SUBSCRIBE; Type =:= ?UNSUBSCRIBE ->
