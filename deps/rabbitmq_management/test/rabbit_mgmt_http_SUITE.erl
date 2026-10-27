@@ -221,6 +221,8 @@ all_tests() -> [
     publish_fail_test,
     publish_base64_test,
     publish_unrouted_test,
+    publish_memory_alarm_test,
+    publish_disk_alarm_test,
     publish_confirm_timeout_test,
     if_empty_unused_test,
     parameters_test,
@@ -4107,6 +4109,32 @@ publish_unrouted_test(Config) ->
     Msg = msg(<<"hmmm">>, #{}, <<"Hello world">>),
     ?assertEqual(#{routed => false},
                  http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, ?OK)).
+
+publish_memory_alarm_test(Config) ->
+    publish_resource_alarm_test(Config, memory).
+
+publish_disk_alarm_test(Config) ->
+    publish_resource_alarm_test(Config, disk).
+
+publish_resource_alarm_test(Config, Resource) ->
+    QName = atom_to_binary(Resource),
+    Path = "/queues/%2F/" ++ atom_to_list(Resource),
+    Msg = msg(QName, #{}, <<"Hello world">>),
+    Get = [{ackmode, ack_requeue_false}, {count, 1}, {encoding, auto}],
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    http_put(Config, Path, #{durable => true}, {group, '2xx'}),
+    try
+        ok = rabbit_ct_broker_helpers:set_alarm(Config, Node, Resource),
+        http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, 503),
+        ok = rabbit_ct_broker_helpers:clear_alarm(Config, Node, Resource),
+        ?assertEqual([], http_post(Config, Path ++ "/get", Get, ?OK)),
+        ?assertEqual(#{routed => true},
+                     http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, ?OK)),
+        ?assertMatch([_], http_post(Config, Path ++ "/get", Get, ?OK))
+    after
+        rabbit_ct_broker_helpers:clear_alarm(Config, Node, Resource),
+        http_delete(Config, Path, {group, '2xx'})
+    end.
 
 publish_confirm_timeout_test(Config) ->
     QName = <<"publish_confirm_timeout_test">>,
