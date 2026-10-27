@@ -29,6 +29,7 @@
          init_after_reset_fails/1,
          init_retries_while_store_restarts/1,
          kill_store_then_init/0,
+         reset_after_failed_start_app/1,
          force_boot/1,
          status_with_alarm/1,
          pid_file_and_await_node_startup/1,
@@ -77,6 +78,7 @@ groups() ->
                              reset_in_minority,
                              init_after_reset_fails,
                              init_retries_while_store_restarts,
+                             reset_after_failed_start_app,
                              force_boot,
                              status_with_alarm,
                              pid_file_and_await_node_startup,
@@ -532,6 +534,20 @@ kill_store_then_init() ->
     exit(whereis(rabbitmq_metadata), kill),
     Seen = khepri_cluster:members(rabbitmq_metadata),
     {Seen, rabbit_khepri:init(false)}.
+
+reset_after_failed_start_app(Config) ->
+    [Rabbit, _Hare] = cluster_members(Config),
+
+    ok = stop_app(Config, Rabbit),
+    Blocker = rpc:call(Rabbit, erlang, spawn, [timer, sleep, [infinity]]),
+    true = rpc:call(Rabbit, erlang, register, [sysmon_handler_sup, Blocker]),
+    ?assertMatch({error, _, _}, start_app(Config, Rabbit)),
+    true = rpc:call(Rabbit, erlang, exit, [Blocker, kill]),
+
+    ok = reset(Config, Rabbit),
+
+    ok = start_app(Config, Rabbit),
+    assert_cluster_status({[Rabbit], [Rabbit]}, [Rabbit]).
 
 is_in_minority(Ret) ->
     ?assertMatch({error, 75, _}, Ret),

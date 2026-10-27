@@ -451,6 +451,12 @@ start_it(StartType) ->
                 ok
             catch
                 error:{badmatch, Error}:_ ->
+                    %% `rabbit:start/2' does not run when a dependency of
+                    %% `rabbit' fails to start, so the boot state is reset here.
+                    case rabbit_boot_state:get() of
+                        booting -> rabbit_boot_state:set(stopped);
+                        _       -> ok
+                    end,
                     %% `rabbitmq_prelaunch' was started before `rabbit' above.
                     %% If the latter fails to start, we must stop the former as
                     %% well.
