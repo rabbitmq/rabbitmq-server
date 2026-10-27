@@ -366,30 +366,6 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                        ttl = wrap(uint, Ttl),
                        %% TODO: check Priority is a ubyte?
                        priority = wrap(ubyte, Priority)},
-<<<<<<< HEAD
-=======
-
-    %% x- headers are stored as message annotations
-    MAC0 = lists:filtermap(
-             fun({_, decimal, _}) ->
-                     false;
-                ({<<"x-", _/binary>> = K, T, V}) ->
-                     %% All message annotation keys need to be either a symbol or ulong
-                     %% but 0.9.1 field-table names are always strings.
-                     {true, {{symbol, K}, from_091(T, V)}};
-                ({<<"CC">>, T = array, V}) ->
-                     %% Special case the 0.9.1 CC header into 1.0 message annotations because
-                     %% 1.0 application properties must not contain list or array values.
-                     {true, {{symbol, <<"x-cc">>}, from_091(T, V)}};
-                (_) ->
-                     false
-             end, Headers),
-    %% `type' doesn't have a direct equivalent so adding as
-    %% a message annotation here
-    MAC = map_add(symbol, <<"x-basic-type">>, utf8, Type, MAC0),
-    MA = #'v1_0.message_annotations'{content = MAC},
-
->>>>>>> ad257e6 (Avoid two more AMQP 0-9-1 to AMQP 1.0 conversion exceptions)
     ReplyTo = case ReplyTo0 of
                   undefined ->
                       undefined;
@@ -444,7 +420,9 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
     MA = case amqp10_section_header(?AMQP10_MESSAGE_ANNOTATIONS_HEADER, Headers) of
              undefined ->
                  MAC0 = lists:filtermap(
-                          fun({<<"x-", _/binary>> = K, T, V}) ->
+                          fun({_, decimal, _}) ->
+                                  false;
+                             ({<<"x-", _/binary>> = K, T, V}) ->
                                   %% All message annotation keys need to be either a symbol or ulong
                                   %% but 0.9.1 field-table names are always strings.
                                   {true, {{symbol, K}, from_091(T, V)}};
