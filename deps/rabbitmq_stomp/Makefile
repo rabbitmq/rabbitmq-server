@@ -30,13 +30,8 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-<<<<<<< HEAD
 DEPS = ranch rabbit_common rabbit amqp_client
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management proper meck
-=======
-DEPS = ranch rabbit_common rabbit
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management proper meck amqp10_client
->>>>>>> b792a8b (Cover STOMP to AMQP 1.0 compatibility here)
 
 PLT_APPS += rabbitmq_cli $(ELIXIR_ERL_EBIN) ssl
 

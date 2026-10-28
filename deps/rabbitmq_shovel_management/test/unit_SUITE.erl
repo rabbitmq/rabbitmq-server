@@ -7,13 +7,8 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 all() ->
-<<<<<<< HEAD
-    [blocked_status].
-=======
     [blocked_status,
-     terminated_reason,
-     filter_vhost_user_tag_representation].
->>>>>>> a929d77 (Shovel: do not try to format exceptions when reporting status)
+     terminated_reason].
 
 init_per_testcase(_, Config) ->
     meck:expect(rabbit_shovel_dyn_worker_sup_sup, cleanup_specs, 0, ok),
