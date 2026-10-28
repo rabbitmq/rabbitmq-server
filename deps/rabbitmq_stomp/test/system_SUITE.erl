@@ -411,7 +411,12 @@ send_with_negative_priority(Config) ->
     {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
     {ok, Client2, _, [<<"2">>]} = stomp_receive(Client1, "MESSAGE"),
     lists:foldl(fun(_, C) ->
+<<<<<<< HEAD
                         {ok, C1, _, [<<"-1">>]} = stomp_receive(C, "MESSAGE"),
+=======
+                        {ok, C1, Hdrs, [<<"-1">>]} = stomp_receive(C, 'MESSAGE'),
+                        ?assertEqual(<<"0">>, maps:get(<<"priority">>, Hdrs)),
+>>>>>>> ce9608d (STOMP: avoid negative priority values in more places)
                         C1
                 end, Client2, lists:seq(1, 7)),
     #'queue.delete_ok'{} =

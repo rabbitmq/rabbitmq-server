@@ -70,7 +70,7 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
                 headers          = [longstr_field(K, V) ||
                                        {K, V} <- Headers, user_header(K)],
                 delivery_mode    = DeliveryMode,
-                priority         = IntH(?HEADER_PRIORITY),
+                priority         = priority(IntH(?HEADER_PRIORITY)),
                 correlation_id   = BinH(?HEADER_CORRELATION_ID),
                 reply_to         = BinH(?HEADER_REPLY_TO),
                 expiration       = BinH(?HEADER_EXPIRATION),
@@ -79,6 +79,9 @@ message_properties(Frame = #stomp_frame{headers = Headers}) ->
                 type             = BinH(?HEADER_TYPE),
                 user_id          = BinH(?HEADER_USER_ID),
                 app_id           = BinH(?HEADER_APP_ID) }.
+
+priority(undefined) -> undefined;
+priority(P)         -> max(0, min(P, 255)).
 
 message_headers(Props = #'P_basic'{headers = Headers}) ->
     adhoc_convert_headers(
