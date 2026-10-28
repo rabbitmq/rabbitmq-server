@@ -474,23 +474,13 @@ terminate(Reason, _StateName, #state{connection_sup = Sup,
                                    {shutdown, R} -> R;
                                    _             -> Reason
                                end),
-    case Reason of
-        normal ->
-            %% Tear down the rest of the connection's supervision tree
-            %% (reader, sessions) now that we're done: a quiet (`normal')
-            %% child termination is not cascaded to `one_for_all' siblings.
-            %%
-            %% This must not be a blocking call: `Sup' shutting down this
-            %% very process is part of its own termination, which can
-            %% never complete while we are still executing this callback,
-            %% so calling sys:terminate/2 (or supervisor:terminate_child/2)
-            %% directly here would deadlock both processes until they each
-            %% hit their 5-second timeout.
-            _ = spawn(fun() -> sys:terminate(Sup, normal) end),
-            ok;
-        _ ->
-            ok
-    end.
+    %% A `normal' or `{shutdown, _}' exit is not cascaded to `one_for_all'
+    %% siblings, so stop the reader and the sessions supervisor explicitly.
+    %%
+    %% This call must not block: `Sup' cannot stop this process until
+    %% `terminate/3' returns, so a direct `sys:terminate/2' would deadlock.
+    _ = spawn(fun() -> sys:terminate(Sup, normal) end),
+    ok.
 
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
