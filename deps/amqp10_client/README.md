@@ -38,7 +38,7 @@ The `connection_config` map contains various configuration properties.
       tls_opts => {secure_port, [ssl:tls_option()]}, % optional
       connect_timeout => timeout(),
       notify => pid(), % Pid to receive protocol notifications. Set to self() if not provided
-      max_frame_size => non_neg_integer(), % incoming max frame size
+      max_frame_size => 512..16_777_216, % incoming max frame size, 1_048_576 by default
       idle_time_out => non_neg_integer(), % heartbeat
       sasl => none | anon | {plain, User :: binary(), Password :: binary(),
       % set this to a negative value to allow a sender to "overshoot" the flow

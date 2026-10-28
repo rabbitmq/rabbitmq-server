@@ -740,9 +740,7 @@ send_transfer(Transfer0, {raw, Payload}, _FooterOpt, MaxMessageSize,
            % TODO: this does not take the extended header into account
            % see: 2.3
            MaxPayloadSize = OutMaxFrameSize - ?FRAME_HEADER_SIZE - TransferSize,
-           Frames = build_frames(Channel, Transfer, Payload, MaxPayloadSize, []),
-           ok = socket_send(Socket, Frames),
-           {ok, length(Frames)}
+           send_frames(Socket, Channel, Transfer, Payload, MaxPayloadSize)
     end;
 send_transfer(Transfer0, Sections0, FooterOpt, MaxMessageSize,
               #state{socket = Socket,
@@ -761,9 +759,7 @@ send_transfer(Transfer0, Sections0, FooterOpt, MaxMessageSize,
            % TODO: this does not take the extended header into account
            % see: 2.3
            MaxPayloadSize = OutMaxFrameSize - ?FRAME_HEADER_SIZE - TransferSize,
-           Frames = build_frames(Channel, Transfer, SectionsBin, MaxPayloadSize, []),
-           ok = socket_send(Socket, Frames),
-           {ok, length(Frames)}
+           send_frames(Socket, Channel, Transfer, SectionsBin, MaxPayloadSize)
     end.
 
 encode_sections(Sections, undefined) ->
@@ -855,6 +851,14 @@ set_flow_session_fields(Flow, #state{next_incoming_id = NID,
            incoming_window = uint(max(0, IW)),
            next_outgoing_id = uint(NOI),
            outgoing_window = ?UINT_OUTGOING_WINDOW}.
+
+send_frames(_Socket, _Channel, _Transfer, _Payload, MaxPayloadSize)
+  when MaxPayloadSize =< 0 ->
+    {error, frame_size_too_small};
+send_frames(Socket, Channel, Transfer, Payload, MaxPayloadSize) ->
+    Frames = build_frames(Channel, Transfer, Payload, MaxPayloadSize, []),
+    ok = socket_send(Socket, Frames),
+    {ok, length(Frames)}.
 
 build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)
   when byte_size(Bin) =< MaxPayloadSize ->
@@ -1620,6 +1624,12 @@ format_status(Status = #{data := Data0}) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/logger.hrl").
+
+send_frames_frame_size_too_small_test_() ->
+    [?_assertEqual({error, frame_size_too_small},
+                   send_frames(undefined, 1, #'v1_0.transfer'{},
+                               <<"payload">>, MaxPayloadSize))
+     || MaxPayloadSize <- [0, -1, -100]].
 
 handle_session_flow_test() ->
     % see spec section: 2.5.6 for logic
