@@ -51,8 +51,13 @@ end_per_suite(Config) ->
 
 init_per_group(cluster_size_2, Config) ->
     init_per_multinode_group(cluster_size_2, Config, 2);
-init_per_group(Group, Config) ->
-    init_per_multinode_group(Group, Config, 1).
+init_per_group(non_parallel_tests = Group, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "single node groups do not exercise mixed versions"};
+        false ->
+            init_per_multinode_group(Group, Config, 1)
+    end.
 
 init_per_multinode_group(_Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
@@ -69,15 +74,6 @@ end_per_group(_Group, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(Testcase, Config) when Testcase == delete_invalid_uri_another_node ->
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
-        true ->
-            %% The code changes to delete shovel are compatible with older versions, however
-            %% older versions fail to delete invalid shovels
-            {skip, "not mixed versions compatible"};
-        false ->
-            rabbit_ct_helpers:testcase_started(Config, Testcase)
-    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 

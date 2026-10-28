@@ -152,11 +152,16 @@ version_to_group_name(V) ->
                             [global, {return, list}])).
 
 init_per_suite(Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config,
-                                           [{rmq_nodename_suffix, ?MODULE}]),
-    rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps()).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "single node suites do not exercise mixed versions"};
+        false ->
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config, [{rmq_nodename_suffix, ?MODULE}]),
+            rabbit_ct_helpers:log_environment(),
+            rabbit_ct_helpers:run_setup_steps(
+              Config1, rabbit_ct_broker_helpers:setup_steps())
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
@@ -175,36 +180,6 @@ init_per_group(Group, Config) ->
 end_per_group(_Group, Config) -> Config.
 
 init_per_testcase(TestCase, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() andalso
-         lists:member(TestCase, tests_with_new_behavior()) of
-        true ->
-            {skip, "Should not run in mixed version environments"};
-        false ->
-            init_per_testcase1(TestCase, Config)
-    end.
-
-tests_with_new_behavior() ->
-    [subscribe_to_exclusive_queue_of_another_connection,
-     reserved_queue_names_are_refused,
-     queue_name_cr_lf_is_stripped,
-     queue_name_of_only_cr_lf_is_refused,
-     malformed_headers_are_refused,
-     empty_queue_name_is_ignored_for_transient_subscription,
-     error_frame_with_non_latin1_text_case1,
-     error_frame_with_non_latin1_text_case2,
-     error_frame_with_non_latin1_text_case3,
-     error_frame_with_utf8_encoded_text,
-     stream_offset_is_refused_for_classic_queue,
-     commit_of_failed_transaction_has_no_receipt,
-     transaction_body_limit,
-     transaction_body_limit_is_released,
-     send_unroutable_with_receipt,
-     global_counters_after_close,
-     consumer_counter_after_server_cancel,
-     stream_readers_closed_with_connection,
-     temp_queue_uses_amq_gen_prefix].
-
-init_per_testcase1(TestCase, Config) ->
     Version = ?config(version, Config),
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, Connection} = amqp_connection:start(#amqp_params_direct{

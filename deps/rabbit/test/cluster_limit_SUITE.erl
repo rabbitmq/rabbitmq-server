@@ -48,19 +48,13 @@ init_per_group(Group, Config) ->
     ClusterSize = case Group of
                       size_2 -> 2
                   end,
-    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
-    case ClusterSize of
-        2 when IsMixed ->
-            {skip, "cluster size 2 isn't mixed versions compatible"};
-        _ ->
-            Config1 = rabbit_ct_helpers:set_config(Config,
-                                                   [{rmq_nodes_count, ClusterSize},
-                                                    {rmq_nodename_suffix, Group},
-                                                    {tcp_ports_base}]),
-            rabbit_ct_helpers:run_steps(Config1,
-                                        [fun merge_app_env/1 ] ++
-                                            rabbit_ct_broker_helpers:setup_steps())
-    end.
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [{rmq_nodes_count, ClusterSize},
+                                            {rmq_nodename_suffix, Group},
+                                            {tcp_ports_base}]),
+    rabbit_ct_helpers:run_steps(Config1,
+                                [fun merge_app_env/1 ] ++
+                                    rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_group(clustered, Config) ->
     Config;

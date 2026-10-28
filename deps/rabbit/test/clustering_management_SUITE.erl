@@ -171,23 +171,17 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 persistent_cluster_id(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-      false ->
-        [Rabbit, Hare] = cluster_members(Config),
-        ClusterIDA1 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
-        ClusterIDB1 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
-        ?assertEqual(ClusterIDA1, ClusterIDB1),
+    [Rabbit, Hare] = cluster_members(Config),
+    ClusterIDA1 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
+    ClusterIDB1 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
+    ?assertEqual(ClusterIDA1, ClusterIDB1),
 
-        rabbit_ct_broker_helpers:restart_node(Config, Rabbit),
-        ClusterIDA2 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
-        rabbit_ct_broker_helpers:restart_node(Config, Hare),
-        ClusterIDB2 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
-        ?assertEqual(ClusterIDA1, ClusterIDA2),
-        ?assertEqual(ClusterIDA2, ClusterIDB2);
-      _ ->
-        %% skip the test in mixed version mode
-        {skip, "Should not run in mixed version environments"}
-    end.
+    rabbit_ct_broker_helpers:restart_node(Config, Rabbit),
+    ClusterIDA2 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),
+    rabbit_ct_broker_helpers:restart_node(Config, Hare),
+    ClusterIDB2 = rpc:call(Hare, rabbit_nodes, persistent_cluster_id, []),
+    ?assertEqual(ClusterIDA1, ClusterIDA2),
+    ?assertEqual(ClusterIDA2, ClusterIDB2).
 
 stop_start_cluster_node(Config) ->
     [Rabbit, Hare] = cluster_members(Config),

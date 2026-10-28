@@ -71,7 +71,17 @@ all_tests() -> [
 %% Test suite setup/teardown
 %% -------------------------------------------------------------------
 
-init_per_group(Group, Config0) ->
+init_per_group(single_node = Group, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "single node groups do not exercise mixed versions"};
+        false ->
+            init_per_group1(Group, Config)
+    end;
+init_per_group(Group, Config) ->
+    init_per_group1(Group, Config).
+
+init_per_group1(Group, Config0) ->
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
     %% Keep `virtual_hosts_test` from racing the vhost reconciler.
     RabbitConfig = {rabbit, [{vhost_process_reconciliation_enabled, false}]},
@@ -100,15 +110,6 @@ end_per_group(_, Config) ->
     Steps = Teardown0 ++ Teardown1,
     rabbit_ct_helpers:run_teardown_steps(Config, Steps).
 
-init_per_testcase(Testcase, Config)
-  when Testcase == is_quorum_critical_test;
-       Testcase == is_quorum_critical_vhost_named_not_applicable_test ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "not mixed versions compatible"};
-        _ ->
-            rabbit_ct_helpers:testcase_started(Config, Testcase)
-    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 

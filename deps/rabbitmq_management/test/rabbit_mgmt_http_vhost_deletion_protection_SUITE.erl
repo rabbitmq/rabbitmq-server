@@ -39,7 +39,17 @@ all_tests() -> [
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_group(Group, Config0) ->
+init_per_group(single_node = Group, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "single node groups do not exercise mixed versions"};
+        false ->
+            init_per_group1(Group, Config)
+    end;
+init_per_group(Group, Config) ->
+    init_per_group1(Group, Config).
+
+init_per_group1(Group, Config0) ->
     rabbit_ct_helpers:log_environment(),
     inets:start(),
     ClusterSize = case Group of
@@ -64,12 +74,7 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, Steps).
 
 init_per_testcase(Testcase, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "not mixed versions compatible"};
-        _ ->
-            rabbit_ct_helpers:testcase_started(Config, Testcase)
-    end.
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).

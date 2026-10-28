@@ -121,20 +121,20 @@ init_per_group(with_disambiguate, Config) ->
     rabbit_ct_helpers:set_config(Config,
       {disambiguate_step, [fun queue_federation_test_helpers:disambiguate/1]});
 init_per_group(cluster_size_1 = Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 1}
-      ]),
-    init_per_group1(Group, Config1);
-init_per_group(cluster_size_2 = Group, Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            {skip, "not mixed versions compatible"};
-        _ ->
+            {skip, "single node groups do not exercise mixed versions"};
+        false ->
             Config1 = rabbit_ct_helpers:set_config(Config, [
-                {rmq_nodes_count, 2}
-            ]),
+                {rmq_nodes_count, 1}
+              ]),
             init_per_group1(Group, Config1)
-    end.
+    end;
+init_per_group(cluster_size_2 = Group, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodes_count, 2}
+    ]),
+    init_per_group1(Group, Config1).
 
 init_per_group1(Group, Config) ->
     SetupFederation = case Group of

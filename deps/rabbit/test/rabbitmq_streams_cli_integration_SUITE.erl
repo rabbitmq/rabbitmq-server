@@ -31,14 +31,9 @@ groups() ->
     ].
 
 init_per_suite(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false ->
-            rabbit_ct_helpers:log_environment(),
-            Config1 = rabbit_ct_helpers:run_setup_steps(Config),
-            rabbit_ct_helpers:ensure_rabbitmq_streams_cmd(Config1);
-        _ ->
-            {skip, "growing and shrinking cannot be done in mixed mode"}
-    end.
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:run_setup_steps(Config),
+    rabbit_ct_helpers:ensure_rabbitmq_streams_cmd(Config1).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).

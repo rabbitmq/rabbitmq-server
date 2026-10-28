@@ -77,8 +77,19 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
   rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(Group, Config)
+  when Group =:= essential orelse Group =:= maintenance_mode ->
+  case rabbit_ct_helpers:is_mixed_versions() of
+      true ->
+          {skip, "single node groups do not exercise mixed versions"};
+      false ->
+          init_per_group2(Group, Config)
+  end;
+init_per_group(Group, Config) ->
+  init_per_group2(Group, Config).
+
 %% Some of the "regular" tests but in the single channel mode.
-init_per_group(essential, Config) ->
+init_per_group2(essential, Config) ->
   SetupFederation = [
       fun(Config1) ->
           setup_federation_with_upstream_params(Config1, [
@@ -95,18 +106,18 @@ init_per_group(essential, Config) ->
     rabbit_ct_broker_helpers:setup_steps() ++
     rabbit_ct_client_helpers:setup_steps() ++
     SetupFederation);
-init_per_group(cluster_size_3 = Group, Config) ->
+init_per_group2(cluster_size_3 = Group, Config) ->
   Config1 = rabbit_ct_helpers:set_config(Config, [
       {rmq_nodes_count, 3}
     ]),
   init_per_group1(Group, Config1);
-init_per_group(rolling_upgrade = Group, Config) ->
+init_per_group2(rolling_upgrade = Group, Config) ->
   Config1 = rabbit_ct_helpers:set_config(Config, [
       {rmq_nodes_count, 5},
       {rmq_nodes_clustered, false}
     ]),
   init_per_group1(Group, Config1);
-init_per_group(maintenance_mode, Config) ->
+init_per_group2(maintenance_mode, Config) ->
   Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
   Config1 = rabbit_ct_helpers:set_config(Config, [
       {rmq_nodename_suffix, Suffix},
@@ -119,7 +130,7 @@ init_per_group(maintenance_mode, Config) ->
   rabbit_ct_helpers:run_steps(Config1,
     rabbit_ct_broker_helpers:setup_steps() ++
     rabbit_ct_client_helpers:setup_steps());
-init_per_group(Group, Config) ->
+init_per_group2(Group, Config) ->
   init_per_group1(Group, Config).
 
 
@@ -503,85 +514,79 @@ unbind_on_client_unbind(Config) ->
   clean_up_federation_related_bits(Config).
 
 max_hops(Config) ->
-  case rabbit_ct_helpers:is_mixed_versions() of
-    false ->
-      [NodeA, NodeB, NodeC] = rabbit_ct_broker_helpers:get_node_configs(
-        Config, nodename),
-      await_credentials_obfuscation_seeding_on_two_nodes(Config),
+  [NodeA, NodeB, NodeC] = rabbit_ct_broker_helpers:get_node_configs(
+    Config, nodename),
+  await_credentials_obfuscation_seeding_on_two_nodes(Config),
 
-      UpX = <<"ring">>,
+  UpX = <<"ring">>,
 
-      %% form of ring of upstreams,
-      %% A upstream points at B
-      rabbit_ct_broker_helpers:set_parameter(
-        Config, NodeA, <<"federation-upstream">>, <<"upstream">>,
-        [
-          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeB)},
-          {<<"exchange">>, UpX},
-          {<<"max-hops">>, 2}
-        ]),
-      %% B upstream points at C
-      rabbit_ct_broker_helpers:set_parameter(
-        Config, NodeB, <<"federation-upstream">>, <<"upstream">>,
-        [
-          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeC)},
-          {<<"exchange">>, UpX},
-          {<<"max-hops">>, 2}
-        ]),
-      %% C upstream points at A
-      rabbit_ct_broker_helpers:set_parameter(
-        Config, NodeC, <<"federation-upstream">>, <<"upstream">>,
-        [
-          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeA)},
-          {<<"exchange">>, UpX},
-          {<<"max-hops">>, 2}
-        ]),
+  %% form of ring of upstreams,
+  %% A upstream points at B
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, NodeA, <<"federation-upstream">>, <<"upstream">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeB)},
+      {<<"exchange">>, UpX},
+      {<<"max-hops">>, 2}
+    ]),
+  %% B upstream points at C
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, NodeB, <<"federation-upstream">>, <<"upstream">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeC)},
+      {<<"exchange">>, UpX},
+      {<<"max-hops">>, 2}
+    ]),
+  %% C upstream points at A
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, NodeC, <<"federation-upstream">>, <<"upstream">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeA)},
+      {<<"exchange">>, UpX},
+      {<<"max-hops">>, 2}
+    ]),
 
-      %% policy on A
-      [begin
-        rabbit_ct_broker_helpers:set_policy(
-          Config, Node,
-          <<"fed.x">>, <<"^ring">>, <<"exchanges">>,
-          [
-            {<<"federation-upstream">>, <<"upstream">>}
-          ])
-       end || Node <- [NodeA, NodeB, NodeC]],
+  %% policy on A
+  [begin
+    rabbit_ct_broker_helpers:set_policy(
+      Config, Node,
+      <<"fed.x">>, <<"^ring">>, <<"exchanges">>,
+      [
+        {<<"federation-upstream">>, <<"upstream">>}
+      ])
+   end || Node <- [NodeA, NodeB, NodeC]],
 
-      NodeACh = rabbit_ct_client_helpers:open_channel(Config, NodeA),
-      NodeBCh = rabbit_ct_client_helpers:open_channel(Config, NodeB),
-      NodeCCh = rabbit_ct_client_helpers:open_channel(Config, NodeC),
+  NodeACh = rabbit_ct_client_helpers:open_channel(Config, NodeA),
+  NodeBCh = rabbit_ct_client_helpers:open_channel(Config, NodeB),
+  NodeCCh = rabbit_ct_client_helpers:open_channel(Config, NodeC),
 
-      FedX = <<"ring">>,
-      X = exchange_declare_method(FedX),
-      declare_exchange(NodeACh, X),
-      declare_exchange(NodeBCh, X),
-      declare_exchange(NodeCCh, X),
+  FedX = <<"ring">>,
+  X = exchange_declare_method(FedX),
+  declare_exchange(NodeACh, X),
+  declare_exchange(NodeBCh, X),
+  declare_exchange(NodeCCh, X),
 
-      Q1 = declare_and_bind_queue(NodeACh, <<"ring">>, <<"key">>),
-      Q2 = declare_and_bind_queue(NodeBCh, <<"ring">>, <<"key">>),
-      Q3 = declare_and_bind_queue(NodeCCh, <<"ring">>, <<"key">>),
+  Q1 = declare_and_bind_queue(NodeACh, <<"ring">>, <<"key">>),
+  Q2 = declare_and_bind_queue(NodeBCh, <<"ring">>, <<"key">>),
+  Q3 = declare_and_bind_queue(NodeCCh, <<"ring">>, <<"key">>),
 
-      await_binding(Config, NodeA, <<"ring">>, <<"key">>, 3),
-      await_binding(Config, NodeB, <<"ring">>, <<"key">>, 3),
-      await_binding(Config, NodeC, <<"ring">>, <<"key">>, 3),
+  await_binding(Config, NodeA, <<"ring">>, <<"key">>, 3),
+  await_binding(Config, NodeB, <<"ring">>, <<"key">>, 3),
+  await_binding(Config, NodeC, <<"ring">>, <<"key">>, 3),
 
-      publish(NodeACh, <<"ring">>, <<"key">>, <<"HELLO flopsy">>),
-      publish(NodeBCh, <<"ring">>, <<"key">>, <<"HELLO mopsy">>),
-      publish(NodeCCh, <<"ring">>, <<"key">>, <<"HELLO cottontail">>),
+  publish(NodeACh, <<"ring">>, <<"key">>, <<"HELLO flopsy">>),
+  publish(NodeBCh, <<"ring">>, <<"key">>, <<"HELLO mopsy">>),
+  publish(NodeCCh, <<"ring">>, <<"key">>, <<"HELLO cottontail">>),
 
-      Msgs = [<<"HELLO flopsy">>, <<"HELLO mopsy">>, <<"HELLO cottontail">>],
-      expect(NodeACh, Q1, Msgs),
-      expect(NodeBCh, Q2, Msgs),
-      expect(NodeCCh, Q3, Msgs),
-      expect_empty(NodeACh, Q1),
-      expect_empty(NodeBCh, Q2),
-      expect_empty(NodeCCh, Q3),
+  Msgs = [<<"HELLO flopsy">>, <<"HELLO mopsy">>, <<"HELLO cottontail">>],
+  expect(NodeACh, Q1, Msgs),
+  expect(NodeBCh, Q2, Msgs),
+  expect(NodeCCh, Q3, Msgs),
+  expect_empty(NodeACh, Q1),
+  expect_empty(NodeBCh, Q2),
+  expect_empty(NodeCCh, Q3),
 
-      clean_up_federation_related_bits(Config);
-    true ->
-      %% skip the test in mixed version mode
-      {skip, "Should not run in mixed version environments"}
-  end.
+  clean_up_federation_related_bits(Config).
 
 %% Uses a chain (B consumes from A, C consumes from B) rather than a ring so
 %% that cycle detection cannot mask the result.
@@ -590,69 +595,64 @@ max_hops(Config) ->
 %% by decrementing, so the binding propagated through the whole chain
 %% regardless of `max-hops`.
 forged_hops_does_not_bypass_max_hops(Config) ->
-  case rabbit_ct_helpers:is_mixed_versions() of
-    false ->
-      [NodeA, NodeB, NodeC] = rabbit_ct_broker_helpers:get_node_configs(
-        Config, nodename),
-      await_credentials_obfuscation_seeding_on_two_nodes(Config),
+  [NodeA, NodeB, NodeC] = rabbit_ct_broker_helpers:get_node_configs(
+    Config, nodename),
+  await_credentials_obfuscation_seeding_on_two_nodes(Config),
 
-      UpX = <<"chain">>,
+  UpX = <<"chain">>,
 
-      %% B consumes from A
-      rabbit_ct_broker_helpers:set_parameter(
-        Config, NodeB, <<"federation-upstream">>, <<"upstream">>,
-        [
-          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeA)},
-          {<<"exchange">>, UpX},
-          {<<"max-hops">>, 1}
-        ]),
-      %% C consumes from B
-      rabbit_ct_broker_helpers:set_parameter(
-        Config, NodeC, <<"federation-upstream">>, <<"upstream">>,
-        [
-          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeB)},
-          {<<"exchange">>, UpX},
-          {<<"max-hops">>, 1}
-        ]),
+  %% B consumes from A
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, NodeB, <<"federation-upstream">>, <<"upstream">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeA)},
+      {<<"exchange">>, UpX},
+      {<<"max-hops">>, 1}
+    ]),
+  %% C consumes from B
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, NodeC, <<"federation-upstream">>, <<"upstream">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeB)},
+      {<<"exchange">>, UpX},
+      {<<"max-hops">>, 1}
+    ]),
 
-      [begin
-        rabbit_ct_broker_helpers:set_policy(
-          Config, Node,
-          <<"fed.x">>, <<"^chain">>, <<"exchanges">>,
-          [
-            {<<"federation-upstream">>, <<"upstream">>}
-          ])
-       end || Node <- [NodeB, NodeC]],
+  [begin
+    rabbit_ct_broker_helpers:set_policy(
+      Config, Node,
+      <<"fed.x">>, <<"^chain">>, <<"exchanges">>,
+      [
+        {<<"federation-upstream">>, <<"upstream">>}
+      ])
+   end || Node <- [NodeB, NodeC]],
 
-      NodeACh = rabbit_ct_client_helpers:open_channel(Config, NodeA),
-      NodeBCh = rabbit_ct_client_helpers:open_channel(Config, NodeB),
-      NodeCCh = rabbit_ct_client_helpers:open_channel(Config, NodeC),
+  NodeACh = rabbit_ct_client_helpers:open_channel(Config, NodeA),
+  NodeBCh = rabbit_ct_client_helpers:open_channel(Config, NodeB),
+  NodeCCh = rabbit_ct_client_helpers:open_channel(Config, NodeC),
 
-      X = exchange_declare_method(UpX),
-      declare_exchange(NodeACh, X),
-      declare_exchange(NodeBCh, X),
-      declare_exchange(NodeCCh, X),
+  X = exchange_declare_method(UpX),
+  declare_exchange(NodeACh, X),
+  declare_exchange(NodeBCh, X),
+  declare_exchange(NodeCCh, X),
 
-      %% An ordinary binding must reach B first, otherwise the absence of the
-      %% forged one below proves nothing.
-      _ = declare_and_bind_queue(NodeCCh, UpX, <<"baseline">>),
-      await_binding(Config, NodeB, UpX, <<"baseline">>),
+  %% An ordinary binding must reach B first, otherwise the absence of the
+  %% forged one below proves nothing.
+  _ = declare_and_bind_queue(NodeCCh, UpX, <<"baseline">>),
+  await_binding(Config, NodeB, UpX, <<"baseline">>),
 
-      ForgedArgs = [{?BINDING_HEADER, array,
-                     [{table, [{<<"hops">>, short, -100},
-                               {<<"cluster-name">>, longstr, <<"nonexistent">>},
-                               {<<"vhost">>, longstr, <<"x">>}]}]}],
-      _ = declare_and_bind_queue(NodeCCh, UpX, <<"forged">>, ForgedArgs),
+  ForgedArgs = [{?BINDING_HEADER, array,
+                 [{table, [{<<"hops">>, short, -100},
+                           {<<"cluster-name">>, longstr, <<"nonexistent">>},
+                           {<<"vhost">>, longstr, <<"x">>}]}]}],
+  _ = declare_and_bind_queue(NodeCCh, UpX, <<"forged">>, ForgedArgs),
 
-      %% Propagation is asynchronous, so allow it time before asserting its absence.
-      timer:sleep(5000),
-      [] = bound_keys_from(Config, NodeB, <<"/">>, UpX, <<"forged">>),
-      [] = bound_keys_from(Config, NodeA, <<"/">>, UpX, <<"forged">>),
+  %% Propagation is asynchronous, so allow it time before asserting its absence.
+  timer:sleep(5000),
+  [] = bound_keys_from(Config, NodeB, <<"/">>, UpX, <<"forged">>),
+  [] = bound_keys_from(Config, NodeA, <<"/">>, UpX, <<"forged">>),
 
-      clean_up_federation_related_bits(Config);
-    true ->
-      {skip, "Should not run in mixed version environments"}
-  end.
+  clean_up_federation_related_bits(Config).
 
 exchange_federation_link_status(Config) ->
   FedX = <<"single_upstream.federated">>,
