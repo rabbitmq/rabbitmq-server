@@ -1023,9 +1023,6 @@ end}.
 {mapping, "max_message_size", "rabbit.max_message_size",
     [{datatype, integer}, {validators, ["max_message_size"]}]}.
 
-{mapping, "dead_lettering.max_hops", "rabbit.dead_letter_max_hops",
-    [{datatype, {integer, positive}}]}.
-
 {mapping, "cluster_exchange_limit", "rabbit.cluster_exchange_limit",
   [{datatype, [{atom, infinity}, integer]}, {validators, ["non_negative_integer"]}]}.
 
