@@ -251,7 +251,7 @@ handle_input(expecting_frame_header,
              #state{connection_config = ConnConfig} = State)
   when DOff >= 2 andalso (Type =:= 0 orelse Type =:= 1) ->
     %% Extract max_frame_size, falling back to the safe 1 MB default
-    MaxFrameSize = maps:get(max_frame_size, ConnConfig, 1_048_576),
+    MaxFrameSize = maps:get(max_frame_size, ConnConfig, ?DEFAULT_MAX_FRAME_SIZE),
     case Length of
         L when L > MaxFrameSize ->
             ?LOG_WARNING("AMQP 1.0 framing error: frame length (~p) "
