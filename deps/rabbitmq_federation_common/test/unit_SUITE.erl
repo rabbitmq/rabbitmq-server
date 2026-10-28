@@ -42,7 +42,8 @@ all() -> [
     max_hops_keeps_valid_values,
     max_hops_normalizes_legacy_values,
     cluster_name_parameter_set_triggers_federation_adjust,
-    unrelated_global_parameter_set_does_not_trigger_federation_adjust
+    unrelated_global_parameter_set_does_not_trigger_federation_adjust,
+    dropped_message_needs_ack_per_ack_mode
 ].
 
 init_per_suite(Config) ->
@@ -375,3 +376,8 @@ unrelated_global_parameter_set_does_not_trigger_federation_adjust(_Config) ->
     after
         meck:unload(rabbit_federation_parameters)
     end.
+
+dropped_message_needs_ack_per_ack_mode(_Config) ->
+    ?assert(rabbit_federation_link_util:dropped_message_needs_ack('on-confirm')),
+    ?assert(rabbit_federation_link_util:dropped_message_needs_ack('on-publish')),
+    ?assertNot(rabbit_federation_link_util:dropped_message_needs_ack('no-ack')).
