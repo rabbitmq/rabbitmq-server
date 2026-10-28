@@ -619,28 +619,14 @@ start_local_store() ->
     %% Check if we just booted a virgin node or recovered data
     case khepri:is_empty(StoreId, #{timeout => default_timeout()}) of
         true ->
-            %% Virgin bootstrap
-            OtherNodes = rabbit_nodes:list_running() -- [node()],
-            ?LOG_DEBUG("Other nodes in cluster: ~p", [OtherNodes]),
-            case find_active_peer(OtherNodes) of
-                undefined ->
-                    %% Virgin Cluster
-                    ?LOG_DEBUG("No active peer, starting new cluster"),
-                    ok = khepri_cluster:wait_for_leader(StoreId, RetryTimeout),
-                    ?LOG_DEBUG("Started new cluster, initializing schema"),
-                    init_schema(),
-                    ?LOG_DEBUG("Schema initialized"),
-                    expand_cluster();
-                PeerNode ->
-                    %% Existing Cluster
-                    ?LOG_DEBUG("Trying to join active peer: ~p", [PeerNode]),
-                    ok = join_active_peer(StoreId, PeerNode, RaServerConfig, RetryTimeout),
-
-                    ?LOG_DEBUG("Joined existing cluster, waiting for effective behaviour"),
-                    ok = khepri_cluster:wait_for_effective_behaviour(
-                           StoreId, process_based_keep_while, RetryTimeout),
-                    ?LOG_DEBUG("Local store ready")
-            end;
+            %% Virgin Cluster
+            ?LOG_DEBUG("sole_conn store created, waiting for effective behaviour"),
+            ok = khepri_cluster:wait_for_effective_behaviour(
+                   StoreId, process_based_keep_while, RetryTimeout),
+            ?LOG_DEBUG("Initializing schema"),
+            init_schema(),
+            ?LOG_DEBUG("Schema initialized"),
+            expand_cluster();
         false ->
             %% Recovery
             %% The node already has data, meaning it was part of a cluster.
@@ -755,11 +741,15 @@ join_cluster1(SeedNode) ->
 %% -----------------------------------------
 
 make_ra_server_config() ->
+    StoreId = get_store_id(),
+    Nodes = rabbit_nodes:list_members(),
+    Members = [{StoreId, Node} || Node <- Nodes],
     #{cluster_name => ?RA_CLUSTER_NAME,
       friendly_name => ?RA_FRIENDLY_NAME,
       metrics_labels => #{ra_system => ?RA_SYSTEM,
                           module => ?MODULE},
-      min_recovery_checkpoint_interval => 4096}.
+      min_recovery_checkpoint_interval => 4096,
+      initial_members => Members}.
 
 join_active_peer(StoreId, PeerNode, RaServerConfig, RetryTimeout) ->
     join_active_peer(StoreId, PeerNode, RaServerConfig, RetryTimeout, ?JOIN_MAX_ATTEMPTS).
