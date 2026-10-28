@@ -1268,57 +1268,15 @@ modified_quorum_queue_deferral_token_too_many_across_stashed_flows(Config) ->
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"receiver">>, Address, unsettled),
     OutputHandle = element(4, Receiver),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 30000 -> ct:fail({missing_attached, ?LINE})
+    end,
     Tokens1 = [{utf8, integer_to_binary(N)} || N <- lists:seq(1, 200)],
     Tokens2 = [{utf8, integer_to_binary(N)} || N <- lists:seq(201, 300)],
-    %% Fire three `FLOW` frames back-to-back, no wait in between: the
-    %% 2nd and 3rd (300 tokens combined) should land in the
-    %% `stashed_credit_req` path while the 1st `FLOW`'s credit request
-    %% is still in flight.
-    ok = amqp10_client_session:flow_link(
-           Session, OutputHandle,
-           #'v1_0.flow'{link_credit = {uint, 1}},
-           never),
-    ok = amqp10_client_session:flow_link(
-           Session, OutputHandle,
-           #'v1_0.flow'{
-              link_credit = {uint, 1},
-              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
-                                   {array, utf8, Tokens1}}]}},
-           never),
-    ok = amqp10_client_session:flow_link(
-           Session, OutputHandle,
-           #'v1_0.flow'{
-              link_credit = {uint, 1},
-              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
-                                   {array, utf8, Tokens2}}]}},
-           never),
-    receive
-        {amqp10_event,
-         {session, Session,
-          {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
-    after 30000 -> flush(missing_ended),
-                   ct:fail("did not receive expected error")
-    end,
-    ok = close_connection_sync(Connection).
-
-%% Asserts via `meck` that both batches land in one `assign_deferred`
-%% call, so a missed race fails the test instead of passing by accident.
-modified_quorum_queue_deferral_token_at_limit_across_stashed_flows(Config) ->
-    QName = atom_to_binary(?FUNCTION_NAME),
-    {_, Session, LinkPair} = Init = init(Config),
-    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
-                                      LinkPair, QName,
-                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
-    Address = rabbitmq_amqp_address:queue(QName),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session, <<"receiver">>, Address, unsettled),
-    OutputHandle = element(4, Receiver),
-    Tokens1 = [{utf8, integer_to_binary(N)} || N <- lists:seq(1, 200)],
-    Tokens2 = [{utf8, integer_to_binary(N)} || N <- lists:seq(201, 256)],
-
-    Mod = rabbit_queue_type,
-    rabbit_ct_broker_helpers:setup_meck(Config),
-    ok = rpc(Config, meck, new, [Mod, [no_link, passthrough]]),
+    %% Suspending the queue keeps the 1st `FLOW`'s credit request in flight,
+    %% so the 2nd and 3rd `FLOW` (300 tokens combined) are always stashed.
+    RaName = ra_name(QName),
+    ok = rpc(Config, sys, suspend, [RaName]),
     try
         ok = amqp10_client_session:flow_link(
                Session, OutputHandle,
@@ -1338,14 +1296,82 @@ modified_quorum_queue_deferral_token_at_limit_across_stashed_flows(Config) ->
                   properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
                                        {array, utf8, Tokens2}}]}},
                never),
+        receive
+            {amqp10_event,
+             {session, Session,
+              {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
+        after 30000 -> flush(missing_ended),
+                       ct:fail("did not receive expected error")
+        end
+    after
+        ok = rpc(Config, sys, resume, [RaName])
+    end,
+    ok = close_connection_sync(Connection).
+
+%% Asserts via `meck` that both batches land in one
+%% `rabbit_queue_type:assign_deferred/4` call.
+modified_quorum_queue_deferral_token_at_limit_across_stashed_flows(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 30000 -> ct:fail({missing_attached, ?LINE})
+    end,
+    Tokens1 = [{utf8, integer_to_binary(N)} || N <- lists:seq(1, 200)],
+    Tokens2 = [{utf8, integer_to_binary(N)} || N <- lists:seq(201, 256)],
+
+    Mod = rabbit_queue_type,
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    ok = rpc(Config, meck, new, [Mod, [no_link, passthrough]]),
+    RaName = ra_name(QName),
+    try
+        %% Keep the 1st `FLOW`'s credit request in flight.
+        ok = rpc(Config, sys, suspend, [RaName]),
+        try
+            ok = amqp10_client_session:flow_link(
+                   Session, OutputHandle,
+                   #'v1_0.flow'{link_credit = {uint, 1}},
+                   never),
+            ok = amqp10_client_session:flow_link(
+                   Session, OutputHandle,
+                   #'v1_0.flow'{
+                      link_credit = {uint, 1},
+                      properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                           {array, utf8, Tokens1}}]}},
+                   never),
+            ok = amqp10_client_session:flow_link(
+                   Session, OutputHandle,
+                   #'v1_0.flow'{
+                      link_credit = {uint, 1},
+                      properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                           {array, utf8, Tokens2}}]}},
+                   never),
+            %% The session processes frames in order, so once this attach
+            %% completes, the `FLOW` frames above have been stashed.
+            {ok, Sender} = amqp10_client:attach_sender_link(
+                             Session, <<"sender">>,
+                             rabbitmq_amqp_address:exchange(<<"amq.fanout">>)),
+            receive {amqp10_event, {link, Sender, attached}} -> ok
+            after 30000 -> ct:fail({missing_attached, ?LINE})
+            end,
+            ok = detach_link_sync(Sender)
+        after
+            ok = rpc(Config, sys, resume, [RaName])
+        end,
+
+        ?awaitMatch([256], [length(Tokens) || Tokens <- assign_deferred_calls(Config, Mod)],
+                    30_000),
         %% None of these tokens have anything parked under them, so this must not error or deliver.
         receive {amqp10_msg, Receiver, _} -> ct:fail(unexpected_message)
         after 500 -> ok
         end,
-
-        History = rpc(Config, meck, history, [Mod]),
-        AssignDeferredCalls = [Tokens || {_Pid, {_Mod, assign_deferred, [_, _, Tokens, _]}, _Result} <- History],
-        ?assertEqual([256], [length(Tokens) || Tokens <- AssignDeferredCalls]),
+        ?assertEqual([256], [length(Tokens) || Tokens <- assign_deferred_calls(Config, Mod)]),
         ?assert(rpc(Config, meck, validate, [Mod]))
     after
         ok = rpc(Config, meck, unload, [Mod])
@@ -8784,6 +8810,10 @@ ready_messages(QName, Config)
 
 ra_name(Q) ->
     binary_to_atom(<<"%2F_", Q/binary>>).
+
+assign_deferred_calls(Config, Mod) ->
+    [Tokens || {_Pid, {_Mod, assign_deferred, [_, _, Tokens, _]}, _Result}
+               <- rpc(Config, meck, history, [Mod])].
 
 wait_for_local_member(<<"stream">>, QName, Config) ->
     %% If it is a stream we need to wait until there is a local member
