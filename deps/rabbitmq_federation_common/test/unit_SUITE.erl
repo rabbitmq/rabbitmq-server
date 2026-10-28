@@ -39,6 +39,8 @@ all() -> [
     validate_max_hops_accepts_bounds,
     validate_max_hops_rejects_out_of_range,
     validate_max_hops_rejects_non_integers,
+    validate_reconnect_delay_accepts_non_negative_numbers,
+    validate_reconnect_delay_rejects_invalid_values,
     max_hops_keeps_valid_values,
     max_hops_normalizes_legacy_values
 ].
@@ -336,11 +338,23 @@ max_hops_normalizes_legacy_values(_Config) ->
     ?assertEqual(0, rabbit_federation_upstream:max_hops(<<"many">>)),
     ok.
 
+validate_reconnect_delay_accepts_non_negative_numbers(_Config) ->
+    [?assertEqual([], validation_errors(<<"reconnect-delay">>, V)) || V <- [0, 0.5, 1, 30]],
+    ok.
+
+validate_reconnect_delay_rejects_invalid_values(_Config) ->
+    [?assertMatch([{error, _, _}], validation_errors(<<"reconnect-delay">>, V)) ||
+        V <- [-1, -0.5, <<"1">>]],
+    ok.
+
 %% Goes through the upstream set component because, unlike the upstream one,
 %% it has no mandatory URI to validate.
 validation_errors(MaxHops) ->
+    validation_errors(<<"max-hops">>, MaxHops).
+
+validation_errors(Key, Value) ->
     Results = rabbit_federation_parameters:validate(
                 <<"/">>, <<"federation-upstream-set">>,
                 <<"a-name">>, [[{<<"upstream">>, <<"an-upstream">>},
-                                {<<"max-hops">>, MaxHops}]], none),
+                                {Key, Value}]], none),
     [R || Rs <- Results, R <- Rs, R =/= ok].
