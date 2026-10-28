@@ -57,6 +57,9 @@
 
 %% By default, we want to keep the server's remote-incoming-window large at all times.
 -define(DEFAULT_MAX_INCOMING_WINDOW, 100_000).
+
+%% Applies to receiver links that do not set `max_message_size`.
+-define(DEFAULT_MAX_INCOMING_MESSAGE_SIZE, 67_108_864).
 -define(UINT_OUTGOING_WINDOW, {uint, ?UINT_MAX}).
 -define(INITIAL_OUTGOING_DELIVERY_ID, ?UINT_MAX).
 %% "The next-outgoing-id MAY be initialized to an arbitrary value" [2.5.6]
@@ -140,7 +143,7 @@
          link_credit = 0 :: non_neg_integer(),
          available = 0 :: non_neg_integer(),
          drain = false :: boolean(),
-         partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()]},
+         partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()], non_neg_integer()},
          auto_flow :: never | {RenewWhenBelow :: pos_integer(),
                                Credit :: pos_integer()},
          incoming_unsettled = #{} :: #{delivery_number() => ok},
@@ -480,11 +483,14 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
     {ok, #link{output_handle = OutHandle} = Link} =
         find_link_by_input_handle(InHandle, State0),
 
-    Link1 = append_partial_transfer(Transfer, Payload, Link),
-
-    State = book_partial_transfer_received(
-              State0#state{links = Links#{OutHandle => Link1}}),
-    {keep_state, State};
+    case append_partial_transfer(Transfer, Payload, Link) of
+        {ok, Link1} ->
+            State = book_partial_transfer_received(
+                      State0#state{links = Links#{OutHandle => Link1}}),
+            {keep_state, State};
+        message_size_exceeded ->
+            {keep_state, detach_message_size_exceeded(Link, State0)}
+    end;
 mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
               Payload0}, State0) ->
     {ok, #link{target = {pid, TargetPid},
@@ -1407,18 +1413,44 @@ book_link_transfer_send(Link = #link{link_credit = LC,
 
 append_partial_transfer(Transfer, Payload,
                         #link{partial_transfers = undefined} = Link) ->
-    Link#link{partial_transfers = {Transfer, [Payload]}};
+    Size = byte_size(Payload),
+    case within_max_message_size(Size, Link) of
+        true ->
+            {ok, Link#link{partial_transfers = {Transfer, [Payload], Size}}};
+        false ->
+            message_size_exceeded
+    end;
 append_partial_transfer(_Transfer, Payload,
-                        #link{partial_transfers = {T, Payloads}} = Link) ->
-    Link#link{partial_transfers = {T, [Payload | Payloads]}}.
+                        #link{partial_transfers = {T, Payloads, Size0}} = Link) ->
+    Size = Size0 + byte_size(Payload),
+    case within_max_message_size(Size, Link) of
+        true ->
+            {ok, Link#link{partial_transfers = {T, [Payload | Payloads], Size}}};
+        false ->
+            message_size_exceeded
+    end.
 
 complete_partial_transfer(Transfer, Payload,
                           #link{partial_transfers = undefined} = Link) ->
     {Transfer, Payload, Link};
 complete_partial_transfer(_Transfer, Payload,
-                          #link{partial_transfers = {T, Payloads}} = Link) ->
+                          #link{partial_transfers = {T, Payloads, _Size}} = Link) ->
     {T, iolist_to_binary(lists:reverse([Payload | Payloads])),
      Link#link{partial_transfers = undefined}}.
+
+within_max_message_size(Size, #link{max_message_size = undefined}) ->
+    Size =< ?DEFAULT_MAX_INCOMING_MESSAGE_SIZE;
+within_max_message_size(Size, #link{max_message_size = Max}) ->
+    Size =< Max.
+
+detach_message_size_exceeded(#link{ref = Ref} = Link0, State) ->
+    ?LOG_WARNING("amqp10_session: detaching link ~tp: incoming message exceeds "
+                 "the maximum message size", [Ref]),
+    Link = detach_with_error_cond(Link0#link{partial_transfers = undefined},
+                                  State,
+                                  ?V_1_0_LINK_ERROR_MESSAGE_SIZE_EXCEEDED,
+                                  undefined),
+    update_link(Link, State).
 
 decode_as_msg(#'v1_0.transfer'{settled = Settled,
                                delivery_id = {uint, DeliveryId}},
@@ -1574,7 +1606,7 @@ format_status(Status = #{data := Data0}) ->
                       PartialTransfers = case PartialTransfers0 of
                                              undefined ->
                                                  0;
-                                             {#'v1_0.transfer'{}, Binaries} ->
+                                             {#'v1_0.transfer'{}, Binaries, _Size} ->
                                                  length(Binaries)
                                          end,
                       #{name => Name,

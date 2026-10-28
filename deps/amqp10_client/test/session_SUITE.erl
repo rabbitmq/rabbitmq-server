@@ -42,7 +42,10 @@ groups() ->
                    disposition_large_range,
                    disposition_reversed_range,
                    flow_max_incoming_window,
-                   flow_next_incoming_id_leads
+                   flow_next_incoming_id_leads,
+                   fragments_within_max_message_size,
+                   fragments_exceed_max_message_size,
+                   fragments_exceed_default_max_message_size
                   ]}
     ].
 
@@ -260,9 +263,108 @@ flow_next_incoming_id_leads(_Config) ->
     ?assert(is_process_alive(Sup)),
     ok = stop_sup(Sup, Sockets).
 
+%% Fragments that add up to the link's maximum message size are delivered.
+fragments_within_max_message_size(_Config) ->
+    {Sup, Session, Sockets} = start_session_in(mapped, 0),
+    attach_receiver(Session, #{max_message_size => 12}),
+    send_fragment(Session, true, <<"1234">>),
+    send_fragment(Session, true, <<"5678">>),
+    send_fragment(Session, false, <<"90ab">>),
+    receive
+        {amqp10_msg, _, Msg} ->
+            ?assertEqual(<<"1234567890ab">>, amqp10_raw_msg:payload(Msg))
+    after ?TIMEOUT ->
+              ct:fail(message_not_delivered)
+    end,
+    ?assertEqual(0, partial_transfers(Session)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
+%% Fragments over the link's maximum message size detach the link and the
+%% buffered fragments are dropped.
+fragments_exceed_max_message_size(_Config) ->
+    {Sup, Session, {_Listener, Peer} = Sockets} = start_session_in(mapped, 0),
+    attach_receiver(Session, #{max_message_size => 10}),
+    send_fragment(Session, true, <<"1234">>),
+    send_fragment(Session, true, <<"5678">>),
+    ?assertEqual(2, partial_transfers(Session)),
+    send_fragment(Session, true, <<"90ab">>),
+    ?assertMatch(#'v1_0.detach'{
+                    closed = true,
+                    error = #'v1_0.error'{
+                               condition = ?V_1_0_LINK_ERROR_MESSAGE_SIZE_EXCEEDED}},
+                 recv_detach(Peer)),
+    ?assertEqual(0, partial_transfers(Session)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
+%% A link without a maximum message size is limited to 64 MiB.
+fragments_exceed_default_max_message_size(_Config) ->
+    {Sup, Session, {_Listener, Peer} = Sockets} = start_session_in(mapped, 0),
+    attach_receiver(Session, #{}),
+    Fragment = binary:copy(<<0>>, 32 * 1024 * 1024),
+    send_fragment(Session, true, Fragment),
+    send_fragment(Session, true, Fragment),
+    ?assertEqual(2, partial_transfers(Session)),
+    send_fragment(Session, true, <<0>>),
+    ?assertMatch(#'v1_0.detach'{
+                    error = #'v1_0.error'{
+                               condition = ?V_1_0_LINK_ERROR_MESSAGE_SIZE_EXCEEDED}},
+                 recv_detach(Peer)),
+    ?assertEqual(0, partial_transfers(Session)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
+
+attach_receiver(Session, ExtraArgs) ->
+    Args = maps:merge(#{name => <<"receiver">>,
+                        role => {receiver, #{address => <<"/queues/q">>}, self()},
+                        snd_settle_mode => settled,
+                        rcv_settle_mode => first,
+                        raw_mode => true},
+                      ExtraArgs),
+    {ok, _} = amqp10_client_session:attach(Session, Args),
+    gen_statem:cast(Session,
+                    #'v1_0.attach'{name = {utf8, <<"receiver">>},
+                                   handle = {uint, 0},
+                                   role = ?AMQP_ROLE_SENDER,
+                                   source = #'v1_0.source'{},
+                                   target = #'v1_0.target'{},
+                                   initial_delivery_count = {uint, 0}}),
+    receive
+        {amqp10_event, {link, _, attached}} ->
+            ok
+    after ?TIMEOUT ->
+              ct:fail(link_not_attached)
+    end.
+
+send_fragment(Session, More, Payload) ->
+    Transfer = #'v1_0.transfer'{handle = {uint, 0},
+                                delivery_id = {uint, 0},
+                                delivery_tag = {binary, <<0>>},
+                                settled = true,
+                                more = More},
+    gen_statem:cast(Session, {Transfer, Payload}),
+    ok.
+
+partial_transfers(Session) ->
+    {mapped, #{links := Links}} = session_state(Session),
+    [#{partial_transfers := N}] = maps:values(Links),
+    N.
+
+recv_detach(Peer) ->
+    {ok, <<Length:32, 2:8, _:8, _Channel:16>>} = gen_tcp:recv(Peer, 8, ?TIMEOUT),
+    {ok, Data} = gen_tcp:recv(Peer, Length - 8, ?TIMEOUT),
+    {PerfDesc, _} = amqp10_binary_parser:parse(Data),
+    case amqp10_framing:decode(PerfDesc) of
+        #'v1_0.detach'{} = Detach ->
+            Detach;
+        _ ->
+            recv_detach(Peer)
+    end.
 
 session_state(Session) ->
     {StateName, Data0} = sys:get_state(Session, 1000),
