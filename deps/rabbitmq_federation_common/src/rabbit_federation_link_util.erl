@@ -18,6 +18,7 @@
          ensure_connection_closed/1, ensure_connection_closed/2,
          ensure_connection_closed_async/1, ensure_connection_closed_async/2,
          log_terminate/4, unacked_new/0, ack/3, nack/3, forward/9,
+         dropped_message_needs_ack/1,
          handle_downstream_down/3, handle_upstream_down/3,
          get_connection_name/2,
          connection_close_timeout/0]).
@@ -287,10 +288,16 @@ forward(#upstream{ack_mode      = AckMode,
                      'no-ack' ->
                          Unacked
                  end;
-        false -> amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DT}),
-                 %% Drop it, but acknowledge it!
+        false -> case dropped_message_needs_ack(AckMode) of
+                     true  -> amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DT});
+                     false -> ok
+                 end,
                  Unacked
     end.
+
+-spec dropped_message_needs_ack('on-confirm' | 'on-publish' | 'no-ack') -> boolean().
+dropped_message_needs_ack('no-ack') -> false;
+dropped_message_needs_ack(_)        -> true.
 
 maybe_clear_user_id(false, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{user_id = undefined}};
