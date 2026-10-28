@@ -251,8 +251,8 @@ connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun, LinkNameOverrid
                    rabbit_shovel_util:log_connection_failure(Reason, Uri, Name),
                    exit({shutdown, {connection_failed, Reason}})
            end,
-    {ok, Sess} = amqp10_client:begin_session(Conn),
     link(Conn),
+    {ok, Sess} = amqp10_client:begin_session(Conn),
     LinkName = case LinkNameOverride of
                    undefined ->
                        LinkName0 = rabbit_shovel_util:gen_unique_name(Name, Postfix),

@@ -214,7 +214,9 @@ expecting_socket({call, From}, begin_session,
     %% isn't fully opened. Let's queue this request until the connection
     %% is ready.
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
-    {keep_state, State1}.
+    {keep_state, State1};
+expecting_socket(_EvtType, {'EXIT', _, _} = Exit, State) ->
+    unexpected_during_handshake(expecting_socket, Exit, State).
 
 sasl_hdr_sent(_EvtType, {protocol_header_received, 3, 1, 0, 0}, State) ->
     {next_state, sasl_hdr_rcvds, State};
@@ -345,7 +347,9 @@ open_sent(_EvtType, #'v1_0.close'{} = Close,
     {stop, normal, State};
 open_sent(info, {'DOWN', MRef, process, _, _},
           #state{reader_m_ref = MRef}) ->
-    {stop, {shutdown, reader_down}}.
+    {stop, {shutdown, reader_down}};
+open_sent(_EvtType, {'EXIT', _, _} = Exit, State) ->
+    unexpected_during_handshake(open_sent, Exit, State).
 
 opened(_EvtType, heartbeat, State = #state{idle_time_out = T}) ->
     ok = send_heartbeat(State),
@@ -431,6 +435,9 @@ close_sent(_EvtType, #'v1_0.open'{}, _Data) ->
 %% A peer that refuses the connection or misbehaves can send frames out
 %% of the expected handshake sequence. Terminating with a stack trace
 %% would help nobody; log the frame and stop quietly instead.
+unexpected_during_handshake(_StateName, {'EXIT', _Pid, _Reason}, State) ->
+    %% The process that opened this connection is gone.
+    {stop, {shutdown, owner_down}, State};
 unexpected_during_handshake(StateName, Frame, State) ->
     ?LOG_WARNING("Connection ~tp received an unexpected frame or message "
                  "~tp during handshake (~ts)",

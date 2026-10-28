@@ -60,9 +60,14 @@ groups() ->
                  disposition_large_range_settles_outgoing,
                  link_credit_max,
                  drain_with_nothing_available,
+<<<<<<< HEAD
                  frame_size_too_small_rejected,
                  max_frame_size_exceeded_rejected,
                  connect_timeout
+=======
+                 connect_timeout,
+                 handshake_owner_down
+>>>>>>> caab269 (Shovel: link AMQP 1.0 connections before opening a session)
                 ]}
     ].
 
@@ -852,6 +857,26 @@ connect_timeout(_Config) ->
     after 5000 ->
             exit(Pid, kill),
             ct:fail(connect_timeout_not_honoured)
+    end,
+    ok = gen_tcp:close(Listener).
+
+handshake_owner_down(_Config) ->
+    {ok, Listener} = gen_tcp:listen(0, [{active, false}]),
+    {ok, Port} = inet:port(Listener),
+    Cfg = #{address => "localhost", port => Port, sasl => none},
+    Self = self(),
+    Owner = spawn(fun() ->
+                          {ok, Connection} = amqp10_client:open_connection(Cfg),
+                          link(Connection),
+                          Self ! {connection, Connection},
+                          receive stop -> ok end
+                  end),
+    Connection = receive {connection, C} -> C after 5000 -> ct:fail(no_connection) end,
+    MRef = monitor(process, Connection),
+    Owner ! stop,
+    receive
+        {'DOWN', MRef, process, Connection, {shutdown, owner_down}} -> ok
+    after 5000 -> ct:fail(connection_still_running)
     end,
     ok = gen_tcp:close(Listener).
 
