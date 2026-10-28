@@ -17,6 +17,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("khepri/include/khepri.hrl").
+-include_lib("rabbit/include/rabbit_khepri.hrl").
 
 -record(state, {
     timer :: reference() | undefined
@@ -24,10 +25,11 @@
 
 -define(SWEEP_INTERVAL, 5000).
 
--define(KHEPRI_USER_SESSIONS_PATTERN(Username), [rabbitmq, mgmt_sessions, Username, ?KHEPRI_WILDCARD_STAR]).
--define(KHEPRI_SESSION_PATH(Username, SessionId), [rabbitmq, mgmt_sessions, Username, SessionId]).
--define(KHEPRI_ALL_SESSIONS_PATTERN, [rabbitmq, mgmt_sessions, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR]).
--define(KHEPRI_SESSION_ID_PATTERN(SessionId), [rabbitmq, mgmt_sessions, ?KHEPRI_WILDCARD_STAR, SessionId]).
+-define(KHEPRI_USER_SESSIONS_PATH(Username), ?RABBITMQ_KHEPRI_ROOT_PATH([mgmt_sessions, Username])).
+-define(KHEPRI_USER_SESSIONS_PATTERN(Username), ?RABBITMQ_KHEPRI_ROOT_PATH([mgmt_sessions, Username, ?KHEPRI_WILDCARD_STAR])).
+-define(KHEPRI_SESSION_PATH(Username, SessionId), ?RABBITMQ_KHEPRI_ROOT_PATH([mgmt_sessions, Username, SessionId])).
+-define(KHEPRI_ALL_SESSIONS_PATTERN, ?RABBITMQ_KHEPRI_ROOT_PATH([mgmt_sessions, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR])).
+-define(KHEPRI_SESSION_ID_PATTERN(SessionId), ?RABBITMQ_KHEPRI_ROOT_PATH([mgmt_sessions, ?KHEPRI_WILDCARD_STAR, SessionId])).
 
 %%====================================================================
 %% API
@@ -175,7 +177,7 @@ list_sessions(Page, PageSize, UsernameFilter) ->
             maps:fold(fun(Path, S, Acc) ->
                 case is_active(S, Now) of
                     true ->
-                        [rabbitmq, mgmt_sessions, Username, SessionId] = Path,
+                        ?KHEPRI_SESSION_PATH(Username, SessionId) = Path,
                         [{Username, SessionId, S} | Acc];
                     false ->
                         Acc
@@ -222,7 +224,7 @@ list_sessions(Page, PageSize, UsernameFilter) ->
 terminate_sessions(undefined) ->
     ok;
 terminate_sessions(Username) ->
-    delete_path([rabbitmq, mgmt_sessions, Username]),
+    delete_path(?KHEPRI_USER_SESSIONS_PATH(Username)),
     ?LOG_DEBUG("Terminated all sessions for user ~ts", [Username]),
     ok.
 
