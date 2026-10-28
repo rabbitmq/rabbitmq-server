@@ -74,7 +74,8 @@ groups() ->
             get_erl_path,
             hexify,
             getstat_or_zero_on_live_socket,
-            getstat_or_zero_on_closed_socket
+            getstat_or_zero_on_closed_socket,
+            ssl_options_check_file
         ]},
         {sequential_tests, [], [
             data_coercion_to_existing_atom_does_not_create_atoms
@@ -662,6 +663,28 @@ getstat_or_zero_on_closed_socket(_) ->
     ok = gen_tcp:close(LSock),
     ?assertEqual(0, rabbit_net:getstat_or_zero(LSock, recv_oct)),
     ?assertEqual(0, rabbit_net:getstat_or_zero(LSock, send_oct)),
+    ok.
+
+ssl_options_check_file(Config) ->
+    Dir = ?config(priv_dir, Config),
+    Small = filename:join(Dir, "small.pem"),
+    Empty = filename:join(Dir, "empty.pem"),
+    Large = filename:join(Dir, "large.pem"),
+    ok = file:write_file(Small, <<"-----BEGIN CERTIFICATE-----">>),
+    ok = file:write_file(Empty, <<>>),
+    ok = file:write_file(Large, binary:copy(<<"a">>, 4 * 1024 * 1024 + 1)),
+    ?assertEqual(ok, rabbit_ssl_options:check_file(Small)),
+    ?assertEqual({error, empty}, rabbit_ssl_options:check_file(Empty)),
+    ?assertEqual({error, too_large}, rabbit_ssl_options:check_file(Large)),
+    ?assertEqual({error, not_a_regular_file}, rabbit_ssl_options:check_file("/dev/zero")),
+    ?assertEqual({error, not_a_regular_file}, rabbit_ssl_options:check_file(Dir)),
+    ?assertEqual({error, enoent},
+                 rabbit_ssl_options:check_file(filename:join(Dir, "missing.pem"))),
+    ?assertEqual(ok, rabbit_ssl_options:check_file_options(
+                       [{cacertfile, Small}, {verify, verify_peer}])),
+    ?assertEqual({error, {keyfile, not_a_regular_file}},
+                 rabbit_ssl_options:check_file_options(
+                   [{cacertfile, Small}, {keyfile, "/dev/zero"}])),
     ok.
 
 date_time_parse_duration(_) ->

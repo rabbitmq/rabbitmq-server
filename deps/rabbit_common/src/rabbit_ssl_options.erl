@@ -8,13 +8,19 @@
 -module(rabbit_ssl_options).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("kernel/include/file.hrl").
 
 
 -export([
     fix/1,
     fix_client/1,
-    wrap_password_opt/1
+    wrap_password_opt/1,
+    check_file/1,
+    check_file_options/1
 ]).
+
+%% `ssl` reads these files whole, and devices such as `/dev/zero` never end.
+-define(MAX_FILE_SIZE, 4 * 1024 * 1024).
 
 -define(BAD_SSL_PROTOCOL_VERSIONS, [
                                     %% POODLE
@@ -22,6 +28,36 @@
                                    ]).
 
 -type tls_opts() :: [ssl:tls_server_option()] | [ssl:tls_client_option()].
+
+-spec check_file(file:filename_all()) ->
+    ok | {error, not_a_regular_file | empty | too_large | file:posix() | badarg}.
+check_file(Path) ->
+    case file:read_file_info(Path) of
+        {ok, #file_info{type = regular, size = 0}} ->
+            {error, empty};
+        {ok, #file_info{type = regular, size = Size}} when Size =< ?MAX_FILE_SIZE ->
+            ok;
+        {ok, #file_info{type = regular}} ->
+            {error, too_large};
+        {ok, #file_info{}} ->
+            {error, not_a_regular_file};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec check_file_options(tls_opts()) ->
+    ok | {error, {cacertfile | certfile | keyfile, term()}}.
+check_file_options([{Key, Path} | Rest]) when Key =:= cacertfile;
+                                               Key =:= certfile;
+                                               Key =:= keyfile ->
+    case check_file(Path) of
+        ok              -> check_file_options(Rest);
+        {error, Reason} -> {error, {Key, Reason}}
+    end;
+check_file_options([_ | Rest]) ->
+    check_file_options(Rest);
+check_file_options([]) ->
+    ok.
 
 -spec wrap_password_opt(tls_opts()) -> tls_opts().
 wrap_password_opt(Opts0) ->
