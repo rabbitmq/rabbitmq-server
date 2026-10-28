@@ -145,5 +145,44 @@ defmodule ExportDefinitionsCommandTest do
     assert Map.has_key?(map, :rabbitmq_version)
   end
 
+  @tag format: "json"
+  test "run: the exported file is only readable and writable by its owner", context do
+    File.rm(valid_file_path())
+    {:ok, nil} = @command.run([valid_file_path()], context[:opts])
+
+    assert Bitwise.band(File.stat!(valid_file_path()).mode, 0o777) == 0o600
+  end
+
+  @tag format: "json"
+  test "run: replaces an existing file owned by the current user", context do
+    File.write!(valid_file_path(), "stale content")
+    File.chmod!(valid_file_path(), 0o644)
+    {:ok, nil} = @command.run([valid_file_path()], context[:opts])
+
+    assert Bitwise.band(File.stat!(valid_file_path()).mode, 0o777) == 0o600
+    {:ok, bin} = File.read(valid_file_path())
+    {:ok, map} = RabbitMQ.CLI.Core.JSON.decode(bin)
+    assert Map.has_key?(map, "rabbitmq_version")
+  end
+
+  @tag format: "erlang"
+  test "run: the file content matches the definitions returned for stdout", context do
+    File.rm(valid_file_path())
+    {:ok, nil} = @command.run([valid_file_path()], context[:opts])
+    {:ok, map} = @command.run(["-"], context[:opts])
+
+    assert :erlang.binary_to_term(File.read!(valid_file_path())) == map
+  end
+
+  test "run: reports an error when the target path is a directory", context do
+    dir = Path.join(System.tmp_dir(), "definitions_dir")
+    File.mkdir_p!(dir)
+
+    assert @command.run([dir], context[:opts]) ==
+             {:error, RabbitMQ.CLI.Core.ExitCodes.exit_dataerr(), "Path #{dir} is a directory"}
+
+    File.rmdir(dir)
+  end
+
   defp valid_file_path(), do: "#{System.tmp_dir()}/definitions"
 end
