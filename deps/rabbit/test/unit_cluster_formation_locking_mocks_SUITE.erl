@@ -53,7 +53,7 @@ init_with_lock_exits_after_errors(_Config) ->
     passed.
 
 %% The `aborted_feature_flags_compat_check' error means the function called
-%% `rabbit_db_cluster:join/2', so it passed the locking step. The error is
+%% `rabbit_db_cluster:do_join/2', so it passed the locking step. The error is
 %% expected because the test runs outside of a working RabbitMQ.
 
 init_with_lock_ignore_after_errors(_Config) ->

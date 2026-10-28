@@ -25,6 +25,7 @@
          forget_removes_things/1,
          reset/1,
          reset_removes_things/1,
+         reset_and_join_while_booting/1,
          reset_in_minority/1,
          force_boot/1,
          status_with_alarm/1,
@@ -71,6 +72,7 @@ groups() ->
                              forget_removes_things,
                              reset,
                              reset_removes_things,
+                             reset_and_join_while_booting,
                              reset_in_minority,
                              force_boot,
                              status_with_alarm,
@@ -460,6 +462,25 @@ reset(Config) ->
     assert_cluster_status({[Hare], [Hare]}, [Hare]),
 
     ok.
+
+reset_and_join_while_booting(Config) ->
+    [Rabbit, Hare | _] = cluster_members(Config),
+
+    BootStateKey = {rabbit_boot_state, boot_state},
+
+    ok = stop_app(Config, Rabbit),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, Rabbit, persistent_term, put, [BootStateKey, booting]),
+    ResetRet = reset(Config, Rabbit),
+    JoinRet = join_cluster(Config, Rabbit, Hare),
+    true = rabbit_ct_broker_helpers:rpc(
+             Config, Rabbit, persistent_term, erase, [BootStateKey]),
+    ?assertMatch({error, 75, _}, ResetRet),
+    ?assertMatch({error, 75, _}, JoinRet),
+
+    ok = start_app(Config, Rabbit),
+    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Rabbit, Hare]},
+                          [Rabbit, Hare]).
 
 reset_removes_things(Config) ->
     ClassicQueue = <<"classic-queue">>,
