@@ -62,6 +62,14 @@ defmodule DefaultOutputTest do
       ExampleCommand.output({:error, ~c"I am formatted ~p", [~c"string"]}, %{})
   end
 
+  test "unexpected boot state is a temporary failure" do
+    {:error, 75, message} =
+      ExampleCommand.output({:error, {:unexpected_boot_state, :booting}}, %{node: :rabbit@qa1})
+
+    assert message =~ "rabbit@qa1"
+    assert message =~ "booting"
+  end
+
   test "non atom value is ok" do
     val = "foo"
     assert match?({:ok, ^val}, ExampleCommand.output(val, %{}))

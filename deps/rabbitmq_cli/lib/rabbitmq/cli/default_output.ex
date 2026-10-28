@@ -53,6 +53,11 @@ defmodule RabbitMQ.CLI.DefaultOutput do
     {:error, to_string(:rabbit_misc.format(format, args))}
   end
 
+  defp normalize_output({:error, {:unexpected_boot_state, boot_state}}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_tempfail(),
+     "Node #{node_name} is in boot state '#{boot_state}'. Run the command again once it has finished booting or stopping"}
+  end
+
   defp normalize_output({:error, _} = input, _opts), do: input
 
   defp normalize_output({:error_string, string}, _opts) do
