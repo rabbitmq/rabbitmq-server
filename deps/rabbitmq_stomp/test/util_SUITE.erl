@@ -18,6 +18,7 @@ all() -> [
     longstr_field,
     message_properties,
     message_properties_strips_reserved_headers,
+    message_properties_priority_is_within_bounds,
     message_headers,
     minimal_message_headers_with_no_custom,
     headers_reserved_names_cannot_be_overridden,
@@ -101,6 +102,19 @@ message_properties_strips_reserved_headers(_) ->
 
     #'P_basic'{headers = [{<<"str">>, longstr, <<"foo">>}]} =
         rabbit_stomp_util:message_properties(#stomp_frame{headers = Headers}).
+
+message_properties_priority_is_within_bounds(_) ->
+    Priority = fun(V) ->
+                       #'P_basic'{priority = P} =
+                           rabbit_stomp_util:message_properties(
+                             #stomp_frame{headers = [{"priority", V}]}),
+                       P
+               end,
+    ?assertEqual(0, Priority("-1")),
+    ?assertEqual(0, Priority("0")),
+    ?assertEqual(7, Priority("7")),
+    ?assertEqual(255, Priority("255")),
+    ?assertEqual(255, Priority("256")).
 
 message_headers(_) ->
     Properties = #'P_basic'{

@@ -7,7 +7,8 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 all() ->
-    [blocked_status].
+    [blocked_status,
+     terminated_reason].
 
 init_per_testcase(_, Config) ->
     meck:expect(rabbit_shovel_dyn_worker_sup_sup, cleanup_specs, 0, ok),
@@ -69,6 +70,28 @@ blocked_status(_Config) ->
     rabbit_shovel_status:report(Name, Type, {terminated, reason}),
     ?assertEqual([{Name, terminated}], get_shovel_states()),
 
+    ok.
+
+terminated_reason(_Config) ->
+    Name = {<<"/">>, <<"test">>},
+    Hidden = <<"internal error, see the node log">>,
+    Cases = [{"heartbeat timeout", <<"heartbeat timeout">>},
+             {<<"NOT_FOUND - no queue 'q1'">>, <<"NOT_FOUND - no queue 'q1'">>},
+             {dest_queue_down, <<"dest_queue_down">>},
+             {{connection_failed, econnrefused},
+              <<"{connection_failed,econnrefused}">>},
+             {{inbound_conn_closed, {forced, <<"closed by peer">>}},
+              <<"{inbound_conn_closed,{forced,<<\"closed by peer\">>}}">>},
+             {{server_initiated_close, 320, <<"CONNECTION_FORCED">>},
+              <<"{server_initiated_close,320,<<\"CONNECTION_FORCED\">>}">>},
+             {{function_clause, [{m, f, [<<"secret payload">>], []}]}, Hidden},
+             {{{badmatch, <<"secret payload">>}, [{m, f, 1, []}]}, Hidden},
+             {#{payload => <<"secret payload">>}, Hidden}],
+    [begin
+         ok = rabbit_shovel_status:report(Name, dynamic, {terminated, Reason}),
+         [S] = rabbit_shovel_mgmt_util:status(node()),
+         ?assertEqual(Expected, proplists:get_value(reason, S))
+     end || {Reason, Expected} <- Cases],
     ok.
 
 get_shovel_states() ->

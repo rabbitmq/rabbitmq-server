@@ -20,6 +20,7 @@
 -define(QUEUE_QQ, <<"TestQueueQQ">>).
 -define(DESTINATION, "/amq/queue/TestQueue").
 -define(DESTINATION_QQ, "/amq/queue/TestQueueQQ").
+-define(AMQP_1_0_QUEUE, <<"TestAmqp10ConsumerQueue">>).
 
 all() ->
     [{group, version_to_group_name(V)} || V <- ?SUPPORTED_VERSIONS].
@@ -38,6 +39,7 @@ groups() ->
         publisher_headers_do_not_override_server_headers,
         send,
         send_with_negative_priority,
+        send_with_negative_priority_to_amqp_1_0_consumer,
         delete_queue_subscribe,
         temp_destination_queue,
         temp_destination_in_send,
@@ -411,11 +413,42 @@ send_with_negative_priority(Config) ->
     {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
     {ok, Client2, _, [<<"2">>]} = stomp_receive(Client1, "MESSAGE"),
     lists:foldl(fun(_, C) ->
-                        {ok, C1, _, [<<"-1">>]} = stomp_receive(C, "MESSAGE"),
+                        {ok, C1, Hdrs, [<<"-1">>]} = stomp_receive(C, "MESSAGE"),
+                        ?assertEqual("0", proplists:get_value("priority", Hdrs)),
                         C1
                 end, Client2, lists:seq(1, 7)),
     #'queue.delete_ok'{} =
         amqp_channel:call(Channel, #'queue.delete'{queue = ?QUEUE}),
+    ok.
+
+send_with_negative_priority_to_amqp_1_0_consumer(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue = ?AMQP_1_0_QUEUE, durable = true}),
+    rabbit_stomp_client:send(
+      Client, "SEND", [{"destination", "/amq/queue/" ++ binary_to_list(?AMQP_1_0_QUEUE)},
+                       {"priority", "-1"},
+                       {"receipt", "r"}], ["hello"]),
+    {ok, _, _, _} = stomp_receive(Client, "RECEIPT"),
+
+    {ok, _} = application:ensure_all_started(amqp10_client),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Connection} = amqp10_client:open_connection(
+                         #{address => ?config(rmq_hostname, Config),
+                           port => Port,
+                           container_id => atom_to_binary(?FUNCTION_NAME),
+                           sasl => {plain, <<"guest">>, <<"guest">>}}),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>,
+                       <<"/queues/", ?AMQP_1_0_QUEUE/binary>>, settled),
+    {ok, Msg} = amqp10_client:get_msg(Receiver, 30_000),
+    ?assertEqual(<<"hello">>, amqp10_msg:body_bin(Msg)),
+    ?assertEqual(0, amqp10_msg:header(priority, Msg)),
+    ok = amqp10_client:close_connection(Connection),
+    #'queue.delete_ok'{} =
+        amqp_channel:call(Channel, #'queue.delete'{queue = ?AMQP_1_0_QUEUE}),
     ok.
 
 delete_queue_subscribe(Config) ->
