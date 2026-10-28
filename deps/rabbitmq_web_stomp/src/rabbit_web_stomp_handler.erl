@@ -23,6 +23,7 @@
     terminate/3
 ]).
 -export([close_connection/2]).
+-export([conserve_resources/3]).
 
 %% cowboy_sub_protocol
 -export([upgrade/4,
@@ -38,14 +39,15 @@
     parser_config,
     proc_state,
     state,
-    conserve_resources,
+    blocked_by = sets:new([{version, 2}]) :: sets:set(rabbit_alarm:resource_alarm_source()),
     socket,
     peername,
     auth_hd,
     stats_timer,
     connection,
     current_frame_size = 0,
-    max_frame_size
+    max_frame_size,
+    idle_timeout
 }).
 
 -define(APP, rabbitmq_web_stomp).
@@ -120,6 +122,7 @@ init(Req0, Opts) ->
             end,
             WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
             WsOpts = maps:merge(#{compress => true,
+                                   idle_timeout => 60_000,
                                    max_frame_size => unauthenticated_frame_size()}, WsOpts0),
             {?MODULE, Req, #state{
                 frame_type         = proplists:get_value(type, Opts, text),
@@ -127,7 +130,7 @@ init(Req0, Opts) ->
                 heartbeat          = {none, none},
                 heartbeat_mode     = heartbeat,
                 state              = running,
-                conserve_resources = false,
+                idle_timeout       = maps:get(idle_timeout, WsOpts),
                 socket             = SockInfo,
                 peername           = PeerAddr,
                 auth_hd            = cowboy_req:header(<<"authorization">>, Req)
@@ -147,12 +150,21 @@ websocket_init(State) ->
     {ok, ProcessorState, ParserConfig} = init_processor_state(State),
     LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
     erlang:send_after(LoginTimeout, self(), login_timeout),
-    {ok, rabbit_event:init_stats_timer(
+    Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    {ok, rabbit_event:init_stats_timer(control_throttle(
            State#state{proc_state     = ProcessorState,
                        parser_config  = ParserConfig,
+                       blocked_by     = sets:from_list(Alarms, [{version, 2}]),
                        max_frame_size = unauthenticated_frame_size(),
-                       parse_state    = rabbit_stomp_frame:initial_state(ParserConfig)},
+                       parse_state    = rabbit_stomp_frame:initial_state(ParserConfig)}),
            #state.stats_timer)}.
+
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
+    Pid ! {conserve_resources, Source, Conserve},
+    ok.
 
 -spec close_connection(pid(), string()) -> 'ok'.
 close_connection(Pid, Reason) ->
@@ -230,12 +242,18 @@ websocket_handle(_Frame, State) ->
 websocket_info({send, Msg}, State=#state{frame_type=FrameType}) ->
     {reply, {FrameType, Msg}, State};
 
-websocket_info({conserve_resources, Conserve}, State) ->
-    NewState = State#state{conserve_resources = Conserve},
-    handle_credits(control_throttle(NewState));
+websocket_info({conserve_resources, Source, Conserve},
+               State = #state{blocked_by = BlockedBy0}) ->
+    BlockedBy = case Conserve of
+                    true ->
+                        sets:add_element(Source, BlockedBy0);
+                    false ->
+                        sets:del_element(Source, BlockedBy0)
+                end,
+    handle_credits(State#state{blocked_by = BlockedBy});
 websocket_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
-    handle_credits(control_throttle(State));
+    handle_credits(State);
 
 websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
                State = #state{proc_state = ProcState0}) ->
@@ -282,7 +300,8 @@ websocket_info({start_heartbeats, {0, 0}}, State) ->
 websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
                State = #state{socket         = Sock,
                               heartbeat_sup  = SupPid,
-                              heartbeat_mode = heartbeat}) ->
+                              heartbeat_mode = heartbeat,
+                              state          = ConnState}) ->
     Self = self(),
     SendFun = fun () -> Self ! {send, <<$\n>>}, ok end,
     ReceiveFun = fun() -> Self ! client_timeout end,
@@ -302,6 +321,10 @@ websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
         _ ->
             rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
                                    SendFun, ReceiveTimeout, ReceiveFun)
+    end,
+    case ConnState of
+        blocked -> rabbit_heartbeat:pause_monitor(Heartbeat);
+        _ -> ok
     end,
     {ok, State#state{heartbeat = Heartbeat}};
 websocket_info(client_timeout, State) ->
@@ -415,7 +438,7 @@ filter_stomp_protocols(Protocols) ->
 handle_data(Data, State0) ->
     case handle_data1(Data, State0) of
         {ok, State1 = #state{state = blocked}} ->
-            {[{active, false}], State1};
+            {[{set_options, #{idle_timeout => infinity}}, {active, false}], State1};
         {error, Error0} ->
             Error1 = rabbit_misc:format("~tp", [Error0]),
             ?LOG_ERROR("STOMP detected framing error '~ts'", [Error1]),
@@ -521,16 +544,20 @@ stop(State, CloseCode, Error0) ->
 %%----------------------------------------------------------------------------
 
 handle_credits(State0) ->
-    case control_throttle(State0) of
-        State = #state{state = running} ->
+    State = control_throttle(State0),
+    case {State0#state.state, State#state.state} of
+        {blocked, running} ->
+            {[{set_options, #{idle_timeout => State#state.idle_timeout}},
+              {active, true}], State};
+        {_, running} ->
             {[{active, true}], State};
-        State ->
+        _ ->
             {ok, State}
     end.
 
-control_throttle(State = #state{state              = CS,
-                                conserve_resources = Mem}) ->
-    case {CS, Mem orelse credit_flow:blocked()} of
+control_throttle(State = #state{state = CS, blocked_by = BlockedBy}) ->
+    Conserve = not sets:is_empty(BlockedBy),
+    case {CS, Conserve orelse credit_flow:blocked()} of
         {running,   true} -> blocking(State);
         {blocking, false} -> running(State);
         {blocked,  false} -> running(State);
@@ -540,8 +567,10 @@ control_throttle(State = #state{state              = CS,
 blocking(State) ->
     State#state{state = blocking}.
 
-running(State = #state{heartbeat=Heartbeat}) ->
+running(State = #state{state = blocked, heartbeat = Heartbeat}) ->
     rabbit_heartbeat:resume_monitor(Heartbeat),
+    State#state{state = running};
+running(State) ->
     State#state{state = running}.
 
 %%----------------------------------------------------------------------------
