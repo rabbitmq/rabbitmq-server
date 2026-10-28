@@ -78,10 +78,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
 
         _ = File.rm(abs_path)
 
-        case File.write(abs_path, body) do
+        case write_file(abs_path, body) do
           # no output
           :ok ->
             {:ok, nil}
+
+          {:error, :eexist} ->
+            {:error, ExitCodes.exit_dataerr(), "File #{path} exists and could not be removed"}
 
           {:error, :enoent} ->
             {:error, ExitCodes.exit_dataerr(), "Parent directory or file #{path} does not exist"}
@@ -157,6 +160,32 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
 
   defp serialise(map, "erlang") do
     :erlang.term_to_binary(map, [{:compressed, 9}])
+  end
+
+  defp write_file(path, body) do
+    # `:exclusive` refuses a file or a symlink that another user has left at the path,
+    # and the mode is restricted before the file has any content.
+    case :file.open(path, [:write, :raw, :binary, :exclusive]) do
+      {:ok, fd} ->
+        result =
+          with :ok <- :file.change_mode(path, 0o600),
+               :ok <- :file.write(fd, body) do
+            :file.close(fd)
+          else
+            err ->
+              _ = :file.close(fd)
+              err
+          end
+
+        if result != :ok, do: File.rm(path)
+        result
+
+      {:error, :eexist} = err ->
+        if File.dir?(path), do: {:error, :eisdir}, else: err
+
+      err ->
+        err
+    end
   end
 
   defp human_friendly_format("JSON"), do: "JSON"
