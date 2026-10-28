@@ -462,7 +462,7 @@ parse_result(Map) ->
     Ret0 = maps:fold(fun("idle_time_out", V, Acc) ->
                              Acc#{idle_time_out => list_to_integer(V)};
                         ("max_frame_size", V, Acc) ->
-                             Acc#{max_frame_size => list_to_integer(V)};
+                             Acc#{max_frame_size => parse_max_frame_size(V)};
                         ("hostname", V, Acc) ->
                              Acc#{hostname => list_to_binary(V)};
                         ("container_id", V, Acc) ->
@@ -479,6 +479,17 @@ parse_result(Map) ->
         "amqps" ->
             TlsOpts = parse_tls_opts(Query),
             Ret0#{tls_opts => {secure_port, TlsOpts}}
+    end.
+
+parse_max_frame_size(V) ->
+    try list_to_integer(V) of
+        N when N >= ?MIN_MAX_FRAME_SIZE andalso N =< ?MAX_MAX_FRAME_SIZE ->
+            N;
+        _ ->
+            throw({invalid_option, max_frame_size})
+    catch
+        error:badarg ->
+            throw({invalid_option, max_frame_size})
     end.
 
 parse_usertoken(U) ->
@@ -646,6 +657,16 @@ parse_uri_test_() ->
         parse_uri("amqp://my_proxy:9876?sasl=external")),
      ?_assertEqual({error, path_segment_not_supported},
                    parse_uri("amqp://my_host/my_path_segment:9876")),
+     [?_assertMatch({ok, #{max_frame_size := Size}},
+                    parse_uri("amqp://my_host?max_frame_size=" ++ Size0))
+      || {Size0, Size} <- [{"512", 512},
+                           {"1048576", 1_048_576},
+                           {"2097152", 2_097_152},
+                           {"16777216", 16_777_216}]],
+     [?_assertEqual({error, {invalid_option, max_frame_size}},
+                    parse_uri("amqp://my_host?max_frame_size=" ++ Size))
+      || Size <- ["511", "0", "-1", "-512", "16777217", "4294967295",
+                  "abc", "1.5", "1048576b", ""]],
      ?_test(begin
                 {ok, #{tls_opts := {secure_port, TlsOpts}}} =
                     parse_uri("amqps://my_host?cacertfile=/etc/cacert.pem&"

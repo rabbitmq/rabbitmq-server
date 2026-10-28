@@ -69,7 +69,7 @@
       notify_when_closed => pid() | none,
       notify_with_performative => boolean(),
       %% incoming maximum frame size set by our client application
-      max_frame_size => pos_integer(), % TODO: constrain to large than 512
+      max_frame_size => pos_integer(),
       %% outgoing maximum frame size set by AMQP peer in OPEN performative
       outgoing_max_frame_size => pos_integer() | undefined,
       idle_time_out => milliseconds(),
@@ -100,6 +100,11 @@
 %% -------------------------------------------------------------------
 
 -spec open(connection_config()) -> supervisor:startchild_ret().
+open(#{max_frame_size := MaxFrameSize})
+  when not (is_integer(MaxFrameSize) andalso
+            MaxFrameSize >= ?MIN_MAX_FRAME_SIZE andalso
+            MaxFrameSize =< ?MAX_MAX_FRAME_SIZE) ->
+    {error, {invalid_max_frame_size, MaxFrameSize}};
 open(Config0) ->
     Config = maps:update_with(sasl, fun maybe_encrypt_sasl/1, Config0),
     %% Start the supervision tree dedicated to that connection. It
@@ -306,15 +311,22 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
                        Bytes when is_integer(Bytes) ->
                            Bytes
                    end,
-    State1 = State#state{config = Config#{outgoing_max_frame_size => MaxFrameSize}},
-    State2 = lists:foldr(
-               fun(From, S0) ->
-                       {Ret, S2} = handle_begin_session(From, S0),
-                       _ = gen_statem:reply(From, Ret),
-                       S2
-               end, State1, PendingSessionReqs),
-    ok = notify_opened(Config, Open),
-    {next_state, opened, State2#state{pending_session_reqs = []}};
+    case MaxFrameSize >= ?MIN_MAX_FRAME_SIZE of
+        true ->
+            State1 = State#state{config = Config#{outgoing_max_frame_size => MaxFrameSize}},
+            State2 = lists:foldr(
+                       fun(From, S0) ->
+                               {Ret, S2} = handle_begin_session(From, S0),
+                               _ = gen_statem:reply(From, Ret),
+                               S2
+                       end, State1, PendingSessionReqs),
+            ok = notify_opened(Config, Open),
+            {next_state, opened, State2#state{pending_session_reqs = []}};
+        false ->
+            [gen_statem:reply(From, {error, closed}) || From <- PendingSessionReqs],
+            _ = send_close(State, none),
+            {stop, {shutdown, {invalid_peer_max_frame_size, MaxFrameSize}}, State}
+    end;
 open_sent({call, From}, begin_session,
           #state{pending_session_reqs = PendingSessionReqs} = State) ->
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
@@ -699,5 +711,30 @@ decrypted_sasl_to_mechanism({plain, _, _}) ->
 config_defaults() ->
     #{sasl => none,
       transfer_limit_margin => 0,
-      %% 1 MB
-      max_frame_size => 1_048_576}.
+      max_frame_size => ?DEFAULT_MAX_FRAME_SIZE}.
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+open_sent_peer_max_frame_size_below_minimum_test_() ->
+    {ok, LSock} = gen_tcp:listen(0, [binary]),
+    {ok, Port} = inet:port(LSock),
+    {ok, Sock} = gen_tcp:connect({127, 0, 0, 1}, Port, [binary]),
+    State = #state{connection_sup = self(),
+                   socket = {tcp, Sock},
+                   config = #{}},
+    Result = [open_sent(info,
+                        #'v1_0.open'{max_frame_size = {uint, Size}},
+                        State)
+              || Size <- [0, 8, ?MIN_MAX_FRAME_SIZE - 1]],
+    ok = gen_tcp:close(Sock),
+    ok = gen_tcp:close(LSock),
+    [?_assertMatch({stop, {shutdown, {invalid_peer_max_frame_size, Size}}, _},
+                   R)
+     || {Size, R} <- lists:zip([0, 8, ?MIN_MAX_FRAME_SIZE - 1], Result)].
+
+open_invalid_max_frame_size_test_() ->
+    [?_assertEqual({error, {invalid_max_frame_size, Size}},
+                   open(#{max_frame_size => Size}))
+     || Size <- [511, 0, -1, 16_777_217, 4_294_967_295, infinity, <<"1024">>]].
+-endif.
