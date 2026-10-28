@@ -157,8 +157,8 @@ maybe_init() ->
 %% peer discovery backend.
 %%
 %% If the peer discovery backend finds nodes that this node should cluster
-%% with, this function calls {@link rabbit_db_cluster:join/2} to join one of
-%% these nodes.
+%% with, this function calls {@link rabbit_db_cluster:do_join/2} to join one
+%% of these nodes.
 %%
 %% This function always returns `ok', regardless if this node joined a cluster
 %% or it should boot as a standalone node.
@@ -396,8 +396,8 @@ check_discovered_nodes_list_validity(DiscoveredNodes, BadNodeType)
 %%
 %% An example of what we want to avoid is e.g. node 4 joining node 1, then node
 %% 1 joining node 2. Indeed, now that peer discovery uses {@link
-%% rabbit_db_cluster:join/2} instead of its own code path, there is the risk
-%% that node 1 kicks node 4 out of the cluster by joining node 2 because
+%% rabbit_db_cluster:do_join/2} instead of its own code path, there is the
+%% risk that node 1 kicks node 4 out of the cluster by joining node 2 because
 %% `join_cluster' includes a reset.
 %%
 %% @private
@@ -935,8 +935,9 @@ select_node_to_join([{Node, _Members, _StartTime, false} | _]) ->
       Reason :: any().
 %% @doc Joins the selected node.
 %%
-%% This function relies on {@link rabbit_db_cluster:join/2}. It acquires a lock
-%% before proceeding with the join if the backend provides such a mechanism.
+%% This function relies on {@link rabbit_db_cluster:do_join/2}. It acquires a
+%% lock before proceeding with the join if the backend provides such a
+%% mechanism.
 %%
 %% If the selected node is this node, this is a no-op and no lock is acquired.
 %%
@@ -997,7 +998,7 @@ join_selected_node_locked(Node, NodeType) ->
     %% resets the joining node and copies the feature flags states from the
     %% cluster.
     try
-        Ret = rabbit_db_cluster:join(Node, NodeType),
+        Ret = rabbit_db_cluster:do_join(Node, NodeType),
         case Ret of
             ok ->
                 ?LOG_INFO(
