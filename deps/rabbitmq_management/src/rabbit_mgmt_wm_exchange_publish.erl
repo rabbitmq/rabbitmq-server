@@ -49,7 +49,16 @@ content_types_accepted(ReqData, Context) ->
    {[{'*', accept_content}], ReqData, Context}.
 
 accept_content(ReqData, Context) ->
-    rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
+    case rabbit_alarm:get_alarms() of
+        [] ->
+            rabbit_mgmt_util:post_respond(do_it(ReqData, Context));
+        Alarms ->
+            Resources = lists:usort([R || {{resource_limit, R, _}, _} <- Alarms]),
+            Reason = rabbit_misc:format(
+                       "Publishing is blocked by a resource alarm: ~ts",
+                       [lists:join(", ", [atom_to_list(R) || R <- Resources])]),
+            rabbit_mgmt_util:service_unavailable(Reason, ReqData, Context)
+    end.
 
 do_it(ReqData0, Context) ->
     VHost = rabbit_mgmt_util:vhost(ReqData0),
