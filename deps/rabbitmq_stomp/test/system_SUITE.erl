@@ -42,6 +42,7 @@
 -define(MULTIACK_DESTINATION_A, <<"/amq/queue/TestMultiAckQueueA">>).
 -define(MULTIACK_DESTINATION_B, <<"/amq/queue/TestMultiAckQueueB">>).
 -define(BIND_FAIL_QUEUE, <<"TestSubscribeBindFailQueue">>).
+-define(AMQP_1_0_QUEUE, <<"TestAmqp10ConsumerQueue">>).
 -define(MAX_MSG_SIZE_QUEUE, <<"TestMaxMessageSizeQueue">>).
 -define(MAX_MSG_SIZE_DESTINATION, <<"/amq/queue/TestMaxMessageSizeQueue">>).
 
@@ -89,6 +90,7 @@ groups() ->
         reused_subscription_id_keeps_ack_mode,
         send,
         send_with_negative_priority,
+        send_with_negative_priority_to_amqp_1_0_consumer,
         send_body_larger_than_max_message_size_is_rejected,
         delete_queue_subscribe,
         durable_resubscribe_pipelined_classic,
@@ -322,7 +324,8 @@ end_per_testcase0(_, Config) ->
 cleanup_per_testcase0(_, Config) ->
     _ = [delete_test_queue(Q, Config)
          || Q <- [?UNSUBSCRIBE_QUEUE, ?UNSUBSCRIBE_QUEUE_QQ, ?UNSUBSCRIBE_STREAM,
-                  ?MULTIACK_QUEUE_A, ?MULTIACK_QUEUE_B, ?BIND_FAIL_QUEUE]],
+                  ?MULTIACK_QUEUE_A, ?MULTIACK_QUEUE_B, ?BIND_FAIL_QUEUE,
+                  ?AMQP_1_0_QUEUE]],
     Config.
 
 delete_test_queue(Queue, Config) ->
@@ -1798,12 +1801,40 @@ send_with_negative_priority(Config) ->
     {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
     {ok, Client2, _, [<<"2">>]} = stomp_receive(Client1, 'MESSAGE'),
     lists:foldl(fun(_, C) ->
-                        {ok, C1, _, [<<"-1">>]} = stomp_receive(C, 'MESSAGE'),
+                        {ok, C1, Hdrs, [<<"-1">>]} = stomp_receive(C, 'MESSAGE'),
+                        ?assertEqual(<<"0">>, maps:get(<<"priority">>, Hdrs)),
                         C1
                 end, Client2, lists:seq(1, 7)),
     #'queue.delete_ok'{} =
         amqp_channel:call(Channel, #'queue.delete'{queue = ?QUEUE}),
     ok.
+
+send_with_negative_priority_to_amqp_1_0_consumer(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue = ?AMQP_1_0_QUEUE, durable = true}),
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, <<"/amq/queue/", ?AMQP_1_0_QUEUE/binary>>},
+                       {<<"priority">>, <<"-1">>},
+                       {<<"receipt">>, <<"r">>}], ["hello"]),
+    {ok, _, _, _} = stomp_receive(Client, 'RECEIPT'),
+
+    {ok, _} = application:ensure_all_started(amqp10_client),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Connection} = amqp10_client:open_connection(
+                         #{address => ?config(rmq_hostname, Config),
+                           port => Port,
+                           container_id => atom_to_binary(?FUNCTION_NAME),
+                           sasl => {plain, <<"guest">>, <<"guest">>}}),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>,
+                       <<"/queues/", ?AMQP_1_0_QUEUE/binary>>, settled),
+    {ok, Msg} = amqp10_client:get_msg(Receiver, 30_000),
+    ?assertEqual(<<"hello">>, amqp10_msg:body_bin(Msg)),
+    ?assertEqual(0, amqp10_msg:header(priority, Msg)),
+    ok = amqp10_client:close_connection(Connection).
 
 send_body_larger_than_max_message_size_is_rejected(Config) ->
     Channel = ?config(amqp_channel, Config),

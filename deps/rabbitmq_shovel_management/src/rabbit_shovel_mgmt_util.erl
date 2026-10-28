@@ -75,7 +75,34 @@ format_info({running, Props}) ->
 
 format_info({terminated, Reason}) ->
     [{state,  terminated},
-        {reason, print("~ts", [rabbit_misc:format_term(Reason)])}].
+        {reason, format_reason(Reason)}].
+
+%% A crash reason can include message content and is visible to
+%% `monitoring` users. `rabbit_shovel_worker:terminate/2` logs it in full.
+format_reason(Reason) ->
+    case is_readable_reason(Reason) of
+        true when is_binary(Reason) ->
+            Reason;
+        true when is_list(Reason) ->
+            unicode:characters_to_binary(Reason);
+        true ->
+            print("~ts", [rabbit_misc:format_term(Reason)]);
+        false ->
+            <<"internal error, see the node log">>
+    end.
+
+is_readable_reason(Reason) when is_atom(Reason);
+                                is_integer(Reason);
+                                is_binary(Reason) ->
+    true;
+is_readable_reason(Reason) when is_list(Reason) ->
+    io_lib:printable_unicode_list(Reason);
+is_readable_reason({Tag, Reason}) when is_atom(Tag) ->
+    is_readable_reason(Reason);
+is_readable_reason({Tag, Code, Reason}) when is_atom(Tag), is_integer(Code) ->
+    is_readable_reason(Reason);
+is_readable_reason(_) ->
+    false.
 
 format_ts({{Y, M, D}, {H, Min, S}}) ->
     print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
