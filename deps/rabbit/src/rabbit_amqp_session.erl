@@ -1341,6 +1341,8 @@ handle_frame(#'v1_0.end'{},
                       Reason =:= noproc ->
                    %% AMQP connection and therefore the writer process got already terminated
                    %% before we had the chance to synchronously end the session.
+                   ok;
+               exit:{{shutdown, _}, {gen_server, call, _ArgList}} ->
                    ok
          end,
     {stop, normal, State};
