@@ -23,7 +23,12 @@ groups() ->
     [
       {non_parallel_tests, [], [
           ready_for_close_with_dead_writer,
-          terminate_safely_handles_cleanup_failures
+          terminate_safely_handles_cleanup_failures,
+          replies_taken_by_writer,
+          replies_not_taken_by_writer,
+          tx_commit_replies_not_taken_by_writer,
+          basic_get_replies_not_taken_by_writer,
+          basic_get_reply_bytes_not_taken_by_writer
         ]}
     ].
 
@@ -134,6 +139,113 @@ terminate_safely_handles_cleanup_failures1(_Config) ->
         meck:unload(rabbit_queue_type),
         throw(channel_did_not_terminate)
     end.
+
+replies_taken_by_writer(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, replies_taken_by_writer1, [Config]).
+
+replies_taken_by_writer1(_Config) ->
+    {ok, LSock} = gen_tcp:listen(0, [binary, {active, false}]),
+    {ok, Port} = inet:port(LSock),
+    {ok, Client} = gen_tcp:connect({127, 0, 0, 1}, Port, [binary, {active, false}]),
+    {ok, Sock} = gen_tcp:accept(LSock),
+    ok = gen_tcp:close(LSock),
+    Me = self(),
+    {ok, Writer} = rabbit_writer:start_link(Sock, 1, 0, Me, ?MODULE, false),
+    {ok, Limiter} = rabbit_limiter:start_link(no_id),
+    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer, Me, "",
+                                         rabbit_ct_broker_helpers:user(<<"guest">>),
+                                         <<"/">>, [], Me,
+                                         Limiter),
+    ok = rabbit_channel_common:do(Ch, #'channel.open'{}),
+    ok = recv_frames(Client, #'channel.open_ok'{}, 1),
+    [begin
+         [ok = rabbit_channel_common:do(Ch, #'basic.qos'{})
+          || _ <- lists:seq(1, 1_000)],
+         ok = recv_frames(Client, #'basic.qos_ok'{}, 1_000)
+     end || _ <- lists:seq(1, 10)],
+    [begin unlink(P), exit(P, kill) end || P <- [Ch, Writer, Limiter]],
+    ok = gen_tcp:close(Client),
+    passed.
+
+recv_frames(Client, Method, N) ->
+    Frame = iolist_to_binary(
+              rabbit_binary_generator:build_simple_method_frame(1, Method)),
+    {ok, Data} = gen_tcp:recv(Client, N * byte_size(Frame), ?TIMEOUT),
+    Data = binary:copy(Frame, N),
+    ok.
+
+replies_not_taken_by_writer(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, replies_not_taken_by_writer1, [Config]).
+
+replies_not_taken_by_writer1(_Config) ->
+    replies_not_taken_by_writer([], #'basic.qos'{}).
+
+tx_commit_replies_not_taken_by_writer(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, tx_commit_replies_not_taken_by_writer1, [Config]).
+
+tx_commit_replies_not_taken_by_writer1(_Config) ->
+    replies_not_taken_by_writer([{#'tx.select'{}, none}], #'tx.commit'{}).
+
+basic_get_replies_not_taken_by_writer(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, basic_get_replies_not_taken_by_writer1, [Config]).
+
+basic_get_replies_not_taken_by_writer1(_Config) ->
+    Q = <<"basic_get_replies_not_taken_by_writer">>,
+    Publish = {#'basic.publish'{routing_key = Q},
+               rabbit_basic:build_content(#'P_basic'{}, <<"x">>)},
+    replies_not_taken_by_writer(
+      [{#'queue.declare'{queue = Q, exclusive = true}, none}
+       | lists:duplicate(10_000, Publish)],
+      #'basic.get'{queue = Q, no_ack = true}).
+
+basic_get_reply_bytes_not_taken_by_writer(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, basic_get_reply_bytes_not_taken_by_writer1, [Config]).
+
+basic_get_reply_bytes_not_taken_by_writer1(_Config) ->
+    Q = <<"basic_get_reply_bytes_not_taken_by_writer">>,
+    Payload = binary:copy(<<"x">>, 1_048_576),
+    Publish = {#'basic.publish'{routing_key = Q},
+               rabbit_basic:build_content(#'P_basic'{}, Payload)},
+    replies_not_taken_by_writer(
+      [{#'queue.declare'{queue = Q, exclusive = true}, none}
+       | lists:duplicate(40, Publish)],
+      #'basic.get'{queue = Q, no_ack = true}, 100).
+
+replies_not_taken_by_writer(SetupMethods, Method) ->
+    replies_not_taken_by_writer(SetupMethods, Method, 10_000).
+
+replies_not_taken_by_writer(SetupMethods, Method, N) ->
+    Me = self(),
+    Writer = spawn(fun() -> receive after infinity -> ok end end),
+    {ok, Limiter} = rabbit_limiter:start_link(no_id),
+    {ok, Collector} = rabbit_queue_collector:start_link(?MODULE),
+    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer, Me, "",
+                                         rabbit_ct_broker_helpers:user(<<"guest">>),
+                                         <<"/">>, [], Collector,
+                                         Limiter),
+    MRef = erlang:monitor(process, Ch),
+    [ok = rabbit_channel_common:do(Ch, M, C)
+     || {M, C} <- [{#'channel.open'{}, none} | SetupMethods]],
+    [ok = rabbit_channel_common:do(Ch, Method) || _ <- lists:seq(1, N)],
+    receive
+        {channel_exit, 1, #amqp_error{name = resource_error}} -> ok
+    after ?TIMEOUT ->
+        throw(failed_to_receive_channel_exit)
+    end,
+    receive
+        {'DOWN', MRef, process, Ch, normal} -> ok
+    after ?TIMEOUT ->
+        throw(channel_did_not_terminate)
+    end,
+    exit(Writer, kill),
+    unlink(Collector),
+    exit(Collector, kill),
+    passed.
 
 start_channel_and_writer() ->
     {Writer, _Limiter, Ch} = rabbit_ct_broker_helpers:test_channel(),
