@@ -276,24 +276,31 @@ code_change(_OldVsn, State, _Extra) ->
 sweep_expired_sessions_in_khepri() ->
     Now = os:system_time(millisecond),
     PathPattern = ?KHEPRI_ALL_SESSIONS_PATTERN,
-    case rabbit_khepri:get_many(PathPattern) of
+    case rabbit_khepri:adv_get_many(PathPattern) of
         {ok, Map} when map_size(Map) > 0 ->
-            ExpiredPaths = maps:fold(fun(Path, S, Acc) ->
-                case is_expired(S, Now) of
+            maps:fold(fun(Path, #{data := S, payload_version := Vsn}, Count) ->
+                case is_expired(S, Now) andalso delete_if_unchanged(Path, Vsn) of
                     true ->
-                        [Path | Acc];
+                        Count + 1;
                     false ->
-                        Acc
+                        Count
                 end
-            end, [], Map),
-            case ExpiredPaths of
-                [] ->
-                    0;
-                _ ->
-                    length([P || P <- ExpiredPaths, delete_path(P) =:= ok])
-            end;
+            end, 0, Map);
         _ ->
             0
+    end.
+
+delete_if_unchanged(Path, Vsn) ->
+    ConditionalPath = khepri_path:combine_with_conditions(
+                        Path, [#if_payload_version{version = Vsn}]),
+    case rabbit_khepri:delete(ConditionalPath) of
+        ok ->
+            true;
+        {error, {khepri, mismatching_node, _}} ->
+            false;
+        {error, Reason} ->
+            ?LOG_WARNING("Failed to delete Management UI session path ~tp: ~tp", [Path, Reason]),
+            false
     end.
 
 delete_path(Path) ->
