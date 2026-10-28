@@ -63,7 +63,9 @@ groups() ->
                  link_credit_max,
                  drain_with_nothing_available,
                  connect_timeout,
-                 handshake_owner_down
+                 handshake_owner_down,
+                 sasl_failure_peer_keeps_socket_open,
+                 sasl_failure_peer_closes_socket
                 ]}
     ].
 
@@ -875,6 +877,59 @@ handshake_owner_down(_Config) ->
     after 5000 -> ct:fail(connection_still_running)
     end,
     ok = gen_tcp:close(Listener).
+
+sasl_failure_peer_keeps_socket_open(_Config) ->
+    sasl_failure_frees_connection_processes(false).
+
+sasl_failure_peer_closes_socket(_Config) ->
+    sasl_failure_frees_connection_processes(true).
+
+sasl_failure_frees_connection_processes(PeerCloses) ->
+    {ok, Listener} = gen_tcp:listen(0, [binary, {active, false}]),
+    {ok, Port} = inet:port(Listener),
+    Peer = spawn_link(fun() -> sasl_failure_peer(Listener, PeerCloses) end),
+    Cfg = #{address => "localhost", port => Port, sasl => anon, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {dictionary, Dict} = process_info(Connection, dictionary),
+    [Sup | _] = proplists:get_value('$ancestors', Dict),
+    Children = supervisor:which_children(Sup),
+    {reader, Reader, _, _} = lists:keyfind(reader, 1, Children),
+    Pids = [Sup | [Pid || {_, Pid, _, _} <- Children]],
+    {links, Links} = process_info(Reader, links),
+    [Socket] = [L || L <- Links, is_port(L)],
+    MRefs = [monitor(process, Pid) || Pid <- Pids],
+    Peer ! go,
+    receive
+        {amqp10_event, {connection, Connection, {closed, sasl_auth_failure}}} -> ok
+    after ?TIMEOUT -> ct:fail(connection_not_closed)
+    end,
+    [receive
+         {'DOWN', MRef, process, _, _} -> ok
+     after 5000 -> ct:fail({process_still_alive, [P || P <- Pids, is_process_alive(P)]})
+     end || MRef <- MRefs],
+    ?assertEqual(undefined, erlang:port_info(Socket)),
+    Peer ! stop,
+    ok = gen_tcp:close(Listener).
+
+sasl_failure_peer(Listener, PeerCloses) ->
+    {ok, Sock} = gen_tcp:accept(Listener),
+    receive go -> ok end,
+    {ok, <<"AMQP", 3, 1, 0, 0>>} = gen_tcp:recv(Sock, 8),
+    Mechs = #'v1_0.sasl_mechanisms'{
+               sasl_server_mechanisms = {array, symbol, [{symbol, <<"ANONYMOUS">>}]}},
+    Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 1}},
+    ok = gen_tcp:send(Sock, <<"AMQP", 3, 1, 0, 0>>),
+    ok = gen_tcp:send(Sock, sasl_frame(Mechs)),
+    {ok, _SaslInit} = gen_tcp:recv(Sock, 0),
+    ok = gen_tcp:send(Sock, sasl_frame(Outcome)),
+    case PeerCloses of
+        true -> gen_tcp:close(Sock);
+        false -> receive stop -> gen_tcp:close(Sock) end
+    end.
+
+sasl_frame(Performative) ->
+    amqp10_binary_generator:build_frame(
+      0, 1, [amqp10_framing:encode_bin(Performative)]).
 
 open_refused(Config) ->
     Hostname = ?config(mock_host, Config),
