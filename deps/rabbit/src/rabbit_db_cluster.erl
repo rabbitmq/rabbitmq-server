@@ -15,6 +15,7 @@
 
 -export([ensure_feature_flags_are_in_sync/2,
          join/2,
+         do_join/2,
          forget_member/2]).
 -export([change_node_type/1]).
 -export([is_clustered/0,
@@ -82,10 +83,30 @@ can_join_using_khepri(RemoteNode) when is_atom(RemoteNode) ->
       Ret :: ok | Error,
       Error :: {error, any()}.
 %% @doc Adds this node to a cluster using `RemoteNode' to reach it.
+%%
+%% A booting or stopping node is refused because the join resets the
+%% metadata store it uses.
 
-join(ThisNode, _NodeType) when ThisNode =:= node() ->
+join(RemoteNode, NodeType) ->
+    maybe
+        ok ?= rabbit_db:ensure_not_booting_or_stopping(),
+        do_join(RemoteNode, NodeType)
+    end.
+
+-spec do_join(RemoteNode, NodeType) -> Ret when
+      RemoteNode :: node(),
+      NodeType :: node_type(),
+      Ret :: ok | Error,
+      Error :: {error, any()}.
+%% @doc Adds this node to a cluster without checking the boot state.
+%%
+%% Peer discovery uses it to join a cluster while this node boots.
+%%
+%% @private
+
+do_join(ThisNode, _NodeType) when ThisNode =:= node() ->
     {error, cannot_cluster_node_with_itself};
-join(RemoteNode, NodeType)
+do_join(RemoteNode, NodeType)
   when is_atom(RemoteNode) andalso ?IS_NODE_TYPE(NodeType) ->
     case can_join(RemoteNode) of
         {ok, ClusterNodes} when is_list(ClusterNodes) ->
@@ -117,7 +138,7 @@ join(RemoteNode, NodeType)
 
             %% We acquire the feature flags registry reload lock because
             %% between the time we reset the registry (as part of
-            %% `rabbit_db:reset/0' and the states copy from the remote node,
+            %% `rabbit_db:do_reset/0' and the states copy from the remote node,
             %% there could be a concurrent reload of the registry (for instance
             %% because of peer discovery on another node) with the
             %% default/empty states.
@@ -126,7 +147,7 @@ join(RemoteNode, NodeType)
             %% `rabbit_ff_registry_wrapper'.
             rabbit_ff_registry_factory:acquire_state_change_lock(),
             try
-                ok = rabbit_db:reset(),
+                ok = rabbit_db:do_reset(),
                 rabbit_feature_flags:copy_feature_states_after_reset(
                   RemoteNode)
             after
