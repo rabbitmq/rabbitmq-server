@@ -2262,6 +2262,15 @@ test_writer(Pid) ->
                                       test_writer(Pid);
         {send_command, Method}     -> Pid ! Method,
                                       test_writer(Pid);
+        {send_command_and_ack, Method, Sender} ->
+                                      Pid ! Method,
+                                      Sender ! {writer_acks, self(), 1, 0},
+                                      test_writer(Pid);
+        {send_command_and_ack, Method, Content, Sender} ->
+                                      Pid ! Method,
+                                      Sender ! {writer_acks, self(), 1,
+                                                rabbit_writer:msg_size(Content)},
+                                      test_writer(Pid);
         shutdown                   -> ok
     end.
 

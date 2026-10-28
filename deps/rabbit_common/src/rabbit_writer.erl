@@ -41,6 +41,7 @@
          send_command_sync/2, send_command_sync/3,
          send_command_and_notify/4, send_command_and_notify/5,
          send_command_flow/2, send_command_flow/3,
+         send_command_and_ack/2, send_command_and_ack/3,
          flush/1]).
 -export([internal_send_command/3]).
 -export([msg_size/1, maybe_gc_large_msg/1, maybe_gc_large_msg/2]).
@@ -60,10 +61,13 @@
     %% flushes)
     pending,
     %% defines how often gc will be executed
-    writer_gc_threshold
+    writer_gc_threshold,
+    command_acks = none :: none | {pid(), pos_integer(), non_neg_integer()}
 }).
 
 -define(HIBERNATE_AFTER, 6_000).
+-define(COMMAND_ACK_BATCH_SIZE, 200).
+-define(COMMAND_ACK_BATCH_BYTES, 1_048_576).
 %% 1GB
 -define(DEFAULT_GC_THRESHOLD, 1_000_000_000).
 
@@ -96,6 +100,10 @@
             'ok'.
 -spec send_command_flow(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 -spec send_command_flow
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content()) ->
+            'ok'.
+-spec send_command_and_ack(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
+-spec send_command_and_ack
         (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content()) ->
             'ok'.
 -spec flush(pid()) -> 'ok'.
@@ -201,6 +209,11 @@ handle_message({send_command_flow, MethodRecord, Sender}, State) ->
 handle_message({send_command_flow, MethodRecord, Content, Sender}, State) ->
     credit_flow:ack(Sender),
     internal_send_command_async(MethodRecord, Content, State);
+handle_message({send_command_and_ack, MethodRecord, Sender}, State) ->
+    ack_command(Sender, 0, internal_send_command_async(MethodRecord, State));
+handle_message({send_command_and_ack, MethodRecord, Content, Sender}, State) ->
+    ack_command(Sender, msg_size(Content),
+                internal_send_command_async(MethodRecord, Content, State));
 handle_message({send_command_and_notify, QPid, ChPid, MethodRecord}, State) ->
     State1 = internal_send_command_async(MethodRecord, State),
     rabbit_amqqueue_common:notify_sent(QPid, ChPid),
@@ -255,6 +268,14 @@ send_command_flow(W, MethodRecord, Content) ->
     W ! {send_command_flow, MethodRecord, Content, self()},
     ok.
 
+send_command_and_ack(W, MethodRecord) ->
+    W ! {send_command_and_ack, MethodRecord, self()},
+    ok.
+
+send_command_and_ack(W, MethodRecord, Content) ->
+    W ! {send_command_and_ack, MethodRecord, Content, self()},
+    ok.
+
 send_command_sync(W, MethodRecord) ->
     call(W, {send_command_sync, MethodRecord}).
 
@@ -275,6 +296,22 @@ flush(W) -> call(W, flush).
 
 call(Pid, Msg) ->
     gen_server:call(Pid, Msg, infinity).
+
+ack_command(Sender, Bytes, State = #wstate{command_acks = {Sender, Count, AckBytes}}) ->
+    ack_command(Sender, Count + 1, AckBytes + Bytes, State);
+ack_command(Sender, Bytes, State = #wstate{command_acks = {Other, Count, AckBytes}}) ->
+    Other ! {writer_acks, self(), Count, AckBytes},
+    ack_command(Sender, 1, Bytes, State);
+ack_command(Sender, Bytes, State = #wstate{command_acks = none}) ->
+    ack_command(Sender, 1, Bytes, State).
+
+ack_command(Sender, Count, Bytes, State)
+  when Count >= ?COMMAND_ACK_BATCH_SIZE orelse
+       Bytes >= ?COMMAND_ACK_BATCH_BYTES ->
+    Sender ! {writer_acks, self(), Count, Bytes},
+    State#wstate{command_acks = none};
+ack_command(Sender, Count, Bytes, State) ->
+    State#wstate{command_acks = {Sender, Count, Bytes}}.
 
 %%---------------------------------------------------------------------------
 
