@@ -10,6 +10,10 @@
 
 -define(TIMEOUT, 5000).
 
+-define(MIN_MAX_FRAME_SIZE, 512).
+-define(DEFAULT_MAX_FRAME_SIZE, 1_048_576).
+-define(MAX_MAX_FRAME_SIZE, 16_777_216).
+
 % -define(debug, true).
 -ifdef(debug).
 -define(DBG(F, A), ?LOG_INFO(F, A)).
