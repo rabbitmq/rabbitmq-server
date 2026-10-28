@@ -33,7 +33,8 @@ all() ->
       main_reader_rejects_invalid_frame_end_marker_in_one_packet,
       main_reader_rejects_buffered_frame_above_negotiated_frame_max,
       main_reader_assembles_frame_split_across_packets,
-      connection_closed_on_frame_above_negotiated_frame_max
+      connection_closed_on_frame_above_negotiated_frame_max,
+      negotiated_frame_max_below_minimum_is_rejected
     ].
 
 %% -------------------------------------------------------------------
@@ -593,3 +594,11 @@ split_into_3(Bin) ->
     <<Part1:Third/binary, Rest/binary>> = Bin,
     <<Part2:Third/binary, Part3/binary>> = Rest,
     [Part1, Part2, Part3].
+
+negotiated_frame_max_below_minimum_is_rejected(_Config) ->
+    ?assertEqual(ok, amqp_network_connection:sanity_check_frame_max(?FRAME_MIN_SIZE)),
+    ?assertEqual(ok, amqp_network_connection:sanity_check_frame_max(131072)),
+    ?assertExit({frame_max_too_low, 8, ?FRAME_MIN_SIZE},
+                amqp_network_connection:sanity_check_frame_max(8)),
+    ?assertExit({frame_max_too_low, 8191, ?FRAME_MIN_SIZE},
+                amqp_network_connection:sanity_check_frame_max(8191)).
