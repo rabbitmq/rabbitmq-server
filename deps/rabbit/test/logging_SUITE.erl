@@ -124,7 +124,20 @@ end_per_suite(Config) ->
     unmeck_rabbit_logger_std_h(),
     Config.
 
-init_per_group(syslog_output, Config) ->
+init_per_group(Group, Config)
+  when Group =:= file_output orelse
+       Group =:= console_output orelse
+       Group =:= syslog_output ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "groups without a RabbitMQ node do not exercise mixed versions"};
+        false ->
+            init_per_group1(Group, Config)
+    end;
+init_per_group(Group, Config) ->
+    init_per_group1(Group, Config).
+
+init_per_group1(syslog_output, Config) ->
     Config1 = start_fake_syslogd(Config),
     TcpPort = ?config(syslogd_tcp_port, Config1),
     ok = application:set_env(
@@ -141,7 +154,7 @@ init_per_group(syslog_output, Config) ->
            [{persistent, true}]),
     {ok, _} = application:ensure_all_started(syslog),
     Config1;
-init_per_group(_, Config) ->
+init_per_group1(_, Config) ->
     Config.
 
 end_per_group(syslog_output, Config) ->
@@ -173,17 +186,6 @@ init_per_testcase(Testcase, Config) ->
     end.
 
 init_per_testcase_exchange_output(Testcase, Config) ->
-    case Testcase =:= use_exchange_logger_when_enabling_all_feature_flags
-         andalso rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip,
-             "use_exchange_logger_when_enabling_all_feature_flags "
-             "cannot run in mixed version mode"};
-        false ->
-            init_per_testcase_exchange_output1(Testcase, Config)
-    end.
-
-init_per_testcase_exchange_output1(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
                 [{rmq_nodename_suffix, Testcase}]),

@@ -50,16 +50,7 @@ end_per_group(tests, Config) ->
                                     rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config0) ->
-    case {Testcase, rabbit_ct_helpers:is_mixed_versions()} of
-        {shrink, true} ->
-            {skip, "shrink cannot be done in mixed mode"};
-        {grow, true} ->
-            {skip, "grow cannot be done in mixed mode"};
-        {grow_invalid_node_filtered, true} ->
-            {skip, "grow cannot be done in mixed mode"};
-        _ ->
-            rabbit_ct_helpers:testcase_started(Config0, Testcase)
-    end.
+    rabbit_ct_helpers:testcase_started(Config0, Testcase).
 
 end_per_testcase(Testcase, Config0) ->
     rabbit_ct_helpers:testcase_finished(Config0, Testcase).

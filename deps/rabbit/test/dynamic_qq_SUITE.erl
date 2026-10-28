@@ -58,28 +58,22 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() andalso
-         Testcase == quorum_unaffected_after_vhost_failure of
-        true ->
-            {skip, "test case not mixed versions compatible"};
-        false ->
-            rabbit_ct_helpers:testcase_started(Config, Testcase),
-            ClusterSize = ?config(rmq_nodes_count, Config),
-            TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
-            Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
-            Config1 = rabbit_ct_helpers:set_config(Config, [
-                                                            {rmq_nodename_suffix, Testcase},
-                                                            {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
-                                                            {queue_name, Q},
-                                                            {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                                                                          {<<"x-quorum-initial-group-size">>, long, 3}]}
-                                                           ]),
-            rabbit_ct_helpers:run_steps(
-              Config1,
-              rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps())
-    end.
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    ClusterSize = ?config(rmq_nodes_count, Config),
+    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+    Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
+    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+                                                    {rmq_nodename_suffix, Testcase},
+                                                    {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
+                                                    {queue_name, Q},
+                                                    {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                                                  {<<"x-quorum-initial-group-size">>, long, 3}]}
+                                                   ]),
+    rabbit_ct_helpers:run_steps(
+      Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,

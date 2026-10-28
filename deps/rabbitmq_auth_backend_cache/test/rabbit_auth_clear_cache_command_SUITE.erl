@@ -47,12 +47,14 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(cluster_size_2, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of 
-        true -> {skip, "cluster size 2 isn't mixed versions compatible"};
-        false -> init_per_multinode_group(cluster_size_2, Config, 2)
-    end;
-init_per_group(Group, Config) ->
-    init_per_multinode_group(Group, Config, 1).
+    init_per_multinode_group(cluster_size_2, Config, 2);
+init_per_group(non_parallel_tests = Group, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "single node groups do not exercise mixed versions"};
+        false ->
+            init_per_multinode_group(Group, Config, 1)
+    end.
 
 init_per_multinode_group(_Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),

@@ -281,18 +281,23 @@ init_per_group(clustered, Config) ->
 init_per_group(unclustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
 init_per_group(clustered_with_partitions, Config0) ->
+    Config1 = rabbit_ct_helpers:run_setup_steps(
+               Config0,
+               [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]),
+    Config2 = rabbit_ct_helpers:set_config(Config1,
+                                           [{net_ticktime, ?NET_TICKTIME_S}]),
+    Config2;
+init_per_group(single_node = Group, Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            {skip, "clustered_with_partitions is too unreliable in mixed mode"};
+            {skip, "single node groups do not exercise mixed versions"};
         false ->
-            Config1 = rabbit_ct_helpers:run_setup_steps(
-                       Config0,
-                       [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]),
-            Config2 = rabbit_ct_helpers:set_config(Config1,
-                                                   [{net_ticktime, ?NET_TICKTIME_S}]),
-            Config2
+            init_per_group1(Group, Config)
     end;
 init_per_group(Group, Config) ->
+    init_per_group1(Group, Config).
+
+init_per_group1(Group, Config) ->
     ClusterSize = case Group of
                       single_node -> 1;
                       uncluster_size_2 -> 2;
@@ -300,35 +305,29 @@ init_per_group(Group, Config) ->
                       cluster_size_3 -> 3;
                       cluster_size_5 -> 5
                   end,
-    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
-    case ClusterSize of
-        2 when IsMixed ->
-            {skip, "cluster size 2 isn't mixed versions compatible"};
-        _ ->
-            %% Remove when global_qos/transient_nonexcl_queues is removed entirely.
-            Config0 = rabbit_ct_helpers:merge_app_env(
-                        Config,
-                        {rabbit,
-                         [{permit_deprecated_features, #{global_qos => true,
-                                                         transient_nonexcl_queues => true}}]}),
-            Config1 = rabbit_ct_helpers:set_config(Config0,
-                                                   [{rmq_nodes_count, ClusterSize},
-                                                    {rmq_nodename_suffix, Group},
-                                                    {tcp_ports_base, {skip_n_nodes, ClusterSize}},
-                                                    {net_ticktime, ?NET_TICKTIME_S}
-                                                   ]),
-            Ret = rabbit_ct_helpers:run_steps(Config1,
-                                              [fun merge_app_env/1 ] ++
-                                              rabbit_ct_broker_helpers:setup_steps()),
-            case Ret of
-                {skip, _} ->
-                    Ret;
-                Config2 ->
-                    ok = rabbit_ct_broker_helpers:rpc(
-                           Config2, 0, application, set_env,
-                           [rabbit, channel_tick_interval, 100]),
-                    Config2
-            end
+    %% Remove when global_qos/transient_nonexcl_queues is removed entirely.
+    Config0 = rabbit_ct_helpers:merge_app_env(
+                Config,
+                {rabbit,
+                 [{permit_deprecated_features, #{global_qos => true,
+                                                 transient_nonexcl_queues => true}}]}),
+    Config1 = rabbit_ct_helpers:set_config(Config0,
+                                           [{rmq_nodes_count, ClusterSize},
+                                            {rmq_nodename_suffix, Group},
+                                            {tcp_ports_base, {skip_n_nodes, ClusterSize}},
+                                            {net_ticktime, ?NET_TICKTIME_S}
+                                           ]),
+    Ret = rabbit_ct_helpers:run_steps(Config1,
+                                      [fun merge_app_env/1 ] ++
+                                      rabbit_ct_broker_helpers:setup_steps()),
+    case Ret of
+        {skip, _} ->
+            Ret;
+        Config2 ->
+            ok = rabbit_ct_broker_helpers:rpc(
+                   Config2, 0, application, set_env,
+                   [rabbit, channel_tick_interval, 100]),
+            Config2
     end.
 
 end_per_group(clustered, Config) ->
@@ -384,50 +383,13 @@ init_per_testcase(T, Config)
             {skip, "machine versions must be the same for desired leader location to work"}
     end;
 init_per_testcase(Testcase, Config) ->
-    ClusterSize = ?config(rmq_nodes_count, Config),
-    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
     SameKhepriMacVers = (
       rabbit_ct_broker_helpers:do_nodes_run_same_ra_machine_version(
         Config, khepri_machine)),
     case Testcase of
-        node_removal_is_not_quorum_critical when IsMixed ->
-            {skip, "node_removal_is_not_quorum_critical isn't mixed versions compatible"};
-        simple_confirm_availability_on_leader_change when IsMixed ->
-            {skip, "simple_confirm_availability_on_leader_change isn't mixed versions compatible"};
-        confirm_availability_on_leader_change when IsMixed ->
-            {skip, "confirm_availability_on_leader_change isn't mixed versions compatible"};
-        recover_from_single_failure when IsMixed ->
-            %% In a 3.8/3.9 cluster this will pass only if the failure occurs on the 3.8 node
-            {skip, "recover_from_single_failure isn't mixed versions compatible"};
-        delete_members when IsMixed ->
-            %% In a 3.8/3.9 cluster only the first shrink will work as expected
-            {skip, "delete_members isn't mixed versions compatible"};
-        delete_immediately_by_resource when IsMixed andalso ClusterSize == 3 ->
-            {skip, "delete_immediately_by_resource isn't mixed versions compatible"};
-        queue_ttl when IsMixed andalso ClusterSize == 3 ->
-            {skip, "queue_ttl isn't mixed versions compatible"};
-        start_queue when IsMixed andalso ClusterSize == 5 ->
-            {skip, "start_queue isn't mixed versions compatible"};
-        start_queue_concurrent when IsMixed andalso ClusterSize == 5 ->
-            {skip, "start_queue_concurrent isn't mixed versions compatible"};
-        leader_locator_client_local when IsMixed ->
-            {skip, "leader_locator_client_local isn't mixed versions compatible because "
-             "delete_declare isn't mixed versions reliable"};
-        projection_timeout_cleanup when IsMixed ->
-            {skip, "projection_timeout_cleanup isn't mixed versions compatible because "
-             "it relies on the balanced locator picking a remote leader"};
-        leader_locator_balanced_random_maintenance when IsMixed ->
-            {skip, "leader_locator_balanced_random_maintenance isn't mixed versions compatible because "
-             "delete_declare isn't mixed versions reliable"};
         leadership_takeover when not SameKhepriMacVers ->
             {skip, "leadership_takeover will fail with a mix of Khepri state "
              "machine versions"};
-        reclaim_memory_with_wrong_queue_type when IsMixed ->
-            {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
-        peek_with_wrong_queue_type when IsMixed ->
-            {skip, "peek_with_wrong_queue_type isn't mixed versions compatible"};
-        decorator_added_to_idle_queue_is_notified when IsMixed ->
-            {skip, "decorator_added_to_idle_queue_is_notified isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -804,12 +766,7 @@ start_queue_concurrent(Config) ->
     ok.
 
 quorum_cluster_size_3(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "quorum_cluster_size_3 test isn't mixed version reliable"};
-        false ->
-            quorum_cluster_size_x(Config, 3, 3)
-    end.
+    quorum_cluster_size_x(Config, 3, 3).
 
 quorum_cluster_size_7(Config) ->
     quorum_cluster_size_x(Config, 7, 5).
@@ -1032,14 +989,6 @@ vhost_with_default_queue_type_declares_quorum_queue(Config) ->
     ok.
 
 node_wide_default_queue_type_declares_quorum_queue(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-    true ->
-        {skip, "node_wide_default_queue_type_declares_quorum_queue test isn't mixed version compatible"};
-    false ->
-        node_wide_default_queue_type_declares_quorum_queue0(Config)
-    end.
-
-node_wide_default_queue_type_declares_quorum_queue0(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     rpc:call(Node, application, set_env, [rabbit, default_queue_type, rabbit_quorum_queue]),
     VHost = atom_to_binary(?FUNCTION_NAME, utf8),
@@ -1432,246 +1381,231 @@ single_active_consumer_priority(Config) ->
     ok.
 
 force_shrink_members_to_local_member(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "Should not run in mixed version environments"};
-        _ ->
-            [Server0, Server1, Server2] =
-            rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server0, Server1, Server2] =
+    rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-            Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
-            QQ = ?config(queue_name, Config),
-            ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                         declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-            RaName = ra_name(QQ),
-            rabbit_ct_client_helpers:publish(Ch, QQ, 3),
-            wait_for_messages_ready([Server0], RaName, 3),
-            queue_utils:assert_number_of_replicas(
-              Config, Server0, <<"/">>, QQ, 3),
+    RaName = ra_name(QQ),
+    rabbit_ct_client_helpers:publish(Ch, QQ, 3),
+    wait_for_messages_ready([Server0], RaName, 3),
+    queue_utils:assert_number_of_replicas(
+      Config, Server0, <<"/">>, QQ, 3),
 
-            ?assertEqual(
-               ok,
-               rabbit_ct_broker_helpers:rpc(Config, Server0,
-                                            rabbit_queue_type_ra,
-                                            force_shrink_members_to_local_member,
-                                            [<<"/">>, QQ])),
+    ?assertEqual(
+       ok,
+       rabbit_ct_broker_helpers:rpc(Config, Server0,
+                                    rabbit_queue_type_ra,
+                                    force_shrink_members_to_local_member,
+                                    [<<"/">>, QQ])),
 
-            wait_for_messages_ready([Server0], RaName, 3),
-            queue_utils:assert_number_of_replicas(
-              Config, Server0, <<"/">>, QQ, 1),
+    wait_for_messages_ready([Server0], RaName, 3),
+    queue_utils:assert_number_of_replicas(
+      Config, Server0, <<"/">>, QQ, 1),
 
-            ?assertEqual(
-               {error, no_local_member},
-               rabbit_ct_broker_helpers:rpc(Config, Server1,
-                                            rabbit_queue_type_ra,
-                                            force_shrink_members_to_local_member,
-                                            [<<"/">>, QQ])),
+    ?assertEqual(
+       {error, no_local_member},
+       rabbit_ct_broker_helpers:rpc(Config, Server1,
+                                    rabbit_queue_type_ra,
+                                    force_shrink_members_to_local_member,
+                                    [<<"/">>, QQ])),
 
-            ?assertEqual(
-               {error, no_local_member},
-               rabbit_ct_broker_helpers:rpc(Config, Server2,
-                                            rabbit_queue_type_ra,
-                                            force_shrink_members_to_local_member,
-                                            [<<"/">>, QQ])),
+    ?assertEqual(
+       {error, no_local_member},
+       rabbit_ct_broker_helpers:rpc(Config, Server2,
+                                    rabbit_queue_type_ra,
+                                    force_shrink_members_to_local_member,
+                                    [<<"/">>, QQ])),
 
-            %% Important: make sure to grow back one node at a time, waiting for the new member
-            %% to become a voter before adding more.
-            rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
-            ?awaitMatch(true,
-                        rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
-                                 [RaName, [Server0, Server1]]),
-                        ?DEFAULT_AWAIT),
-            rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
+    %% Important: make sure to grow back one node at a time, waiting for the new member
+    %% to become a voter before adding more.
+    rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
+    ?awaitMatch(true,
+                rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
+                         [RaName, [Server0, Server1]]),
+                ?DEFAULT_AWAIT),
+    rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
 
-            queue_utils:assert_number_of_replicas(
-              Config, Server0, <<"/">>, QQ, 3)
-    end.
+    queue_utils:assert_number_of_replicas(
+      Config, Server0, <<"/">>, QQ, 3).
 
 force_all_queues_shrink_member_to_current_member(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "Should not run in mixed version environments"};
-        _ ->
-            [Server0, Server1, Server2] =
-            rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server0, Server1, Server2] =
+    rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-            Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
-            QQ = ?config(queue_name, Config),
-            AQ = ?config(alt_queue_name, Config),
-            ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                         declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-            ?assertEqual({'queue.declare_ok', AQ, 0, 0},
-                         declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    AQ = ?config(alt_queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                 declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-            QQs = [QQ, AQ],
+    QQs = [QQ, AQ],
 
-            [begin
-                 RaName = ra_name(Q),
-                 rabbit_ct_client_helpers:publish(Ch, Q, 3),
-                 wait_for_messages_ready([Server0], RaName, 3),
-                 queue_utils:assert_number_of_replicas(
-                   Config, Server0, <<"/">>, Q, 3)
-             end || Q <- QQs],
+    [begin
+         RaName = ra_name(Q),
+         rabbit_ct_client_helpers:publish(Ch, Q, 3),
+         wait_for_messages_ready([Server0], RaName, 3),
+         queue_utils:assert_number_of_replicas(
+           Config, Server0, <<"/">>, Q, 3)
+     end || Q <- QQs],
 
-            %% match QQ only in shrink
-            QQSpec = <<QQ/binary, "$">>,
-            ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
-                                         force_all_queues_shrink_member_to_current_member, [QQSpec]),
+    %% match QQ only in shrink
+    QQSpec = <<QQ/binary, "$">>,
+    ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
+                                 force_all_queues_shrink_member_to_current_member, [QQSpec]),
 
-            [{_, {error, noproc}}] =
-                rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_quorum_queue,
-                    force_all_queues_shrink_member_to_current_member, [QQSpec]),
+    [{_, {error, noproc}}] =
+        rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_quorum_queue,
+            force_all_queues_shrink_member_to_current_member, [QQSpec]),
 
-            [{_, {error, noproc}}] =
-                rabbit_ct_broker_helpers:rpc(Config, Server2, rabbit_quorum_queue,
-                    force_all_queues_shrink_member_to_current_member, [QQSpec]),
+    [{_, {error, noproc}}] =
+        rabbit_ct_broker_helpers:rpc(Config, Server2, rabbit_quorum_queue,
+            force_all_queues_shrink_member_to_current_member, [QQSpec]),
 
-            wait_for_messages_ready([Server0], ra_name(QQ), 3),
-            queue_utils:assert_number_of_replicas(
-                Config, Server0, <<"/">>, QQ, 1),
+    wait_for_messages_ready([Server0], ra_name(QQ), 3),
+    queue_utils:assert_number_of_replicas(
+        Config, Server0, <<"/">>, QQ, 1),
 
-            wait_for_messages_ready([Server0], ra_name(AQ), 3),
-            queue_utils:assert_number_of_replicas(
-                Config, Server0, <<"/">>, AQ, 3),
+    wait_for_messages_ready([Server0], ra_name(AQ), 3),
+    queue_utils:assert_number_of_replicas(
+        Config, Server0, <<"/">>, AQ, 3),
 
-            %% match all queues on shrink
+    %% match all queues on shrink
 
-            ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
-                                         force_all_queues_shrink_member_to_current_member, []),
+    ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
+                                 force_all_queues_shrink_member_to_current_member, []),
 
-            [begin
-                 RaName = ra_name(Q),
-                 wait_for_messages_ready([Server0], RaName, 3),
-                 queue_utils:assert_number_of_replicas(
-                   Config, Server0, <<"/">>, Q, 1)
-             end || Q <- QQs],
+    [begin
+         RaName = ra_name(Q),
+         wait_for_messages_ready([Server0], RaName, 3),
+         queue_utils:assert_number_of_replicas(
+           Config, Server0, <<"/">>, Q, 1)
+     end || Q <- QQs],
 
-            %% Important: make sure to grow back one node at a time, waiting for the new member
-            %% to become a voter before adding more.
-            rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
-            [?awaitMatch(true,
-                         rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
-                                  [ra_name(Q), [Server0, Server1]]),
-                         ?DEFAULT_AWAIT) || Q <- QQs],
-            rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
+    %% Important: make sure to grow back one node at a time, waiting for the new member
+    %% to become a voter before adding more.
+    rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
+    [?awaitMatch(true,
+                 rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
+                          [ra_name(Q), [Server0, Server1]]),
+                 ?DEFAULT_AWAIT) || Q <- QQs],
+    rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
 
-            [begin
-                 RaName = ra_name(Q),
-                 wait_for_messages_ready([Server0], RaName, 3),
-                 queue_utils:assert_number_of_replicas(
-                   Config, Server0, <<"/">>, Q, 3)
-             end || Q <- QQs]
-    end.
+    [begin
+         RaName = ra_name(Q),
+         wait_for_messages_ready([Server0], RaName, 3),
+         queue_utils:assert_number_of_replicas(
+           Config, Server0, <<"/">>, Q, 3)
+     end || Q <- QQs].
 
 force_vhost_queues_shrink_member_to_current_member(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "Should not run in mixed version environments"};
-        _ ->
-            [Server0, Server1, Server2] =
-                rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-            Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
-            QQ = ?config(queue_name, Config),
-            AQ = ?config(alt_queue_name, Config),
-            ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                         declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-            ?assertEqual({'queue.declare_ok', AQ, 0, 0},
-                         declare(Ch0, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    AQ = ?config(alt_queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                 declare(Ch0, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-            QQs = [QQ, AQ],
+    QQs = [QQ, AQ],
 
-            VHost1 = <<"/">>,
-            VHost2 = <<"another-vhost">>,
-            VHosts = [VHost1, VHost2],
+    VHost1 = <<"/">>,
+    VHost2 = <<"another-vhost">>,
+    VHosts = [VHost1, VHost2],
 
-            User = ?config(rmq_username, Config),
-            ok = rabbit_ct_broker_helpers:add_vhost(Config, Server0, VHost2, User),
-            ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost2),
-            Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server0, VHost2),
-            {ok, Ch1} = amqp_connection:open_channel(Conn1),
-                ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                         declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-            ?assertEqual({'queue.declare_ok', AQ, 0, 0},
-                         declare(Ch1, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    User = ?config(rmq_username, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Server0, VHost2, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost2),
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server0, VHost2),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                 declare(Ch1, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-            [rabbit_ct_client_helpers:publish(Ch, Q, 3) || Q <- QQs, Ch <- [Ch0, Ch1]],
+    [rabbit_ct_client_helpers:publish(Ch, Q, 3) || Q <- QQs, Ch <- [Ch0, Ch1]],
 
-            [begin
-                QQRes = rabbit_misc:r(VHost, queue, Q),
-                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
-                wait_for_messages_ready([Server0], RaName, 3),
-                 queue_utils:assert_number_of_replicas(
-                   Config, Server0, VHost, Q, 3)
-            end || Q <- QQs, VHost <- VHosts],
+    [begin
+        QQRes = rabbit_misc:r(VHost, queue, Q),
+        {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+        wait_for_messages_ready([Server0], RaName, 3),
+         queue_utils:assert_number_of_replicas(
+           Config, Server0, VHost, Q, 3)
+    end || Q <- QQs, VHost <- VHosts],
 
-            % match QQ only in VHost2 on shrink
-            QQSpec = <<QQ/binary, "$">>,
-            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-                force_vhost_queues_shrink_member_to_current_member, [VHost2, QQSpec]),
+    % match QQ only in VHost2 on shrink
+    QQSpec = <<QQ/binary, "$">>,
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_vhost_queues_shrink_member_to_current_member, [VHost2, QQSpec]),
 
-            [begin
-                QQRes = rabbit_misc:r(VHost2, queue, Q),
-                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
-                wait_for_messages_ready([Server0], RaName, 3),
-                case Q of
-                    QQ ->
-                        queue_utils:assert_number_of_replicas(
-                          Config, Server0, VHost2, Q, 1);
-                    AQ ->
-                        queue_utils:assert_number_of_replicas(
-                          Config, Server0, VHost2, Q, 3)
-                end
-            end || Q <- QQs],
-
-            [begin
-                QQRes = rabbit_misc:r(VHost1, queue, Q),
-                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
-                wait_for_messages_ready([Server0], RaName, 3),
-                 queue_utils:assert_number_of_replicas(
-                   Config, Server0, VHost1, Q, 3)
-            end || Q <- QQs],
-
-            % match all queues in VHost2 on shrink
-            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-                force_vhost_queues_shrink_member_to_current_member, [VHost2]),
-
-            [begin
-                QQRes = rabbit_misc:r(VHost, queue, Q),
-                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
-                wait_for_messages_ready([Server0], RaName, 3),
-                case VHost of
-                    VHost1 ->
-                        queue_utils:assert_number_of_replicas(
-                          Config, Server0, VHost, Q, 3);
-                    VHost2 ->
-                        queue_utils:assert_number_of_replicas(
-                          Config, Server0, VHost, Q, 1)
-                end
-            end || Q <- QQs, VHost <- VHosts],
-
-            %% Important: make sure to grow back one node at a time, waiting for the new member
-            %% to become a voter before adding more (in this case, for VHost2 specifically).
-            rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, VHost2, <<".*">>, all]),
-            [begin
-                 QQRes = rabbit_misc:r(VHost2, queue, Q),
-                 {ok, RN} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
-                 ?awaitMatch(true,
-                             rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
-                                      [RN, [Server0, Server1]]),
-                             ?DEFAULT_AWAIT)
-             end || Q <- QQs],
-            rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, VHost2, <<".*">>, all]),
-
-            [begin
-                QQRes = rabbit_misc:r(VHost, queue, Q),
-                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
-                wait_for_messages_ready([Server0], RaName, 3),
+    [begin
+        QQRes = rabbit_misc:r(VHost2, queue, Q),
+        {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+        wait_for_messages_ready([Server0], RaName, 3),
+        case Q of
+            QQ ->
                 queue_utils:assert_number_of_replicas(
-                  Config, Server0, VHost, Q, 3)
-            end || Q <- QQs, VHost <- VHosts]
-    end.
+                  Config, Server0, VHost2, Q, 1);
+            AQ ->
+                queue_utils:assert_number_of_replicas(
+                  Config, Server0, VHost2, Q, 3)
+        end
+    end || Q <- QQs],
+
+    [begin
+        QQRes = rabbit_misc:r(VHost1, queue, Q),
+        {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+        wait_for_messages_ready([Server0], RaName, 3),
+         queue_utils:assert_number_of_replicas(
+           Config, Server0, VHost1, Q, 3)
+    end || Q <- QQs],
+
+    % match all queues in VHost2 on shrink
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_vhost_queues_shrink_member_to_current_member, [VHost2]),
+
+    [begin
+        QQRes = rabbit_misc:r(VHost, queue, Q),
+        {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+        wait_for_messages_ready([Server0], RaName, 3),
+        case VHost of
+            VHost1 ->
+                queue_utils:assert_number_of_replicas(
+                  Config, Server0, VHost, Q, 3);
+            VHost2 ->
+                queue_utils:assert_number_of_replicas(
+                  Config, Server0, VHost, Q, 1)
+        end
+    end || Q <- QQs, VHost <- VHosts],
+
+    %% Important: make sure to grow back one node at a time, waiting for the new member
+    %% to become a voter before adding more (in this case, for VHost2 specifically).
+    rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, VHost2, <<".*">>, all]),
+    [begin
+         QQRes = rabbit_misc:r(VHost2, queue, Q),
+         {ok, RN} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+         ?awaitMatch(true,
+                     rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
+                              [RN, [Server0, Server1]]),
+                     ?DEFAULT_AWAIT)
+     end || Q <- QQs],
+    rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, VHost2, <<".*">>, all]),
+
+    [begin
+        QQRes = rabbit_misc:r(VHost, queue, Q),
+        {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+        wait_for_messages_ready([Server0], RaName, 3),
+        queue_utils:assert_number_of_replicas(
+          Config, Server0, VHost, Q, 3)
+    end || Q <- QQs, VHost <- VHosts].
 
 force_checkpoint_on_queue(Config) ->
     check_quorum_queues_v8_compat(Config),
@@ -1969,142 +1903,137 @@ recovery_checkpoint(Config) ->
 % that affects such queue, when the process is made available again, the policy
 % will eventually get applied. (https://github.com/rabbitmq/rabbitmq-server/issues/7863)
 policy_repair(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "Should not run in mixed version environments"};
-        _ ->
-            [Server0, _Server1, _Server2] = Servers =
-                rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-            Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
-            #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    [Server0, _Server1, _Server2] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
 
-            QQ = ?config(queue_name, Config),
-            ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                         declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-            RaName = ra_name(QQ),
-            ExpectedMaxLength1 = 10,
-            Priority1 = 1,
-            ok = rabbit_ct_broker_helpers:rpc(
-                Config,
-                0,
-                rabbit_policy,
-                set,
-                [
-                    <<"/">>,
-                    <<QQ/binary, "_1">>,
-                    QQ,
-                    [{<<"max-length">>, ExpectedMaxLength1}, {<<"overflow">>, <<"reject-publish">>}],
-                    Priority1,
-                    <<"quorum_queues">>,
-                    <<"acting-user">>
-                ]),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    RaName = ra_name(QQ),
+    ExpectedMaxLength1 = 10,
+    Priority1 = 1,
+    ok = rabbit_ct_broker_helpers:rpc(
+        Config,
+        0,
+        rabbit_policy,
+        set,
+        [
+            <<"/">>,
+            <<QQ/binary, "_1">>,
+            QQ,
+            [{<<"max-length">>, ExpectedMaxLength1}, {<<"overflow">>, <<"reject-publish">>}],
+            Priority1,
+            <<"quorum_queues">>,
+            <<"acting-user">>
+        ]),
 
-            % Wait for the policy to apply
-            QueryFun = fun rabbit_fifo:overview/1,
-            ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength1}}}, _},
-                        rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
-                        ?DEFAULT_AWAIT),
+    % Wait for the policy to apply
+    QueryFun = fun rabbit_fifo:overview/1,
+    ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength1}}}, _},
+                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
+                ?DEFAULT_AWAIT),
 
-            % Check the policy has been applied
-            %   Insert MaxLength1 + some messages but after consuming all messages only
-            %   MaxLength1 are retrieved.
-            %   Checking twice to ensure consistency
-            publish_confirm_many(Ch, QQ, ExpectedMaxLength1 + 1),
-            % +1 because QQs let one pass
-            wait_for_messages_ready(Servers, RaName, ExpectedMaxLength1 + 1),
-            fail = publish_confirm(Ch, QQ),
-            fail = publish_confirm(Ch, QQ),
-            consume_all(Ch, QQ),
+    % Check the policy has been applied
+    %   Insert MaxLength1 + some messages but after consuming all messages only
+    %   MaxLength1 are retrieved.
+    %   Checking twice to ensure consistency
+    publish_confirm_many(Ch, QQ, ExpectedMaxLength1 + 1),
+    % +1 because QQs let one pass
+    wait_for_messages_ready(Servers, RaName, ExpectedMaxLength1 + 1),
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
+    consume_all(Ch, QQ),
 
-            % Set higher priority policy, allowing more messages
-            ExpectedMaxLength2 = 20,
-            Priority2 = 2,
-            ok = rabbit_ct_broker_helpers:rpc(
-                Config,
-                0,
-                rabbit_policy,
-                set,
-                [
-                    <<"/">>,
-                    <<QQ/binary, "_2">>,
-                    QQ,
-                    [{<<"max-length">>, ExpectedMaxLength2}, {<<"overflow">>, <<"reject-publish">>}],
-                    Priority2,
-                    <<"quorum_queues">>,
-                    <<"acting-user">>
-                ]),
+    % Set higher priority policy, allowing more messages
+    ExpectedMaxLength2 = 20,
+    Priority2 = 2,
+    ok = rabbit_ct_broker_helpers:rpc(
+        Config,
+        0,
+        rabbit_policy,
+        set,
+        [
+            <<"/">>,
+            <<QQ/binary, "_2">>,
+            QQ,
+            [{<<"max-length">>, ExpectedMaxLength2}, {<<"overflow">>, <<"reject-publish">>}],
+            Priority2,
+            <<"quorum_queues">>,
+            <<"acting-user">>
+        ]),
 
-            % Wait for the policy to apply
-            ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength2}}}, _},
-                        rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
-                        ?DEFAULT_AWAIT),
+    % Wait for the policy to apply
+    ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength2}}}, _},
+                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
+                ?DEFAULT_AWAIT),
 
-            % Check the policy has been applied
-            %   Insert MaxLength2 + some messages but after consuming all messages only
-            %   MaxLength2 are retrieved.
-            %   Checking twice to ensure consistency.
-            % + 1 because QQs let one pass
-            publish_confirm_many(Ch, QQ, ExpectedMaxLength2 + 1),
-            wait_for_messages_ready(Servers, RaName, ExpectedMaxLength2 + 1),
-            fail = publish_confirm(Ch, QQ),
-            fail = publish_confirm(Ch, QQ),
-            consume_all(Ch, QQ),
+    % Check the policy has been applied
+    %   Insert MaxLength2 + some messages but after consuming all messages only
+    %   MaxLength2 are retrieved.
+    %   Checking twice to ensure consistency.
+    % + 1 because QQs let one pass
+    publish_confirm_many(Ch, QQ, ExpectedMaxLength2 + 1),
+    wait_for_messages_ready(Servers, RaName, ExpectedMaxLength2 + 1),
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
+    consume_all(Ch, QQ),
 
-            % Ensure the queue process is unavailable
-            [ok = ra:stop_server(quorum_queues, {RaName, Srv}) || Srv <- Servers],
+    % Ensure the queue process is unavailable
+    [ok = ra:stop_server(quorum_queues, {RaName, Srv}) || Srv <- Servers],
 
-            % Add policy with higher priority, allowing even more messages.
-            ExpectedMaxLength3 = 30,
-            Priority3 = 3,
-            ok = rabbit_ct_broker_helpers:rpc(
-                Config,
-                0,
-                rabbit_policy,
-                set,
-                [
-                    <<"/">>,
-                    <<QQ/binary, "_3">>,
-                    QQ,
-                    [{<<"max-length">>, ExpectedMaxLength3}, {<<"overflow">>, <<"reject-publish">>}],
-                    Priority3,
-                    <<"quorum_queues">>,
-                    <<"acting-user">>
-                ]),
+    % Add policy with higher priority, allowing even more messages.
+    ExpectedMaxLength3 = 30,
+    Priority3 = 3,
+    ok = rabbit_ct_broker_helpers:rpc(
+        Config,
+        0,
+        rabbit_policy,
+        set,
+        [
+            <<"/">>,
+            <<QQ/binary, "_3">>,
+            QQ,
+            [{<<"max-length">>, ExpectedMaxLength3}, {<<"overflow">>, <<"reject-publish">>}],
+            Priority3,
+            <<"quorum_queues">>,
+            <<"acting-user">>
+        ]),
 
-            % Restart the queue process.
-            [ok = ra:restart_server(quorum_queues, {RaName, Srv}) || Srv <- Servers],
+    % Restart the queue process.
+    [ok = ra:restart_server(quorum_queues, {RaName, Srv}) || Srv <- Servers],
 
-            % Wait for the queue to be available again.
-            lists:foreach(fun(Srv) ->
-                rabbit_ct_helpers:await_condition(
-                    fun () ->
-                        is_pid(
-                            rabbit_ct_broker_helpers:rpc(
-                                Config,
-                                Srv,
-                                erlang,
-                                whereis,
-                                [RaName]))
-                    end)
-                end,
-                Servers),
+    % Wait for the queue to be available again.
+    lists:foreach(fun(Srv) ->
+        rabbit_ct_helpers:await_condition(
+            fun () ->
+                is_pid(
+                    rabbit_ct_broker_helpers:rpc(
+                        Config,
+                        Srv,
+                        erlang,
+                        whereis,
+                        [RaName]))
+            end)
+        end,
+        Servers),
 
-            % Wait for the policy to apply
-            ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength3}}}, _},
-                        rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
-                        ?DEFAULT_AWAIT),
+    % Wait for the policy to apply
+    ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength3}}}, _},
+                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
+                ?DEFAULT_AWAIT),
 
-            % Check the policy has been applied
-            %   Insert MaxLength3 + some messages but after consuming all messages only
-            %   MaxLength3 are retrieved.
-            %   Checking twice to ensure consistency.
-            % + 1 because QQs let one pass
-            publish_confirm_many(Ch, QQ, ExpectedMaxLength3 + 1),
-            wait_for_messages_ready(Servers, RaName, ExpectedMaxLength3 + 1),
-            fail = publish_confirm(Ch, QQ),
-            fail = publish_confirm(Ch, QQ),
-            consume_all(Ch, QQ)
-    end.
+    % Check the policy has been applied
+    %   Insert MaxLength3 + some messages but after consuming all messages only
+    %   MaxLength3 are retrieved.
+    %   Checking twice to ensure consistency.
+    % + 1 because QQs let one pass
+    publish_confirm_many(Ch, QQ, ExpectedMaxLength3 + 1),
+    wait_for_messages_ready(Servers, RaName, ExpectedMaxLength3 + 1),
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
+    consume_all(Ch, QQ).
 
 subscribe_from_each(Config) ->
 
@@ -2566,14 +2495,6 @@ delete_members(Config) ->
     ok.
 
 rebalance(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "rebalance test isn't mixed version compatible"};
-        false ->
-            rebalance0(Config)
-    end.
-
-rebalance0(Config) ->
     [Server0, _, _] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -3311,14 +3232,6 @@ leadership_takeover(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0).
 
 metrics_cleanup_on_leadership_takeover(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "metrics_cleanup_on_leadership_takeover test isn't mixed version compatible"};
-        false ->
-            metrics_cleanup_on_leadership_takeover0(Config)
-    end.
-
-metrics_cleanup_on_leadership_takeover0(Config) ->
     %% Queue core metrics should be deleted from a node once the leadership is transferred
     %% to another follower
     [Server, _, _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -3394,14 +3307,6 @@ metrics_cleanup_on_leader_crash(Config) ->
 
 
 delete_declare(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "delete_declare isn't mixed version reliable"};
-        false ->
-            delete_declare0(Config)
-    end.
-
-delete_declare0(Config) ->
     %% Delete cluster in ra is asynchronous, we have to ensure that we handle that in rmq
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config,
                                                                    nodename),
@@ -3606,19 +3511,11 @@ declare_during_node_down(Config) ->
     publish(Ch, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
 
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% stop here if mixexd
-            ok;
-        false ->
-            %% further assertions that we can consume from the newly
-            %% started member
-            SubCh = rabbit_ct_client_helpers:open_channel(Config, DownServer),
-            subscribe(SubCh, QQ, false),
-            receive_and_ack(Ch),
-            wait_for_messages_ready(Servers, RaName, 0),
-            ok
-    end.
+    SubCh = rabbit_ct_client_helpers:open_channel(Config, DownServer),
+    subscribe(SubCh, QQ, false),
+    receive_and_ack(Ch),
+    wait_for_messages_ready(Servers, RaName, 0),
+    ok.
 
 projection_timeout_cleanup(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -6085,14 +5982,6 @@ replica_states(Config) ->
 
 % Testcase motivated by : https://github.com/rabbitmq/rabbitmq-server/discussions/13131
 restart_after_queue_reincarnation(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "queue reincarnation protection can't work on mixed mode"};
-        false ->
-            restart_after_queue_reincarnation_(Config)
-    end.
-
-restart_after_queue_reincarnation_(Config) ->
     [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     QName = <<"QQ">>,
@@ -6174,12 +6063,7 @@ restart_after_queue_reincarnation_(Config) ->
 
 % Testcase motivated by : https://github.com/rabbitmq/rabbitmq-server/issues/12366
 no_messages_after_queue_reincarnation(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "queue reincarnation protection can't work on mixed mode"};
-        false ->
-            no_messages_after_queue_reincarnation_(Config)
-    end.
+    no_messages_after_queue_reincarnation_(Config).
 
 no_messages_after_queue_reincarnation_(Config) ->
     [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

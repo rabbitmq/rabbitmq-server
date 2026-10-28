@@ -115,18 +115,26 @@ groups() ->
                     test_resolve_offset_spec, node_endpoints_fallback]}].
 
 init_per_suite(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "mixed version clusters are not supported"};
-        _ ->
-            rabbit_ct_helpers:log_environment(),
-            Config
-    end.
+    rabbit_ct_helpers:log_environment(),
+    Config.
 
 end_per_suite(Config) ->
     Config.
 
 init_per_group(Group, Config)
+  when Group == single_node orelse
+       Group == single_node_1 orelse
+       Group == single_node_initial_frame_max ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "single node groups do not exercise mixed versions"};
+        false ->
+            init_per_group1(Group, Config)
+    end;
+init_per_group(Group, Config) ->
+    init_per_group1(Group, Config).
+
+init_per_group1(Group, Config)
   when Group == single_node orelse Group == single_node_1 ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{rmq_nodes_clustered, false},
@@ -165,7 +173,7 @@ init_per_group(Group, Config)
        end]
       ++ ExtraSetupSteps
       ++ rabbit_ct_broker_helpers:setup_steps());
-init_per_group(single_node_initial_frame_max, Config) ->
+init_per_group1(single_node_initial_frame_max, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{rmq_nodes_clustered, false},
                          {rabbitmq_ct_tls_verify, verify_none},
@@ -180,7 +188,7 @@ init_per_group(single_node_initial_frame_max, Config) ->
                                                   ?CUSTOM_INITIAL_FRAME_MAX}]})
        end]
       ++ rabbit_ct_broker_helpers:setup_steps());
-init_per_group(cluster = Group, Config) ->
+init_per_group1(cluster = Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{rmq_nodes_clustered, true},
                          {rmq_nodes_count, 3},
@@ -198,7 +206,7 @@ init_per_group(cluster = Group, Config) ->
                                                   1000}]})
        end]
       ++ rabbit_ct_broker_helpers:setup_steps());
-init_per_group(_, Config) ->
+init_per_group1(_, Config) ->
     rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_group(java, Config) ->

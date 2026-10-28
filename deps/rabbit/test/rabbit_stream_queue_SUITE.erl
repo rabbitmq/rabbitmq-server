@@ -188,13 +188,6 @@ init_per_suite(Config0) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(cluster_size_3_parallel = Group, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "not mixed versions compatible"};
-        _ ->
-            init_per_group1(Group, Config)
-    end;
 init_per_group(cluster_size_3_initial_offset = Group, Config) ->
     case init_per_group1(Group, Config) of
         {skip, _} = Skip ->
@@ -208,6 +201,18 @@ init_per_group(cluster_size_3_initial_offset = Group, Config) ->
                     _ = end_per_group(Group, Config1),
                     Skip
             end
+    end;
+init_per_group(Group, Config)
+  when Group =:= single_node orelse
+       Group =:= single_node_parallel_1 orelse
+       Group =:= single_node_parallel_2 orelse
+       Group =:= single_node_parallel_3 orelse
+       Group =:= single_node_parallel_4 ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "single node groups do not exercise mixed versions"};
+        false ->
+            init_per_group1(Group, Config)
     end;
 init_per_group(Group, Config) ->
     init_per_group1(Group, Config).
@@ -303,43 +308,7 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(TestCase, Config)
-  when TestCase == receive_basic_cancel_on_queue_deletion
-       orelse TestCase == keep_consuming_on_leader_restart ->
-    ClusterSize = ?config(rmq_nodes_count, Config),
-    case {rabbit_ct_helpers:is_mixed_versions(), ClusterSize} of
-        {true, 2} ->
-            %% These 2 tests fail because the leader can be the lower version,
-            %% which does not have the fix.
-            {skip, "not tested in mixed-version cluster and cluster size = 2"};
-        _ ->
-            init_test_case(TestCase, Config)
-    end;
-init_per_testcase(TestCase, Config)
-  when TestCase == replica_recovery
-       orelse TestCase == leader_failover
-       orelse TestCase == leader_failover_dedupe
-       orelse TestCase == recover_after_leader_and_coordinator_kill
-       orelse TestCase == max_age_policy ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% not supported because of machine version difference
-            {skip, "mixed version clusters are not supported"};
-        _ ->
-            init_test_case(TestCase, Config)
-    end;
-init_per_testcase(TestCase, Config)
-  when TestCase == filtering ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "filtering should not be used in mixed-version clusters"};
-        _ ->
-            init_test_case(TestCase, Config)
-    end;
 init_per_testcase(TestCase, Config) ->
-    init_test_case(TestCase, Config).
-
-init_test_case(TestCase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, TestCase),
     Q = rabbit_data_coercion:to_binary(TestCase),
     Config2 = rabbit_ct_helpers:set_config(Config1, [{queue_name, Q}]),
