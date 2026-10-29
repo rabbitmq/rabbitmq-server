@@ -30,6 +30,7 @@ all_tests() ->
      amqpl_defaults,
      amqpl_compat,
      amqpl_table_x_header,
+     amqpl_stream_filter_value,
      amqpl_table_x_header_array_of_tbls,
      amqpl_death_records,
      is_death_cycle,
@@ -75,6 +76,21 @@ all_tests() ->
 %%%===================================================================
 %%% Test cases
 %%%===================================================================
+
+amqpl_stream_filter_value(_Config) ->
+    StreamMessage = fun(Headers) ->
+                            Content = #content{properties = #'P_basic'{headers = Headers},
+                                               payload_fragments_rev = [<<"data">>]},
+                            rabbit_stream_queue:stream_message(
+                              mc:init(mc_amqpl, Content, annotations()))
+                    end,
+    ?assertMatch({<<"apple">>, _},
+                 StreamMessage([{<<"x-stream-filter-value">>, longstr, <<"apple">>}])),
+    ?assertNotMatch({_, _},
+                    StreamMessage([{<<"x-stream-filter-value">>, long, 42}])),
+    ?assertNotMatch({_, _},
+                    StreamMessage([{<<"x-stream-filter-value">>, bool, true}])),
+    ok.
 
 amqpl_defaults(_Config) ->
     Props = #'P_basic'{},
