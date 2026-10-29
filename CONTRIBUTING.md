@@ -95,6 +95,17 @@ SECONDARY_DIST=rabbitmq_server-4.1.1 make -C deps/rabbit ct-quorum_queue
 Odd-numbered nodes (eg. 1 and 3) will be started using the main repository, while even-numbered nodes (eg. node 2)
 will run the older version.
 
+To run the older version on a different Erlang/OTP release, point `SECONDARY_ERL` at its `erl` executable.
+When the older release is OTP 27 and the main repository is built with OTP 28 or later, build with
+`ERL_COMPILER_OPTIONS` set as below, so that OTP 27 nodes can load the test modules:
+
+```shell
+export ERL_COMPILER_OPTIONS='[r27]'
+SECONDARY_DIST=rabbitmq_server-4.4.0 SECONDARY_ERL=/path/to/otp-27/bin/erl make -C deps/rabbit ct-quorum_queue
+```
+
+The build must start from a clean tree, since existing BEAM files are not recompiled when compiler options change.
+
 ## Running Single Nodes from Source
 
 ``` shell
