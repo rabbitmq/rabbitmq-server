@@ -44,9 +44,6 @@ handle_event(#event{type = channel_created, props = Details}, State) ->
 handle_event(#event{type = channel_closed, props = Details}, State) ->
     ok = rabbit_channel_tracking:update_tracked({channel_closed, Details}),
     {ok, State};
-handle_event(#event{type = connection_closed, props = Details}, State) ->
-    ok = rabbit_channel_tracking:update_tracked({connection_closed, Details}),
-    {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
     ok = rabbit_channel_tracking:update_tracked({user_deleted, Details}),
     {ok, State};

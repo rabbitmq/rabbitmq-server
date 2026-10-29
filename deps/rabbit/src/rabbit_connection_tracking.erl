@@ -107,8 +107,14 @@ handle_cast({connection_closed, Details}) ->
           %% [{name,<<"127.0.0.1:64078 -> 127.0.0.1:5672">>},
           %%  {pid,<0.1774.0>},
           %%  {node, rabbit@hostname}]
-          unregister_tracked(
-              rabbit_tracking:id(ThisNode, pget(name, Details)));
+          case take_tracked(rabbit_tracking:id(ThisNode, pget(name, Details))) of
+              %% Avoid scanning the channels table when possible
+              [#tracked_connection{type = Type, protocol = Protocol}]
+                when Type =:= direct orelse Protocol =:= {0, 9, 1} ->
+                  rabbit_channel_tracking:update_tracked({connection_closed, Details});
+              _ ->
+                  ok
+          end;
       _OtherNode ->
         %% ignore
         ok
@@ -160,11 +166,17 @@ register_tracked(#tracked_connection{username = Username, vhost = VHost, id = Co
 
 -spec unregister_tracked(rabbit_types:tracked_connection_id()) -> ok.
 unregister_tracked(ConnId = {Node, _Name}) when Node =:= node() ->
+    _ = take_tracked(ConnId),
+    ok.
+
+take_tracked(ConnId) ->
     case ets:take(?TRACKED_CONNECTION_TABLE, ConnId) of
-        []     -> ok;
-        [#tracked_connection{vhost = VHost, username = Username}] ->
+        [] ->
+            [];
+        [#tracked_connection{vhost = VHost, username = Username}] = Conns ->
             decrement_counter(?TRACKED_CONNECTION_TABLE_PER_USER, Username),
-            decrement_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VHost)
+            decrement_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VHost),
+            Conns
     end.
 
 %% The counter does not exist any more if the user or the vhost has been deleted.
