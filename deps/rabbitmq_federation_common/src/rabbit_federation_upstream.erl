@@ -147,7 +147,7 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               queue_name      = bget(queue,             US, U, name(XorQ)),
               consumer_tag    = bget('consumer-tag',    US, U, <<"federation-link-", Name/binary>>),
               prefetch_count  = bget('prefetch-count',  US, U, ?DEF_PREFETCH),
-              reconnect_delay = bget('reconnect-delay', US, U, 5),
+              reconnect_delay = max(0, bget('reconnect-delay', US, U, 5)),
               max_hops        = max_hops(bget('max-hops', US, U, ?DEF_MAX_HOPS)),
               expires         = bget(expires,           US, U, none),
               message_ttl     = bget('message-ttl',     US, U, none),
