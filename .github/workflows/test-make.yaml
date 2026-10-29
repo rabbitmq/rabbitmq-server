@@ -13,6 +13,12 @@ on:
     - rabbitmq-components.mk
     - .github/workflows/test-make.yaml
   pull_request:
+  workflow_dispatch:
+    inputs:
+      secondary_erlang_version:
+        description: 'Mixed clusters: OTP version of the previous version nodes'
+        type: string
+        default: '27'
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -85,6 +91,7 @@ jobs:
       erlang_version: ${{ matrix.erlang_version }}
       elixir_version: ${{ matrix.elixir_version }}
       mixed_clusters: true
+      secondary_erlang_version: ${{ inputs.secondary_erlang_version }}
 
   type-check:
     name: Type check

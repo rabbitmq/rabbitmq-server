@@ -768,6 +768,10 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         true ->
             PeerEnv3
     end,
+    Erl = case secondary_erl(Config, UseSecondaryDist) of
+              undefined    -> os:find_executable("erl");
+              SecondaryErl -> SecondaryErl
+          end,
     %% Start the peer node.
     %%
     %% `wait_boot' is set explicitly because the 15-second default is too
@@ -780,7 +784,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         longnames => false,
         host => HostName1,
         connection => standard_io,
-        exec => os:find_executable("erl"),
+        exec => Erl,
         args => PeerArgs,
         env => PeerEnv,
         wait_boot => 60_000}),
@@ -818,6 +822,24 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         %% @todo Get rid of {skip,_} returns.
         peer:stop(PeerPid),
         {skip, {Class, Error}}
+    end.
+
+secondary_erl(Config, true) ->
+    case ?config(secondary_erl, Config) of
+        SecondaryErl when is_list(SecondaryErl) -> SecondaryErl;
+        _                                       -> undefined
+    end;
+secondary_erl(_Config, false) ->
+    undefined.
+
+secondary_erl_path_env(Config, UseSecondaryDist) ->
+    case secondary_erl(Config, UseSecondaryDist) of
+        undefined ->
+            [];
+        SecondaryErl ->
+            %% FIXME: `:` is the Unix `PATH` separator, so this probably does
+            %% not work on Windows.
+            [{"PATH", filename:dirname(SecondaryErl) ++ ":" ++ os:getenv("PATH")}]
     end.
 
 query_node(Config, NodeConfig) ->
@@ -1318,7 +1340,7 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
       {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"},
       {"RABBITMQ_FEATURE_FLAGS_FILE",
         ?config(enabled_feature_flags_list_file, NodeConfig)}
-    ],
+    ] ++ secondary_erl_path_env(Config, UseSecondaryDist),
     Cmd = [Rabbitmqctl, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}, {timeout, Timeout}]).
 
@@ -2232,7 +2254,7 @@ plugin_action(Config, Node, Args) ->
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
         ?config(enabled_plugins_file, NodeConfig)},
       {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
-    ],
+    ] ++ secondary_erl_path_env(Config, UseSecondaryDist),
     Cmd = [Rabbitmqplugins, "-n", Nodename | Args],
     {ok, _} = rabbit_ct_helpers:exec(Cmd, [{env, Env}]),
     ok.
