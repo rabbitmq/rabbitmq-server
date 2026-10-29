@@ -60,6 +60,8 @@ cluster_size_1_tests() ->
      client_set_max_packet_size_connack,
      client_set_max_packet_size_invalid,
      message_expiry,
+     message_expiry_limit,
+     message_expiry_limit_will,
      message_expiry_will_message,
      message_expiry_retained_message,
      session_expiry_classic_queue_disconnect_decrease,
@@ -338,6 +340,69 @@ message_expiry(Config) ->
     ok = emqtt:disconnect(Sub2),
     Sub3 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(Sub3).
+
+message_expiry_limit(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Ch, #'queue.bind'{queue = Q,
+                                            exchange = <<"amq.topic">>,
+                                            routing_key = Topic}),
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [1]} = emqtt:subscribe(Sub, Topic, qos1),
+    Pub = connect(<<"publisher">>, Config),
+    ok = emqtt:publish(Pub, Topic, #{'Message-Expiry-Interval' => 315_360_001},
+                       <<"m1">>, [{qos, 0}]),
+    {ok, _} = emqtt:publish(Pub, Topic, #{'Message-Expiry-Interval' => 16#FFFFFFFF},
+                            <<"m2">>, [{qos, 1}, {retain, true}]),
+    lists:foreach(
+      fun(Payload) ->
+              receive {publish, #{client_pid := Sub,
+                                  payload := Payload,
+                                  properties := #{'Message-Expiry-Interval' := MEI}}} ->
+                          assert_message_expiry_interval(315_360_000, MEI)
+              after ?TIMEOUT -> ct:fail({missing, Payload})
+              end,
+              ?assertMatch(
+                 {#'basic.get_ok'{},
+                  #amqp_msg{props = #'P_basic'{expiration = <<"315360000000">>},
+                            payload = Payload}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Q, no_ack = true}))
+      end, [<<"m1">>, <<"m2">>]),
+    RetainedSub = connect(<<"retained-subscriber">>, Config),
+    {ok, _, [1]} = emqtt:subscribe(RetainedSub, Topic, qos1),
+    receive {publish, #{client_pid := RetainedSub,
+                        retain := true,
+                        payload := <<"m2">>,
+                        properties := #{'Message-Expiry-Interval' := RetainedMEI}}} ->
+                assert_message_expiry_interval(315_360_000, RetainedMEI)
+    after ?TIMEOUT -> ct:fail(missing_retained)
+    end,
+    {ok, _} = emqtt:publish(Pub, Topic, #{}, <<>>, [{qos, 1}, {retain, true}]),
+    ok = emqtt:disconnect(Pub),
+    ok = emqtt:disconnect(Sub),
+    ok = emqtt:disconnect(RetainedSub),
+    ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
+
+message_expiry_limit_will(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [1]} = emqtt:subscribe(Sub, Topic, qos1),
+    Pub = connect(<<"publisher">>, Config,
+                  [{will_topic, Topic},
+                   {will_payload, <<"will">>},
+                   {will_qos, 1},
+                   {will_props, #{'Message-Expiry-Interval' => 16#FFFFFFFF}}]),
+    ok = emqtt:disconnect(Pub, ?RC_DISCONNECT_WITH_WILL),
+    receive {publish, #{client_pid := Sub,
+                        payload := <<"will">>,
+                        properties := #{'Message-Expiry-Interval' := MEI}}} ->
+                assert_message_expiry_interval(315_360_000, MEI)
+    after ?TIMEOUT -> ct:fail(missing_will)
+    end,
+    ok = emqtt:disconnect(Sub).
 
 message_expiry_will_message(Config) ->
     NumExpiredBefore = dead_letter_metric(messages_dead_lettered_expired_total, Config),
