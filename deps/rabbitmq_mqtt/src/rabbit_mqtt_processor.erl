@@ -38,6 +38,8 @@
 -define(QUEUE_TTL_KEY, <<"x-expires">>).
 -define(WILL_QUEUE_EXPIRY_MARGIN_MS, 1_000).
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
+%% The 10 year limit of `rabbit_misc:check_expiry/1`.
+-define(MAX_MESSAGE_EXPIRY_INTERVAL_SECS, 315_360_000).
 -define(FENCE_TIMEOUT, 30_000).
 
 -ifdef(TEST).
@@ -449,7 +451,7 @@ process_request(?PUBLISH,
                             dup = Dup,
                             packet_id  = PacketId,
                             payload = Payload,
-                            props = Props},
+                            props = cap_message_expiry(Props)},
             case EffectiveQos of
                 ?QOS_0 ->
                     publish_to_queues_with_checks(Msg, State);
@@ -1083,8 +1085,13 @@ make_will_msg(#mqtt_packet_connect{will_flag = true,
                    packet_id = Correlation,
                    topic = Topic,
                    dup = false,
-                   props = Props,
+                   props = cap_message_expiry(Props),
                    payload = Payload}}.
+
+cap_message_expiry(#{'Message-Expiry-Interval' := Seconds} = Props) ->
+    Props#{'Message-Expiry-Interval' := min(Seconds, ?MAX_MESSAGE_EXPIRY_INTERVAL_SECS)};
+cap_message_expiry(Props) ->
+    Props.
 
 check_vhost_exists(VHost, Username, PeerIp) ->
     case rabbit_vhost:exists(VHost) of
