@@ -45,6 +45,8 @@ client_set_max_packet_size_publish(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 client_set_max_packet_size_connack(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 client_set_max_packet_size_invalid(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 message_expiry(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+message_expiry_limit(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+message_expiry_limit_will(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 message_expiry_will_message(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 message_expiry_retained_message(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 session_expiry_classic_queue_disconnect_decrease(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
