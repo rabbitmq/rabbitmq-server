@@ -56,13 +56,25 @@
 
 %% Behaviour callbacks
 
+%% Connection events are handled in the calling `rabbit_event` process, so
+%% that `connection_closed` cannot be processed before `connection_created`.
 -spec update_tracked(term()) -> ok.
 
-update_tracked(Event) ->
-    spawn(?MODULE, handle_cast, [Event]),
-    ok.
+update_tracked({Type, _} = Event) ->
+    try
+        _ = case Type of
+                connection_created -> handle_cast(Event);
+                connection_closed -> handle_cast(Event);
+                _ -> spawn(?MODULE, handle_cast, [Event])
+            end,
+        ok
+    catch
+        Class:Reason ->
+            ?LOG_WARNING("Could not update connection tracking for ~ts event: ~tp:~tp",
+                         [Type, Class, Reason]),
+            ok
+    end.
 
-%% Asynchronously handle update events
 -spec handle_cast(term()) -> ok.
 
 handle_cast({connection_created, Details}) ->
@@ -148,12 +160,20 @@ register_tracked(#tracked_connection{username = Username, vhost = VHost, id = Co
 
 -spec unregister_tracked(rabbit_types:tracked_connection_id()) -> ok.
 unregister_tracked(ConnId = {Node, _Name}) when Node =:= node() ->
-    case ets:lookup(?TRACKED_CONNECTION_TABLE, ConnId) of
+    case ets:take(?TRACKED_CONNECTION_TABLE, ConnId) of
         []     -> ok;
         [#tracked_connection{vhost = VHost, username = Username}] ->
-            _ = ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_USER, Username, -1),
-            _ = ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VHost, -1),
-            ets:delete(?TRACKED_CONNECTION_TABLE, ConnId)
+            decrement_counter(?TRACKED_CONNECTION_TABLE_PER_USER, Username),
+            decrement_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VHost)
+    end.
+
+%% The counter does not exist any more if the user or the vhost has been deleted.
+decrement_counter(Table, Key) ->
+    try
+        _ = ets:update_counter(Table, Key, -1),
+        ok
+    catch
+        error:badarg -> ok
     end.
 
 -spec count_tracked_items_in({atom(), rabbit_types:vhost()}) -> non_neg_integer().
