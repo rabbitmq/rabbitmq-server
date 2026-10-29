@@ -33,6 +33,7 @@ groups() ->
           connection_tracking_event_churn,
           channel_tracking_event_churn,
           tracking_handlers_survive_errors,
+          channels_shut_down_only_for_amqpl_connections,
           amqpl_connection_churn,
           amqp_connection_churn
         ]}
@@ -204,6 +205,63 @@ tracking_handlers_survive_errors(Config) ->
     ?awaitMatch({1, [_]}, tracked_channels(Config, <<"guest">>), ?TIMEOUT),
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     ?awaitMatch({0, 0, []}, tracked_connections(Config, <<"/">>, <<"guest">>), ?TIMEOUT).
+
+channels_shut_down_only_for_amqpl_connections(Config) ->
+    [?assertEqual({Protocol, Expected}, {Protocol, channel_shut_down(Config, Protocol, Type)})
+     || {Protocol, Type, Expected} <- [{{0, 9, 1}, network, true},
+                                       {{'Direct', {0, 9, 1}}, direct, true},
+                                       {{1, 0}, network, false},
+                                       {{'MQTT', "3.1.1"}, network, false},
+                                       {{'STOMP', "1.2"}, network, false},
+                                       {<<"stream">>, network, false}]].
+
+channel_shut_down(Config, Protocol, Type) ->
+    Name = iolist_to_binary(io_lib:format("~0p", [Protocol])),
+    Node = node_name(Config),
+    ChPid = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, start_recorder, []),
+    ok = notify(Config, [{connection_created,
+                          [{name, Name}, {node, Node}, {pid, self()}, {vhost, Name},
+                           {user, Name}, {protocol, Protocol}, {type, Type}]},
+                         {channel_created,
+                          [{pid, ChPid}, {name, Name}, {vhost, Name},
+                           {connection, self()}, {user, Name}]},
+                         {connection_closed, [{name, Name}, {node, Node}, {pid, self()}]}]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, await_channel_tracking, []),
+    ShutDown = case Type =:= direct orelse Protocol =:= {0, 9, 1} of
+                   true ->
+                       ?awaitMatch([{'$gen_cast', terminate}], recorded(ChPid), ?TIMEOUT),
+                       true;
+                   false ->
+                       recorded(ChPid) =/= []
+               end,
+    ok = notify(Config, [{channel_closed, [{pid, ChPid}]}]),
+    ?awaitMatch({0, []}, tracked_channels(Config, Name), ?TIMEOUT),
+    ShutDown.
+
+await_channel_tracking() ->
+    ok = rabbit_event:sync_notify(?FUNCTION_NAME, []),
+    Busy = [P || P <- processes(),
+                 process_info(P, initial_call) =:=
+                     {initial_call, {rabbit_channel_tracking, handle_cast, 1}}],
+    case Busy of
+        [] -> ok;
+        _ -> timer:sleep(10), await_channel_tracking()
+    end.
+
+start_recorder() ->
+    spawn(fun() -> recorder([]) end).
+
+recorder(Msgs) ->
+    receive
+        {get, From} -> From ! {recorded, lists:reverse(Msgs)}, recorder(Msgs);
+        Msg -> recorder([Msg | Msgs])
+    end.
+
+recorded(Pid) ->
+    Pid ! {get, self()},
+    receive {recorded, Msgs} -> Msgs
+    after ?TIMEOUT -> ct:fail(recorder_timeout)
+    end.
 
 amqpl_connection_churn(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
