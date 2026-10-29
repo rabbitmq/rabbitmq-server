@@ -13,7 +13,7 @@
 all() ->
     [connect_reserved_flag, fixed_header_flags, publish_fixed_header_flags,
      connect_will_flags, connect_password_flag,
-     utf8_strings, publish_utf8_unchecked, topic_names_and_filters,
+     utf8_strings, publish_utf8, topic_names_and_filters,
      subscription_payloads, subscription_identifier_zero].
 
 init_per_suite(Config) ->
@@ -125,21 +125,18 @@ utf8_strings(_Config) ->
      || Vsn <- [4, 5]],
     ok.
 
-publish_utf8_unchecked(_Config) ->
+publish_utf8(_Config) ->
     [begin
          Encoded = <<(byte_size(Bad)):16, Bad/binary>>,
-         [?assertMatch({ok, #mqtt_packet{variable = #mqtt_packet_publish{topic_name = Bad}}, <<>>, Vsn},
+         [?assertThrow(invalid_utf8,
                        rabbit_mqtt_packet:parse(packet(16#30, <<Encoded/binary, (properties(Vsn))/binary>>), Vsn))
           || Vsn <- [4, 5]],
-         [begin
-              Body = <<0, 1, "a", (byte_size(Props)), Props/binary>>,
-              ?assertMatch({ok, #mqtt_packet{variable = #mqtt_packet_publish{props = Expected}}, <<>>, 5},
-                           rabbit_mqtt_packet:parse(packet(16#30, Body), 5))
-          end || {Props, Expected} <-
-                     [{<<16#03, Encoded/binary>>, #{'Content-Type' => Bad}},
-                      {<<16#08, Encoded/binary>>, #{'Response-Topic' => Bad}},
-                      {<<16#26, Encoded/binary, 0, 1, "v">>, #{'User-Property' => [{Bad, <<"v">>}]}},
-                      {<<16#26, 0, 1, "k", Encoded/binary>>, #{'User-Property' => [{<<"k">>, Bad}]}}]]
+         [?assertThrow(invalid_utf8,
+                       rabbit_mqtt_packet:parse(packet(16#30, <<0, 1, "a", (byte_size(Props)), Props/binary>>), 5))
+          || Props <- [<<16#03, Encoded/binary>>,
+                       <<16#08, Encoded/binary>>,
+                       <<16#26, Encoded/binary, 0, 1, "v">>,
+                       <<16#26, 0, 1, "k", Encoded/binary>>]]
      end || Bad <- invalid_utf8_strings()],
     ok.
 
