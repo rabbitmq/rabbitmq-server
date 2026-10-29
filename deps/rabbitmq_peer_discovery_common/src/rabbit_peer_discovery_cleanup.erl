@@ -312,10 +312,16 @@ maybe_remove_nodes([Node | Nodes], true) ->
 maybe_remove_nodes([Node | Nodes], false) ->
     ?LOG_WARNING(
        "Peer discovery: removing unknown node ~ts from the cluster", [Node]),
-    _ = rabbit_db_cluster:forget_member(Node, false),
-    ?LOG_WARNING(
-        "Peer discovery: removing all quorum queue replicas on node ~ts", [Node]),
-    _ = rabbit_quorum_queue:shrink_all(Node),
+    case rabbit_db_cluster:forget_member(Node, false) of
+        ok ->
+            ?LOG_WARNING(
+               "Peer discovery: removing all quorum queue replicas on node ~ts",
+               [Node]),
+            _ = rabbit_quorum_queue:shrink_all(Node);
+        {error, _} = Error ->
+            ?LOG_WARNING(
+               "Peer discovery: failed to remove node ~ts: ~tp", [Node, Error])
+    end,
     maybe_remove_nodes(Nodes, false).
 
 %%--------------------------------------------------------------------
