@@ -204,7 +204,7 @@ parse_subscriptions(<<Len:16, _:Len/binary, _:8, _/binary>>, _Id, 0, _Acc) ->
 parse_subscriptions(<<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2, Rest/binary>>,
                     Id, Remaining, Acc) ->
     Sub = #mqtt_subscription{
-             topic_filter = Topic,
+             topic_filter = binary:copy(Topic),
              options = #mqtt_subscription_opts{
                           qos = QoS,
                           no_local = int_to_bool(Nl),
