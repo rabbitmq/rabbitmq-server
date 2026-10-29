@@ -37,6 +37,7 @@ connect_reserved_flag(_Config) ->
               ?assertEqual({error, reserved_connect_flag}, rabbit_mqtt_packet:parse(Rest, Cont))
           end || Split <- lists:seq(1, byte_size(Packet) - 1)]
      end || Vsn <- [4, 5]],
+    ?assertMatch({ok, _, <<>>, 3}, parse_connect(3, 3, <<>>)),
     ok.
 
 fixed_header_flags(_Config) ->
@@ -74,6 +75,10 @@ connect_will_flags(_Config) ->
          [?assertMatch({ok, _, <<>>, Vsn}, parse_connect(Vsn, Flags, Will))
           || Flags <- [16#06, 16#0E, 16#26, 16#2E]]
      end || Vsn <- [4, 5]],
+    [?assertMatch({ok, _, <<>>, 3}, parse_connect(3, Flags, <<>>))
+     || Flags <- [16#0A, 16#12, 16#22, 16#32]],
+    [assert_connect_error(connect_packet(3, Flags, <<>>), invalid_will_flags)
+     || Flags <- [16#1A, 16#1E]],
     ok.
 
 connect_password_flag(_Config) ->
@@ -213,13 +218,18 @@ assert_connect_error(Packet, Reason) ->
     ok.
 
 connect_packet(Vsn, Flags, Payload) ->
+    Name = protocol_name(Vsn),
     Props = properties(Vsn),
-    Body = <<0, 4, "MQTT", Vsn, Flags, 0, 60, Props/binary,
+    Body = <<(byte_size(Name)):16, Name/binary, Vsn, Flags, 0, 60, Props/binary,
              0, 4, "test", Payload/binary>>,
     packet(16#10, Body).
+
+protocol_name(3) -> <<"MQIsdp">>;
+protocol_name(_) -> <<"MQTT">>.
 
 packet(Header, Body) ->
     <<Header, (byte_size(Body)), Body/binary>>.
 
+properties(3) -> <<>>;
 properties(4) -> <<>>;
 properties(5) -> <<0>>.
