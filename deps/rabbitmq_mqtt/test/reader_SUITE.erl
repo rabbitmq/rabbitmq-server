@@ -10,6 +10,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(rabbit_ct_broker_helpers, [rpc/4]).
 -import(rabbit_ct_helpers, [eventually/3]).
@@ -44,7 +45,8 @@ tests() ->
      classic_clean_session_true,
      classic_clean_session_false,
      event_authentication_failure,
-     rabbit_mqtt_qos0_queue_overflow
+     rabbit_mqtt_qos0_queue_overflow,
+     connection_churn
     ].
 
 suite() ->
@@ -346,3 +348,29 @@ num_received(Topic, Payload, N) ->
     after 3000 ->
               N
     end.
+
+connection_churn(Config) ->
+    User = <<"churn-", (atom_to_binary(?config(mqtt_version, Config)))/binary>>,
+    ok = rabbit_ct_broker_helpers:add_user(Config, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    Opts = [{username, User}, {password, User}],
+    Open = connect(<<User/binary, "-open">>, Config, Opts),
+    Workers = [spawn_monitor(
+                 fun() ->
+                         [begin
+                              ClientId = <<User/binary, "-", (integer_to_binary(W))/binary,
+                                           "-", (integer_to_binary(I))/binary>>,
+                              ok = emqtt:disconnect(connect(ClientId, Config, Opts))
+                          end || I <- lists:seq(1, 50)]
+                 end) || W <- lists:seq(1, 20)],
+    [receive {'DOWN', Ref, process, Pid, Reason} -> ?assertEqual(normal, Reason)
+     end || {Pid, Ref} <- Workers],
+    Tracked = fun() ->
+                      {rpc(Config, rabbit_connection_tracking, count_tracked_items_in,
+                           [{user, User}]),
+                       rpc(Config, rabbit_connection_tracking, list_of_user, [User])}
+              end,
+    ?awaitMatch({1, [_]}, Tracked(), 30_000),
+    ok = emqtt:disconnect(Open),
+    ?awaitMatch({0, []}, Tracked(), 30_000),
+    ok = rabbit_ct_broker_helpers:delete_user(Config, User).
