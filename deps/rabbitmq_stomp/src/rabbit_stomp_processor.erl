@@ -601,6 +601,7 @@ handle_frame('UNSUBSCRIBE', Frame, State) ->
     cancel_subscription(ConsumerTag, Frame, State);
 
 handle_frame('SEND', Frame, State) ->
+    check_expiration_header(Frame),
     maybe_with_transaction(
       Frame,
       fun(State0) ->
@@ -2336,6 +2337,20 @@ check_user_id(Message, User) ->
             ok;
         {refused, Reason, Args} ->
             rabbit_misc:protocol_error(access_refused, Reason, Args)
+    end.
+
+check_expiration_header(Frame) ->
+    case rabbit_stomp_frame:header(Frame, ?HEADER_EXPIRATION) of
+        not_found ->
+            ok;
+        {ok, Expiration} ->
+            case rabbit_basic:parse_expiration(Expiration) of
+                {ok, _} ->
+                    ok;
+                {error, Reason} ->
+                    rabbit_misc:precondition_failed(
+                      "invalid expiration '~ts': ~tp", [Expiration, Reason])
+            end
     end.
 
 check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},

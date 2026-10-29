@@ -89,6 +89,9 @@ groups() ->
         ack_auto_delivery_errors,
         reused_subscription_id_keeps_ack_mode,
         send,
+        send_with_expiration_limit,
+        send_with_invalid_expiration,
+        transaction_with_invalid_expiration,
         send_with_negative_priority,
         send_with_negative_priority_to_amqp_1_0_consumer,
         send_body_larger_than_max_message_size_is_rejected,
@@ -1784,6 +1787,67 @@ send(Config) ->
 
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
     ok.
+
+send_with_expiration_limit(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    #'queue.declare_ok'{queue = Queue} =
+        amqp_channel:call(Channel, #'queue.declare'{exclusive = true}),
+    rabbit_stomp_client:send(
+      Client, 'SEND', [{<<"destination">>, <<"/amq/queue/", Queue/binary>>},
+                       {<<"expiration">>, <<"315360000000">>},
+                       {<<"receipt">>, <<"expiry">>}], ["hello"]),
+    stomp_receive_receipt(Client, <<"expiry">>),
+    {#'basic.get_ok'{},
+     #amqp_msg{props = #'P_basic'{expiration = <<"315360000000">>}, payload = <<"hello">>}} =
+        amqp_channel:call(Channel, #'basic.get'{queue = Queue, no_ack = true}),
+    ok.
+
+send_with_invalid_expiration(Config) ->
+    send_with_invalid_expiration(Config, []).
+
+transaction_with_invalid_expiration(Config) ->
+    send_with_invalid_expiration(Config, [{<<"transaction">>, <<"expiry">>}]).
+
+send_with_invalid_expiration(Config, Transaction) ->
+    Channel = ?config(amqp_channel, Config),
+    Version = ?config(version, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    #'queue.declare_ok'{queue = Queue} =
+        amqp_channel:call(Channel, #'queue.declare'{exclusive = true}),
+    lists:foreach(
+      fun({Expiration, Reason}) ->
+              {ok, Client} = rabbit_stomp_client:connect(Version, Port),
+              case Transaction of
+                  [] -> ok;
+                  _ ->
+                      rabbit_stomp_client:send(Client, 'BEGIN', Transaction),
+                      rabbit_stomp_client:send(
+                        Client, 'SEND', [{<<"destination">>, <<"/amq/queue/", Queue/binary>>}
+                                         | Transaction], ["valid"])
+              end,
+              Before = queue_churn(Config),
+              rabbit_stomp_client:send(
+                Client, 'SEND', [{<<"destination">>, <<"/queue/invalid-expiration-queue">>},
+                                 {<<"reply-to">>, <<"/temp-queue/invalid-expiration-reply">>},
+                                 {<<"expiration">>, Expiration},
+                                 {<<"receipt">>, <<"send">>} | Transaction], ["hello"]),
+              {ok, {Sock, Buffered}, Headers, Body} = stomp_receive(Client, 'ERROR'),
+              ?assertEqual(<<"precondition_failed">>, maps:get(<<"message">>, Headers)),
+              Error = iolist_to_binary(lists:reverse(Body)),
+              ?assertNotEqual(nomatch, binary:match(
+                                        Error, <<"invalid expiration '", Expiration/binary, "': ">>)),
+              ?assertNotEqual(nomatch, binary:match(Error, Reason)),
+              ?assertEqual([], Buffered),
+              ?assertEqual({error, closed}, gen_tcp:recv(Sock, 0, 30_000)),
+              ?assertEqual({0, 0}, queue_churn_since(Before, Config)),
+              ?assertEqual(#'basic.get_empty'{},
+                           amqp_channel:call(Channel, #'basic.get'{queue = Queue, no_ack = true}))
+      end, [{<<"315360000001">>, <<"value_too_large">>},
+            {<<"-1">>, <<"value_negative">>},
+            {<<"abc">>, <<"no_integer">>},
+            {<<"10abc">>, <<"leftover_string">>},
+            {<<>>, <<"no_integer">>}]).
 
 send_with_negative_priority(Config) ->
     Channel = ?config(amqp_channel, Config),
