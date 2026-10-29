@@ -49,13 +49,8 @@ dep_credentials_obfuscation = hex 3.5.0
 dep_cuttlefish = hex 3.10.0
 dep_gen_batch_server = hex 0.10.0
 dep_gun = hex 2.7.0
-<<<<<<< HEAD
-dep_jose = hex 1.11.12
-dep_khepri = hex 0.18.4
-=======
 dep_jose = hex 1.11.13
-dep_khepri = hex 0.19.3
->>>>>>> bb76b66 (Bump jose to `1.11.13`)
+dep_khepri = hex 0.18.4
 dep_khepri_mnesia_migration = hex 0.8.1
 dep_meck = hex 1.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris v1.14.1
