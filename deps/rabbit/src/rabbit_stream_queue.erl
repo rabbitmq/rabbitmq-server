@@ -59,7 +59,8 @@
          tracking_status/2,
          get_overview/1]).
 
--export([check_max_segment_size_bytes/1]).
+-export([check_max_segment_size_bytes/1,
+         stream_message/1]).
 
 -export([policy_apply_to_name/0,
          stop/1,
@@ -629,7 +630,9 @@ stream_message(Msg) ->
         undefined ->
             MsgData;
         {utf8, Value} ->
-            {Value, MsgData}
+            {Value, MsgData};
+        _ ->
+            MsgData
     end.
 
 -spec dequeue(_, _, _, _, _, client()) -> no_return().
