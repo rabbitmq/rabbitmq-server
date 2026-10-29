@@ -21,6 +21,7 @@ all() -> [
     adjust_when_supervisor_not_running,
     adjust_clear_upstream_when_supervisor_not_running,
     start_child_handles_already_present,
+    children_in_vhost_filters_by_vhost,
     hops_no_header_returns_max_hops,
     hops_larger_than_max_hops_is_clamped,
     hops_of_one_returns_zero,
@@ -84,13 +85,13 @@ adjust_when_supervisor_not_running(_Config) ->
     %% adjust/1 should return ok, not crash
     ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust(everything)),
     ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({upstream, <<"test">>})),
-    ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({upstream_set, <<"test">>})).
+    ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({upstream_set, <<"/">>, <<"test">>})).
 
 adjust_clear_upstream_when_supervisor_not_running(_Config) ->
     ?assertEqual(undefined, whereis(rabbit_federation_exchange_link_sup_sup)),
     %% adjust/1 with clear_upstream should not fail
     ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({clear_upstream, <<"/">>, <<"test">>})),
-    ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({clear_upstream_set, <<"test">>})).
+    ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({clear_upstream_set, <<"/">>, <<"test">>})).
 
 start_child_handles_already_present(_Config) ->
     XName = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
@@ -163,3 +164,10 @@ hops_with_non_positive_max_hops_returns_zero(_Config) ->
 
 header_with_hops(Hops) ->
     [{?BINDING_HEADER, array, [{table, [{<<"hops">>, short, Hops}]}]}].
+
+children_in_vhost_filters_by_vhost(_Config) ->
+    X = fun(V) -> #exchange{name = rabbit_misc:r(V, exchange, <<"x">>)} end,
+    A = {X(<<"a">>), self(), supervisor, []},
+    B = {X(<<"b">>), self(), supervisor, []},
+    ?assertEqual([A], rabbit_federation_exchange_link_sup_sup:children_in_vhost([A, B], <<"a">>)),
+    ?assertEqual([], rabbit_federation_exchange_link_sup_sup:children_in_vhost([A, B], <<"c">>)).
