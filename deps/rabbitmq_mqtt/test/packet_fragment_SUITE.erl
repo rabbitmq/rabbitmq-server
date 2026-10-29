@@ -31,6 +31,7 @@ groups() ->
        five_byte_subscription_identifier_is_rejected,
        topic_filters_up_to_limit_are_accepted,
        topic_filters_over_limit_are_rejected,
+       subscription_topic_filter_does_not_reference_packet,
        fragmented_topic_filters_over_limit_are_rejected,
        user_properties_up_to_limit_are_accepted,
        user_properties_over_limit_are_rejected
@@ -125,6 +126,16 @@ topic_filters_up_to_limit_are_accepted(_Config) ->
          ?assertEqual(?MAX_ENTRIES, length(Topics))
      end || Vsn <- [3, 4, 5]],
     ok.
+
+subscription_topic_filter_does_not_reference_packet(_Config) ->
+    Filter = binary:copy(<<"a">>, 100),
+    Body = <<1:16, 100:16, Filter/binary, 0>>,
+    Packet = <<?SUBSCRIBE:4, 2:4, (remaining_length(byte_size(Body)))/binary, Body/binary>>,
+    {ok, #mqtt_packet{variable = #mqtt_packet_subscribe{
+                                    subscriptions = [#mqtt_subscription{topic_filter = Parsed}]}},
+     <<>>, _} = rabbit_mqtt_packet:parse(Packet, 4),
+    ?assertEqual(Filter, Parsed),
+    ?assertEqual(byte_size(Parsed), binary:referenced_byte_size(Parsed)).
 
 topic_filters_over_limit_are_rejected(_Config) ->
     [begin
