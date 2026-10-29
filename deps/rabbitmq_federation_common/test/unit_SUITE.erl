@@ -42,7 +42,8 @@ all() -> [
     validate_reconnect_delay_accepts_non_negative_numbers,
     validate_reconnect_delay_rejects_invalid_values,
     max_hops_keeps_valid_values,
-    max_hops_normalizes_legacy_values
+    max_hops_normalizes_legacy_values,
+    dropped_message_needs_ack_per_ack_mode
 ].
 
 init_per_suite(Config) ->
@@ -358,3 +359,8 @@ validation_errors(Key, Value) ->
                 <<"a-name">>, [[{<<"upstream">>, <<"an-upstream">>},
                                 {Key, Value}]], none),
     [R || Rs <- Results, R <- Rs, R =/= ok].
+
+dropped_message_needs_ack_per_ack_mode(_Config) ->
+    ?assert(rabbit_federation_link_util:dropped_message_needs_ack('on-confirm')),
+    ?assert(rabbit_federation_link_util:dropped_message_needs_ack('on-publish')),
+    ?assertNot(rabbit_federation_link_util:dropped_message_needs_ack('no-ack')).
