@@ -22,7 +22,8 @@ all() ->
      duplicate_at_limit_boundary_accepted,
      duplicates_do_not_count,
      first_occurrence_wins,
-     unique_and_duplicate_mix
+     unique_and_duplicate_mix,
+     long_headers_fed_byte_by_byte
     ].
 
 %% Exactly LIMIT unique headers must be accepted.
@@ -69,7 +70,21 @@ unique_and_duplicate_mix(_) ->
     Dups   = [{"h1", "dup"} || _ <- lists:seq(1, 100)],
     {ok, _, _} = parse(make_frame(Unique ++ Dups)).
 
+long_headers_fed_byte_by_byte(_) ->
+    Long = lists:duplicate(60_000, $a),
+    Bin = iolist_to_binary(["SEND\r\n", Long, ":", Long, "\r\n",
+                            "k:", Long, "\n\n\0"]),
+    Expected = parse(Bin),
+    ?assertMatch({ok, _, <<>>}, Expected),
+    ?assertEqual(Expected, parse_byte_by_byte(Bin, rabbit_stomp_frame:initial_state())).
+
 %%-------------------------------------------------------------------
+
+parse_byte_by_byte(<<B:1/binary, Rest/binary>>, State) ->
+    case parse(B, State) of
+        {more, State1} -> parse_byte_by_byte(Rest, State1);
+        Result         -> Result
+    end.
 
 unique_headers(N) ->
     [{lists:flatten(io_lib:format("h~b", [I])), "v"} || I <- lists:seq(1, N)].

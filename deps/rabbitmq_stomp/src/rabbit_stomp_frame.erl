@@ -164,8 +164,11 @@ parse_headers(Bin, S) ->
 %% Slow path: escape sequences present, fall back to byte-by-byte.
 %%
 
-parse_hdr(Bin, S = #ps{config = #stomp_parser_config{max_header_length = MaxHL}}) ->
-    case scan_header_line(Bin) of
+parse_hdr(Bin, S) ->
+    parse_hdr(Bin, {name, 0}, S).
+
+parse_hdr(Bin, From, S = #ps{config = #stomp_parser_config{max_header_length = MaxHL}}) ->
+    case scan_header_line(Bin, From) of
         {ok, Name, Value, Rest} ->
             case byte_size(Name) > MaxHL orelse byte_size(Value) > MaxHL of
                 true  -> {error, {max_header_length, MaxHL}};
@@ -179,10 +182,10 @@ parse_hdr(Bin, S = #ps{config = #stomp_parser_config{max_header_length = MaxHL}}
             parse_hdrname_esc(Bin, S#ps{acc = [], acc_len = 0});
         {no_value, Name} ->
             {error, {header_no_value, Name}};
-        {more, Len} ->
+        {more, Len, Resume} ->
             case Len > MaxHL of
                 true  -> {error, {max_header_length, MaxHL}};
-                false -> more(fun(Rest) -> parse_hdr(<<Bin/binary, Rest/binary>>, S) end)
+                false -> more(fun(Rest) -> parse_hdr(<<Bin/binary, Rest/binary>>, Resume, S) end)
             end;
         {error, _} = Err ->
             Err
@@ -278,10 +281,13 @@ scan_until_lf(Bin, Pos) ->
 %%   {ok, NameBin, ValueBin, Rest}  — fast path, no escapes
 %%   has_escapes                     — contains \ or CR, use slow path
 %%   {no_value, NameBin}            — LF before COLON
-%%   {more, Len}                    — need more data
+%%   {more, Len, Resume}            — need more data, resume the scan from `Resume`
 %%   {error, _}                     — CR not followed by LF
-scan_header_line(Bin) ->
-    scan_hdr_name(Bin, 0).
+scan_header_line(Bin, {name, Pos}) ->
+    scan_hdr_name(Bin, Pos);
+scan_header_line(Bin, {value, NameLen, Pos}) ->
+    <<Name:NameLen/binary, ?COLON, Rest/binary>> = Bin,
+    scan_hdr_value(Rest, Name, Pos).
 
 scan_hdr_name(Bin, Pos) ->
     case Bin of
@@ -297,13 +303,13 @@ scan_hdr_name(Bin, Pos) ->
         <<_:Pos/binary, ?BSL, _/binary>> ->
             has_escapes;
         <<_:Pos/binary, ?CR>> ->
-            {more, Pos};
+            {more, Pos, {name, Pos}};
         <<_:Pos/binary, ?CR, Ch:8, _/binary>> ->
             {error, {unexpected_chars_in_header, [?CR, Ch]}};
         <<_:Pos/binary, _:8, _/binary>> ->
             scan_hdr_name(Bin, Pos + 1);
         <<_:Pos/binary>> ->
-            {more, Pos}
+            {more, Pos, {name, Pos}}
     end.
 
 scan_hdr_value(Bin, Name, Pos) ->
@@ -317,13 +323,13 @@ scan_hdr_value(Bin, Name, Pos) ->
         <<_:Pos/binary, ?BSL, _/binary>> ->
             has_escapes;
         <<_:Pos/binary, ?CR>> ->
-            {more, Pos};
+            {more, Pos, {value, byte_size(Name), Pos}};
         <<_:Pos/binary, ?CR, Ch:8, _/binary>> ->
             {error, {unexpected_chars_in_header, [?CR, Ch]}};
         <<_:Pos/binary, _:8, _/binary>> ->
             scan_hdr_value(Bin, Name, Pos + 1);
         <<_:Pos/binary>> ->
-            {more, Pos}
+            {more, Pos, {value, byte_size(Name), Pos}}
     end.
 
 %%
