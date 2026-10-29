@@ -38,7 +38,6 @@
 -define(QUEUE_TTL_KEY, <<"x-expires">>).
 -define(WILL_QUEUE_EXPIRY_MARGIN_MS, 1_000).
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
-%% The 10 year limit of `rabbit_misc:check_expiry/1`.
 -define(MAX_MESSAGE_EXPIRY_INTERVAL_SECS, 315_360_000).
 -define(FENCE_TIMEOUT, 30_000).
 
