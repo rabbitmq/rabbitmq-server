@@ -195,7 +195,7 @@ maybe_resize_cluster() ->
                             ?LOG_INFO("~ts: Expanding sole_conn Khepri cluster to "
                                       "running node ~w", [?MODULE, New]),
                             try
-                                erpc:cast(New, ?MODULE, ensure_running, [])
+                                erpc:call(New, ?MODULE, ensure_running, [])
                             catch
                                 Class:Reason ->
                                     ?LOG_WARNING("~ts: Failed to cast ensure_running to node ~w. "
