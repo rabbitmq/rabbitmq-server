@@ -134,7 +134,7 @@ shovel_validation() ->
     AllProtocols = list_all_protocols(),
     [{<<"internal">>, fun rabbit_parameter_validation:boolean/2, optional},
      {<<"internal_owner">>, fun validate_internal_owner/2, optional},
-     {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
+     {<<"reconnect-delay">>, fun rabbit_parameter_validation:non_negative_number/2,optional},
      {<<"ack-mode">>, rabbit_parameter_validation:enum(
                         ['no-ack', 'on-publish', 'on-confirm']), optional},
      {<<"src-protocol">>,
