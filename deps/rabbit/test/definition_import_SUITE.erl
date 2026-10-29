@@ -83,6 +83,7 @@ groups() ->
             export_import_round_trip_case2,
             export_import_round_trip_operator_policy,
             export_import_round_trip_vhost_limits,
+            export_vhost_with_undefined_limits,
             export_import_round_trip_operator_policy_all_keys,
             export_import_round_trip_multiple_operator_policies,
             export_import_round_trip_mixed_parameters,
@@ -535,6 +536,16 @@ export_import_round_trip_vhost_limits(Config) ->
         import_parsed(Config, Defs)
     end).
 
+export_vhost_with_undefined_limits(Config) ->
+    VHost = <<"vhost-with-undefined-limits">>,
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_undefined_vhost_limits, [VHost]),
+    Defs = export(Config),
+    [Limits] = [maps:get(<<"limits">>, V) || V <- maps:get(vhosts, Defs),
+                                             maps:get(<<"name">>, V) =:= VHost],
+    ?assertEqual(#{}, Limits),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
+
 export_import_round_trip_operator_policy_all_keys(Config) ->
     run_if_not_mixed_versions(fun() ->
         import_file_case(Config, "case24"),
@@ -733,6 +744,9 @@ export(Config) ->
 
 run_export() ->
     rabbit_definitions:all_definitions().
+
+set_undefined_vhost_limits(VHost) ->
+    rabbit_db_vhost:update(VHost, fun(V) -> vhost:set_limits(V, undefined) end).
 
 run_directory_import_case(Path, Expected) ->
     ct:pal("Will load definitions from files under ~tp~n", [Path]),
