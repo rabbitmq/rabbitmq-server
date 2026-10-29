@@ -19,7 +19,8 @@ all() -> [
     reconnect_all_broadcasts_to_members,
     adjust_when_supervisor_not_running,
     adjust_clear_upstream_when_supervisor_not_running,
-    start_child_handles_already_present
+    start_child_handles_already_present,
+    children_in_vhost_filters_by_vhost
 ].
 
 init_per_suite(Config) ->
@@ -72,13 +73,13 @@ adjust_when_supervisor_not_running(_Config) ->
     %% adjust/1 should return ok, not crash
     ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:adjust(everything)),
     ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:adjust({upstream, <<"test">>})),
-    ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:adjust({upstream_set, <<"test">>})).
+    ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:adjust({upstream_set, <<"/">>, <<"test">>})).
 
 adjust_clear_upstream_when_supervisor_not_running(_Config) ->
     ?assertEqual(undefined, whereis(rabbit_federation_queue_link_sup_sup)),
     %% adjust/1 with clear_upstream should not fail
     ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:adjust({clear_upstream, <<"/">>, <<"test">>})),
-    ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:adjust({clear_upstream_set, <<"test">>})).
+    ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:adjust({clear_upstream_set, <<"/">>, <<"test">>})).
 
 start_child_handles_already_present(_Config) ->
     Name = #resource{virtual_host = <<"/">>, kind = queue, name = <<"q">>},
@@ -96,3 +97,10 @@ start_child_handles_already_present(_Config) ->
     after
         ok = meck:unload(mirrored_supervisor)
     end.
+
+children_in_vhost_filters_by_vhost(_Config) ->
+    Q = fun(V) -> amqqueue:new(rabbit_misc:r(V, queue, <<"q">>), none, true, false, none, [], V, #{}) end,
+    A = {Q(<<"a">>), self(), supervisor, []},
+    B = {Q(<<"b">>), self(), supervisor, []},
+    ?assertEqual([A], rabbit_federation_queue_link_sup_sup:children_in_vhost([A, B], <<"a">>)),
+    ?assertEqual([], rabbit_federation_queue_link_sup_sup:children_in_vhost([A, B], <<"c">>)).

@@ -22,6 +22,7 @@
 -export([start_link/0, start_child/1, adjust/1, stop_child/1]).
 -export([init/1]).
 -export([id_to_khepri_path/1]).
+-export([children_in_vhost/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -65,17 +66,23 @@ start_child(X) ->
         exit:shutdown -> ok
     end.
 
-adjust({clear_upstream, VHost, UpstreamName}) ->
+adjust({Reason, VHost, Name})
+  when Reason =:= clear_upstream;
+       Reason =:= upstream_set;
+       Reason =:= clear_upstream_set ->
     _ = [rabbit_federation_link_sup:adjust(Pid, rabbit_federation_exchange_link, X,
-                                           {clear_upstream, UpstreamName}) ||
-            {#exchange{name = Name} = X, Pid, _, _} <- which_children(),
-            Name#resource.virtual_host == VHost],
+                                           {Reason, Name}) ||
+            {X, Pid, _, _} <- children_in_vhost(which_children(), VHost)],
     ok;
 adjust(Reason) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, rabbit_federation_exchange_link,
                                            X, Reason) ||
             {X, Pid, _, _} <- which_children()],
     ok.
+
+children_in_vhost(Children, VHost) ->
+    [C || {#exchange{name = #resource{virtual_host = V}}, _, _, _} = C <- Children,
+          V =:= VHost].
 
 which_children() ->
     try
