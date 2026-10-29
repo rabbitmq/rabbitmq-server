@@ -11,6 +11,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("common_test/include/ct.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -27,7 +29,12 @@ groups() ->
           exchange_count,
           queue_count,
           connection_count,
-          connection_lookup
+          connection_lookup,
+          connection_tracking_event_churn,
+          channel_tracking_event_churn,
+          tracking_handlers_survive_errors,
+          amqpl_connection_churn,
+          amqp_connection_churn
         ]}
     ].
 
@@ -36,6 +43,7 @@ groups() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
+    {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config).
 
@@ -118,3 +126,176 @@ connection_lookup(Config) ->
 
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
+
+%% ---------------------------------------------------------------------------
+%% Connection and channel churn
+%% ---------------------------------------------------------------------------
+
+-define(CHURN_WORKERS, 20).
+-define(CHURN_ITERATIONS, 50).
+-define(EVENT_CHURN, 10_000).
+
+connection_tracking_event_churn(Config) ->
+    Name = atom_to_binary(?FUNCTION_NAME),
+    Created = fun(ConnName) ->
+                      [{name, ConnName}, {node, node_name(Config)}, {pid, self()},
+                       {vhost, Name}, {user, Name}, {protocol, {0,9,1}},
+                       {type, network}, {connected_at, os:system_time(millisecond)}]
+              end,
+    Closed = fun(ConnName) ->
+                     [{name, ConnName}, {node, node_name(Config)}, {pid, self()}]
+             end,
+    Events = lists:append([[{connection_created, Created(N)},
+                            {connection_closed, Closed(N)}]
+                           || I <- lists:seq(1, ?EVENT_CHURN),
+                              N <- [integer_to_binary(I)]]),
+    ok = notify(Config, Events ++ [{connection_created, Created(<<"open">>)}]),
+    ?awaitMatch({1, 1, [#tracked_connection{name = <<"open">>}]},
+                tracked_connections(Config, Name, Name),
+                ?TIMEOUT),
+    ok = notify(Config, [{connection_closed, Closed(<<"open">>)}]),
+    ?awaitMatch({0, 0, []}, tracked_connections(Config, Name, Name), ?TIMEOUT).
+
+channel_tracking_event_churn(Config) ->
+    User = atom_to_binary(?FUNCTION_NAME),
+    [OpenChPid | ChPids] = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, dead_pids,
+                                                        [?EVENT_CHURN + 1]),
+    Created = fun(ChPid) ->
+                      [{pid, ChPid}, {name, list_to_binary(pid_to_list(ChPid))},
+                       {vhost, <<"/">>}, {connection, self()}, {user, User}]
+              end,
+    Events = lists:append([[{channel_created, Created(ChPid)},
+                            {channel_closed, [{pid, ChPid}]}]
+                           || ChPid <- ChPids]),
+    ok = notify(Config, Events ++ [{channel_created, Created(OpenChPid)}]),
+    ?awaitMatch({1, [#tracked_channel{pid = OpenChPid}]},
+                tracked_channels(Config, User),
+                ?TIMEOUT),
+    ok = notify(Config, [{channel_closed, [{pid, OpenChPid}]}]),
+    ?awaitMatch({0, []}, tracked_channels(Config, User), ?TIMEOUT).
+
+tracking_handlers_survive_errors(Config) ->
+    Name = atom_to_binary(?FUNCTION_NAME),
+    Node = node_name(Config),
+    [ChPid] = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, dead_pids, [1]),
+    ok = notify(Config, [{connection_created,
+                          [{name, Name}, {node, Node}, {pid, self()},
+                           {vhost, Name}, {user, Name}, {type, network}]},
+                         {channel_created,
+                          [{pid, ChPid}, {name, Name}, {vhost, Name},
+                           {connection, self()}, {user, Name}]}]),
+    ?awaitMatch({1, 1, [_]}, tracked_connections(Config, Name, Name), ?TIMEOUT),
+    ?awaitMatch({1, [_]}, tracked_channels(Config, Name), ?TIMEOUT),
+    %% As if the user had been deleted while the connection was open.
+    [true = rabbit_ct_broker_helpers:rpc(Config, 0, ets, delete, [Tab, Name])
+     || Tab <- [tracked_connection_per_user, tracked_channel_per_user]],
+    ok = notify(Config, [{channel_closed, [{pid, ChPid}]},
+                         {connection_closed, [{name, Name}, {node, Node}, {pid, self()}]},
+                         {channel_created, []},
+                         {channel_closed, [{pid, self()}]}]),
+    ?awaitMatch({0, 0, []}, tracked_connections(Config, Name, Name), ?TIMEOUT),
+    ?awaitMatch({0, []}, tracked_channels(Config, Name), ?TIMEOUT),
+    Handlers = rabbit_ct_broker_helpers:rpc(Config, 0, gen_event, which_handlers,
+                                            [rabbit_event]),
+    ?assert(lists:member(rabbit_connection_tracking_handler, Handlers)),
+    ?assert(lists:member(rabbit_channel_tracking_handler, Handlers)),
+    {Conn, _Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    ?awaitMatch({1, 1, [_]}, tracked_connections(Config, <<"/">>, <<"guest">>), ?TIMEOUT),
+    ?awaitMatch({1, [_]}, tracked_channels(Config, <<"guest">>), ?TIMEOUT),
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+    ?awaitMatch({0, 0, []}, tracked_connections(Config, <<"/">>, <<"guest">>), ?TIMEOUT).
+
+amqpl_connection_churn(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Frame = fun(Method) -> rabbit_binary_generator:build_simple_method_frame(0, Method) end,
+    %% The handshake and the close are pipelined, so that the connection
+    %% closes as soon as it has been opened.
+    Frames = [<<"AMQP", 0, 0, 9, 1>>,
+              Frame(#'connection.start_ok'{client_properties = [],
+                                           mechanism = <<"PLAIN">>,
+                                           response = <<0, "guest", 0, "guest">>,
+                                           locale = <<"en_US">>}),
+              Frame(#'connection.tune_ok'{channel_max = 16,
+                                          frame_max = 131072,
+                                          heartbeat = 0}),
+              Frame(#'connection.open'{virtual_host = <<"/">>}),
+              Frame(#'connection.close'{reply_code = 200,
+                                        reply_text = <<>>,
+                                        class_id = 0,
+                                        method_id = 0})],
+    CloseOk = iolist_to_binary(Frame(#'connection.close_ok'{})),
+    churn(Config,
+          fun() ->
+                  {ok, Sock} = gen_tcp:connect("localhost", Port,
+                                               [binary, {active, false}, {nodelay, true}]),
+                  ok = gen_tcp:send(Sock, Frames),
+                  ok = recv_until(Sock, CloseOk, <<>>),
+                  ok = gen_tcp:close(Sock)
+          end).
+
+amqp_connection_churn(Config) ->
+    OpnConf = #{address => ?config(rmq_hostname, Config),
+                port => rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+                container_id => atom_to_binary(?FUNCTION_NAME),
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    churn(Config,
+          fun() ->
+                  {ok, C} = amqp10_client:open_connection(OpnConf),
+                  receive {amqp10_event, {connection, C, opened}} -> ok
+                  after ?TIMEOUT -> ct:fail(opened_timeout)
+                  end,
+                  ok = amqp10_client:close_connection(C),
+                  receive {amqp10_event, {connection, C, {closed, normal}}} -> ok
+                  after ?TIMEOUT -> ct:fail(closed_timeout)
+                  end
+          end).
+
+churn(Config, Fun) ->
+    {Conn, _Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Workers = [spawn_monitor(fun() ->
+                                     [Fun() || _ <- lists:seq(1, ?CHURN_ITERATIONS)]
+                             end)
+               || _ <- lists:seq(1, ?CHURN_WORKERS)],
+    [receive {'DOWN', Ref, process, Pid, Reason} -> ?assertEqual(normal, Reason)
+     end || {Pid, Ref} <- Workers],
+    ?awaitMatch({1, 1, [_]}, tracked_connections(Config, <<"/">>, <<"guest">>), ?TIMEOUT),
+    ?awaitMatch({1, [_]}, tracked_channels(Config, <<"guest">>), ?TIMEOUT),
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+    ?awaitMatch({0, 0, []}, tracked_connections(Config, <<"/">>, <<"guest">>), ?TIMEOUT),
+    ?awaitMatch({0, []}, tracked_channels(Config, <<"guest">>), ?TIMEOUT).
+
+recv_until(Sock, Pattern, Acc0) ->
+    {ok, Data} = gen_tcp:recv(Sock, 0, ?TIMEOUT),
+    Acc = <<Acc0/binary, Data/binary>>,
+    case binary:match(Acc, Pattern) of
+        nomatch -> recv_until(Sock, Pattern, Acc);
+        _ -> ok
+    end.
+
+node_name(Config) ->
+    rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename).
+
+%% Events are emitted by a single process, in order, as a connection or
+%% a channel would emit them.
+notify(Config, Events) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, notify, [Events]).
+
+notify(Events) ->
+    lists:foreach(fun({Type, Props}) -> rabbit_event:notify(Type, Props) end, Events).
+
+dead_pids(N) ->
+    [spawn(fun() -> ok end) || _ <- lists:seq(1, N)].
+
+tracked_connections(Config, VHost, User) ->
+    {rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
+                                  count_tracked_items_in, [{vhost, VHost}]),
+     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
+                                  count_tracked_items_in, [{user, User}]),
+     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
+                                  list_of_user, [User])}.
+
+tracked_channels(Config, User) ->
+    {rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel_tracking,
+                                  count_tracked_items_in, [{user, User}]),
+     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel_tracking,
+                                  list_of_user, [User])}.
