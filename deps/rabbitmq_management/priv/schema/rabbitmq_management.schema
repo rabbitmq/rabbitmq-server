@@ -370,6 +370,24 @@ end}.
 ]}.
 
 %%
+%% Concurrent Sessions Limit
+%%
+
+{mapping, "management.sessions.enabled", "rabbitmq_management.sessions_enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "management.sessions.max_concurrent", "rabbitmq_management.sessions_max_concurrent", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "management.sessions.heartbeat_interval", "rabbitmq_management.sessions_heartbeat_interval", [
+    {datatype, integer},
+    {validators, ["sessions_heartbeat_interval"]}
+]}.
+
+%%
 %% Inter-node query result caching
 %%
 
@@ -726,6 +744,9 @@ fun(Conf) ->
      {detailed, TranslatePolicy(Detailed)}]
 end}.
 
+
+{validator, "sessions_heartbeat_interval", "number should be greater or equal to 30",
+fun(Int) when is_integer(Int) -> Int >= 30; (_) -> false end}.
 
 {validator, "is_dir", "is not directory",
 fun(File) ->

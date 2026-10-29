@@ -104,6 +104,16 @@ module_app(Module) ->
 web_ui()     -> [{javascript, <<"dispatcher.js">>}].
 
 dispatcher() ->
+    SessionRoutes = case rabbit_mgmt_features:is_sessions_enabled() of
+        true  -> [{"/session",           rabbit_mgmt_wm_session,  []},
+                  {"/session/:session",  rabbit_mgmt_wm_session,  []},
+                  {"/sessions",          rabbit_mgmt_wm_sessions, []},
+                  {"/sessions/:session", rabbit_mgmt_wm_sessions, []},
+                  {"/sessions/user/:username", rabbit_mgmt_wm_sessions_user, []},
+                  {"/sessions/user/:username/:session", rabbit_mgmt_wm_sessions_user, []}];
+        false -> []
+    end,
+    SessionRoutes ++
     [{"/overview",                                             rabbit_mgmt_wm_overview, []},
      {"/cluster-name",                                         rabbit_mgmt_wm_cluster_name, []},
      {"/nodes",                                                rabbit_mgmt_wm_nodes, []},

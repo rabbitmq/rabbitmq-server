@@ -16,6 +16,13 @@ function format_error_response(response, reason) {
 }
 
 $(document).ready(function() {
+  register_session_ended_listener('app', function() {
+    if (oauth.enabled && oauth.sp_initiated) {
+      oauth_initiateLogout();
+    } else {
+      location.reload();
+    }
+  });
   setup_oauth_events_if_required();
   var url_string = window.location.href;
   var url = new URL(url_string);
@@ -33,12 +40,16 @@ $(document).ready(function() {
       startWithOAuthLogin(oauth);
     } else {
       startWithLoginPage();
-      }
+    }
   }
 });
 
 function startWithLoginPage() {
   replace_content('outer', format('login', {}));
+  var message = take_login_status_message();
+  if (message) {
+    replace_content('login-status', '<p class="warning">' + fmt_escape_html(message) + '</p>');
+  }
   start_app_login();
 }
 function removeDuplicates(array){
@@ -54,7 +65,11 @@ function removeDuplicates(array){
 
 function startWithOAuthLogin (oauth) {
   if (!oauth.logged_in) {
-    hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => {  render_login_oauth(oauth, escaped_warnings); start_app_login(); })
+    hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => {
+      var message = take_login_status_message();
+      render_login_oauth(oauth, (message ? [fmt_escape_html(message)] : []).concat(escaped_warnings));
+      start_app_login();
+    })
   } else {
     start_app_login()
   }
@@ -126,7 +141,7 @@ function check_login () {
     if (oauth.enabled) {
       renderWarningMessageInLoginStatus(oauth, 'Not authorized');
     } else {
-      replace_content('login-status', '<p>Login failed</p>');
+      replace_content('login-status', '<p class="warning">Login failed</p>');
     }
     return false;
   }
@@ -143,7 +158,7 @@ function load_init_data() {
       if (oauth.enabled) {
           renderWarningMessageInLoginStatus(oauth, 'Could not load the management UI');
       } else {
-          replace_content('login-status', '<p>Could not load the management UI</p>');
+          replace_content('login-status', '<p class="warning">Could not load the management UI</p>');
       }
       return false;
   }
@@ -173,7 +188,7 @@ function do_login(username, password) {
 function login(username, password) {
   var result = do_login(username, password);
   if (!result || result.error) {
-    replace_content('login-status', '<p>Login failed</p>');
+    replace_content('login-status', '<p class="warning">Login failed</p>');
     if (result && result.reason && typeof result.reason === 'string') {
       show_popup('warn', fmt_escape_html(result.reason));
     }
@@ -187,20 +202,52 @@ function login(username, password) {
   return load_init_data_and_ui(user);
 }
 
+function oauth_logout_after_failure(message) {
+  if (oauth.enabled && oauth.sp_initiated) {
+    store_login_status_message(message);
+    oauth_initiateLogout();
+  }
+}
+
 function load_init_data_and_ui(user) {
   if (!load_init_data()) {
     return false;
   }
-  load_ui(user);
+
+  var res = invokeLoginProcessors({user: user, settings: window.app_settings});
+  if (res.ok === false) {
+    var errMsg = res.error || 'Failed to establish session with server';
+    invokeInitFailedProcessors(errMsg);
+    clear_auth();
+    if (oauth.enabled) {
+      renderWarningMessageInLoginStatus(oauth, fmt_escape_html(errMsg));
+      oauth_logout_after_failure(errMsg);
+    } else {
+      replace_content('login-status', '<p class="warning">' + fmt_escape_html(errMsg) + '</p>');
+    }
+    return false;
+  }
+
+  try {
+    load_ui(user);
+  } catch (err) {
+    console.error("Application initialization failed:", err);
+    invokeInitFailedProcessors(err);
+    clear_auth();
+    replace_content('login-status', '<p class="warning">Application initialization failed</p>');
+    oauth_logout_after_failure('Application initialization failed');
+    return false;
+  }
+  invokeInitProcessors({user: user, settings: window.app_settings});
   return true;
 }
 
 function load_ui(user) {
+  var settings = window.app_settings;
+
   set_session_expiry_if_required(user.login_session_timeout);
   check_version();
   hide_popup_warn();
-
-  var settings = window.app_settings;
 
   replace_content('outer', format('layout', {}));
 
@@ -1644,6 +1691,7 @@ function sync_req(type, params0, path_template, options) {
     }
 }
 function initiate_logout(oauth, error = "") {
+    invokeLogoutProcessors({involuntary: true});
     renderWarningMessageInLoginStatus(oauth, error);
 }
 /**
