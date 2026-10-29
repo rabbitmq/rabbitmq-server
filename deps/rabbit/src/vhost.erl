@@ -65,7 +65,7 @@
     %% name as a binary
     virtual_host :: name() | '_' | '$1',
     %% proplist of limits configured, if any
-    limits :: limits() | '_',
+    limits :: limits() | undefined | '_',
     metadata :: metadata() | '_'
 }).
 
@@ -148,7 +148,9 @@ pattern_match_names() ->
 -spec get_name(vhost()) -> name().
 get_name(#vhost{virtual_host = Value}) -> Value.
 
+%% Records written by older versions can have `undefined` limits.
 -spec get_limits(vhost()) -> limits().
+get_limits(#vhost{limits = undefined}) -> [];
 get_limits(#vhost{limits = Value}) -> Value.
 
 -spec get_metadata(vhost()) -> metadata().
