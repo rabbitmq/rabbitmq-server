@@ -57,13 +57,8 @@ groups() ->
                  attach_refused,
                  incoming_heartbeat,
                  multi_transfer_without_delivery_id,
-<<<<<<< HEAD
-=======
                  multi_transfer_max_message_size_exceeded,
                  multi_transfer_on_sender_link,
-                 frame_size_too_small_rejected,
-                 max_frame_size_exceeded_rejected,
->>>>>>> 7b31428 (AMQP 1.0 client: enforce max_message_size on multi-transfer deliveries)
                  disposition_large_range_settles_outgoing,
                  link_credit_max,
                  drain_with_nothing_available,
