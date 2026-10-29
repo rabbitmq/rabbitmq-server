@@ -57,6 +57,8 @@ groups() ->
                  attach_refused,
                  incoming_heartbeat,
                  multi_transfer_without_delivery_id,
+                 multi_transfer_max_message_size_exceeded,
+                 multi_transfer_on_sender_link,
                  frame_size_too_small_rejected,
                  max_frame_size_exceeded_rejected,
                  disposition_large_range_settles_outgoing,
@@ -1274,6 +1276,156 @@ multi_transfer_without_delivery_id(Config) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ok.
+
+multi_transfer_max_message_size_exceeded(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{role = true,
+                                             name = Name,
+                                             source = Source,
+                                             max_message_size = {ulong, 20}}, <<>>}) ->
+                         {Ch, [#'v1_0.attach'{name = Name,
+                                              handle = {uint, 99},
+                                              initial_delivery_count = {uint, 1},
+                                              source = Source,
+                                              role = false}
+                              ]}
+                 end,
+    %% Each data section with a 5 byte content is 10 bytes.
+    Frame = fun(DeliveryId, Content, More) ->
+                    [#'v1_0.transfer'{handle = {uint, 99},
+                                      delivery_id = DeliveryId,
+                                      more = More},
+                     #'v1_0.data'{content = Content}]
+            end,
+    LinkCreditStep = fun({0 = Ch, #'v1_0.flow'{}, <<>>}) ->
+                             {Ch, {multi, [Frame({uint, 1}, <<"aaaaa">>, true),
+                                           Frame(undefined, <<"bbbbb">>, false),
+                                           Frame({uint, 2}, <<"ccccc">>, true),
+                                           Frame(undefined, <<"ddddd">>, true),
+                                           Frame(undefined, <<"eeeee">>, true),
+                                           Frame(undefined, <<"fffff">>, false)
+                                          ]}}
+                     end,
+    EndStep = fun({0 = Ch, #'v1_0.end'{error = #'v1_0.error'{
+                                                  condition = ?V_1_0_LINK_ERROR_MESSAGE_SIZE_EXCEEDED}},
+                   <<>>}) ->
+                      {Ch, [#'v1_0.end'{}]}
+              end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep),
+             mock_server:amqp_step(LinkCreditStep),
+             mock_server:amqp_step(EndStep)
+            ],
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Receiver} = amqp10_client:attach_link(
+                       Session, #{name => <<"mock1-received">>,
+                                  role => {receiver, #{address => <<"test">>,
+                                                       durable => none}, self()},
+                                  snd_settle_mode => unsettled,
+                                  rcv_settle_mode => first,
+                                  max_message_size => 20}),
+    ok = amqp10_client:flow_link_credit(Receiver, 100, 50),
+    receive
+        {amqp10_msg, Receiver, Msg} ->
+            ?assertEqual([<<"aaaaa">>, <<"bbbbb">>], amqp10_msg:body(Msg))
+    after ?TIMEOUT ->
+              ct:fail(delivery_timeout)
+    end,
+    receive
+        {amqp10_event,
+         {link, Receiver,
+          {detached, #'v1_0.error'{condition = ?V_1_0_LINK_ERROR_MESSAGE_SIZE_EXCEEDED}}}} -> ok
+    after ?TIMEOUT ->
+              flush(),
+              ct:fail(detach_timeout)
+    end,
+    receive
+        {amqp10_event, {session, Session, {ended, _}}} -> ok
+    after ?TIMEOUT ->
+              flush(),
+              ct:fail(session_end_timeout)
+    end,
+    assert_no_message(Receiver),
+    ok = amqp10_client:close_connection(Connection).
+
+multi_transfer_on_sender_link(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{name = Name,
+                                             role = false,
+                                             target = Target}, <<>>}) ->
+                         Attach = #'v1_0.attach'{name = Name,
+                                                 handle = {uint, 99},
+                                                 role = true,
+                                                 target = Target},
+                         Transfer = [#'v1_0.transfer'{handle = {uint, 99},
+                                                      delivery_id = {uint, 1},
+                                                      more = true},
+                                     #'v1_0.data'{content = <<"aaaaa">>}],
+                         {Ch, {multi, [[Attach], Transfer]}}
+                 end,
+    EndStep = fun({0 = Ch, #'v1_0.end'{error = #'v1_0.error'{
+                                                  condition = ?V_1_0_AMQP_ERROR_NOT_ALLOWED}},
+                   <<>>}) ->
+                      {Ch, [#'v1_0.end'{}]}
+              end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep),
+             mock_server:amqp_step(EndStep)
+            ],
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"mock1-sender">>,
+                                                    <<"test">>),
+    receive
+        {amqp10_event,
+         {link, Sender,
+          {detached, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_NOT_ALLOWED}}}} -> ok
+    after ?TIMEOUT ->
+              flush(),
+              ct:fail(detach_timeout)
+    end,
+    receive
+        {amqp10_event, {session, Session, {ended, _}}} -> ok
+    after ?TIMEOUT ->
+              flush(),
+              ct:fail(session_end_timeout)
+    end,
+    ok = amqp10_client:close_connection(Connection).
 
 frame_size_too_small_rejected(Config) ->
     Hostname = ?config(mock_host, Config),

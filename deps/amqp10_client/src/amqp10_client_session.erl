@@ -140,7 +140,8 @@
          link_credit = 0 :: non_neg_integer(),
          available = 0 :: non_neg_integer(),
          drain = false :: boolean(),
-         partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()]},
+         partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()],
+                                           Size :: non_neg_integer()},
          auto_flow :: never | {RenewWhenBelow :: pos_integer(),
                                Credit :: pos_integer()},
          incoming_unsettled = #{} :: #{delivery_number() => ok},
@@ -475,16 +476,24 @@ mapped(cast, #'v1_0.flow'{handle = {uint, InHandle}} = Flow,
     {keep_state, State1};
 mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
                                more = true} = Transfer, Payload},
-       #state{links = Links} = State0) ->
-
-    {ok, #link{output_handle = OutHandle} = Link} =
-        find_link_by_input_handle(InHandle, State0),
-
-    Link1 = append_partial_transfer(Transfer, Payload, Link),
-
-    State = book_partial_transfer_received(
-              State0#state{links = Links#{OutHandle => Link1}}),
-    {keep_state, State};
+       State0) ->
+    {ok, Link0} = find_link_by_input_handle(InHandle, State0),
+    case append_partial_transfer(Transfer, Payload, Link0) of
+        {ok, Link} ->
+            State = book_partial_transfer_received(update_link(Link, State0)),
+            {keep_state, State};
+        {error, {symbol, Reason} = Cond} ->
+            ?LOG_WARNING("amqp10_session: ending session due to ~ts on link ~ts",
+                         [Reason, Link0#link.name]),
+            %% Notify the link owner now, as this peer may not reply to `end` either.
+            Detach = #'v1_0.detach'{handle = uint(Link0#link.output_handle),
+                                    closed = true,
+                                    error = #'v1_0.error'{condition = Cond}},
+            ok = notify_link_detached(Link0, Detach, State0),
+            State = update_link(Link0#link{partial_transfers = undefined}, State0),
+            ok = send_end(State, Cond),
+            {next_state, end_sent, State}
+    end;
 mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
               Payload0}, State0) ->
     {ok, #link{target = {pid, TargetPid},
@@ -1409,18 +1418,28 @@ book_link_transfer_send(Link = #link{link_credit = LC,
     Link#link{link_credit = LC - 1,
               delivery_count = add(DC, 1)}.
 
+append_partial_transfer(_Transfer, _Payload, #link{role = sender}) ->
+    {error, ?V_1_0_AMQP_ERROR_NOT_ALLOWED};
 append_partial_transfer(Transfer, Payload,
                         #link{partial_transfers = undefined} = Link) ->
-    Link#link{partial_transfers = {Transfer, [Payload]}};
+    append_partial_transfer(Transfer, Payload,
+                            Link#link{partial_transfers = {Transfer, [], 0}});
 append_partial_transfer(_Transfer, Payload,
-                        #link{partial_transfers = {T, Payloads}} = Link) ->
-    Link#link{partial_transfers = {T, [Payload | Payloads]}}.
+                        #link{partial_transfers = {T, Payloads, Size0},
+                              max_message_size = MaxMessageSize} = Link) ->
+    Size = Size0 + byte_size(Payload),
+    if is_integer(MaxMessageSize) andalso
+       Size > MaxMessageSize ->
+           {error, ?V_1_0_LINK_ERROR_MESSAGE_SIZE_EXCEEDED};
+       true ->
+           {ok, Link#link{partial_transfers = {T, [Payload | Payloads], Size}}}
+    end.
 
 complete_partial_transfer(Transfer, Payload,
                           #link{partial_transfers = undefined} = Link) ->
     {Transfer, Payload, Link};
 complete_partial_transfer(_Transfer, Payload,
-                          #link{partial_transfers = {T, Payloads}} = Link) ->
+                          #link{partial_transfers = {T, Payloads, _Size}} = Link) ->
     {T, iolist_to_binary(lists:reverse([Payload | Payloads])),
      Link#link{partial_transfers = undefined}}.
 
@@ -1578,7 +1597,7 @@ format_status(Status = #{data := Data0}) ->
                       PartialTransfers = case PartialTransfers0 of
                                              undefined ->
                                                  0;
-                                             {#'v1_0.transfer'{}, Binaries} ->
+                                             {#'v1_0.transfer'{}, Binaries, _Size} ->
                                                  length(Binaries)
                                          end,
                       #{name => Name,
