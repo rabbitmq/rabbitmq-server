@@ -10,6 +10,7 @@
 -behaviour(gen_server).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
 -include_lib("khepri/include/khepri.hrl").
 -include("include/rabbit_khepri.hrl").
 -include_lib("amqp10_common/include/amqp10_sole_conn.hrl").
@@ -62,7 +63,8 @@
          is_resizing/0,
          get_ra_system/0,
          get_store_id/0,
-         join_cluster/1]).
+         join_cluster/1,
+         start_gen_server/0]).
 
 %% public API
 -export([acquire/5,
@@ -294,6 +296,29 @@ stop() ->
                "removing from supervision tree on ~p", [node()]),
     _ = stop_gen_server(),
     ok.
+
+start_gen_servers() ->
+    case start_gen_server() of
+        ok ->
+            case members() of
+                {ok, Members} ->
+                    lists:foreach(
+                      fun
+                          ({_StoreId, Node}) when Node =:= node() ->
+                              ok;
+                          ({_StoreId, Node}) ->
+                              erpc:call(
+                                Node,
+                                rabbit_sup, start_restartable_child,
+                                [?GEN_SERVER_NAME])
+                      end, Members),
+                    ok;
+                Error ->
+                    Error
+            end;
+        Error ->
+            Error
+    end.
 
 start_gen_server() ->
     rabbit_sup:start_restartable_child(?GEN_SERVER_NAME).
@@ -611,6 +636,7 @@ start_local_store() ->
                [node()]),
     RetryTimeout = leader_wait_retry_timeout(),
     StoreId = get_store_id(),
+    ?assertNot(khepri_cluster:is_store_running(StoreId)),
 
     RaServerConfig = make_ra_server_config(),
     ?LOG_DEBUG("Starting ~ts Khepri store", [?RA_FRIENDLY_NAME]),
@@ -625,8 +651,7 @@ start_local_store() ->
                    StoreId, process_based_keep_while, RetryTimeout),
             ?LOG_DEBUG("Initializing schema"),
             init_schema(),
-            ?LOG_DEBUG("Schema initialized"),
-            expand_cluster();
+            ?LOG_DEBUG("Schema initialized");
         false ->
             %% Recovery
             %% The node already has data, meaning it was part of a cluster.
@@ -641,7 +666,7 @@ start_local_store() ->
     %% Start the gen_server. This registers the local process
     %% name, which allows subsequent calls to bypass this setup, and
     %% lets other nodes discover us via find_active_peer/1.
-    ok = start_gen_server(),
+    ok = start_gen_servers(),
     ok.
 
 %% -----------------------------------------
@@ -717,17 +742,23 @@ join_cluster1(SeedNode) ->
     StoreId = get_store_id(),
     case ra_directory:uid_of(get_ra_system(), StoreId) of
         undefined ->
-            RaServerConfig = make_ra_server_config(),
+            RaServerConfig0 = make_ra_server_config(),
+            RaServerConfig1 = maps:remove(initial_members, RaServerConfig0),
             RetryTimeout = leader_wait_retry_timeout(),
+
+            global:set_lock(?BOOTSTRAP_LOCK),
             try
-                {ok, _} = khepri:start(?RA_SYSTEM, RaServerConfig),
-                ok = join_active_peer(StoreId, SeedNode, RaServerConfig, RetryTimeout),
+                {ok, _} = khepri:start(?RA_SYSTEM, RaServerConfig1),
+                ok = join_active_peer(StoreId, SeedNode, RaServerConfig1, RetryTimeout),
                 ok = khepri_cluster:wait_for_effective_behaviour(
                        StoreId, process_based_keep_while, RetryTimeout),
                 %% Only reached when the join succeeded.
                 start_gen_server()
             catch
                 Class:Reason -> {error, {Class, Reason}}
+            after
+                %% Lock is released even if an exception occurs
+                global:del_lock(?BOOTSTRAP_LOCK)
             end;
         _ ->
             %% A store already exists on disk here. khepri_cluster:join/2
@@ -742,7 +773,13 @@ join_cluster1(SeedNode) ->
 
 make_ra_server_config() ->
     StoreId = get_store_id(),
-    Nodes = rabbit_nodes:list_members(),
+    %% We put this node first in the list. It should influence where the leader
+    %% is located.
+    %%
+    %% This also makes sure we have at least this node in the list in testcases
+    %% that do not start a full RabbitMQ node.
+    ThisNode = node(),
+    Nodes = [ThisNode | rabbit_nodes:list_members() -- [ThisNode]],
     Members = [{StoreId, Node} || Node <- Nodes],
     #{cluster_name => ?RA_CLUSTER_NAME,
       friendly_name => ?RA_FRIENDLY_NAME,
