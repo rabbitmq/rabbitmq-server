@@ -197,8 +197,15 @@ connect_source(State = #{name := Name,
                         on_confirm -> unsettled
                     end,
     AttachFun = fun(S, L, A, SSM, D) ->
-                        Filter = translate_consumer_args_to_filter(CArgs),
-                        amqp10_client:attach_receiver_link(S, L, A, SSM, D, Filter, #{}, true)
+                        amqp10_client:attach_link(
+                          S, #{name => L,
+                               role => {receiver, #{address => A,
+                                                    durable => D}, self()},
+                               snd_settle_mode => SSM,
+                               rcv_settle_mode => first,
+                               filter => translate_consumer_args_to_filter(CArgs),
+                               max_message_size => persistent_term:get(max_message_size),
+                               raw_mode => true})
                 end,
     LinkNameOverride = case CName of
                            <<>> -> undefined;
