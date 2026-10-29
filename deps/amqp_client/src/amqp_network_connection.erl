@@ -159,7 +159,7 @@ do_connect({Addr, Family},
                           orddict:merge(fun (_, _A, B) -> B end,
                                         orddict:from_list(GlobalSslOpts),
                                         orddict:from_list(SslOpts0)))),
-            case ssl:connect(Sock, SslOpts, Timeout) of
+            case ssl_connect(Sock, SslOpts, Timeout) of
                 {ok, SslSock} ->
                     try_handshake(AmqpParams, SIF,
                                   State#state{sock = SslSock});
@@ -167,6 +167,15 @@ do_connect({Addr, Family},
                     E
             end;
         {error, _} = E ->
+            E
+    end.
+
+ssl_connect(Sock, SslOpts, Timeout) ->
+    case rabbit_ssl_options:check_file_options(SslOpts) of
+        ok ->
+            ssl:connect(Sock, SslOpts, Timeout);
+        {error, _} = E ->
+            _ = gen_tcp:close(Sock),
             E
     end.
 

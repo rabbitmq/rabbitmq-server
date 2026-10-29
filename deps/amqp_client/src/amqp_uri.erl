@@ -200,7 +200,10 @@ build_ssl_broker(ParsedUri, DefaultVHost) ->
           [fun (L) -> KeyString = atom_to_list(Key),
                       case lists:keysearch(KeyString, 1, Query) of
                           {value, {_, Value}} ->
-                              try return([{Key, unescape_string(query, Fun(Value))} | L])
+                              try
+                                  V = unescape_string(query, Fun(Value)),
+                                  check_ssl_parameter(Key, V),
+                                  return([{Key, V} | L])
                               catch throw:_ ->
                                       fail({invalid_ssl_parameter, Key})
                               end;
@@ -270,6 +273,18 @@ parse_amqp_param(Field, String) ->
 
 find_path_parameter(Value) ->
     find_identity_parameter(Value).
+
+check_ssl_parameter(Key, Path) when Key =:= cacertfile;
+                                   Key =:= certfile;
+                                   Key =:= keyfile ->
+    case rabbit_ssl_options:check_file(Path) of
+        ok              -> ok;
+        %% A URI can be parsed on a node other than the one that connects.
+        {error, enoent} -> ok;
+        {error, Reason} -> throw({invalid_ssl_parameter, Key, Reason})
+    end;
+check_ssl_parameter(_Key, _Value) ->
+    ok.
 
 find_sni_parameter("disable") ->
     disable;

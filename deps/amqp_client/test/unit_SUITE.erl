@@ -316,7 +316,13 @@ amqp_uri_error_info_has_no_user_input(_Config) ->
                  {"amqps://alice:s3cret@host/?depth=s3cret&password=s3cret",
                   {invalid_ssl_parameter, depth}},
                  {"amqps://alice:s3cret@host/?password=s3cret%zz",
-                  {invalid_ssl_parameter, password}}]],
+                  {invalid_ssl_parameter, password}},
+                 {"amqps://localhost/%2f?cacertfile=/dev/zero",
+                  {invalid_ssl_parameter, cacertfile}},
+                 {"amqps://localhost/%2f?certfile=/dev/zero",
+                  {invalid_ssl_parameter, certfile}},
+                 {"amqps://localhost/%2f?keyfile=/dev",
+                  {invalid_ssl_parameter, keyfile}}]],
     ok.
 
 uri_parser_accepts_string_and_binaries(_Config) ->
