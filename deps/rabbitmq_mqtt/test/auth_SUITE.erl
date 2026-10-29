@@ -576,9 +576,20 @@ user_credentials_auth(Config) ->
         fun(Conf) -> connect_user(NewUser, <<"invalid_pass">>, Conf) end,
         Config),
 
-    expect_authentication_failure(
-        fun(Conf) -> connect_user(undefined, <<"pass">>, Conf) end,
-        Config),
+    %% MQTT 3.1.1 forbids a password without a username, so parsing rejects
+    %% the connection before authentication. MQTT 5.0 permits this combination.
+    case ?config(mqtt_version, Config) of
+        v4 ->
+            rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),
+            {ok, C} = connect_user(undefined, <<"pass">>, Config),
+            unlink(C),
+            ?assertEqual({error, tcp_closed}, emqtt:connect(C)),
+            ?assertEqual([], rpc(Config, 0, rabbit_core_metrics, get_auth_attempts, []));
+        v5 ->
+            expect_authentication_failure(
+                fun(Conf) -> connect_user(undefined, <<"pass">>, Conf) end,
+                Config)
+    end,
 
     expect_authentication_failure(
         fun(Conf) -> connect_user(NewUser, undefined, Conf) end,

@@ -112,12 +112,12 @@ publish_packet() ->
          #mqtt_packet{
             fixed = #mqtt_packet_fixed{
                        type = ?PUBLISH,
-                       dup = boolean(),
+                       dup = case Qos of 0 -> false; _ -> boolean() end,
                        qos = Qos,
                        retain = boolean()},
             variable = #mqtt_packet_publish{
                           packet_id = packet_id(Qos),
-                          topic_name = mqtt_utf8_string()},
+                          topic_name = mqtt_topic_name()},
             payload = binary()}).
 
 publish_with_properties_packet() ->
@@ -179,6 +179,10 @@ user_property() ->
                        {1, {<<"same name">>, <<"same value">>}}
                       ])))}.
 
+mqtt_topic_name() ->
+    ?SUCHTHAT(Topic, mqtt_utf8_string(),
+              Topic =/= <<>> andalso binary:match(Topic, [<<"+">>, <<"#">>]) =:= nomatch).
+
 qos() ->
     range(0, 2).
 
@@ -230,7 +234,7 @@ mqtt_utf8_string() ->
     ?LET(Bin, utf8(inf, MaxCodePointSize),
          begin
              L0 = unicode:characters_to_list(Bin, utf8),
-             L = lists:sublist(L0, MaxCodePoints),
+             L = lists:sublist([C || C <- L0, C =/= 0], MaxCodePoints),
              unicode:characters_to_binary(L, utf8, utf8)
          end).
 

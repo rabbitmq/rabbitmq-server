@@ -46,6 +46,7 @@ parse0(<<>>, ProtoVer)
     {more, fun(Bin) -> parse(Bin, ProtoVer) end};
 parse0(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, ProtoVer)
   when is_number(ProtoVer) ->
+    ok = validate_fixed_header(MessageType, Dup, QoS, Retain, ProtoVer),
     Fixed = #mqtt_packet_fixed{type = MessageType,
                                dup = int_to_bool(Dup),
                                qos = QoS,
@@ -54,6 +55,20 @@ parse0(<<MessageType:4, Dup:1, QoS:2, Retain:1, Rest/binary>>, ProtoVer)
 parse0(Bin, Cont)
   when is_function(Cont) ->
     Cont(Bin).
+
+validate_fixed_header(_Type, _Dup, _QoS, _Retain, 3) ->
+    ok;
+validate_fixed_header(?PUBLISH, Dup, QoS, _Retain, _)
+  when QoS < 3 andalso (QoS > 0 orelse Dup =:= 0) ->
+    ok;
+validate_fixed_header(Type, 0, 1, 0, _)
+  when Type =:= ?SUBSCRIBE; Type =:= ?UNSUBSCRIBE ->
+    ok;
+validate_fixed_header(Type, 0, 0, 0, _)
+  when Type =:= ?PUBACK; Type =:= ?PINGREQ; Type =:= ?DISCONNECT; Type =:= ?AUTH ->
+    ok;
+validate_fixed_header(_, _, _, _, _) ->
+    throw(invalid_fixed_header).
 
 parse_remaining_len(<<>>, Fixed, ProtoVer) ->
     {more, fun(Bin) -> parse_remaining_len(Bin, Fixed, ProtoVer) end};
@@ -110,6 +125,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
         {?PUBLISH, <<TopicLen:16, TopicName:TopicLen/binary,
                      PacketBin:(Length-2-TopicLen)/binary,
                      Rest/binary>>} ->
+            ok = validate_topic_name(TopicName, ProtoVer =:= 5),
             {PacketId, Rest1} = case Qos of
                                     ?QOS_0 ->
                                         %% "The Packet Identifier field is only present in
@@ -120,6 +136,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
                                         {Id, R}
                                 end,
             {Props, Payload} = parse_props(Rest1, ProtoVer, Type),
+            true = TopicName =/= <<>> orelse maps:is_key('Topic-Alias', Props),
             Publish = #mqtt_packet_publish{topic_name = TopicName,
                                            packet_id = PacketId,
                                            props = Props},
@@ -146,7 +163,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
             Id = maps:get('Subscription-Identifier', Props, undefined),
-            Subscriptions = parse_subscriptions(Rest1, Id, max_topic_filters(), []),
+            [_ | _] = Subscriptions = parse_subscriptions(Rest1, ProtoVer, Id, max_topic_filters(), []),
             Subscribe = #mqtt_packet_subscribe{packet_id = PacketId,
                                                props = Props,
                                                subscriptions = Subscriptions},
@@ -155,7 +172,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             %% "UNSUBSCRIBE messages use QoS level 1 to acknowledge multiple unsubscribe requests."
             1 = Qos,
             {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
-            Topics = parse_topic_filters(Rest1, max_topic_filters(), []),
+            [_ | _] = Topics = parse_topic_filters(Rest1, max_topic_filters(), []),
             Unsubscribe = #mqtt_packet_unsubscribe{packet_id = PacketId,
                                                    props = Props,
                                                    topic_filters = Topics},
@@ -199,10 +216,20 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
 max_topic_filters() ->
     persistent_term:get(?PERSISTENT_TERM_MAX_TOPIC_FILTERS_PER_PACKET).
 
-parse_subscriptions(<<Len:16, _:Len/binary, _:8, _/binary>>, _Id, 0, _Acc) ->
+parse_subscriptions(<<>>, _ProtoVer, _Id, _Remaining, Acc) ->
+    lists:reverse(Acc);
+parse_subscriptions(<<Len:16, _:Len/binary, _:8, _/binary>>, _ProtoVer, _Id, 0, _Acc) ->
     topic_filter_limit_exceeded();
-parse_subscriptions(<<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, QoS:2, Rest/binary>>,
-                    Id, Remaining, Acc) ->
+parse_subscriptions(<<Len:16, Topic:Len/binary, Options0, Rest/binary>>,
+                    ProtoVer, Id, Remaining, Acc) ->
+    ok = validate_topic_filter(Topic),
+    Options = case ProtoVer of
+                  3 -> Options0 band 3;
+                  _ -> Options0
+              end,
+    <<0:2, Rh:2, Rap:1, Nl:1, QoS:2>> = <<Options>>,
+    true = QoS < 3 andalso Rh < 3,
+    true = ProtoVer =:= 5 orelse Options < 3,
     Sub = #mqtt_subscription{
              topic_filter = binary:copy(Topic),
              options = #mqtt_subscription_opts{
@@ -211,16 +238,15 @@ parse_subscriptions(<<Len:16, Topic:Len/binary, _Reserved:2, Rh:2, Rap:1, Nl:1, 
                           retain_as_published = int_to_bool(Rap),
                           retain_handling = Rh,
                           id = Id}},
-    parse_subscriptions(Rest, Id, Remaining - 1, [Sub | Acc]);
-parse_subscriptions(_, _Id, _Remaining, Acc) ->
-    lists:reverse(Acc).
+    parse_subscriptions(Rest, ProtoVer, Id, Remaining - 1, [Sub | Acc]).
 
+parse_topic_filters(<<>>, _Remaining, Acc) ->
+    lists:reverse(Acc);
 parse_topic_filters(<<Len:16, _:Len/binary, _/binary>>, 0, _Acc) ->
     topic_filter_limit_exceeded();
 parse_topic_filters(<<Len:16, Topic:Len/binary, Rest/binary>>, Remaining, Acc) ->
-    parse_topic_filters(Rest, Remaining - 1, [Topic | Acc]);
-parse_topic_filters(_, _Remaining, Acc) ->
-    lists:reverse(Acc).
+    ok = validate_topic_filter(Topic),
+    parse_topic_filters(Rest, Remaining - 1, [Topic | Acc]).
 
 -spec topic_filter_limit_exceeded() -> no_return().
 topic_filter_limit_exceeded() ->
@@ -232,8 +258,14 @@ topic_filter_limit_exceeded() ->
 parse_connect(Bin, Fixed, Length) ->
     case Bin of
         <<PacketBin:Length/binary, Rest/binary>> ->
-            Connect = #mqtt_packet_connect{proto_ver = ProtoVer} = parse_connect(PacketBin),
-            wrap(Fixed, Connect, Rest, ProtoVer);
+            try parse_connect(PacketBin) of
+                #mqtt_packet_connect{proto_ver = ProtoVer} = Connect ->
+                    wrap(Fixed, Connect, Rest, ProtoVer);
+                {error, _} = Error ->
+                    Error
+            catch throw:Reason when Reason =:= invalid_utf8; Reason =:= invalid_topic_name ->
+                      {error, Reason}
+            end;
         TooShortBin
           when byte_size(TooShortBin) < Length ->
             more_fragments([TooShortBin], byte_size(TooShortBin), Length,
@@ -243,7 +275,19 @@ parse_connect(Bin, Fixed, Length) ->
     end.
 
 -spec parse_connect(binary()) ->
-    #mqtt_packet_connect{}.
+    #mqtt_packet_connect{} |
+    {error, reserved_connect_flag | invalid_will_flags | password_without_username}.
+parse_connect(<<Len:16, _ProtoName:Len/binary, ProtoVer, _Flags:7, 1:1, _/binary>>)
+  when ProtoVer =/= 3 ->
+    {error, reserved_connect_flag};
+parse_connect(<<Len:16, _ProtoName:Len/binary, ProtoVer,
+                _Credentials:2, WillRetain:1, WillQos:2, WillFlag:1, _Flags:2, _/binary>>)
+  when WillQos =:= 3;
+       ProtoVer =/= 3 andalso WillFlag =:= 0 andalso (WillQos =/= 0 orelse WillRetain =/= 0) ->
+    {error, invalid_will_flags};
+parse_connect(<<Len:16, _ProtoName:Len/binary, ProtoVer, 0:1, 1:1, _Flags:6, _/binary>>)
+  when ProtoVer =/= 5 ->
+    {error, password_without_username};
 parse_connect(<<Len:16, ProtoName:Len/binary,
                 ProtoVer,
                 UsernameFlag:1,
@@ -257,7 +301,7 @@ parse_connect(<<Len:16, ProtoName:Len/binary,
                 Rest0/binary>>) ->
     true = protocol_name_approved(ProtoVer, ProtoName),
     {Props, Rest1} = parse_props(Rest0, ProtoVer, ?CONNECT),
-    {ClientId, Rest2} = parse_bin(Rest1),
+    {ClientId, Rest2} = parse_utf8(Rest1),
     {WillProps, WillTopic, WillPayload, Rest3} =
     case WillFlag of
         0 ->
@@ -265,10 +309,11 @@ parse_connect(<<Len:16, ProtoName:Len/binary,
         1 ->
             {WillProps0, R0} = parse_props(Rest2, ProtoVer, will_props),
             {WillTopic0, R1} = parse_bin(R0),
+            ok = validate_topic_name(WillTopic0, false),
             {WillPayload0, R2} = parse_bin(R1),
             {WillProps0, WillTopic0, WillPayload0, R2}
     end,
-    {UserName, Rest} = parse_bin(Rest3, UsernameFlag),
+    {UserName, Rest} = parse_utf8(Rest3, UsernameFlag),
     {PasssWord, <<>>} = parse_bin(Rest, PasswordFlag),
     #mqtt_packet_connect{
        proto_ver = ProtoVer,
@@ -301,11 +346,56 @@ wrap(Fixed, Variable, Rest, ProtoVer) ->
 wrap(Fixed, Rest, ProtoVer) ->
     {ok, #mqtt_packet { fixed = Fixed }, Rest, ProtoVer}.
 
-%% parse_bin/1 is used for parsing both binary data and UTF-8 encoded strings.
-%% Our parser opts out of UTF-8 validation for performance reasons.
-%% Some UTF-8 encoded strings are blindly forwarded from MQTT publisher to MQTT subscriber.
-%% Other UTF-8 encoded strings are processed by the server and checked for UTF-8
-%% well-formedness later on.
+parse_utf8(Bin) ->
+    {String, Rest} = parse_bin(Bin),
+    ok = validate_utf8(String),
+    {String, Rest}.
+
+parse_utf8(Bin, 0) ->
+    {undefined, Bin};
+parse_utf8(Bin, 1) ->
+    parse_utf8(Bin).
+
+validate_topic_name(<<>>, false) ->
+    throw(invalid_topic_name);
+validate_topic_name(<<>>, true) ->
+    ok;
+validate_topic_name(Topic, _AllowEmpty) ->
+    validate_topic_name_chars(Topic).
+
+validate_topic_name_chars(<<>>) ->
+    ok;
+validate_topic_name_chars(<<C/utf8, Rest/binary>>)
+  when C =/= 0, C =/= $+, C =/= $# ->
+    validate_topic_name_chars(Rest);
+validate_topic_name_chars(<<C, _/binary>>)
+  when C =:= $+; C =:= $# ->
+    throw(invalid_topic_name);
+validate_topic_name_chars(_) ->
+    throw(invalid_utf8).
+
+validate_topic_filter(Topic) ->
+    true = Topic =/= <<>>,
+    ok = validate_utf8(Topic),
+    validate_topic_levels(binary:split(Topic, <<"/">>, [global])).
+
+validate_topic_levels([]) ->
+    ok;
+validate_topic_levels([<<"#">>]) ->
+    ok;
+validate_topic_levels([<<"+">> | Rest]) ->
+    validate_topic_levels(Rest);
+validate_topic_levels([Level | Rest]) ->
+    nomatch = binary:match(Level, [<<"+">>, <<"#">>]),
+    validate_topic_levels(Rest).
+
+validate_utf8(<<>>) ->
+    ok;
+validate_utf8(<<C/utf8, Rest/binary>>) when C =/= 0 ->
+    validate_utf8(Rest);
+validate_utf8(_) ->
+    throw(invalid_utf8).
+
 -spec parse_bin(binary()) ->
     {binary(), binary()}.
 parse_bin(<<Len:16, Bin:Len/binary, Rest/binary>>) ->
@@ -359,15 +449,18 @@ parse_prop(<<16#02, Val:32, Bin/binary>>, Type, Props)
     parse_prop(Bin, Type, Props#{'Message-Expiry-Interval' => Val});
 parse_prop(<<16#03, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
   when Type =:= ?PUBLISH orelse Type =:= will_props ->
+    ok = validate_utf8(Val),
     parse_prop(Rest, Type, Props#{'Content-Type' => Val});
 parse_prop(<<16#08, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
   when Type =:= ?PUBLISH orelse Type =:= will_props ->
+    ok = validate_utf8(Val),
     parse_prop(Rest, Type, Props#{'Response-Topic' => Val});
 parse_prop(<<16#09, Len:16, Val:Len/binary, Bin/binary>>, Type, Props)
   when Type =:= ?PUBLISH orelse Type =:= will_props ->
     parse_prop(Bin, Type, Props#{'Correlation-Data' => Val});
 parse_prop(<<16#0B, Bin/binary>>, ?SUBSCRIBE = Type, Props) ->
     {Val, Rest} = parse_variable_byte_integer(Bin),
+    true = Val > 0,
     %% Client sends at most one Subscription-Identifier to the server (in SUBSCRIBE packet).
     %% "It is a Protocol Error to include the Subscription Identifier more than once." [v5 3.8.2.1.2]
     parse_prop(Rest, Type, Props#{'Subscription-Identifier' => Val});
@@ -375,6 +468,7 @@ parse_prop(<<16#11, Val:32, Bin/binary>>, Type, Props)
   when Type =:= ?CONNECT orelse Type =:= ?DISCONNECT ->
     parse_prop(Bin, Type, Props#{'Session-Expiry-Interval' => Val});
 parse_prop(<<16#15, Len:16, Val:Len/binary, Rest/binary>>, ?CONNECT = Type, Props) ->
+    ok = validate_utf8(Val),
     parse_prop(Rest, Type, Props#{'Authentication-Method' => Val});
 parse_prop(<<16#16, Len:16, Val:Len/binary, Bin/binary>>, ?CONNECT = Type, Props) ->
     parse_prop(Bin, Type, Props#{'Authentication-Data' => Val});
@@ -385,9 +479,11 @@ parse_prop(<<16#18, Val:32, Bin/binary>>, will_props = Type, Props) ->
 parse_prop(<<16#19, Val, Bin/binary>>, ?CONNECT = Type, Props) ->
     parse_prop(Bin, Type, Props#{'Request-Response-Information' => Val});
 parse_prop(<<16#1C, Len:16, Val:Len/binary, Rest/binary>>, ?DISCONNECT = Type, Props) ->
+    ok = validate_utf8(Val),
     parse_prop(Rest, Type, Props#{'Server-Reference' => Val});
 parse_prop(<<16#1F, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
   when Type =:= ?PUBACK orelse Type =:= ?DISCONNECT ->
+    ok = validate_utf8(Val),
     parse_prop(Rest, Type, Props#{'Reason-String' => Val});
 parse_prop(<<16#21, Val:16, Bin/binary>>, ?CONNECT = Type, Props) ->
     case Val of
@@ -406,6 +502,8 @@ parse_prop(<<16#26, LenName:16, Name:LenName/binary, LenVal:16, Val:LenVal/binar
            Type, Props0) ->
     %% "The User Property is allowed to appear multiple times to represent multiple
     %% name, value pairs. The same name is allowed to appear more than once."
+    ok = validate_utf8(Name),
+    ok = validate_utf8(Val),
     Pair = {Name, Val},
     UserProps = case Props0 of
                     #{'User-Property' := {0, _}} ->
