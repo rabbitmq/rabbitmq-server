@@ -20,6 +20,7 @@ groups() ->
     [{non_parallel_tests, [], [
         no_config_defaults,
         tcp_config_only,
+        cowboy_opts_override_defaults,
         ssl_config_only,
         tls_config_only_does_not_start_a_plain_listener,
 
@@ -51,13 +52,13 @@ unset_listener_env() ->
      || Key <- [tcp_config, ssl_config, tcp_listeners, ssl_listeners]].
 
 no_config_defaults(_Config) ->
-    ?assertEqual([
+    ?assertEqual(sort_nested([
         [
             {cowboy_opts,[
-                {sendfile, false}
+                {sendfile, false}, {protocols, [http]}
             ]},
             {port, 15692}]
-    ], rabbit_prometheus_app:get_listeners_config()).
+    ]), sort_nested(rabbit_prometheus_app:get_listeners_config())).
 
 
 tcp_config_only(_Config) ->
@@ -71,11 +72,20 @@ tcp_config_only(_Config) ->
     Expected = [
         {cowboy_opts,[
             {idle_timeout, 10000},
-            {sendfile, false}
+            {sendfile, false}, {protocols, [http]}
         ]},
         {port, 999}
     ],
     ?assertEqual(sort_nested(Expected), sort_nested(get_single_listener_config())).
+
+cowboy_opts_override_defaults(_Config) ->
+    application:set_env(rabbitmq_prometheus, tcp_config, [
+        {port, 999},
+        {cowboy_opts, [{protocols, [http2, http]}, {sendfile, true}]}
+    ]),
+    ?assertEqual([{protocols, [http2, http]}, {sendfile, true}],
+                 lists:sort(proplists:get_value(cowboy_opts,
+                                                get_single_listener_config()))).
 
 ssl_config_only(_Config) ->
     application:set_env(rabbitmq_prometheus, ssl_config, [
@@ -85,7 +95,7 @@ ssl_config_only(_Config) ->
 
     Expected = [
         {cowboy_opts,[
-            {sendfile,false}
+            {sendfile, false}, {protocols, [http]}
         ]},
         {ssl, true},
         {port, 999},
@@ -108,12 +118,12 @@ extra_tcp_listeners(_Config) ->
     application:set_env(rabbitmq_prometheus, tcp_listeners,
                         [15680, {"127.0.0.1", 15681}]),
     Expected = [
-        [{cowboy_opts, [{idle_timeout, 10000}, {sendfile, false}]},
+        [{cowboy_opts, [{idle_timeout, 10000}, {sendfile, false}, {protocols, [http]}]},
          {ip, "10.0.0.1"},
          {port, 998}],
-        [{cowboy_opts, [{idle_timeout, 10000}, {sendfile, false}]},
+        [{cowboy_opts, [{idle_timeout, 10000}, {sendfile, false}, {protocols, [http]}]},
          {port, 15680}],
-        [{cowboy_opts, [{idle_timeout, 10000}, {sendfile, false}]},
+        [{cowboy_opts, [{idle_timeout, 10000}, {sendfile, false}, {protocols, [http]}]},
          {ip, "127.0.0.1"},
          {port, 15681}]
     ],
@@ -122,8 +132,8 @@ extra_tcp_listeners(_Config) ->
 extra_tcp_listeners_without_tcp_config(_Config) ->
     application:set_env(rabbitmq_prometheus, tcp_listeners, [15680]),
     Expected = [
-        [{cowboy_opts, [{sendfile, false}]}, {port, 15692}],
-        [{cowboy_opts, [{sendfile, false}]}, {port, 15680}]
+        [{cowboy_opts, [{sendfile, false}, {protocols, [http]}]}, {port, 15692}],
+        [{cowboy_opts, [{sendfile, false}, {protocols, [http]}]}, {port, 15680}]
     ],
     ?assertEqual(sort_nested(Expected), sort_nested(rabbit_prometheus_app:get_listeners_config())).
 
@@ -134,11 +144,11 @@ extra_tls_listeners(_Config) ->
     ]),
     application:set_env(rabbitmq_prometheus, ssl_listeners, [{"127.0.0.1", 15671}]),
     Expected = [
-        [{cowboy_opts, [{sendfile, false}]},
+        [{cowboy_opts, [{sendfile, false}, {protocols, [http]}]},
          {ssl, true},
          {port, 999},
          {certfile, "/path/to/cert.pem"}],
-        [{cowboy_opts, [{sendfile, false}]},
+        [{cowboy_opts, [{sendfile, false}, {protocols, [http]}]},
          {ssl, true},
          {ip, "127.0.0.1"},
          {port, 15671},
@@ -149,8 +159,8 @@ extra_tls_listeners(_Config) ->
 extra_tls_listeners_without_ssl_config(_Config) ->
     application:set_env(rabbitmq_prometheus, ssl_listeners, [15671]),
     Expected = [
-        [{cowboy_opts, [{sendfile, false}]}, {port, 15692}],
-        [{cowboy_opts, [{sendfile, false}]}, {ssl, true}, {port, 15671}]
+        [{cowboy_opts, [{sendfile, false}, {protocols, [http]}]}, {port, 15692}],
+        [{cowboy_opts, [{sendfile, false}, {protocols, [http]}]}, {ssl, true}, {port, 15671}]
     ],
     ?assertEqual(sort_nested(Expected), sort_nested(rabbit_prometheus_app:get_listeners_config())).
 

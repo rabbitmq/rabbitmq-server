@@ -117,16 +117,18 @@ with_address({IP, Port}, Config) ->
     lists:keystore(ip, 1, with_address(Port, Config), {ip, IP}).
 
 tcp_listener(Conf) ->
-    maybe_disable_sendfile(Conf).
+    with_default_cowboy_opts(Conf).
 
 tls_listener(Conf) ->
-    rabbit_ssl:wrap_password_opt(maybe_disable_sendfile([{ssl, true} | Conf])).
+    rabbit_ssl:wrap_password_opt(with_default_cowboy_opts([{ssl, true} | Conf])).
 
-maybe_disable_sendfile(Listener) ->
-    DisableSendfile = #{sendfile => false},
+with_default_cowboy_opts(Listener) ->
+    %% HTTP/2 is disabled because Cowboy buffers up to 16 MB per connection
+    %% for clients that do not read responses. Scrapers use HTTP/1.1.
+    Defaults = #{sendfile => false, protocols => [http]},
     CowboyOptsL0 = proplists:get_value(cowboy_opts, Listener, []),
     CowboyOptsM0 = maps:from_list(CowboyOptsL0),
-    CowboyOptsM1 = maps:merge(DisableSendfile, CowboyOptsM0),
+    CowboyOptsM1 = maps:merge(Defaults, CowboyOptsM0),
     CowboyOptsL1 = maps:to_list(CowboyOptsM1),
     L1 = lists:keydelete(cowboy_opts, 1, Listener),
     [{cowboy_opts, CowboyOptsL1} | L1].
