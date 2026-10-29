@@ -1338,10 +1338,16 @@ handle_frame(Detach0 = #'v1_0.detach'{handle = ?UINT(HandleInt),
                                 {ok, QStates1} ->
                                     {OutgoingLinks1, Unsettled1, Pending1, QStates1, Detach0, PC};
                                 {error, Reason} ->
-                                    protocol_error(
-                                      ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                      "Failed to remove consumer from ~s: ~tP",
-                                      [rabbit_misc:rs(amqqueue:get_name(Q)), Reason, ?FORMAT_DEPTH_LIMIT])
+                                    ?LOG_WARNING(
+                                       "Failed to remove consumer ~ts from ~ts: ~tP",
+                                       [Ctag, rabbit_misc:rs(QName), Reason, ?FORMAT_DEPTH_LIMIT]),
+                                    Description = unicode:characters_to_binary(
+                                                    "failed to remove consumer from " ++
+                                                    rabbit_misc:rs(QName)),
+                                    Err = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                                        description = {utf8, Description}},
+                                    Detach1 = Detach0#'v1_0.detach'{error = Err},
+                                    {OutgoingLinks1, Unsettled1, Pending1, QStates0, Detach1, PC}
                             end;
                         {error, not_found} ->
                             {OutgoingLinks1, Unsettled1, Pending1, QStates0, Detach0, PC}

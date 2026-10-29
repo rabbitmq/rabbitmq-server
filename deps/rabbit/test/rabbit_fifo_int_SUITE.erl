@@ -40,6 +40,8 @@ all_tests() ->
      cancel_checkout_with_remove,
      cancel_checkout_with_pending_using_cancel_reason,
      cancel_checkout_with_pending_using_remove_reason,
+     cancel_checkout_when_server_is_down,
+     checkout_after_cancel_checkout_when_server_is_down,
      lost_delivery,
      credit_api_v2,
      untracked_enqueue,
@@ -682,6 +684,78 @@ cancel_checkout_with_pending(Config, Reason) ->
                       element(2, ra:member_overview(ServerId))),
         200, 20),
     flush(),
+    ok.
+
+cancel_checkout_when_server_is_down(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
+    {ok, _, F2} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10},
+                                              #{}, F1),
+    {_, _, F3} = process_ra_events(receive_ra_events(1, 1), ClusterName, F2,
+                                   [], [], fun (_, S) -> S end),
+    ok = rabbit_quorum_queue:stop_server(ServerId),
+    {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, remove, F3),
+    ?assertEqual(1, rabbit_fifo_client:pending_size(F4)),
+
+    ok = rabbit_quorum_queue:restart_server(ServerId),
+    F5a = receive
+              {ra_event, From, {machine, leader_change} = Evt} ->
+                  {ok, S, []} = rabbit_fifo_client:handle_ra_event(
+                                  ClusterName, From, Evt, F4),
+                  S
+          after ?TIMEOUT ->
+                    exit(leader_change_timeout)
+          end,
+    {_, Actions, F5} = process_ra_events(receive_ra_events(1, 0), ClusterName, F5a,
+                                         [], [], fun (_, S) -> S end),
+    ?assertEqual([], Actions),
+    ?assertEqual(0, rabbit_fifo_client:pending_size(F5)),
+    {ok, _, {_, _, _, _, m1}, F6} =
+        rabbit_fifo_client:dequeue(ClusterName, <<"d1">>, settled, undefined, F5),
+
+    %% Replies to cancels resent with another sequence number.
+    ?assertMatch({ok, _, []},
+                 rabbit_fifo_client:handle_ra_event(
+                   ClusterName, ServerId,
+                   {applied, [{1000, {ok, #{num_checked_out => 0}}},
+                              {1001, {error, consumer_not_found}}]},
+                   F6)),
+    rabbit_quorum_queue:stop_server(ServerId),
+    ok.
+
+checkout_after_cancel_checkout_when_server_is_down(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
+    {ok, _, F2} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10},
+                                              #{}, F1),
+    {_, _, F3} = process_ra_events(receive_ra_events(1, 1), ClusterName, F2,
+                                   [], [], fun (_, S) -> S end),
+    ok = rabbit_quorum_queue:stop_server(ServerId),
+    {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, remove, F3),
+
+    ok = rabbit_quorum_queue:restart_server(ServerId),
+    %% Check out again before the client handles the leader change.
+    LeaderChange = receive
+                       {ra_event, _, {machine, leader_change}} = Evt ->
+                           Evt
+                   after ?TIMEOUT ->
+                             exit(leader_change_timeout)
+                   end,
+    {ok, _, F5} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10},
+                                              #{}, F4),
+    ?assertEqual(0, rabbit_fifo_client:pending_size(F5)),
+    {_, _, F6} = process_ra_events([LeaderChange], ClusterName, F5),
+    {[{_, m1}], F7} = receive_deliveries(ClusterName, 1, F6),
+    _ = process_ra_events(receive_ra_events(), ClusterName, F7),
+    ?assertMatch(#{machine := #{num_consumers := 1}},
+                 element(2, ra:member_overview(ServerId))),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 lost_delivery(Config) ->
