@@ -35,6 +35,7 @@ all() ->
         unauthenticated_disconnect_returns_error,
         unauthenticated_error_does_not_crash_reader,
         connection_is_tracked,
+        reader_process_flags,
         user_deletion_closes_connection,
         vhost_connection_limit,
         user_connection_limit
@@ -426,6 +427,14 @@ connection_is_tracked(Config) ->
                       count_tracked_items_in, [{user, <<"guest">>}])),
     rabbit_stomp_client:disconnect(Client),
     ?awaitMatch(0, count_tracked_stomp_connections(Config), 30_000).
+
+reader_process_flags(Config) ->
+    {ok, Client} = rabbit_stomp_client:connect(get_stomp_port(Config)),
+    [Reader] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []),
+    ?assertMatch({max_heap_size, #{size := 0}},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, erlang, process_info,
+                                              [Reader, max_heap_size])),
+    rabbit_stomp_client:disconnect(Client).
 
 user_deletion_closes_connection(Config) ->
     User = <<"stomp-tracked-user">>,
