@@ -1,0 +1,44 @@
+:root {
+    color-scheme: light;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #273d34;
+    background: #f4f1e8;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1120px; margin: auto; padding: 30px 40px; }
+a { color: inherit; }
+header { display: flex; align-items: center; justify-content: space-between; }
+.brand { color: #f60; font-size: 24px; font-weight: 750; text-decoration: none; letter-spacing: -1px; }
+#exit { text-decoration: none; font-size: 14px; padding: 9px 12px; border: 1px solid #bfc5b7; border-radius: 6px; }
+kbd { font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid #c6cbbf; border-radius: 4px; }
+#exit kbd { margin-left: 12px; }
+.heading { margin: 56px 0 32px; }
+.eyebrow { font-size: 10px; letter-spacing: 2px; font-weight: 700; color: #697566; }
+h1 { margin: 12px 0; font-size: clamp(44px, 7vw, 78px); letter-spacing: -4px; font-weight: 750; line-height: 1; }
+h1 span { color: #f60; }
+.heading > p:last-child { color: #697566; font-size: 16px; }
+.game { position: relative; overflow: hidden; border: 1px solid #c9cebf; border-radius: 12px; background: #f4f1e8; }
+.scoreboard { display: flex; gap: 38px; position: absolute; z-index: 2; top: 22px; right: 26px; pointer-events: none; }
+.scoreboard div { display: flex; flex-direction: column; gap: 4px; min-width: 48px; }
+.scoreboard span { text-transform: uppercase; letter-spacing: 1.5px; font-size: 9px; color: #697566; }
+.scoreboard output { font-variant-numeric: tabular-nums; font-size: 25px; font-weight: 650; }
+#course { width: 100%; height: clamp(300px, 40vw, 430px); touch-action: none; outline: none; }
+canvas { display: block; }
+#panel { position: absolute; z-index: 1; inset: 80px 0 0; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 20px; text-align: center; background: #f4f1e8e8; }
+#panel[hidden], [hidden] { display: none; }
+h2 { font-size: clamp(24px, 4vw, 36px); letter-spacing: -1px; margin: 8px 0; }
+#message { max-width: 390px; color: #697566; font-size: 14px; line-height: 1.5; margin: 8px 0 20px; }
+button { background: #f60; border: 0; border-radius: 6px; color: #fff; font: inherit; font-size: 14px; font-weight: 650; padding: 14px 28px; cursor: pointer; }
+button:hover { background: #e65b00; }
+a:focus-visible, button:focus-visible { outline: 3px solid #273d34; outline-offset: 5px; }
+footer { display: flex; justify-content: space-between; gap: 12px; color: #697566; font-size: 12px; margin-top: 16px; }
+footer p { line-height: 1.8; }
+@media (max-width: 600px) {
+    main { padding: 20px; }
+    .heading { margin-top: 38px; }
+    h1 { letter-spacing: -2px; }
+    footer { flex-direction: column; gap: 0; }
+    footer p { margin: 4px 0; }
+    .scoreboard { top: 18px; right: 20px; gap: 26px; }
+}

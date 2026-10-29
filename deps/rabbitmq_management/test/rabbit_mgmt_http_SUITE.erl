@@ -78,6 +78,7 @@ groups() ->
 
 some_tests() ->
     [
+        bunny_hop_test,
         users_test,
         users_protected_test,
         users_protected_bulk_delete_test,
@@ -5061,6 +5062,30 @@ login_encrypted_test(Config) ->
     rpc(Config, application, unset_env,
         [rabbitmq_management, credential_encryption_secret]),
     passed.
+
+bunny_hop_test(Config) ->
+    {ok, {{_, 200, _}, Headers, Body}} = req(Config, get_static, "bunny-hop", []),
+    ?assert(lists:prefix("text/html", proplists:get_value("content-type", Headers))),
+    Html = iolist_to_binary(Body),
+    ?assertNotEqual(nomatch, binary:match(Html, <<"js/bunny-hop/bootstrap.js">>)),
+    ?assertEqual(nomatch, binary:match(Html, <<"js/main.js">>)),
+    ?assertEqual(nomatch, binary:match(Html, <<"js/router.js">>)),
+    ?assertEqual(nomatch, binary:match(Html, <<"http:">>)),
+    ?assertEqual(nomatch, binary:match(Html, <<"https:">>)),
+    lists:foreach(
+      fun({Path, Types}) ->
+          {ok, {{_, 200, _}, AssetHeaders, AssetBody}} = req(Config, get_static, Path, []),
+          ContentType = proplists:get_value("content-type", AssetHeaders),
+          ?assert(lists:any(fun(Type) -> lists:prefix(Type, ContentType) end, Types)),
+          ?assert(iolist_size(AssetBody) > 0)
+      end,
+      [{"js/bunny-hop/bootstrap.js", ["text/javascript", "application/javascript"]},
+       {"js/bunny-hop/game.js", ["text/javascript", "application/javascript"]},
+       {"js/bunny-hop/model.js", ["text/javascript", "application/javascript"]},
+       {"js/bunny-hop/vendor/pixi-8.22.0.min.mjs", ["text/javascript", "application/javascript"]},
+       {"js/bunny-hop/vendor/unsafe-eval-8.22.0.min.js", ["text/javascript", "application/javascript"]},
+       {"css/bunny-hop.css", ["text/css"]},
+       {"img/bunny-hop/rabbitmq-logo.png", ["image/png"]}]).
 
 csp_headers_test(Config) ->
     AuthHeader = auth_header("guest", "guest"),

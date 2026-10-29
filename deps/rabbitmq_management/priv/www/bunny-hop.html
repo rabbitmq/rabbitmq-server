@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bunny Hop — RabbitMQ</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="css/bunny-hop.css">
+</head>
+<body data-state="loading">
+  <main>
+    <header>
+      <a class="brand" href="./#/" aria-label="RabbitMQ management overview">RabbitMQ</a>
+      <a id="exit" href="./#/">Exit <kbd>q</kbd></a>
+    </header>
+    <section class="heading">
+      <p class="eyebrow">A LITTLE BREAK BETWEEN MESSAGES</p>
+      <h1>Bunny Hop<span>.</span></h1>
+      <p>Keep moving. Clear the queues.</p>
+    </section>
+    <section class="game" aria-label="Bunny Hop game">
+      <div class="scoreboard">
+        <div><span>Distance</span><output id="distance">0</output></div>
+        <div><span>Hops</span><output id="hops">0</output></div>
+      </div>
+      <div id="course" aria-label="Running course. Press Space or Arrow Up, or tap to jump."></div>
+      <div id="panel" role="region" aria-labelledby="status">
+        <p class="eyebrow" id="stage-label">BUNNY HOP</p>
+        <h2 id="status" role="status">Loading the course…</h2>
+        <p id="message">Getting your rabbit ready.</p>
+        <button id="action" type="button" hidden>Start running</button>
+      </div>
+    </section>
+    <footer>
+      <p><kbd>Space</kbd> or <kbd>↑</kbd>, or tap the course to jump</p>
+      <p>Messages ahead. One hop at a time.</p>
+    </footer>
+  </main>
+  <script src="js/bunny-hop/bootstrap.js"></script>
+</body>
+</html>

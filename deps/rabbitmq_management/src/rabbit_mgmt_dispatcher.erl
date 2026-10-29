@@ -31,7 +31,9 @@ build_routes(Ignore) ->
     OauthTokenProxy = build_oauth_token_proxy_routes(Prefix),
     % NB: order is significant in the routing list
     Routes0 = build_module_routes(Ignore) ++
-        [ApiRdrRte, CliRdrRte, MgmtRdrRte, StatsRdrRte1, StatsRdrRte2, LocalStaticRte],
+        [{"/bunny-hop", rabbit_mgmt_wm_static,
+          {priv_file, ManagementApp, "www/bunny-hop.html"}},
+         ApiRdrRte, CliRdrRte, MgmtRdrRte, StatsRdrRte1, StatsRdrRte2, LocalStaticRte],
     Routes1 = maybe_add_path_prefix(Routes0, Prefix),
     % NB: ensure the root routes are first
     Routes2 = RootIdxRtes ++ OauthBootstrap ++ OauthTokenProxy ++ maybe_add_path_prefix([{"/login", rabbit_mgmt_login, []}], Prefix) ++ Routes1,
