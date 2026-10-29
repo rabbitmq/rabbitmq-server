@@ -150,6 +150,7 @@
 %% incoming multi transfer delivery [2.6.14]
 -record(multi_transfer_msg, {
           payload_fragments_rev :: [binary(),...],
+          payload_size :: non_neg_integer(),
           delivery_id :: delivery_number(),
           settled :: boolean()
          }).
@@ -2571,6 +2572,7 @@ incoming_link_transfer(
     Link = Link0#incoming_link{
              multi_transfer_msg = #multi_transfer_msg{
                                      payload_fragments_rev = [MsgPart],
+                                     payload_size = byte_size(MsgPart),
                                      delivery_id = DeliveryId,
                                      %% "If not set on the first (or only) transfer for a (multi-transfer)
                                      %% delivery, then the settled flag MUST be interpreted as being false."
@@ -2585,15 +2587,22 @@ incoming_link_transfer(
              max_message_size = MaxMessageSize,
              multi_transfer_msg = Multi = #multi_transfer_msg{
                                              payload_fragments_rev = PFR0,
+                                             payload_size = PayloadSize0,
                                              delivery_id = FirstDeliveryId,
                                              settled = FirstSettled}},
   State) ->
     %% This is a continuation transfer with even more transfers to come.
     validate_multi_transfer_delivery_id(DeliveryId, FirstDeliveryId),
     validate_multi_transfer_settled(Settled, FirstSettled),
-    PFR = [MsgPart | PFR0],
-    validate_message_size(PFR, MaxMessageSize),
-    Link = Link0#incoming_link{multi_transfer_msg = Multi#multi_transfer_msg{payload_fragments_rev = PFR}},
+    PayloadSize = PayloadSize0 + byte_size(MsgPart),
+    validate_message_size(PayloadSize, MaxMessageSize),
+    PFR = case MsgPart of
+              <<>> -> PFR0;
+              _ -> [MsgPart | PFR0]
+          end,
+    Link = Link0#incoming_link{multi_transfer_msg = Multi#multi_transfer_msg{
+                                                      payload_fragments_rev = PFR,
+                                                      payload_size = PayloadSize}},
     {ok, [], Link, State};
 incoming_link_transfer(
   #'v1_0.transfer'{handle = ?UINT(HandleInt)},
