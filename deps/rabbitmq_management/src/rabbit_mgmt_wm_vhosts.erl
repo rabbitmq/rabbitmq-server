@@ -51,7 +51,7 @@ is_authorized(ReqData, Context) ->
 augment(Basic, ReqData) ->
     case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
-            rabbit_mgmt_db:augment_vhosts(Basic, rabbit_mgmt_util:range(ReqData));
+            rabbit_mgmt_db:augment_vhosts(Basic, rabbit_mgmt_util:list_range(ReqData));
         true ->
             Basic
     end.
@@ -61,7 +61,7 @@ augmented(ReqData, #context{user = User}) ->
         false ->
             rabbit_mgmt_db:augment_vhosts(
               [rabbit_vhost:info(V) || V <- rabbit_mgmt_util:list_visible_vhosts(User)],
-              rabbit_mgmt_util:range(ReqData));
+              rabbit_mgmt_util:list_range(ReqData));
         true ->
             [rabbit_vhost:info(V) || V <- rabbit_mgmt_util:list_visible_vhosts(User)]
     end.

@@ -8,6 +8,7 @@
 -module(rabbit_mgmt_test_unit_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 -compile(export_all).
 
@@ -26,7 +27,8 @@ groups() ->
                                    path_prefix_test,
                                    regex_dos_test,
                                    has_json_extension_test,
-                                   sort_list_test
+                                   sort_list_test,
+                                   list_range_test
                                   ]},
      {sequential_tests, [], [
                               referrer_policy_header_set_when_configured,
@@ -199,4 +201,21 @@ sort_list_test(_Config) ->
     %% Dotted traversal into lists of non-2-tuples
     ItemList = [{name, <<"e">>}, {tags, [<<"tag1">>, <<"tag2">>]}],
     ?assertEqual([ItemList], rabbit_mgmt_util:sort_list([ItemList], ["tags.foo"])),
+    ok.
+
+list_range_test(_Config) ->
+    Req = fun(Age, Incr) ->
+                  #{qs => iolist_to_binary(
+                            io_lib:format("lengths_age=~b&lengths_incr=~b",
+                                          [Age, Incr]))}
+          end,
+    {#range{}, no_range, no_range, no_range} = rabbit_mgmt_util:range(Req(600, 5)),
+    {#range{}, no_range, no_range, no_range} = rabbit_mgmt_util:range_ceil(Req(600, 5)),
+    {#range{}, no_range, no_range, no_range} = rabbit_mgmt_util:list_range(Req(300, 5)),
+    {#range{}, no_range, no_range, no_range} = rabbit_mgmt_util:list_range_ceil(Req(300, 5)),
+    {no_range, no_range, no_range, no_range} = rabbit_mgmt_util:list_range(#{qs => <<>>}),
+    ?assertThrow({error, invalid_range_parameters, _},
+                 rabbit_mgmt_util:list_range(Req(305, 5))),
+    ?assertThrow({error, invalid_range_parameters, _},
+                 rabbit_mgmt_util:list_range_ceil(Req(600, 5))),
     ok.

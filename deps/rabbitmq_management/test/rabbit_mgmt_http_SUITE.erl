@@ -3540,7 +3540,7 @@ samples_range_test(Config) ->
     ?AWAIT(
        begin
            [ConnInfo | _] = http_get(Config, "/channels?lengths_age=60&lengths_incr=1", ?OK),
-           http_get(Config, "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/channels?lengths_age=61&lengths_incr=1", ?BAD_REQUEST),
 
            ConnDetails = maps:get(connection_details, ConnInfo),
            ConnName0 = maps:get(name, ConnDetails),
@@ -3551,21 +3551,21 @@ samples_range_test(Config) ->
            http_get(Config, "/channels/" ++ ChanName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
            http_get(Config, "/vhosts/%2F/channels?lengths_age=60&lengths_incr=1", ?OK),
-           http_get(Config, "/vhosts/%2F/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/vhosts/%2F/channels?lengths_age=61&lengths_incr=1", ?BAD_REQUEST),
 
            %% Connections.
 
            http_get(Config, "/connections?lengths_age=60&lengths_incr=1", ?OK),
-           http_get(Config, "/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/connections?lengths_age=61&lengths_incr=1", ?BAD_REQUEST),
 
            http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=60&lengths_incr=1", ?OK),
            http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
            http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=60&lengths_incr=1", ?OK),
-           http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=61&lengths_incr=1", ?BAD_REQUEST),
 
            http_get(Config, "/vhosts/%2F/connections?lengths_age=60&lengths_incr=1", ?OK),
-           http_get(Config, "/vhosts/%2F/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/vhosts/%2F/connections?lengths_age=61&lengths_incr=1", ?BAD_REQUEST),
            true
        end),
 
@@ -3575,7 +3575,7 @@ samples_range_test(Config) ->
     %% Exchanges
 
     http_get(Config, "/exchanges?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/exchanges?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+    http_get(Config, "/exchanges?lengths_age=61&lengths_incr=1", ?BAD_REQUEST),
 
     http_get(Config, "/exchanges/%2F/amq.direct?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/exchanges/%2F/amq.direct?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
@@ -3605,7 +3605,7 @@ samples_range_test(Config) ->
     ?AWAIT(
        begin
            http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK),
-           http_get(Config, "/queues/%2F?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/queues/%2F?lengths_age=61&lengths_incr=1", ?BAD_REQUEST),
            http_get(Config, "/queues/%2F/test-001?lengths_age=60&lengths_incr=1", ?OK),
            http_get(Config, "/queues/%2F/test-001?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
            true
@@ -3619,7 +3619,7 @@ samples_range_test(Config) ->
     ?AWAIT(
        begin
            http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
-           http_get(Config, "/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/vhosts?lengths_age=61&lengths_incr=1", ?BAD_REQUEST),
            http_get(Config, "/vhosts/vh1?lengths_age=60&lengths_incr=1", ?OK),
            http_get(Config, "/vhosts/vh1?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
            true

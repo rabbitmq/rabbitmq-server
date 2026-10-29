@@ -38,7 +38,7 @@
 -export([post_respond/1, columns/1, is_monitor/1]).
 -export([list_visible_vhosts/1, list_visible_vhosts_names/1,
          b64decode_or_throw/1, no_range/0, range/1,
-         range_ceil/1, floor/2, ceil/1, ceil/2]).
+         range_ceil/1, list_range/1, list_range_ceil/1, floor/2, ceil/1, ceil/2]).
 -export([pagination_params/1,
          maybe_filter_by_keyword/4,
          get_value_param/2,
@@ -69,6 +69,7 @@
 -define(MAX_PAGE_SIZE, 500).
 
 -define(MAX_RANGE, 500).
+-define(MAX_LIST_RANGE, 60).
 -define(MAX_FILTER_LENGTH, 1024).
 
 %% Erlang's own ceiling for a receive/gen_server/gen_event/rpc timeout value.
@@ -1260,10 +1261,15 @@ no_range() -> {no_range, no_range, no_range, no_range}.
 %% Take floor on queries so we make sure we only return samples
 %% for which we've finished receiving events. Fixes the "drop at
 %% the end" problem.
-range(ReqData) -> {range("lengths",    fun floor/2, ReqData),
-                   range("msg_rates",  fun floor/2, ReqData),
-                   range("data_rates", fun floor/2, ReqData),
-                   range("node_stats", fun floor/2, ReqData)}.
+range(ReqData) -> range(ReqData, ?MAX_RANGE).
+
+%% List endpoints compute samples for every object in the list.
+list_range(ReqData) -> range(ReqData, ?MAX_LIST_RANGE).
+
+range(ReqData, Max) -> {range("lengths",    fun floor/2, Max, ReqData),
+                        range("msg_rates",  fun floor/2, Max, ReqData),
+                        range("data_rates", fun floor/2, Max, ReqData),
+                        range("node_stats", fun floor/2, Max, ReqData)}.
 
 %% ...but if we know only one event could have contributed towards
 %% what we are interested in, then let's take the ceiling instead and
@@ -1282,17 +1288,21 @@ range(ReqData) -> {range("lengths",    fun floor/2, ReqData),
 %% Age is assumed to be > 0, Incr > 0 and (Age div Incr) <= ?MAX_RANGE.
 %% The latter condition allows us to limit the number of samples that
 %% will be sent to the client.
-range_ceil(ReqData) -> {range("lengths",    fun ceil/2,  ReqData),
-                        range("msg_rates",  fun floor/2, ReqData),
-                        range("data_rates", fun floor/2,  ReqData),
-                        range("node_stats", fun floor/2,  ReqData)}.
+range_ceil(ReqData) -> range_ceil(ReqData, ?MAX_RANGE).
 
-range(Prefix, Round, ReqData) ->
+list_range_ceil(ReqData) -> range_ceil(ReqData, ?MAX_LIST_RANGE).
+
+range_ceil(ReqData, Max) -> {range("lengths",    fun ceil/2,  Max, ReqData),
+                             range("msg_rates",  fun floor/2, Max, ReqData),
+                             range("data_rates", fun floor/2, Max, ReqData),
+                             range("node_stats", fun floor/2, Max, ReqData)}.
+
+range(Prefix, Round, Max, ReqData) ->
     Age0 = int(Prefix ++ "_age", ReqData),
     Incr0 = int(Prefix ++ "_incr", ReqData),
     if
         is_atom(Age0) orelse is_atom(Incr0) -> no_range;
-        (Age0 > 0) andalso (Incr0 > 0) andalso ((Age0 div Incr0) =< ?MAX_RANGE) ->
+        (Age0 > 0) andalso (Incr0 > 0) andalso ((Age0 div Incr0) =< Max) ->
             Age = Age0 * 1000,
             Incr = Incr0 * 1000,
             Now = os:system_time(milli_seconds),

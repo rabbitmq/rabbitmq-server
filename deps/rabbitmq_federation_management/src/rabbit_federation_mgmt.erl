@@ -54,7 +54,7 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, {Filter, Context}) ->
     try
         Chs = rabbit_mgmt_db:get_all_channels(
-                rabbit_mgmt_util:range(ReqData)),
+                rabbit_mgmt_util:list_range(ReqData)),
         rabbit_mgmt_util:reply_list(
           filter_vhost(status(Chs, ReqData, Context, Filter), ReqData), ReqData, Context)
     catch

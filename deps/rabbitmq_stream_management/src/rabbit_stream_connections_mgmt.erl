@@ -48,7 +48,7 @@ is_authorized(ReqData, Context) ->
 augmented(ReqData, Context) ->
     rabbit_mgmt_util:filter_conn_ch_list(
         rabbit_mgmt_db:get_all_connections(
-            rabbit_mgmt_util:range_ceil(ReqData)),
+            rabbit_mgmt_util:list_range_ceil(ReqData)),
         ReqData, Context).
 
 do_connections_query(ReqData, Context) ->
