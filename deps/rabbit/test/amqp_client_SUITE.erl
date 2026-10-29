@@ -120,6 +120,8 @@ groups() ->
        resource_alarm_send_many,
        max_message_size_client_to_server,
        max_message_size_server_to_client,
+       multi_transfer_empty_fragments,
+       multi_transfer_max_message_size_exceeded,
        global_counters,
        stream_bloom_filter,
        available_messages_classic_queue,
@@ -4846,6 +4848,46 @@ max_message_size_server_to_client(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
+multi_transfer_empty_fragments(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
+    Sock = raw_attach_sender(Config, rabbitmq_amqp_address:queue(QName)),
+    First = raw_frame(#'v1_0.transfer'{handle = {uint, 0},
+                                       delivery_id = {uint, 0},
+                                       delivery_tag = {binary, <<"t1">>},
+                                       settled = false,
+                                       more = true},
+                      amqp10_framing:encode_bin(#'v1_0.data'{content = <<"hello">>})),
+    Empty = raw_frame(#'v1_0.transfer'{handle = {uint, 0}, more = true}),
+    Last = raw_frame(#'v1_0.transfer'{handle = {uint, 0}, more = false}),
+    ok = gen_tcp:send(Sock, [First, lists:duplicate(500_000, Empty), Last]),
+    ?assertMatch(#'v1_0.disposition'{state = #'v1_0.accepted'{}},
+                 raw_recv_until(Sock, 'v1_0.disposition')),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"hello">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true})),
+    ok = gen_tcp:close(Sock),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+multi_transfer_max_message_size_exceeded(Config) ->
+    DefaultMaxMessageSize = rpc(Config, persistent_term, get, [max_message_size]),
+    ok = rpc(Config, persistent_term, put, [max_message_size, 2000]),
+    Sock = raw_attach_sender(Config, rabbitmq_amqp_address:exchange(<<"amq.fanout">>)),
+    ok = rpc(Config, persistent_term, put, [max_message_size, DefaultMaxMessageSize]),
+    First = #'v1_0.transfer'{handle = {uint, 0},
+                             delivery_id = {uint, 0},
+                             delivery_tag = {binary, <<"t1">>},
+                             more = true},
+    Continuation = #'v1_0.transfer'{handle = {uint, 0}, more = true},
+    ok = gen_tcp:send(Sock, [raw_frame(First, binary:copy(<<0>>, 1000)),
+                             raw_frame(Continuation, binary:copy(<<0>>, 1000)),
+                             raw_frame(Continuation, <<0>>)]),
+    ?assertMatch(#'v1_0.end'{error = #'v1_0.error'{
+                                        condition = ?V_1_0_LINK_ERROR_MESSAGE_SIZE_EXCEEDED}},
+                 raw_recv_until(Sock, 'v1_0.end')),
+    ok = gen_tcp:close(Sock).
+
 last_queue_confirms(Config) ->
     ClassicQ = <<"my classic queue">>,
     QuorumQ = <<"my quorum queue">>,
@@ -8841,3 +8883,58 @@ assert_active_notification(LinkRef, Active, <<"quorum">>, Line) ->
 assert_active_notification(_, _, <<"classic">>, _) ->
     %% Classic queues do currently not support this notification.
     ok.
+
+%% A sender link on a plain socket, for frames that `amqp10_client` does not send.
+raw_attach_sender(Config, Address) ->
+    Port = get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Sock} = gen_tcp:connect("localhost", Port, [binary, {active, false}]),
+    ok = gen_tcp:send(Sock, <<"AMQP", 3, 1, 0, 0>>),
+    {ok, <<"AMQP", 3, 1, 0, 0>>} = gen_tcp:recv(Sock, 8, 30_000),
+    #'v1_0.sasl_mechanisms'{} = raw_recv(Sock),
+    SaslInit = #'v1_0.sasl_init'{mechanism = {symbol, <<"PLAIN">>},
+                                 initial_response = {binary, <<0, "guest", 0, "guest">>}},
+    ok = gen_tcp:send(Sock, amqp10_binary_generator:build_frame(
+                              0, 1, amqp10_framing:encode_bin(SaslInit))),
+    #'v1_0.sasl_outcome'{code = ?V_1_0_SASL_CODE_OK} = raw_recv(Sock),
+    ok = gen_tcp:send(Sock, <<"AMQP", 0, 1, 0, 0>>),
+    {ok, <<"AMQP", 0, 1, 0, 0>>} = gen_tcp:recv(Sock, 8, 30_000),
+    ok = gen_tcp:send(Sock, raw_frame(#'v1_0.open'{container_id = {utf8, <<"raw">>}})),
+    #'v1_0.open'{} = raw_recv(Sock),
+    ok = gen_tcp:send(Sock, raw_frame(#'v1_0.begin'{next_outgoing_id = {uint, 0},
+                                                    incoming_window = {uint, 1000},
+                                                    outgoing_window = {uint, 1000}})),
+    #'v1_0.begin'{} = raw_recv(Sock),
+    ok = gen_tcp:send(Sock, raw_frame(#'v1_0.attach'{name = {utf8, <<"sender">>},
+                                                     handle = {uint, 0},
+                                                     role = false,
+                                                     source = #'v1_0.source'{},
+                                                     target = #'v1_0.target'{
+                                                                 address = {utf8, Address}},
+                                                     initial_delivery_count = {uint, 0}})),
+    #'v1_0.attach'{} = raw_recv(Sock),
+    Sock.
+
+raw_frame(Performative) ->
+    raw_frame(Performative, <<>>).
+
+raw_frame(Performative, Payload) ->
+    amqp10_binary_generator:build_frame(0, [amqp10_framing:encode_bin(Performative), Payload]).
+
+raw_recv_until(Sock, RecordName) ->
+    raw_recv_until(Sock, RecordName, erlang:monotonic_time(millisecond) + 30_000).
+
+raw_recv_until(Sock, RecordName, Deadline) ->
+    Performative = raw_recv(Sock, max(0, Deadline - erlang:monotonic_time(millisecond))),
+    case element(1, Performative) of
+        RecordName -> Performative;
+        _ -> raw_recv_until(Sock, RecordName, Deadline)
+    end.
+
+raw_recv(Sock) ->
+    raw_recv(Sock, 30_000).
+
+raw_recv(Sock, Timeout) ->
+    {ok, <<Size:32, DOff:8, _Type:8, _Channel:16>>} = gen_tcp:recv(Sock, 8, Timeout),
+    {ok, <<_:(DOff * 4 - 8)/binary, Body/binary>>} = gen_tcp:recv(Sock, Size - 8, Timeout),
+    [Performative | _] = amqp10_framing:decode_bin(Body),
+    Performative.
