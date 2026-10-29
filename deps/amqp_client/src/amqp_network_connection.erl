@@ -15,6 +15,10 @@
 -export([init/0, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
+-ifdef(TEST).
+-export([sanity_check_frame_max/1]).
+-endif.
+
 -define(RABBIT_TCP_OPTS, [binary, {packet, 0}, {active,false}, {nodelay, true}]).
 -define(SOCKET_CLOSING_TIMEOUT, 1000).
 -define(HANDSHAKE_RECEIVE_TIMEOUT, 60000).
@@ -280,11 +284,17 @@ tune(#'connection.tune'{channel_max = ServerChannelMax,
                          0 -> ?TCP_MAX_PACKET_SIZE;
                          _ -> lists:min([FrameMax, ?TCP_MAX_PACKET_SIZE])
                      end,
+    ok = sanity_check_frame_max(CappedFrameMax),
     NewState = State#state{heartbeat = Heartbeat, frame_max = CappedFrameMax},
     _ = start_heartbeat(NewState),
     {#'connection.tune_ok'{channel_max = ChannelMax,
                            frame_max   = CappedFrameMax,
                            heartbeat   = Heartbeat}, ChannelMax, NewState}.
+
+sanity_check_frame_max(FrameMax) when FrameMax >= ?FRAME_MIN_SIZE ->
+    ok;
+sanity_check_frame_max(FrameMax) ->
+    exit({frame_max_too_low, FrameMax, ?FRAME_MIN_SIZE}).
 
 start_heartbeat(#state{sock      = Sock,
                        name      = Name,
