@@ -43,6 +43,7 @@ parse_ackmode_valid_values(_Config) ->
     ack_requeue_false    = rabbit_mgmt_wm_queue_get:parse_ackmode(<<"ack_requeue_false">>),
     reject_requeue_true  = rabbit_mgmt_wm_queue_get:parse_ackmode(<<"reject_requeue_true">>),
     reject_requeue_false = rabbit_mgmt_wm_queue_get:parse_ackmode(<<"reject_requeue_false">>),
+    modify               = rabbit_mgmt_wm_queue_get:parse_ackmode(<<"modify">>),
     ok.
 
 parse_ackmode_rejects_unknown(_Config) ->
