@@ -81,7 +81,9 @@ groups() ->
        multiple_link_pairs,
        link_attach_order,
        drain,
-       session_flow_control
+       session_flow_control,
+       session_flow_control_link_credit,
+       session_flow_control_link_reattach
       ]},
      {cluster_size_3, [shuffle],
       [classic_queue_stopped,
@@ -1088,6 +1090,83 @@ session_flow_control(Config) ->
                   ct:fail({missing_msg, ?LINE})
     end,
     ok = cleanup(Init).
+
+%% Test that RabbitMQ grants credit for further requests and replies to a drain
+%% request only once it has sent the responses to the earlier requests.
+session_flow_control_link_credit(Config) ->
+    Init = {_, LinkPair = #link_pair{session = Session,
+                                     outgoing_link = OutgoingLink,
+                                     incoming_link = IncomingLink}} = init(Config),
+    flush(attached),
+    amqp10_client_session:flow(Session, 0, never),
+
+    Num = 8,
+    pipeline0(Num, LinkPair, <<"DELETE">>, null),
+    [SessionPid] = rpc(Config, rabbit_amqp_session, list_local, []),
+    eventually(?_assertMatch(#{outgoing_pending := Num}, gen_server_state(SessionPid))),
+    receive Unexpected -> ct:fail({unexpected, Unexpected})
+    after 100 -> ok
+    end,
+    Request = amqp10_msg:new(<<>>, #'v1_0.amqp_value'{content = null}, true),
+    ?assertEqual({error, insufficient_credit},
+                 amqp10_client:send_msg(OutgoingLink, Request)),
+    ok = amqp10_client:flow_link_credit(IncomingLink, Num + 1, never, true),
+
+    amqp10_client_session:flow(Session, Num + 1, never),
+    [receive {amqp10_msg, IncomingLink, Response} ->
+                 ?assertMatch(#{subject := <<"200">>},
+                              amqp10_msg:properties(Response))
+     after 5000 -> flush(missing_msg),
+                   ct:fail({missing_msg, ?LINE})
+     end || _ <- lists:seq(1, Num)],
+    ok = wait_for_credit(OutgoingLink),
+    ok = wait_for_event(IncomingLink, credit_exhausted),
+    ?assertMatch(#{outgoing_pending := 0}, gen_server_state(SessionPid)),
+
+    pipeline0(1, LinkPair, <<"DELETE">>, null),
+    receive {amqp10_msg, IncomingLink, _} -> ok
+    after 5000 -> flush(missing_msg),
+                  ct:fail({missing_msg, ?LINE})
+    end,
+    ok = cleanup(Init).
+
+%% Test that neither repeated drain requests nor re-attaching the request link
+%% add to the buffered responses, and that detaching the response link drops them.
+session_flow_control_link_reattach(Config) ->
+    {Connection, LinkPair = #link_pair{session = Session,
+                                       outgoing_link = OutgoingLink1,
+                                       incoming_link = IncomingLink}} = init(Config),
+    flush(attached),
+    amqp10_client_session:flow(Session, 0, never),
+
+    Num = 8,
+    pipeline0(Num, LinkPair, <<"DELETE">>, null),
+    [ok = amqp10_client:flow_link_credit(IncomingLink, Num, never, true) || _ <- lists:seq(1, 3)],
+    ok = amqp10_client:detach_link(OutgoingLink1),
+    ok = wait_for_event(OutgoingLink1, {detached, normal}),
+    AttachArgs = #{name => <<"my link pair">>,
+                   role => {sender, #{address => <<"/management">>,
+                                      durable => none}},
+                   snd_settle_mode => settled,
+                   rcv_settle_mode => first,
+                   properties => #{<<"paired">> => true}},
+    {ok, OutgoingLink2} = amqp10_client:attach_link(Session, AttachArgs),
+    ok = wait_for_event(OutgoingLink2, attached),
+    receive Unexpected -> ct:fail({unexpected, Unexpected})
+    after 100 -> ok
+    end,
+    [SessionPid] = rpc(Config, rabbit_amqp_session, list_local, []),
+    ?assertMatch(#{outgoing_pending := Num}, gen_server_state(SessionPid)),
+
+    ok = amqp10_client:detach_link(IncomingLink),
+    ok = wait_for_event(IncomingLink, {detached, normal}),
+    ok = wait_for_credit(OutgoingLink2),
+    ?assertMatch(#{outgoing_pending := 0}, gen_server_state(SessionPid)),
+
+    ok = amqp10_client:detach_link(OutgoingLink2),
+    ok = wait_for_event(OutgoingLink2, {detached, normal}),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection).
 
 init(Config) ->
     init(Config, 0).
