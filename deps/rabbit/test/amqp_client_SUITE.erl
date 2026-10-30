@@ -750,7 +750,9 @@ modified_quorum_queue(Config) ->
             #{<<"x-opt-requeued-by">> => {array, utf8, [{utf8, Receiver2Name} | L0]},
               <<"x-opt-requeue-reason">> => {list, [{symbol, <<"reason 2">>} | L1]},
               <<"x-opt-my-map">> => {map, L2 ++ [{{symbol, <<"k3">>}, {symbol, <<"val 3">>}}]},
-              <<"x-other">> => 99}}),
+              <<"x-other">> => 99,
+              <<"x-double">> => 1.5,
+              <<"x-float">> => {float, -2.5}}}),
 
     {ok, M2e} = amqp10_client:get_msg(Receiver1),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2e)),
@@ -764,7 +766,9 @@ modified_quorum_queue(Config) ->
                                           {{utf8, <<"k2">>}, {ulong, 2}},
                                           {{symbol, <<"k3">>}, {symbol, <<"val 3">>}}
                                          ],
-                   <<"x-other">> := 99}, amqp10_msg:message_annotations(M2e)),
+                   <<"x-other">> := 99,
+                   <<"x-double">> := 1.5,
+                   <<"x-float">> := -2.5}, amqp10_msg:message_annotations(M2e)),
     ok = amqp10_client:settle_msg(Receiver1, M2e, modified),
 
     %% Test that we can consume via AMQP 0.9.1
