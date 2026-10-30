@@ -71,6 +71,10 @@ infer_type(V) when is_integer(V) ->
     {long, V};
 infer_type(V) when is_boolean(V) ->
     {boolean, V};
+infer_type(V) when is_float(V) ->
+    {double, V};
+infer_type(null) ->
+    null;
 infer_type(TaggedValue) when is_atom(element(1, TaggedValue)) ->
     TaggedValue.
 
