@@ -38,8 +38,6 @@ jobs:
           - ct-amqp_client
           - ct-amqp_connection_uniqueness
           - ct-amqp_connection_uniqueness_partitions
-          - ct-rabbit_sole_conn
-          - ct-rabbit_sole_conn_cluster
           - ct-clustering_management
           - ct-clustering_recovery
           - eunit ct-dead_lettering
@@ -136,6 +134,7 @@ jobs:
           - rabbitmq_stream
           - rabbitmq_stream_common
           - rabbitmq_stream_management
+          - rabbitmq_top
           - rabbitmq_tracing
           - rabbitmq_trust_store
           - rabbitmq_web_dispatch
