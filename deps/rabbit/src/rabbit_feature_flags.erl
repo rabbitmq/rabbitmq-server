@@ -1080,8 +1080,11 @@ assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
                               doc_url,
                               deprecation_phase,
                               messages,
+                              usage_prevents_denial,
                               callbacks],
                 ?assertEqual([], maps:keys(FeatureProps) -- ValidProps),
+                ?assert(is_boolean(
+                          maps:get(usage_prevents_denial, FeatureProps, true))),
                 Phase = maps:get(deprecation_phase, FeatureProps),
                 ?assert(Phase =:= permitted_by_default orelse
                         Phase =:= denied_by_default orelse
