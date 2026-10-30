@@ -68,7 +68,12 @@
          stats_timer :: rabbit_event:state(),
          %% dynamic buffer
          dynamic_buffer_size = 128,
-         dynamic_buffer_moving_average = 0.0
+         dynamic_buffer_moving_average = 0.0,
+         session_counters = #{} :: #{channel_number() => counters:counters_ref()},
+         %% the counter values that are already in `msg_rates`
+         session_totals = #{} :: #{channel_number() => rabbit_msg_rates:totals()},
+         msg_rates = rabbit_msg_rates:new() :: rabbit_msg_rates:state(),
+         msg_rates_ts = erlang:monotonic_time(millisecond) :: integer()
         }).
 
 -type state() :: #v1{}.

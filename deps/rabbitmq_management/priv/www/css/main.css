@@ -368,6 +368,7 @@ div.bindings-wrapper p.arrow { font-size: 200%; }
 #footer ul { list-style-type: none; padding: 0; margin: 0; }
 #footer ul li { float: left; }
 #footer ul li a { display: block; padding: 0.7em 1em; }
+#footer ul li a#terminology-switcher { cursor: pointer; }
 
 #scratch { display: none; }
 

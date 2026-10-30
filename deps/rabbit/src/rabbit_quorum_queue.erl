@@ -741,6 +741,8 @@ handle_tick(QName,
                                 (last_delayed_at, V, Acc)
                                   when is_integer(V) ->
                                      [{last_delayed_at, V} | Acc];
+                                (message_rates, V, Acc) ->
+                                     [{message_rates, V} | Acc];
                                 (_, _, Acc) ->
                                      Acc
                              end, info(Q, Keys), Overview),
