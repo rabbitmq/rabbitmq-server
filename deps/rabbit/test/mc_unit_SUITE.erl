@@ -1485,11 +1485,22 @@ amqp_x_headers(_Config) ->
     Payload = serialize_sections([M, A, D]),
     Msg0 = mc:init(mc_amqp, Payload, annotations()),
     Msg1 = mc:set_annotation(<<"x-1">>, {byte, -2}, Msg0),
-    ?assertEqual(#{<<"x-1">> => {byte, -2},
-                   <<"x-list">> => {list,[{utf8,<<"l">>}]},
-                   <<"x-map">> => {map,[{{utf8,<<"k">>},{utf8,<<"v">>}}]},
-                   <<"x-stream-filter">> => {utf8,<<"apple">>}},
-                 mc:x_headers(Msg1)).
+    Msg2 = mc:set_annotation(<<"x-2">>, 1.5, Msg1),
+    Msg = mc:set_annotation(<<"x-3">>, null, Msg2),
+    XHeaders = #{<<"x-1">> => {byte, -2},
+                 <<"x-2">> => {double, 1.5},
+                 <<"x-3">> => null,
+                 <<"x-list">> => {list,[{utf8,<<"l">>}]},
+                 <<"x-map">> => {map,[{{utf8,<<"k">>},{utf8,<<"v">>}}]},
+                 <<"x-stream-filter">> => {utf8,<<"apple">>}},
+    ?assertEqual(XHeaders, mc:x_headers(Msg)),
+    ?assertEqual({double, 1.5}, mc:x_header(<<"x-2">>, Msg)),
+    ?assertEqual(null, mc:x_header(<<"x-3">>, Msg)),
+
+    Msg10 = mc_amqp:init_from_stream(iolist_to_binary(mc:protocol_state(Msg)), #{}),
+    ?assertEqual(XHeaders#{<<"x-exchange">> => {utf8, <<"exch">>},
+                           <<"x-routing-key">> => {utf8, <<"apple">>}},
+                 mc:x_headers(Msg10)).
 
 amqpl_x_headers(_Config) ->
     Props = #'P_basic'{headers = [{<<"a-string">>, longstr, <<"a string">>},
