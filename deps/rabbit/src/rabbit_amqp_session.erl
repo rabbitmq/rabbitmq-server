@@ -150,7 +150,13 @@
 -record(management_link_pair, {
           client_terminus_address,
           incoming_half :: unattached | link_handle(),
-          outgoing_half :: unattached | link_handle()
+          outgoing_half :: unattached | link_handle(),
+          %% Number of responses in `outgoing_pending`. Credit for further requests
+          %% is granted only once this is 0, which bounds the buffered responses.
+          pending_responses = 0 :: non_neg_integer(),
+          %% The drain field of a FLOW owed on the outgoing half. It is sent once
+          %% `pending_responses` is 0 so that it does not overtake responses.
+          flow_reply = none :: none | boolean()
          }).
 
 %% Incoming or outgoing half of the link pair.
@@ -265,6 +271,7 @@
          }).
 
 -record(pending_management_delivery, {
+          link_name :: binary(),
           %% A large message can be split into multiple transfer frames.
           frames :: [transfer_frame_body(), ...]
          }).
@@ -1390,10 +1397,16 @@ handle_attach(#'v1_0.attach'{
                                                    outgoing_half = unattached},
                              Pairs0)
             end,
+    Credit = case maps:get(LinkName, Pairs) of
+                 #management_link_pair{pending_responses = 0} ->
+                     ?MAX_MANAGEMENT_LINK_CREDIT;
+                 #management_link_pair{} ->
+                     0
+             end,
     MaxMessageSize = persistent_term:get(max_message_size),
     Link = #management_link{name = LinkName,
                             delivery_count = DeliveryCountInt,
-                            credit = ?MAX_MANAGEMENT_LINK_CREDIT,
+                            credit = Credit,
                             max_message_size = MaxMessageSize},
     State = State0#state{management_link_pairs = Pairs,
                          incoming_management_links = maps:put(HandleInt, Link, Links)},
@@ -1410,7 +1423,7 @@ handle_attach(#'v1_0.attach'{
                properties = Properties},
     Flow = #'v1_0.flow'{handle = Handle,
                         delivery_count = DeliveryCount,
-                        link_credit = ?UINT(?MAX_MANAGEMENT_LINK_CREDIT)},
+                        link_credit = ?UINT(Credit)},
     reply_frames([Reply, Flow], State);
 
 handle_attach(#'v1_0.attach'{
@@ -1974,16 +1987,23 @@ send_pending_delivery(#pending_delivery{
             State = State0#state{outgoing_pending = Buf0},
             {Space, State}
     end;
-send_pending_delivery(#pending_management_delivery{frames = Frames} = Pending,
+send_pending_delivery(#pending_management_delivery{link_name = Name,
+                                                   frames = Frames} = Pending,
                       Buf0,
                       #state{remote_incoming_window = Space,
+                             management_link_pairs = Pairs,
                              cfg = #cfg{writer_pid = WriterPid,
                                         channel_num = Ch}
                             } = State0) ->
     SendFun = send_fun(WriterPid, Ch),
     case send_frames(SendFun, Frames, Space) of
         {sent_all, SpaceLeft} ->
-            State = State0#state{outgoing_pending = Buf0},
+            #management_link_pair{pending_responses = N} = Pair0 = maps:get(Name, Pairs),
+            Pair = Pair0#management_link_pair{pending_responses = N - 1},
+            State1 = State0#state{outgoing_pending = Buf0,
+                                  management_link_pairs = maps:update(Name, Pair, Pairs)},
+            State2 = maybe_grant_mgmt_link_credit(Pair, State1),
+            State = maybe_send_mgmt_flow_reply(Pair, State2),
             {SpaceLeft, State};
         {sent_some, SpaceLeft, Rest} ->
             Buf = queue:in_r(Pending#pending_management_delivery{frames = Rest}, Buf0),
@@ -2367,7 +2387,7 @@ incoming_mgmt_link_transfer(
   #'v1_0.transfer'{
      settled = Settled,
      more = More,
-     handle = IncomingHandle = ?UINT(IncomingHandleInt)},
+     handle = ?UINT(IncomingHandleInt)},
   Request,
   #state{management_link_pairs = LinkPairs,
          incoming_management_links = IncomingLinks,
@@ -2410,8 +2430,9 @@ incoming_mgmt_link_transfer(
     end,
     #management_link_pair{
        incoming_half = IncomingHandleInt,
-       outgoing_half = OutgoingHandleInt
-      } = maps:get(Name, LinkPairs),
+       outgoing_half = OutgoingHandleInt,
+       pending_responses = PendingResponses
+      } = LinkPair0 = maps:get(Name, LinkPairs),
     OutgoingLink0 = case OutgoingHandleInt of
                         unattached ->
                             protocol_error(
@@ -2447,23 +2468,22 @@ incoming_mgmt_link_transfer(
                   more = false},
     validate_message_size(Response, OutgoingMaxMessageSize),
     Frames = transfer_frames(Transfer, Response, MaxFrameSize),
-    PendingDelivery = #pending_management_delivery{frames = Frames},
-    IncomingDeliveryCount = add(IncomingDeliveryCount0, 1),
-    IncomingCredit1 = IncomingCredit0 - 1,
-    {IncomingCredit, Reply} = maybe_grant_mgmt_link_credit(
-                                IncomingCredit1, IncomingDeliveryCount, IncomingHandle),
-    IncomingLink = IncomingLink0#management_link{delivery_count = IncomingDeliveryCount,
-                                                 credit = IncomingCredit},
+    PendingDelivery = #pending_management_delivery{link_name = Name,
+                                                   frames = Frames},
+    IncomingLink = IncomingLink0#management_link{delivery_count = add(IncomingDeliveryCount0, 1),
+                                                 credit = IncomingCredit0 - 1},
     OutgoingLink = OutgoingLink0#management_link{delivery_count = add(OutgoingDeliveryCount, 1),
                                                  credit = OutgoingCredit - 1},
+    LinkPair = LinkPair0#management_link_pair{pending_responses = PendingResponses + 1},
     State = State0#state{
               outgoing_delivery_id = add(OutgoingDeliveryId, 1),
               outgoing_pending = queue:in(PendingDelivery, Pending),
+              management_link_pairs = maps:update(Name, LinkPair, LinkPairs),
               incoming_management_links = maps:update(IncomingHandleInt, IncomingLink, IncomingLinks),
               outgoing_management_links = maps:update(OutgoingHandleInt, OutgoingLink, OutgoingLinks),
               permission_cache = PermCache,
               topic_permission_cache = TopicPermCache},
-    {Reply, State}.
+    {[], State}.
 
 incoming_link_transfer(
   #'v1_0.transfer'{more = true,
@@ -2805,12 +2825,24 @@ grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) ->
     Credit =< MaxLinkCredit div 2 andalso
     NumUnconfirmed < MaxLinkCredit.
 
-maybe_grant_mgmt_link_credit(Credit, DeliveryCount, Handle)
-  when Credit =< ?MAX_MANAGEMENT_LINK_CREDIT div 2 ->
-    {?MAX_MANAGEMENT_LINK_CREDIT,
-     [flow(Handle, DeliveryCount, ?MAX_MANAGEMENT_LINK_CREDIT)]};
-maybe_grant_mgmt_link_credit(Credit, _, _) ->
-    {Credit, []}.
+maybe_grant_mgmt_link_credit(#management_link_pair{incoming_half = Handle,
+                                                   pending_responses = 0},
+                             #state{incoming_management_links = Links,
+                                    outgoing_pending = Pending} = State) ->
+    case Links of
+        #{Handle := #management_link{delivery_count = DeliveryCount,
+                                     credit = Credit} = Link0}
+          when Credit =< ?MAX_MANAGEMENT_LINK_CREDIT div 2 ->
+            Link = Link0#management_link{credit = ?MAX_MANAGEMENT_LINK_CREDIT},
+            Flow = flow(?UINT(Handle), DeliveryCount, ?MAX_MANAGEMENT_LINK_CREDIT),
+            State#state{incoming_management_links = maps:update(Handle, Link, Links),
+                        %% At the front so that the FLOW is not stuck behind blocked deliveries.
+                        outgoing_pending = queue:in_r(Flow, Pending)};
+        _ ->
+            State
+    end;
+maybe_grant_mgmt_link_credit(#management_link_pair{}, State) ->
+    State.
 
 -spec ensure_source(#'v1_0.source'{},
                     boolean(),
@@ -3147,14 +3179,15 @@ ensure_target_v1(Address, _, _, _, _) ->
     {error, {bad_address, Address}}.
 
 handle_outgoing_mgmt_link_flow_control(
-  #management_link{delivery_count = DeliveryCountSnd} = Link0,
-  #'v1_0.flow'{handle = Handle = ?UINT(HandleInt),
+  #management_link{name = Name,
+                   delivery_count = DeliveryCountSnd} = Link0,
+  #'v1_0.flow'{handle = ?UINT(HandleInt),
                delivery_count = MaybeDeliveryCountRcv,
                link_credit = ?UINT(LinkCreditRcv),
                drain = Drain0,
                echo = Echo0},
-  #state{outgoing_management_links = Links0,
-         outgoing_pending = Pending
+  #state{outgoing_management_links = Links,
+         management_link_pairs = Pairs
         } = State0) ->
     Drain = boolean_field(drain, Drain0),
     Echo = boolean_field(echo, Echo0),
@@ -3164,22 +3197,39 @@ handle_outgoing_mgmt_link_flow_control(
                           true -> {add(DeliveryCountSnd, LinkCreditSnd), 0};
                           false -> {DeliveryCountSnd, LinkCreditSnd}
                       end,
-    State = case Echo orelse Drain of
-                true ->
-                    Flow = #'v1_0.flow'{
-                              handle = Handle,
-                              delivery_count = ?UINT(Count),
-                              link_credit = ?UINT(Credit),
-                              available = ?UINT(0),
-                              drain = Drain},
-                    State0#state{outgoing_pending = queue:in(Flow, Pending)};
-                false ->
-                    State0
-            end,
     Link = Link0#management_link{delivery_count = Count,
                                  credit = Credit},
-    Links = maps:update(HandleInt, Link, Links0),
-    State#state{outgoing_management_links = Links}.
+    #management_link_pair{flow_reply = FlowReply0} = Pair0 = maps:get(Name, Pairs),
+    %% One FLOW may answer multiple requests [2.7.4]. It carries the latest drain mode.
+    FlowReply = case Echo orelse Drain orelse FlowReply0 =/= none of
+                    true -> Drain;
+                    false -> none
+                end,
+    Pair = Pair0#management_link_pair{flow_reply = FlowReply},
+    State = State0#state{outgoing_management_links = maps:update(HandleInt, Link, Links),
+                         management_link_pairs = maps:update(Name, Pair, Pairs)},
+    maybe_send_mgmt_flow_reply(Pair, State).
+
+maybe_send_mgmt_flow_reply(#management_link_pair{outgoing_half = Handle,
+                                                 pending_responses = 0,
+                                                 flow_reply = Drain} = Pair,
+                           #state{management_link_pairs = Pairs,
+                                  outgoing_management_links = Links,
+                                  outgoing_pending = Pending} = State)
+  when is_boolean(Drain) ->
+    #management_link{name = Name,
+                     delivery_count = Count,
+                     credit = Credit} = maps:get(Handle, Links),
+    Flow = #'v1_0.flow'{handle = ?UINT(Handle),
+                        delivery_count = ?UINT(Count),
+                        link_credit = ?UINT(Credit),
+                        available = ?UINT(0),
+                        drain = Drain},
+    State#state{management_link_pairs = maps:update(
+                                          Name, Pair#management_link_pair{flow_reply = none}, Pairs),
+                outgoing_pending = queue:in_r(Flow, Pending)};
+maybe_send_mgmt_flow_reply(#management_link_pair{}, State) ->
+    State.
 
 handle_outgoing_link_flow_control(
   #outgoing_link{queue_name = QName,
@@ -3820,7 +3870,8 @@ maybe_detach_mgmt_link(
   HandleInt,
   State = #state{management_link_pairs = LinkPairs0,
                  incoming_management_links = IncomingLinks0,
-                 outgoing_management_links = OutgoingLinks0}) ->
+                 outgoing_management_links = OutgoingLinks0,
+                 outgoing_pending = Pending0}) ->
     case maps:take(HandleInt, IncomingLinks0) of
         {#management_link{name = Name}, IncomingLinks} ->
             Pair = #management_link_pair{outgoing_half = OutgoingHalf} = maps:get(Name, LinkPairs0),
@@ -3837,17 +3888,30 @@ maybe_detach_mgmt_link(
         error ->
             case maps:take(HandleInt, OutgoingLinks0) of
                 {#management_link{name = Name}, OutgoingLinks} ->
-                    Pair = #management_link_pair{incoming_half = IncomingHalf} = maps:get(Name, LinkPairs0),
+                    Pair0 = #management_link_pair{incoming_half = IncomingHalf} = maps:get(Name, LinkPairs0),
+                    Pair = Pair0#management_link_pair{outgoing_half = unattached,
+                                                      pending_responses = 0,
+                                                      flow_reply = none},
                     LinkPairs = case IncomingHalf of
                                     unattached ->
                                         maps:remove(Name, LinkPairs0);
                                     _ ->
-                                        maps:update(Name,
-                                                    Pair#management_link_pair{outgoing_half = unattached},
-                                                    LinkPairs0)
+                                        maps:update(Name, Pair, LinkPairs0)
                                 end,
-                    State#state{outgoing_management_links = OutgoingLinks,
-                                management_link_pairs = LinkPairs};
+                    Pending = case Pair0 of
+                                  #management_link_pair{pending_responses = 0} ->
+                                      Pending0;
+                                  #management_link_pair{} ->
+                                      queue:filter(fun(#pending_management_delivery{link_name = N}) ->
+                                                           N =/= Name;
+                                                      (_) ->
+                                                           true
+                                                   end, Pending0)
+                              end,
+                    maybe_grant_mgmt_link_credit(
+                      Pair, State#state{outgoing_management_links = OutgoingLinks,
+                                        management_link_pairs = LinkPairs,
+                                        outgoing_pending = Pending});
                 error ->
                     State
             end
