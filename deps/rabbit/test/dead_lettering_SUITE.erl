@@ -2026,7 +2026,7 @@ await_dead_letter_handler_applied(Config, QName) ->
                 Config, 0, rabbit_amqqueue, lookup, [QRes], infinity),
     case amqqueue:get_type(Q) of
         rabbit_quorum_queue ->
-            {ok, RaName} = rabbit_queue_type_util:qname_to_internal_name(QRes),
+            {RaName, _} = amqqueue:get_pid(Q),
             Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
             Server = {RaName, Node},
             ?awaitMatch(DLH when DLH =/= undefined,

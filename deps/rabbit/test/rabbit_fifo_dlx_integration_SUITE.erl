@@ -22,7 +22,7 @@
                       wait_for_min_messages/3,
                       wait_for_messages/2,
                       dirty_query/3,
-                      ra_name/1]).
+                      ra_name/2]).
 -import(rabbit_ct_helpers, [eventually/1,
                             eventually/3,
                             consistently/1]).
@@ -202,7 +202,7 @@ expired(Config) ->
 rejected(Config) ->
     {Server, Ch, SourceQ, TargetQ} = declare_topology(Config, []),
     publish(Ch, SourceQ),
-    wait_for_messages_ready([Server], ra_name(SourceQ), 1),
+    wait_for_messages_ready([Server], ra_name(Config, SourceQ), 1),
     DelTag = basic_get_tag(Ch, SourceQ, false),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DelTag,
                                         multiple     = false,
@@ -219,7 +219,7 @@ rejected(Config) ->
 delivery_limit(Config) ->
     {Server, Ch, SourceQ, TargetQ} = declare_topology(Config, [{<<"x-delivery-limit">>, long, 0}]),
     publish(Ch, SourceQ),
-    wait_for_messages_ready([Server], ra_name(SourceQ), 1),
+    wait_for_messages_ready([Server], ra_name(Config, SourceQ), 1),
     _DelTag = basic_get_tag(Ch, SourceQ, false),
     amqp_channel:close(Ch, 541, <<"boo">>),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -274,7 +274,7 @@ target_queue_not_bound(Config) ->
                            #'basic.publish'{routing_key = SourceQ},
                            #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
                                      payload = Msg}),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     %% Binding from target queue to DLX is missing.
     %% Therefore, 1 message should be kept in discards queue.
     eventually(?_assertMatch([{1, _}],
@@ -320,7 +320,7 @@ target_queue_deleted(Config) ->
                            #'basic.publish'{routing_key = SourceQ},
                            #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
                                      payload = Msg1}),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
                              amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}))),
     eventually(?_assertEqual([{0, 0}],
@@ -369,7 +369,7 @@ dlx_missing(Config) ->
                            #'basic.publish'{routing_key = SourceQ},
                            #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
                                      payload = Msg}),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     %% DLX is missing. Therefore, 1 message should be kept in discards queue.
     eventually(?_assertMatch([{1, _}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
@@ -409,7 +409,7 @@ cycle(Config) ->
                            #'basic.publish'{routing_key = SourceQ},
                            #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
                                      payload = Msg}),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     %% Message cycled when it was dead-lettered:
     %% source queue -> default exchange -> source queue
     %% Therefore, 1 message should be kept in discards queue.
@@ -454,7 +454,7 @@ stats(Config) ->
                             #amqp_msg{props = #'P_basic'{expiration = <<"0">>},
                                       payload = Msg})
      || _ <- lists:seq(1, 10)], %% 10 messages in total
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     %% Binding from target queue to DLX is missing. Therefore
     %% * 10 msgs should be discarded (i.e. in discards queue or checked out to dlx_worker)
     %% * 60 bytes (=10msgs*(2+4)bytes) should be discarded
@@ -520,7 +520,7 @@ switch_strategy(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     DLX = ?config(dead_letter_exchange, Config),
     PolicyName = ?config(policy, Config),
     declare_queue(Ch, SourceQ, [
@@ -599,7 +599,7 @@ reject_publish(Config, QArg) when is_tuple(QArg) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     ok = publish_confirm(Ch, SourceQ),
     ok = publish_confirm(Ch, SourceQ),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     eventually(?_assertMatch([{2, _}], %% 2 messages with 1 byte each
                              dirty_query([Server], RaName,
                                          fun rabbit_fifo:query_stat_dlx/1))),
@@ -628,7 +628,7 @@ reject_publish_max_length_target_quorum_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     TargetQ = ?config(target_queue_1, Config),
     declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
                                 {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
@@ -668,7 +668,7 @@ reject_publish_down_target_quorum_queue(Config) ->
     Server2 = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     SourceQ = ?config(source_queue, Config),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     TargetQ = ?config(target_queue_1, Config),
     declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
                                 {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
@@ -716,7 +716,7 @@ reject_publish_target_classic_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     TargetQ = ?config(target_queue_1, Config),
     declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
                                 {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
@@ -801,7 +801,7 @@ target_quorum_queue_delete_create(Config) ->
     %% Expect no message to get stuck in dlx worker.
     wait_for_min_messages(Config, TargetQ, 200),
     eventually(?_assertMatch([{0, _}],
-                             dirty_query([Server], ra_name(SourceQ),
+                             dirty_query([Server], ra_name(Config, SourceQ),
                                          fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
     ?assertEqual(300, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(300, counted(messages_dead_lettered_confirmed_total, Config)),
@@ -821,7 +821,7 @@ many_target_queues(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     SourceQ = ?config(source_queue, Config),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     TargetQ1 = ?config(target_queue_1, Config),
     TargetQ2 = ?config(target_queue_2, Config),
     TargetQ3 = ?config(target_queue_3, Config),
@@ -938,7 +938,7 @@ single_dlx_worker(Config) ->
        rabbit_ct_broker_helpers:rpc_all(Config, supervisor, count_children, [rabbit_fifo_dlx_sup])),
 
     ok = rabbit_ct_broker_helpers:stop_broker(Config, Server1),
-    RaName = ra_name(SourceQ),
+    RaName = ra_name(Config, SourceQ),
     {ok, _, {_, Leader0}} = ra:members({RaName, Server2}),
     ?assertNotEqual(Server1, Leader0),
     [Follower0] = Servers -- [Server1, Leader0],

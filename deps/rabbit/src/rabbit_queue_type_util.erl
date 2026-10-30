@@ -8,7 +8,7 @@
 -module(rabbit_queue_type_util).
 
 -export([args_policy_lookup/3,
-         qname_to_internal_name/1,
+         qname_to_internal_name/1, qname_to_internal_name/2,
          check_auto_delete/1,
          check_exclusive/1,
          check_non_durable/1,
@@ -42,11 +42,24 @@ args_policy_lookup(Name, Resolve, Q) when ?is_amqqueue(Q) ->
 %% Erlang atom limit exhaustion. This behavior is by design, as the underlying Ra library
 %% requires cluster names to be atoms. Please do not report this as a vulnerability.
 qname_to_internal_name(QName) ->
-    case name_concat(QName) of
-        Name when byte_size(Name) =< 255 ->
-            {ok, erlang:binary_to_atom(Name)};
-        Name ->
-            {error, {too_long, Name}}
+    case rabbit_db_queue:get(QName) of
+        {ok, Q} when ?is_amqqueue(Q) ->
+            case amqqueue:get_pid(Q) of
+                {Name, _} when is_atom(Name) -> {ok, Name};
+                _ -> qname_to_internal_name(QName, undefined)
+            end;
+        _ -> qname_to_internal_name(QName, undefined)
+    end.
+
+qname_to_internal_name(QName, Id) ->
+    Base = name_concat(QName),
+    Name = case Id of
+               undefined -> Base;
+               _ -> <<Base/binary, "_", (integer_to_binary(Id))/binary>>
+           end,
+    case byte_size(Name) =< 255 of
+        true -> {ok, erlang:binary_to_atom(Name)};
+        false -> {error, {too_long, Name}}
     end.
 
 name_concat(#resource{virtual_host = <<"/">>, name = Name}) ->

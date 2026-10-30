@@ -9,6 +9,7 @@
 
 -behaviour(rabbit_queue_type).
 -behaviour(rabbit_queue_type_ra).
+-behaviour(rabbit_vhost_deletion).
 -behaviour(rabbit_policy_validator).
 -behaviour(rabbit_policy_merge_strategy).
 
@@ -49,7 +50,7 @@
 -export([delete_member/3, delete_member/2]).
 -export([policy_changed/1]).
 -export([format_ra_event/3]).
--export([cleanup_data_dir/0]).
+-export([cleanup_data_dir/0, vhost_deleted/2, remove_leftovers/1]).
 -export([shrink_all/1,
          grow/4,
          grow/5]).
@@ -110,6 +111,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include_lib("khepri/include/khepri.hrl").
 -include("mc.hrl").
 -include_lib("kernel/include/logger.hrl").
 
@@ -341,6 +343,14 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
     end.
 
 start_cluster(Q) ->
+    case rabbit_db_vhost:identity(amqqueue:get_vhost(Q)) of
+        {ok, VHostId, _} -> start_cluster(Q, VHostId);
+        {error, Reason} ->
+            {protocol_error, internal_error, "Cannot verify virtual host for ~ts: ~tp",
+             [rabbit_misc:rs(amqqueue:get_name(Q)), Reason]}
+    end.
+
+start_cluster(Q, VHostId) ->
     QName = amqqueue:get_name(Q),
     Durable = true = amqqueue:is_durable(Q),
     AutoDelete = false = amqqueue:is_auto_delete(Q),
@@ -352,7 +362,7 @@ start_cluster(Q) ->
     %% It is known that declaring many quorum queues with different names can lead to
     %% Erlang atom limit exhaustion. This behavior is by design, as the underlying Ra library
     %% requires cluster names to be atoms. Please do not report this as a vulnerability.
-    RaName = case qname_to_internal_name(QName) of
+    RaName = case rabbit_queue_type_util:qname_to_internal_name(QName, VHostId) of
                  {ok, A} ->
                      A;
                  {error, {too_long, N}} ->
@@ -365,12 +375,12 @@ start_cluster(Q) ->
     NewQ1 = case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
                 false ->
                     amqqueue:set_type_state(NewQ0,
-                                            #{nodes => [LeaderNode | FollowerNodes]});
+                                            #{nodes => [LeaderNode | FollowerNodes], vhost_id => VHostId});
                 true ->
                     UIDs = #{Node => ra:new_uid(ra_lib:to_binary(RaName))
                              || Node <- [LeaderNode | FollowerNodes]},
                     amqqueue:set_type_state(NewQ0,
-                                            #{nodes => UIDs})
+                                            #{nodes => UIDs, vhost_id => VHostId})
             end,
 
     MinVersion = min_machine_version(FollowerNodes),
@@ -423,6 +433,9 @@ start_cluster(Q) ->
             end;
         {existing, _} = Ex ->
             Ex;
+        {error, stale_vhost_id} ->
+            {protocol_error, internal_error, "Virtual host changed while declaring ~ts",
+             [rabbit_misc:rs(QName)]};
         {error, timeout} ->
             {protocol_error, internal_error,
              "Could not declare quorum ~ts on node '~ts' because the metadata "
@@ -1016,30 +1029,13 @@ recover(_Vhost, Queues) ->
          MutConf = make_mutable_config(Q),
          RaUId = ra_directory:uid_of(?RA_SYSTEM, Name),
          #{nodes := Nodes} = amqqueue:get_type_state(Q),
-         case Nodes of
-             _ when RaUId == undefined ->
-                 %% Queue member was not found in ra_directory
-                 ok;
-             List when is_list(List) ->
-                 %% Node to UID mapping is not tracked in metadata store (legacy format)
-                 ok;
-             #{node() := RaUId} ->
-                 %% Queue member UID in metadata store matches the one in ra_directory
-                 ok;
-             #{node() := _NewRaUId} ->
-                 %% Queue member UID in metadata store does not match the one tracked by
-                 %% ra_directory. Delete old data directory.
-                 %% (Later a new ra server will be started from scratch
-                 %% with the UID in metadata store)
-                 rabbit_log:info("Quorum ~ts: detected node UID change, "
-                                 "deleting old data directory", [rabbit_misc:rs(QName)]),
-                 maybe_delete_data_dir(RaUId);
-             _ ->
-                 %% This node is not in the members map.
-                 %% It should be very unlikely but be extra defensive anyway.
-                 ok
+         StartResult = case Nodes of
+             #{node() := Expected} when RaUId =/= undefined, Expected =/= RaUId ->
+                 ok = stop_obsolete_member(RaUId),
+                 start_server(make_ra_conf(Q, ServerId));
+             _ -> ra:restart_server(?RA_SYSTEM, ServerId, MutConf)
          end,
-         Res = case ra:restart_server(?RA_SYSTEM, ServerId, MutConf) of
+         Res = case StartResult of
                    ok ->
                        % queue was restarted, good
                        ok;
@@ -1445,31 +1441,110 @@ assign_deferred(_QName, CTag, Tokens, QState) ->
     rabbit_fifo_client:assign_deferred(quorum_ctag(CTag), Tokens, QState).
 
 cleanup_data_dir() ->
-    Names = [begin
-                 {Name, _} = amqqueue:get_pid(Q),
-                 Name
-             end
-             || Q <- rabbit_amqqueue:list_by_type(?MODULE),
-                lists:member(node(), get_nodes(Q))],
-    Registered = ra_directory:list_registered(?RA_SYSTEM),
-    Running = Names,
-    _ = [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
-                                       not lists:member(Name, Running)],
-    ok.
+    cleanup_data_dir(all).
 
-maybe_delete_data_dir(UId) ->
-    _ = ra_directory:unregister_name(?RA_SYSTEM, UId),
-    Dir = ra_env:server_data_dir(?RA_SYSTEM, UId),
-    case filelib:is_dir(Dir) of
+%% Member UIDs identify queue data even when its vhost has been recreated.
+-spec vhost_deleted(rabbit_types:vhost(), vhost:id() | undefined) -> ok.
+vhost_deleted(VHost, _Id) ->
+    cleanup_data_dir(VHost).
+
+-spec remove_leftovers(#{rabbit_types:vhost() => vhost:id() | undefined}) -> ok.
+remove_leftovers(_Live) ->
+    cleanup_data_dir().
+
+cleanup_data_dir(VHost) ->
+    case ra_system:fetch(?RA_SYSTEM) of
+        undefined -> ok;
+        #{data_dir := Dir} ->
+            Candidates = cleanup_candidates(Dir, VHost),
+            Result = lists:foldl(fun(Candidate, ok) -> cleanup_candidate(Candidate);
+                                   (_, Error) -> Error
+                                end, ok, Candidates),
+            case Result of
+                ok -> ok;
+                {error, Reason} ->
+                    ?LOG_WARNING("Quorum queue data cleanup deferred: ~tp", [Reason])
+            end
+    end.
+
+cleanup_candidates(Dir, VHost) ->
+    {ok, Entries} = file:list_dir(Dir),
+    lists:filtermap(fun(Entry) ->
+        Path = filename:join(Dir, Entry),
+        case ra_log:read_config(Path) of
+            {ok, #{uid := UId, id := {Name, Node}, vhost_id := VHostId,
+                   machine := {module, rabbit_fifo,
+                               #{queue_resource := #resource{virtual_host = V} = Resource}}}}
+              when Node =:= node(), is_binary(UId), is_atom(Name), is_integer(VHostId),
+                   VHost =:= all orelse VHost =:= V ->
+                case binary_to_list(UId) =:= Entry of
+                    true -> {true, {UId, Resource, Path, VHostId, Name}};
+                    false -> false
+                end;
+            _ -> false
+        end
+    end, Entries).
+
+cleanup_candidate(Candidate) ->
+    cleanup_candidate_metadata(Candidate).
+
+cleanup_candidate_metadata({UId, Resource, Dir, VHostId, Name}) ->
+    Path = rabbit_db_queue:khepri_queue_path(Resource),
+    Counter = rabbit_db_vhost:khepri_vhost_id_path(),
+    Result = try rabbit_khepri:transaction(fun() ->
+                     case khepri_tx:get(Counter) of
+                         {ok, Last} when Last bsr 64 =:= VHostId bsr 64 -> khepri_tx:get(Path);
+                         _ -> {error, unidentified_metadata_store}
+                     end
+                 end, rw, #{timeout => 5000})
+             catch throw:{error, _} = ReadError -> ReadError
+             end,
+    case Result of
+        {error, unidentified_metadata_store} -> ok;
+        {error, ?khepri_error(node_not_found, _)} -> delete_unused_data_dir(UId, Dir);
+        {ok, Q} when ?is_amqqueue(Q), ?amqqueue_is_quorum(Q) ->
+            case amqqueue:get_type_state(Q) of
+                #{nodes := Nodes} when is_map(Nodes) ->
+                    case maps:find(node(), Nodes) of
+                        {ok, UId} -> ok;
+                        {ok, Other} when is_binary(Other) -> delete_unused_data_dir(UId, Dir);
+                        {ok, _} -> ok;
+                        %% Ra membership can be committed before the metadata update.
+                        error ->
+                            case amqqueue:get_pid(Q) of
+                                {OtherName, _} when is_atom(OtherName), OtherName =/= Name ->
+                                    delete_unused_data_dir(UId, Dir);
+                                _ -> ok
+                            end
+                    end;
+                _ -> ok
+            end;
+        {ok, _} -> ok;
+        {error, _} = Error -> Error
+    end.
+
+delete_unused_data_dir(UId, Dir) ->
+    ok = stop_obsolete_member(UId),
+    case member_has_started(UId) of
         false ->
-            ok;
-        true ->
-            {ok, Config} = ra_log:read_config(Dir),
-            case maps:get(machine, Config) of
-                {module, rabbit_fifo, _} ->
-                    ra_lib:recursive_delete(Dir);
-                _ ->
-                    ok
+            %% Delete by UID: the Ra name may already belong to a replacement.
+            %% Ra removes registrations for missing directories at its next startup.
+            ra_lib:recursive_delete(Dir);
+        true -> ok
+    end.
+
+member_has_started(UId) ->
+    ra_directory:where_is(?RA_SYSTEM, UId) =/= undefined orelse
+    ra_directory:where_is_parent(?RA_SYSTEM, UId) =/= undefined.
+
+stop_obsolete_member(UId) ->
+    case ra_directory:where_is_parent(?RA_SYSTEM, UId) of
+        undefined -> ok;
+        Parent ->
+            #{names := #{server_sup := Sup}} = ra_system:fetch(?RA_SYSTEM),
+            case supervisor:terminate_child(Sup, Parent) of
+                ok -> ok;
+                {error, not_found} -> ok
             end
     end.
 
@@ -2452,6 +2527,7 @@ make_ra_conf(Q, ServerId, TickTimeout,
                                 #{cluster_name => ClusterName,
                                   id => ServerId,
                                   uid => UId,
+                                  vhost_id => maps:get(vhost_id, amqqueue:get_type_state(Q), undefined),
                                   friendly_name => FName,
                                   metrics_key => QName,
                                   metrics_labels => #{vhost => amqqueue:get_vhost(Q),

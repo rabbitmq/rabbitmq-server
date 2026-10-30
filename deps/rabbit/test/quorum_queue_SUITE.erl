@@ -24,7 +24,7 @@
                       wait_for_messages_total/3,
                       wait_for_messages/2,
                       dirty_query/3,
-                      ra_name/1]).
+                      ra_name/2]).
 
 -import(clustering_utils, [
                            assert_cluster_status/2,
@@ -778,7 +778,7 @@ quorum_cluster_size_x(Config, Max, Expected) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-quorum-initial-group-size">>, long, Max}])),
@@ -874,7 +874,7 @@ idempotent_recover(Config) ->
     %% validate quorum queue is still functional
     ?awaitMatch({ok, _, _},
                 begin
-                    RaName = ra_name(LQ),
+                    RaName = ra_name(Config, LQ),
                     ra:members({RaName, Server})
                 end, ?DEFAULT_AWAIT),
     %% validate vhosts are running - or rather validate that at least one
@@ -897,7 +897,7 @@ server_system_recover(Config) ->
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(LQ),
+    RaName = ra_name(Config, LQ),
     _ = ra:members({RaName, Server}),
     EtsPid = ct_rpc:call(Server, erlang, whereis, [ra_log_ets]),
     ?assert(is_pid(EtsPid)),
@@ -918,7 +918,6 @@ vhost_with_quorum_queue_is_deleted(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     VHost = <<"vhost2">>,
     QName = atom_to_binary(?FUNCTION_NAME, utf8),
-    RaName = binary_to_atom(<<VHost/binary, "_", QName/binary>>, utf8),
     User = ?config(rmq_username, Config),
     ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost, User),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
@@ -928,6 +927,9 @@ vhost_with_quorum_queue_is_deleted(Config) ->
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
+    Resource = rabbit_misc:r(VHost, queue, QName),
+    {ok, Q} = rpc:call(Node, rabbit_db_queue, get, [Resource]),
+    {RaName, _} = amqqueue:get_pid(Q),
     UId = rpc:call(Node, ra_directory, where_is, [quorum_queues, RaName]),
     ?assert(UId =/= undefined),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
@@ -1150,7 +1152,7 @@ publish_and_restart(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
@@ -1172,7 +1174,7 @@ consume_in_minority(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
-    RaName = binary_to_atom(<<"%2F_", QQ/binary>>),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
@@ -1196,7 +1198,7 @@ get_in_minority(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
-    RaName = binary_to_atom(<<"%2F_", QQ/binary>>),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
@@ -1217,7 +1219,7 @@ single_active_consumer_priority_take_over(Config) ->
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     QName = ?config(queue_name, Config),
     Q1 = <<QName/binary, "_1">>,
-    RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
+    RaNameQ1 = ra_name(Config, Q1),
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
             {<<"x-single-active-consumer">>, bool, true}],
     ?assertEqual({'queue.declare_ok', Q1, 0, 0}, declare(Ch1, Q1, Args)),
@@ -1273,7 +1275,7 @@ single_active_consumer_priority_take_over_base(DelLimit, Config) ->
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     QName = ?config(queue_name, Config),
     Q1 = <<QName/binary, "_1">>,
-    RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
+    RaNameQ1 = ra_name(Config, Q1),
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
             {<<"x-delivery-limit">>, long, DelLimit},
             {<<"x-single-active-consumer">>, bool, true}],
@@ -1344,9 +1346,9 @@ single_active_consumer_priority(Config) ->
     ok = subscribe(Ch3, Q3, false, <<"ch3-ctag3">>, [{"x-priority", byte, 3}]),
 
 
-    RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
-    RaNameQ2 = binary_to_atom(<<"%2F", "_", Q2/binary>>, utf8),
-    RaNameQ3 = binary_to_atom(<<"%2F", "_", Q3/binary>>, utf8),
+    RaNameQ1 = ra_name(Config, Q1),
+    RaNameQ2 = ra_name(Config, Q2),
+    RaNameQ3 = ra_name(Config, Q3),
     %% assert each queue has a different consumer
 
     %% Q1 should have the consumer on Ch1
@@ -1391,7 +1393,7 @@ force_shrink_members_to_local_member(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     rabbit_ct_client_helpers:publish(Ch, QQ, 3),
     wait_for_messages_ready([Server0], RaName, 3),
     queue_utils:assert_number_of_replicas(
@@ -1449,7 +1451,7 @@ force_all_queues_shrink_member_to_current_member(Config) ->
     QQs = [QQ, AQ],
 
     [begin
-         RaName = ra_name(Q),
+         RaName = ra_name(Config, Q),
          rabbit_ct_client_helpers:publish(Ch, Q, 3),
          wait_for_messages_ready([Server0], RaName, 3),
          queue_utils:assert_number_of_replicas(
@@ -1469,11 +1471,11 @@ force_all_queues_shrink_member_to_current_member(Config) ->
         rabbit_ct_broker_helpers:rpc(Config, Server2, rabbit_quorum_queue,
             force_all_queues_shrink_member_to_current_member, [QQSpec]),
 
-    wait_for_messages_ready([Server0], ra_name(QQ), 3),
+    wait_for_messages_ready([Server0], ra_name(Config, QQ), 3),
     queue_utils:assert_number_of_replicas(
         Config, Server0, <<"/">>, QQ, 1),
 
-    wait_for_messages_ready([Server0], ra_name(AQ), 3),
+    wait_for_messages_ready([Server0], ra_name(Config, AQ), 3),
     queue_utils:assert_number_of_replicas(
         Config, Server0, <<"/">>, AQ, 3),
 
@@ -1483,7 +1485,7 @@ force_all_queues_shrink_member_to_current_member(Config) ->
                                  force_all_queues_shrink_member_to_current_member, []),
 
     [begin
-         RaName = ra_name(Q),
+         RaName = ra_name(Config, Q),
          wait_for_messages_ready([Server0], RaName, 3),
          queue_utils:assert_number_of_replicas(
            Config, Server0, <<"/">>, Q, 1)
@@ -1494,12 +1496,12 @@ force_all_queues_shrink_member_to_current_member(Config) ->
     rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
     [?awaitMatch(true,
                  rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
-                          [ra_name(Q), [Server0, Server1]]),
+                          [ra_name(Config, Q), [Server0, Server1]]),
                  ?DEFAULT_AWAIT) || Q <- QQs],
     rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
 
     [begin
-         RaName = ra_name(Q),
+         RaName = ra_name(Config, Q),
          wait_for_messages_ready([Server0], RaName, 3),
          queue_utils:assert_number_of_replicas(
            Config, Server0, <<"/">>, Q, 3)
@@ -1615,7 +1617,7 @@ force_checkpoint_on_queue(Config) ->
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     QName = rabbit_misc:r(<<"/">>, queue, QQ),
 
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -1683,7 +1685,7 @@ force_checkpoint(Config) ->
     QQ = ?config(queue_name, Config),
     QQName = rabbit_misc:r(<<"/">>, queue, QQ),
     CQ = <<"force_checkpoint_cq">>,
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
 
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1811,7 +1813,7 @@ recovery_checkpoint(Config) ->
         Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
         #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
         QQ = ?config(queue_name, Config),
-        RaName = ra_name(QQ),
+        RaName = ra_name(Config, QQ),
 
         ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                      declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -1913,7 +1915,7 @@ policy_repair(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ExpectedMaxLength1 = 10,
     Priority1 = 1,
     ok = rabbit_ct_broker_helpers:rpc(
@@ -2146,7 +2148,7 @@ grow_queue(Config) ->
     MsgCount = 3,
 
     [begin
-        RaName = ra_name(Q),
+        RaName = ra_name(Config, Q),
         rabbit_ct_client_helpers:publish(Ch, Q, MsgCount),
         wait_for_messages_ready([Server0], RaName, MsgCount),
         {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
@@ -2233,7 +2235,7 @@ grow_queue(Config) ->
 
 assert_grown_queues(Qs, Node, TargetClusterSize, MsgCount) ->
     [begin
-        RaName = ra_name(Q),
+        RaName = ra_name(Node, Q),
         wait_for_messages_ready([Node], RaName, MsgCount),
         {ok, Q0} = rpc:call(Node, rabbit_amqqueue, lookup, [Q, <<"/">>]),
         Nodes0 = rabbit_queue_type:get_nodes(Q0),
@@ -2252,7 +2254,7 @@ consumer_message_is_delevered_after_snapshot(Config) ->
     Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
     #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
@@ -2316,7 +2318,7 @@ gh_12635(Config) ->
     Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
     #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
@@ -2399,7 +2401,7 @@ priority_queue_fifo(Config) ->
          end || P <- lists:seq(0, 4)],
 
     Expected = lists:reverse(ExpectedLo ++ ExpectedHi),
-    RaName = ra_name(Queue),
+    RaName = ra_name(Config, Queue),
     wait_for_messages_ready(Servers, RaName, length(Expected)),
     validate_queue(Ch, Queue, Expected),
     ok.
@@ -2434,7 +2436,7 @@ priority_queue_2_1_ratio(Config) ->
          end || P <- lists:seq(5, 14)],
 
     Expected = lists:reverse(ExpectedLo ++ ExpectedHi),
-    RaName = ra_name(Queue),
+    RaName = ra_name(Config, Queue),
     wait_for_messages_ready(Servers, RaName, length(Expected)),
     validate_queue(Ch, Queue, Expected),
     ok.
@@ -2445,7 +2447,7 @@ reject_after_leader_transfer(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
-    RaName = binary_to_atom(<<"%2F_", QQ/binary>>, utf8),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
@@ -2514,10 +2516,10 @@ rebalance(Config) ->
                  declare(Ch, Q2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, {_, _}},
-                                        ra:members({ra_name(Q1), Server0}),
+                                        ra:members({ra_name(Config, Q1), Server0}),
                                         ?DEFAULT_AWAIT),
     {ok, _, {_, Leader2}} = ?awaitMatch({ok, _, {_, _}},
-                                        ra:members({ra_name(Q2), Server0}),
+                                        ra:members({ra_name(Config, Q2), Server0}),
                                         ?DEFAULT_AWAIT),
     rabbit_ct_client_helpers:publish(Ch, Q1, 3),
     rabbit_ct_client_helpers:publish(Ch, Q2, 2),
@@ -2531,8 +2533,8 @@ rebalance(Config) ->
 
     %% Q1 and Q2 should not have moved leader, as these are the queues with more
     %% log entries and we allow up to two queues per node (3 nodes, 5 queues)
-    ?awaitMatch({ok, _, {_, Leader1}}, ra:members({ra_name(Q1), Server0}), ?DEFAULT_AWAIT),
-    ?awaitMatch({ok, _, {_, Leader2}}, ra:members({ra_name(Q2), Server0}), ?DEFAULT_AWAIT),
+    ?awaitMatch({ok, _, {_, Leader1}}, ra:members({ra_name(Config, Q1), Server0}), ?DEFAULT_AWAIT),
+    ?awaitMatch({ok, _, {_, Leader2}}, ra:members({ra_name(Config, Q2), Server0}), ?DEFAULT_AWAIT),
 
     %% Check that we have at most 2 queues per node
     ?awaitMatch(true,
@@ -2554,7 +2556,7 @@ subscribe_should_fail_when_global_qos_true(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     qos(Ch, 10, true),
     publish(Ch, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
@@ -2579,7 +2581,7 @@ dead_letter_to_classic_queue(Config) ->
                                   {<<"x-dead-letter-routing-key">>, longstr, CQ}
                                  ])),
     ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
-    test_dead_lettering(true, Config, Ch, Servers, ra_name(QQ), QQ, CQ).
+    test_dead_lettering(true, Config, Ch, Servers, ra_name(Config, QQ), QQ, CQ).
 
 dead_letter_with_memory_limit(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -2594,7 +2596,7 @@ dead_letter_with_memory_limit(Config) ->
                                   {<<"x-dead-letter-routing-key">>, longstr, CQ}
                                  ])),
     ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
-    test_dead_lettering(true, Config, Ch, Servers, ra_name(QQ), QQ, CQ).
+    test_dead_lettering(true, Config, Ch, Servers, ra_name(Config, QQ), QQ, CQ).
 
 test_dead_lettering(PolicySet, Config, Ch, Servers, RaName, Source, Destination) ->
     publish(Ch, Source),
@@ -2631,7 +2633,7 @@ dead_letter_policy(Config) ->
            Config, 0, <<"dlx">>, <<"dead_letter.*">>, <<"queues">>,
            [{<<"dead-letter-exchange">>, <<"">>},
             {<<"dead-letter-routing-key">>, CQ}]),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     test_dead_lettering(true, Config, Ch, Servers, RaName, QQ, CQ),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"dlx">>),
     test_dead_lettering(false, Config, Ch, Servers, RaName, QQ, CQ).
@@ -2668,7 +2670,7 @@ at_most_once_dead_letter_order_maxlen(Config) ->
                            #amqp_msg{payload = LargePayload}),
     wait_for_consensus(QQ, Config),
     wait_for_consensus(DLQ, Config),
-    RaName = ra_name(DLQ),
+    RaName = ra_name(Config, DLQ),
     wait_for_messages_ready(Servers, RaName, 3),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
                  amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
@@ -2719,7 +2721,7 @@ at_most_once_dead_letter_order_rejected(Config) ->
                                              requeue = false}),
 
     wait_for_consensus(DLQ, Config),
-    wait_for_messages_ready(Servers,  ra_name(DLQ), 2),
+    wait_for_messages_ready(Servers,  ra_name(Config, DLQ), 2),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
                  amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
                                                     no_ack = true})),
@@ -2768,7 +2770,7 @@ at_most_once_dead_letter_order_delivery_limit_channel_closed(Config) ->
     amqp_channel:close(Ch2),
 
     wait_for_consensus(DLQ, Config),
-    wait_for_messages_ready(Servers,  ra_name(DLQ), 2),
+    wait_for_messages_ready(Servers,  ra_name(Config, DLQ), 2),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
                  amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
                                                     no_ack = true})),
@@ -2874,14 +2876,14 @@ at_most_once_dead_letter_order_expired(Config) ->
                            #amqp_msg{props = #'P_basic'{expiration = <<"1">>},
                                      payload = <<"m3">>}),
     wait_for_consensus(QQ, Config),
-    wait_for_messages_ready(Servers, ra_name(QQ), 3),
+    wait_for_messages_ready(Servers, ra_name(Config, QQ), 3),
 
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
                  amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                                     no_ack = true})),
 
     wait_for_consensus(DLQ, Config),
-    wait_for_messages_ready(Servers,  ra_name(DLQ), 2),
+    wait_for_messages_ready(Servers,  ra_name(Config, DLQ), 2),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
                  amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
                                                     no_ack = true})),
@@ -2937,8 +2939,8 @@ dead_letter_to_quorum_queue(Config) ->
                                  ])),
     ?assertEqual({'queue.declare_ok', QQ2, 0, 0},
                  declare(Ch, QQ2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
-    RaName2 = ra_name(QQ2),
+    RaName = ra_name(Config, QQ),
+    RaName2 = ra_name(Config, QQ2),
     publish(Ch, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
@@ -2975,7 +2977,7 @@ dead_letter_from_classic_to_quorum_queue(Config) ->
                                  ])),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch, CQ),
     wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 0),
@@ -3008,7 +3010,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch2, QQ),
     _Res = dirty_query(Servers, RaName, fun rabbit_fifo:query_consumer_count/1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
@@ -3054,7 +3056,7 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch1, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
@@ -3093,7 +3095,7 @@ recover_from_single_failure(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     Running = Servers -- [Server2],
     assert_cluster_status({Servers, Servers, Running}, Running),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
 
     publish(Ch, QQ),
     publish(Ch, QQ),
@@ -3163,7 +3165,7 @@ recover_from_multiple_failures(Config) ->
     Running = Servers -- [Server1],
     assert_cluster_status({Servers, Servers, Running}, Running),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
 
     publish(Ch, QQ),
     publish(Ch, QQ),
@@ -3206,7 +3208,7 @@ publishing_to_unavailable_queue(Config) ->
 
     TCh = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
-    RaName = binary_to_atom(<<"%2F_", QQ/binary>>, utf8),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(TCh, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
@@ -3256,7 +3258,7 @@ leadership_takeover(Config) ->
     Running = Servers -- [Server1],
     assert_cluster_status({Servers, Servers, Running}, Running),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
 
     publish(Ch, QQ),
     publish(Ch, QQ),
@@ -3289,7 +3291,7 @@ metrics_cleanup_on_leadership_takeover(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
@@ -3324,7 +3326,7 @@ metrics_cleanup_on_leader_crash(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
@@ -3364,7 +3366,7 @@ delete_declare(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
@@ -3421,7 +3423,7 @@ delete_ra_cluster_already_shutting_down(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
@@ -3543,7 +3545,7 @@ declare_during_node_down(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     %% Since there are not sufficient running nodes, we expect that
     %% also stopped nodes are selected as replicas.
     UniqueMembers = lists:usort(Servers),
@@ -3619,7 +3621,7 @@ projection_timeout_cleanup(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     publish(Ch, QQ),
     amqp_channel:wait_for_confirms_or_die(Ch, 30),
-    wait_for_messages_ready(Servers, ra_name(QQ), 1),
+    wait_for_messages_ready(Servers, ra_name(Config, QQ), 1),
     ?assertEqual(1, basic_get_tag(Ch, QQ, false)),
 
     [?assertMatch(#'queue.delete_ok'{},
@@ -3903,7 +3905,7 @@ delete_member_member_already_deleted(Config) ->
     NServers = length(Servers),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?awaitMatch(NServers, count_online_nodes(Server, <<"/">>, QQ), ?DEFAULT_AWAIT),
@@ -3984,8 +3986,8 @@ cleanup_data_dir(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
 
-    UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [quorum_queues])),
-    UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [quorum_queues])),
+    UId1 = proplists:get_value(ra_name(Config, QQ), rpc:call(Server1, ra_directory, list_registered, [quorum_queues])),
+    UId2 = proplists:get_value(ra_name(Config, QQ), rpc:call(Server2, ra_directory, list_registered, [quorum_queues])),
     DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [quorum_queues, UId1]),
     DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [quorum_queues, UId2]),
     ?assert(filelib:is_dir(DataDir1)),
@@ -4016,7 +4018,7 @@ partitioned_publisher(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     {ok, _, {_, Node1}} = ra:members({RaName, Node1}),
 
     #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
@@ -4059,7 +4061,7 @@ reconnect_consumer_and_publish(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     {ok, _, {_, Leader}} = ra:members({RaName, Server}),
     [F1, F2] = lists:delete(Leader, Servers),
     ChF = rabbit_ct_client_helpers:open_channel(Config, F1),
@@ -4109,7 +4111,7 @@ reconnect_consumer_and_wait(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     {ok, _, {_, Leader}} = ra:members({RaName, Server}),
     [F1, F2] = lists:delete(Leader, Servers),
     ChF = rabbit_ct_client_helpers:open_channel(Config, F1),
@@ -4149,7 +4151,7 @@ reconnect_consumer_and_wait_channel_down(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     {ok, _, {_, Leader}} = ra:members({RaName, Server}),
     [F1, F2] = lists:delete(Leader, Servers),
     ChF = rabbit_ct_client_helpers:open_channel(Config, F1),
@@ -4215,7 +4217,7 @@ subscribe_redelivery_count(Config) ->
                           {<<"x-max-in-memory-length">>, long, 0}
                          ])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
@@ -4446,8 +4448,7 @@ delivery_limit_policy_update(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    VHost = <<"%2F">>,
-    RaName = binary_to_atom(<<VHost/binary, "_", QQ/binary>>, utf8),
+    RaName = ra_name(Config, QQ),
 
     %% Initially, delivery_limit should be the default (20)
     ?awaitMatch({ok, #{machine := #{config := #{delivery_limit := 20}}}, _},
@@ -4534,7 +4535,7 @@ consume_redelivery_count(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
@@ -4577,7 +4578,7 @@ message_bytes_metrics(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     {ok, _, {_, Leader}} = ra:members({RaName, Server}),
     QRes = rabbit_misc:r(<<"/">>, queue, QQ),
 
@@ -4700,7 +4701,7 @@ queue_length_limit_drop_head(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-max-length">>, long, 1}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = QQ},
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
@@ -4722,7 +4723,7 @@ queue_length_limit_reject_publish(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-max-length">>, long, 1},
@@ -4757,7 +4758,7 @@ queue_length_limit_policy_cleared(Config) ->
            Config, 0, <<"max-length">>, QQ, <<"queues">>,
            [{<<"max-length">>, 2},
             {<<"overflow">>, <<"reject-publish">>}]),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     % QueryFun = fun rabbit_fifo:overview/1,
     ?awaitMatch({ok, #{machine := #{config := #{max_length := 2}}}, _},
                 ra:member_overview({RaName, Server}),
@@ -4783,7 +4784,7 @@ purge(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     Msg1 = <<"msg1">>,
     Msg2 = <<"msg11">>,
 
@@ -4839,8 +4840,7 @@ oldest_entry_timestamp(Config) ->
                                   {<<"x-max-in-memory-length">>, long, 2}])),
 
     Msg1 = <<"msg1">>,
-    VHost = <<"%2F">>,
-    ServerId = binary_to_atom(<<VHost/binary, "_", QQ/binary>>, utf8),
+    ServerId = ra_name(Config, QQ),
 
     ?assertMatch({ok, Ts} when is_integer(Ts),
                  rabbit_ct_broker_helpers:rpc(Config, 0, ra,
@@ -4930,7 +4930,7 @@ mixed_version_local_queries0(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-quorum-initial-group-size">>, long, 3}])),
@@ -4960,7 +4960,7 @@ status_noproc(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, N1),
 
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
@@ -5136,8 +5136,7 @@ message_ttl_policy(Config) ->
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0, <<"msg-ttl">>,
                                              QQ, <<"queues">>,
                                              [{<<"message-ttl">>, 1000}]),
-    VHost = <<"%2F">>,
-    RaName = binary_to_atom(<<VHost/binary, "_", QQ/binary>>, utf8),
+    RaName = ra_name(Config, QQ),
 
     ?awaitMatch({ok, #{machine := #{config := #{msg_ttl := 1000}}}, _},
                 rpc:call(Server, ra, member_overview, [RaName]),
@@ -5255,7 +5254,7 @@ consumer_metrics(Config) ->
                  declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     subscribe(Ch1, QQ, false),
 
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     {ok, _, {_, Leader}} = ra:members({RaName, Server}),
     QNameRes = rabbit_misc:r(<<"/">>, queue, QQ),
     ?awaitMatch(1,
@@ -5589,7 +5588,7 @@ amqpl_headers(Config) ->
             #amqp_msg{props = #'P_basic'{headers = HeadersSent,
                                          delivery_mode = 2}}) ||
      HeadersSent <- [Headers1Sent, Headers2Sent]],
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     wait_for_messages_ready(Servers, RaName, 2),
 
     {#'basic.get_ok'{},
@@ -5739,7 +5738,7 @@ leader_locator_client_local(Config) ->
                       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                       {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
          ?assertMatch({ok, _, {_, Server = _Leader}},
-                      ra:members({ra_name(Q), Server1})),
+                      ra:members({ra_name(Config, Q), Server1})),
          ?assertMatch(#'queue.delete_ok'{},
                       amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      end || Server <- Servers].
@@ -5756,7 +5755,7 @@ leader_locator_balanced(Config) ->
                                 declare(Ch, Q,
                                         [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                          {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
-                   {ok, _, {_, Leader}} = ra:members({ra_name(Q), Server}),
+                   {ok, _, {_, Leader}} = ra:members({ra_name(Config, Q), Server}),
                    Leader
                end || Q <- Qs],
     ?assertEqual(3, sets:size(sets:from_list(Leaders))),
@@ -5778,7 +5777,7 @@ leader_locator_balanced_maintenance(Config) ->
                                 declare(Ch, Q,
                                         [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                          {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
-                   {ok, _, {_, Leader}} = ra:members({ra_name(Q), S1}),
+                   {ok, _, {_, Leader}} = ra:members({ra_name(Config, Q), S1}),
                    Leader
                end || Q <- Qs],
     ?assert(lists:member(S1, Leaders)),
@@ -5806,7 +5805,7 @@ leader_locator_balanced_random_maintenance(Config) ->
                                 declare(Ch, Q,
                                         [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                          {<<"x-quorum-initial-group-size">>, long, 2}])),
-                   {ok, [{_, R1}, {_, R2}], {_, Leader}} = ra:members({ra_name(Q), S1}),
+                   {ok, [{_, R1}, {_, R2}], {_, Leader}} = ra:members({ra_name(Config, Q), S1}),
                    ?assert(lists:member(R1, Servers)),
                    ?assert(lists:member(R2, Servers)),
                    ?assertMatch(#'queue.delete_ok'{},
@@ -5838,7 +5837,7 @@ leader_locator_policy(Config) ->
                    ?assertMatch({'queue.declare_ok', Q, 0, 0},
                                 declare(Ch, Q,
                                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-                   {ok, _, {_, Leader}} = ra:members({ra_name(Q), Server}),
+                   {ok, _, {_, Leader}} = ra:members({ra_name(Config, Q), Server}),
                    Leader
                end || Q <- Qs],
 
@@ -5860,7 +5859,7 @@ select_nodes_with_least_replicas(Config) ->
                                 declare(Ch, Q,
                                         [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                          {<<"x-quorum-initial-group-size">>, long, 3}])),
-                   {ok, Members0, _} = ra:members({ra_name(Q), Server}),
+                   {ok, Members0, _} = ra:members({ra_name(Config, Q), Server}),
                    ?assertEqual(3, length(Members0)),
                    lists:map(fun({_, N}) -> N end, Members0)
                end || Q <- Qs],
@@ -5884,7 +5883,7 @@ select_nodes_with_least_replicas_node_down(Config) ->
                                 declare(Ch, Q,
                                         [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                          {<<"x-quorum-initial-group-size">>, long, 3}])),
-                   {ok, Members0, _} = ra:members({ra_name(Q), S1}),
+                   {ok, Members0, _} = ra:members({ra_name(Config, Q), S1}),
                    ?assertEqual(3, length(Members0)),
                    lists:map(fun({_, N}) -> N end, Members0)
                end || Q <- Qs],
@@ -6210,7 +6209,7 @@ consumer_timeout(Config) ->
               ct:fail("basic.cancel timeout")
     end,
     %% Asset consumer is gone from the queue
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?awaitMatch({ok, #{machine := #{num_consumers := 0}}, _},
                 ra:member_overview({RaName, Server}),
                 ?DEFAULT_AWAIT),
@@ -6227,7 +6226,7 @@ consumer_disconnected_timeout_queue_arg(Config) ->
                  declare(Ch, QQ,
                          [{<<"x-queue-type">>, longstr, <<"quorum">>},
                           {<<"x-consumer-disconnected-timeout">>, long, CustomTimeout}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?awaitMatch({ok, #{machine := #{config := #{consumer_disconnected_timeout := CustomTimeout}}}, _},
                 ra:member_overview({RaName, Server}),
                 ?DEFAULT_AWAIT),
@@ -6246,7 +6245,7 @@ consumer_disconnected_timeout_policy(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ,
                          [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?awaitMatch({ok, #{machine := #{config := #{consumer_disconnected_timeout := CustomTimeout}}}, _},
                 ra:member_overview({RaName, Server}),
                 ?DEFAULT_AWAIT),
@@ -6265,7 +6264,7 @@ consumer_disconnected_timeout_global(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ,
                          [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?awaitMatch({ok, #{machine := #{config := #{consumer_disconnected_timeout := CustomTimeout}}}, _},
                 ra:member_overview({RaName, Server}),
                 ?DEFAULT_AWAIT),
@@ -6348,7 +6347,7 @@ delayed_retry_all(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-delayed-retry-type">>, longstr, <<"all">>},
                                   {<<"x-delayed-retry-min">>, long, 2000}])),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     DeliveryTag = basic_get_tag(Ch, QQ, false),
@@ -6635,7 +6634,7 @@ delivery_time_on_publish_amqpl(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
@@ -6667,7 +6666,7 @@ delayed_retry_counts_towards_limit(Config) ->
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-delayed-retry-type">>, longstr, <<"all">>},
@@ -6706,7 +6705,7 @@ delivery_time_counts_towards_limit(Config) ->
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+    RaName = ra_name(Config, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-max-length">>, long, 1},
@@ -6819,7 +6818,7 @@ wait_for_cleanup(Server, Channel, Number, N) ->
     end.
 
 force_leader_change([Server | _] = Servers, Q) ->
-    RaName = ra_name(Q),
+    RaName = ra_name(Server, Q),
     {ok, _, {_, Leader}} = ra:members({RaName, Server}),
     [F1, _] = Servers -- [Leader],
     ok = rpc:call(F1, ra, trigger_election, [{RaName, F1}]),
@@ -6851,7 +6850,7 @@ get_message_bytes(Leader, QRes) ->
 
 wait_for_consensus(Name, Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    RaName = ra_name(Name),
+    RaName = ra_name(Config, Name),
     {ok, _, _} = ra:members({RaName, Server}).
 
 queue_names(Records) ->

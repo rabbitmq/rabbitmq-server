@@ -12,7 +12,7 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(queue_utils, [wait_for_messages_ready/3,
-                      ra_name/1]).
+                      ra_name/2]).
 
 -compile(nowarn_export_all).
 -compile(export_all).
@@ -111,7 +111,7 @@ force_delete_if_no_consensus(Config) ->
                                           }),
     rabbit_ct_client_helpers:close_channel(Ch),
 
-    RaName = queue_utils:ra_name(QName),
+    RaName = queue_utils:ra_name(Config, QName),
     {ok, [{_, A}, {_, B}, {_, C}], _} = ra:members({RaName, Server}),
 
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
@@ -156,7 +156,7 @@ takeover_on(Config, Fun) ->
                                            }),
     rabbit_ct_client_helpers:publish(Ch, QName, 10),
 
-    RaName = queue_utils:ra_name(QName),
+    RaName = queue_utils:ra_name(Config, QName),
     {ok, [{_, A}, {_, B}, {_, C}], _} = ra:members({RaName, Server}),
     ok = rabbit_ct_broker_helpers:restart_node(Config, B),
 
@@ -231,11 +231,11 @@ forget_cluster_node(Config) ->
                                            durable = true
                                           }),
 
-    RaName = queue_utils:ra_name(QName),
+    RaName = queue_utils:ra_name(Config, QName),
     {ok, [{_, A}, {_, B}, {_, C}], _} = ra:members({RaName, Server}),
     Servers = [A, B, C],
 
-    Name = ra_name(QName),
+    Name = ra_name(Config, QName),
 
     rabbit_ct_client_helpers:publish(Ch, QName, 15),
     wait_for_messages_ready(Servers, Name, 15),

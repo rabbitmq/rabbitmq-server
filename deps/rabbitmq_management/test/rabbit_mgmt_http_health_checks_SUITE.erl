@@ -279,7 +279,7 @@ is_quorum_critical_test(Config) ->
     Check1 = http_get(Config, EndpointPath, ?OK),
     ?assertEqual(false, maps:is_key(reason, Check1)),
 
-    RaName = binary_to_atom(<<"%2F_", QName/binary>>, utf8),
+    RaName = queue_utils:ra_name(Config, QName),
     {ok, [_, {_, Server2}, {_, Server3}], _} = ra:members({RaName, Server}),
 
     ok = rabbit_ct_broker_helpers:stop_broker(Config, Server2),

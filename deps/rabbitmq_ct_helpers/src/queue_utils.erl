@@ -15,7 +15,7 @@
          wait_for_min_messages/3,
          wait_for_max_messages/3,
          dirty_query/3,
-         ra_name/1,
+         ra_name/2,
          ra_machines_use_same_version/3,
          wait_for_local_stream_member/4,
          has_local_stream_member_rpc/1,
@@ -182,8 +182,23 @@ dirty_query(Servers, QName, Fun) ->
               end
       end, Servers).
 
-ra_name(Q) ->
-    binary_to_atom(<<"%2F_", Q/binary>>, utf8).
+ra_name(Config, Q) when is_list(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ra_name_from_nodes(Nodes, Q);
+ra_name(Node, Q) when is_atom(Node) ->
+    ra_name_from_nodes([Node], Q).
+
+ra_name_from_nodes(Nodes, Q) ->
+    Resource = rabbit_misc:r(<<"/">>, queue, Q),
+    {Replies, _} = rpc:multicall(Nodes, rabbit_db_queue, get, [Resource], 5000),
+    case [Name || {ok, Queue} <- Replies, {Name, _} <- [amqqueue:get_pid(Queue)]] of
+        [Name | _] -> Name;
+        [] ->
+            {VHosts, _} = rpc:multicall(Nodes, rabbit_db_vhost, get, [<<"/">>], 5000),
+            [VHost | _] = [V || V <- VHosts, is_tuple(V), element(1, V) =:= vhost],
+            {ok, Name} = rabbit_queue_type_util:qname_to_internal_name(Resource, vhost:get_id(VHost)),
+            Name
+    end.
 
 filter_queues(Expected, Got) ->
     Keys = [hd(E) || E <- Expected],

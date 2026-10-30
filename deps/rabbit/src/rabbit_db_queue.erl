@@ -733,7 +733,7 @@ get_all_by_type_and_node(VHostName, Type, Node) ->
       Ret :: {created, Queue} |
              {existing, Queue} |
              {absent, Queue, nodedown} |
-             rabbit_khepri:timeout_error().
+             rabbit_khepri:timeout_error() | {error, stale_vhost_id}.
 %% @doc Writes a queue record if it doesn't exist already or returns the existing one
 %%
 %% @returns the existing record if there is one in the database already, or the newly
@@ -742,6 +742,34 @@ get_all_by_type_and_node(VHostName, Type, Node) ->
 %% @private
 
 create_or_get(Q) ->
+    case amqqueue:get_type_state(Q) of
+        #{vhost_id := Id} when is_integer(Id) -> create_or_get(Q, Id);
+        _ -> create_or_get_without_vhost_id(Q)
+    end.
+
+create_or_get(Q, Id) ->
+    VHostPath = rabbit_db_vhost:khepri_vhost_path(amqqueue:get_vhost(Q)),
+    Path = khepri_queue_path(amqqueue:get_name(Q)),
+    try rabbit_khepri:transaction(fun() ->
+        case khepri_tx:get(VHostPath) of
+            {ok, VHost} ->
+                case vhost:get_id(VHost) of
+                    Id ->
+                        case khepri_tx:get(Path) of
+                            {ok, Existing} -> {existing, Existing};
+                            {error, ?khepri_error(node_not_found, _)} ->
+                                ok = khepri_tx:put(Path, Q),
+                                {created, Q}
+                        end;
+                    _ -> {error, stale_vhost_id}
+                end;
+            {error, ?khepri_error(node_not_found, _)} -> {error, stale_vhost_id}
+        end
+    end, rw)
+    catch throw:{error, _} = Error -> Error
+    end.
+
+create_or_get_without_vhost_id(Q) ->
     QueueName = amqqueue:get_name(Q),
     Path = khepri_queue_path(QueueName),
     case rabbit_khepri:adv_create(Path, Q) of

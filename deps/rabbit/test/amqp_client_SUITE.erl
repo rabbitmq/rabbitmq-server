@@ -1280,7 +1280,7 @@ modified_quorum_queue_deferral_token_too_many_across_stashed_flows(Config) ->
     Tokens2 = [{utf8, integer_to_binary(N)} || N <- lists:seq(201, 300)],
     %% Suspending the queue keeps the 1st `FLOW`'s credit request in flight,
     %% so the 2nd and 3rd `FLOW` (300 tokens combined) are always stashed.
-    RaName = ra_name(QName),
+    RaName = ra_name(Config, QName),
     ok = rpc(Config, sys, suspend, [RaName]),
     try
         ok = amqp10_client_session:flow_link(
@@ -1334,7 +1334,7 @@ modified_quorum_queue_deferral_token_at_limit_across_stashed_flows(Config) ->
     Mod = rabbit_queue_type,
     rabbit_ct_broker_helpers:setup_meck(Config),
     ok = rpc(Config, meck, new, [Mod, [no_link, passthrough]]),
-    RaName = ra_name(QName),
+    RaName = ra_name(Config, QName),
     try
         %% Keep the 1st `FLOW`'s credit request in flight.
         ok = rpc(Config, sys, suspend, [RaName]),
@@ -5001,7 +5001,7 @@ target_queue_deleted(Config) ->
     end,
 
     N0 = get_node_config(Config, 0, nodename),
-    RaName = ra_name(QuorumQ),
+    RaName = ra_name(Config, QuorumQ),
     ServerId0 = {RaName, N0},
     {ok, Members, _Leader} = ra:members(ServerId0),
     ?assertEqual(2, length(Members)),
@@ -8596,7 +8596,7 @@ attach_to_down_quorum_queue(Config) ->
 lost_deliveries_quorum_queue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
-    RaName = ra_name(QName),
+    RaName = ra_name(Config, QName),
 
     LeaderNode = get_node_config(Config, 0, nodename),
     NonMemberNode = get_node_config(Config, 2, nodename),
@@ -8843,8 +8843,8 @@ ready_messages(QName, Config)
     ct:pal("Queue ~s has ~b ready messages.", [QName, MsgsReady]),
     MsgsReady.
 
-ra_name(Q) ->
-    binary_to_atom(<<"%2F_", Q/binary>>).
+ra_name(Config, Q) ->
+    queue_utils:ra_name(Config, Q).
 
 assign_deferred_calls(Config, Mod) ->
     [Tokens || {_Pid, {_Mod, assign_deferred, [_, _, Tokens, _]}, _Result}

@@ -35,6 +35,7 @@ groups() ->
                         stale_deletion_keeps_the_replacement,
                         metadata_failure_refuses_supervisor_lookup,
                         metadata_recovery_retries_vhost_start,
+                        stale_queue_operations_keep_replacements,
                         uncertain_deletion_keeps_the_supervisor,
                         cleanup_rechecks_candidates,
                         legacy_reset_keeps_foreign_data]},
@@ -336,6 +337,44 @@ metadata_recovery_retries_vhost_start(Config) ->
             _ -> false
         end
     end, 15000).
+
+stale_queue_operations_keep_replacements(Config) ->
+    [stale_queue_operations_keep_replacement(Config, Type) || Type <- [<<"classic">>, <<"quorum">>]],
+    ok.
+
+stale_queue_operations_keep_replacement(Config, Type) ->
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, ?VHOST),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, ?VHOST),
+    Declare = #'queue.declare'{queue = Type, durable = true,
+                              arguments = [{<<"x-queue-type">>, longstr, Type}]},
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, ?VHOST),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, Declare),
+    Resource = rabbit_misc:r(?VHOST, queue, Type),
+    {ok, OldQ} = rpc(Config, 0, rabbit_amqqueue, lookup, [Resource]),
+    ok = amqp_channel:close(Ch),
+    ok = amqp_connection:close(Conn),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, ?VHOST),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, ?VHOST),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, ?VHOST),
+    case Type of
+        <<"classic">> -> ok;
+        _ -> ?assertEqual({error, stale_vhost_id}, rpc(Config, 0, rabbit_db_queue, create_or_get, [OldQ]))
+    end,
+    NewConn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, ?VHOST),
+    {ok, NewCh} = amqp_connection:open_channel(NewConn),
+    #'queue.declare_ok'{} = amqp_channel:call(NewCh, Declare),
+    {ok, NewQ} = rpc(Config, 0, rabbit_amqqueue, lookup, [Resource]),
+    ok = rpc(Config, 0, rabbit_amqqueue, internal_delete, [OldQ, <<"guest">>]),
+    {ok, KeptQ} = rpc(Config, 0, rabbit_amqqueue, lookup, [Resource]),
+    ?assertEqual(amqqueue:get_pid(NewQ), amqqueue:get_pid(KeptQ)),
+    case Type of
+        <<"classic">> -> ok;
+        _ -> ?assertEqual({error, stale_vhost_id}, rpc(Config, 0, rabbit_db_queue, create_or_get, [OldQ]))
+    end,
+    ok = amqp_channel:close(NewCh),
+    ok = amqp_connection:close(NewConn),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, ?VHOST).
 
 uncertain_deletion_keeps_the_supervisor(Config) ->
     ok = rabbit_ct_broker_helpers:add_vhost(Config, ?VHOST),

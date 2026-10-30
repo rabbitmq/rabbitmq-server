@@ -276,7 +276,7 @@ get_queue_type(Args, DefaultQueueType) ->
       Recover :: boolean(),
       Ret :: {created | existing, amqqueue:amqqueue()} |
              queue_absent() |
-             rabbit_khepri:timeout_error().
+             rabbit_khepri:timeout_error() | {error, stale_vhost_id}.
 
 internal_declare(Q, Recover) ->
     do_internal_declare(Q, Recover).
@@ -1945,13 +1945,14 @@ internal_delete(Queue, ActingUser) ->
 
 internal_delete(Queue, ActingUser, Reason) ->
     QueueName = amqqueue:get_name(Queue),
-    Conditions = case amqqueue:get_exclusive_owner(Queue) of
+    OwnerConditions = case amqqueue:get_exclusive_owner(Queue) of
                      none ->
                          [];
                      Owner ->
                          Pattern = amqqueue:pattern_match_on_exclusive_owner(Owner),
                          [#if_data_matches{pattern = Pattern}]
                  end,
+    Conditions = [#if_data_matches{pattern = queue_identity_pattern(Queue)} | OwnerConditions],
     OnlyDurable = Reason =:= missing_owner,
     case rabbit_db_queue:delete_if(QueueName, Conditions, OnlyDurable) of
         ok ->
@@ -1967,6 +1968,14 @@ internal_delete(Queue, ActingUser, Reason) ->
                                       {type, amqqueue:get_type(Queue)},
                                       {user_who_performed_action, ActingUser}])
     end.
+
+queue_identity_pattern(Q) ->
+    Pattern = amqqueue:pattern_match_all(),
+    Pid = case amqqueue:get_pid(Q) of
+              {Name, _Node} -> {Name, '_'};
+              Other -> Other
+          end,
+    amqqueue:set_pid(Pattern, Pid).
 
 -spec forget_all(node()) -> 'ok'.
 

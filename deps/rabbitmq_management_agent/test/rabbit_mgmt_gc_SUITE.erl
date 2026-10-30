@@ -228,7 +228,7 @@ quorum_queue_stats(Config) ->
                                        arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
     %% Wait for the Ra leader to be elected. The GC test only needs the leader-follower
     %% distinction.
-    RaName = {'%2F_quorum_queue_stats', B},
+    RaName = {queue_utils:ra_name(Config, <<"quorum_queue_stats">>), B},
     rabbit_ct_helpers:await_condition(
         fun() ->
             case rabbit_ct_broker_helpers:rpc(Config, B, ra, members, [RaName]) of
