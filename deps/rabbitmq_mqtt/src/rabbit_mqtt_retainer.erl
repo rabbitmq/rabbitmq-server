@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, start_link/1]).
+         terminate/2, start_link/1, start_link/2]).
 
 -export([retain/3, fetch/2, clear/2]).
 
@@ -29,6 +29,8 @@
                  vhost :: rabbit_types:vhost(),
                  max_messages :: limit(),
                  max_size_bytes :: limit(),
+                 incarnation :: vhost:id() | undefined,
+                 storage_id :: vhost:id() | legacy,
                  last_limit_log :: integer() | undefined
                 }).
 -type state() :: #?STATE{}.
@@ -36,7 +38,13 @@
 -spec start_link(rabbit_types:vhost()) ->
     gen_server:start_ret().
 start_link(VHost) ->
-    gen_server:start_link(?MODULE, VHost, []).
+    case rabbit_db_vhost:identity(VHost) of
+        {ok, _, Id} -> start_link(VHost, {incarnation, Id});
+        {error, _} -> ignore
+    end.
+
+start_link(VHost, {incarnation, Id}) ->
+    gen_server:start_link(?MODULE, {VHost, Id}, []).
 
 -spec retain(pid(), topic(), mqtt_msg()) -> ok.
 retain(Pid, Topic, Msg = #mqtt_msg{retain = true}) ->
@@ -51,11 +59,25 @@ fetch(Pid, Topic) ->
 clear(Pid, Topic) ->
     gen_server:cast(Pid, {clear, Topic}).
 
--spec init(rabbit_types:vhost()) ->
-    {ok, state()}.
-init(VHost) ->
+-spec init({rabbit_types:vhost(), vhost:id() | legacy}) -> {ok, state()} | ignore.
+init({VHost, StorageId}) ->
+    case rabbit_db_vhost:identity(VHost) of
+        {ok, Id, StorageId} ->
+            try init_store(VHost, Id, StorageId) of
+                {ok, _} = Result ->
+                    true = rabbit_mqtt_retainer_sup:register_retainer(VHost, Id, StorageId),
+                    Result
+            catch Class:Reason ->
+                ?LOG_ERROR("Cannot open MQTT retained store for vhost '~ts': ~tp", [VHost, {Class, Reason}]),
+                ignore
+            end;
+        _ -> ignore
+    end.
+
+init_store(VHost, Id, StorageId) ->
     process_flag(trap_exit, true),
-    {StoreState, Expire0} = rabbit_mqtt_retained_msg_store:start(VHost),
+    {StoreState, Expire0} = rabbit_mqtt_retained_msg_store:start(VHost, StorageId),
+    _ = erlang:send_after(5000, self(), check_vhost),
     Now = os:system_time(second),
     Expire = maps:map(fun(Topic, {Timestamp, Expiry}) ->
                               TimerSecs = max(0, Expiry - (Now - Timestamp)),
@@ -64,6 +86,8 @@ init(VHost) ->
     {ok, #?STATE{store_state = StoreState,
                  expire = Expire,
                  vhost = VHost,
+                 incarnation = Id,
+                 storage_id = StorageId,
                  max_messages = get_limit(retained_message_store_max_messages),
                  max_size_bytes = get_limit(retained_message_store_max_size_bytes)}}.
 
@@ -110,10 +134,32 @@ handle_info({timeout, Timer, Topic}, State = #?STATE{store_state = StoreState,
                      Expire0
              end,
     {noreply, State#?STATE{expire = Expire}};
+handle_info(check_vhost, #?STATE{vhost = VHost, incarnation = Id} = State) ->
+    case rabbit_db_vhost:get(VHost) of
+        undefined -> check_identity(State);
+        V ->
+            case vhost:get_id(V) of
+                Id -> continue_checking(State);
+                _ -> check_identity(State)
+            end
+    end;
 handle_info(stop, State) ->
     {stop, normal, State};
 handle_info(Info, State) ->
     {stop, {unknown_info, Info}, State}.
+
+check_identity(#?STATE{vhost = VHost, storage_id = StorageId} = State) ->
+    case rabbit_db_vhost:identity(VHost) of
+        {ok, Id, StorageId} ->
+            true = rabbit_mqtt_retainer_sup:register_retainer(VHost, Id, StorageId),
+            continue_checking(State#?STATE{incarnation = Id});
+        {error, Reason} when Reason =/= not_found -> continue_checking(State);
+        _ -> {stop, normal, State}
+    end.
+
+continue_checking(State) ->
+    _ = erlang:send_after(5000, self(), check_vhost),
+    {noreply, State}.
 
 terminate(_Reason, #?STATE{store_state = StoreState}) ->
     rabbit_mqtt_retained_msg_store:terminate(StoreState).

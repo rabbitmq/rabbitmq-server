@@ -13,7 +13,7 @@
 -include("rabbit_mqtt_packet.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--export([new/2, recover/2, insert/3, lookup/2, delete/2, info/1, terminate/1]).
+-export([new/2, recover/2, open/3, delete_vhost/2, remove_leftovers/2, insert/3, lookup/2, delete/2, info/1, terminate/1]).
 
 -record(store_state, {table :: dets:tab_name()}).
 
@@ -21,14 +21,14 @@
 
 -spec new(file:name_all(), rabbit_types:vhost()) -> store_state().
 new(Dir, VHost) ->
-    {ok, TabName} = open_table(Dir, VHost),
+    {ok, TabName} = open_legacy_table(Dir, VHost),
     #store_state{table = TabName}.
 
 -spec recover(file:name_all(), rabbit_types:vhost()) ->
     {ok, store_state(), rabbit_mqtt_retained_msg_store:expire()} |
     {error, uninitialized}.
 recover(Dir, VHost) ->
-    case open_table(Dir, VHost) of
+    case open_legacy_table(Dir, VHost) of
         {ok, TabName}  ->
             {ok,
              #store_state{table = TabName},
@@ -37,6 +37,13 @@ recover(Dir, VHost) ->
             ?LOG_ERROR("~s failed to open table: ~p", [?MODULE, Reason]),
             {error, uninitialized}
     end.
+
+-spec open(file:name_all(), rabbit_types:vhost(), vhost:id()) ->
+    {ok, store_state(), rabbit_mqtt_retained_msg_store:expire()}.
+open(Dir, VHost, Id) ->
+    Path = rabbit_mqtt_retained_msg_store:incarnation_path(path(Dir, VHost), Id),
+    {ok, Tab} = open_table(Path, Path),
+    {ok, #store_state{table = Tab}, rabbit_mqtt_retained_msg_store:expire(dets, Tab)}.
 
 -spec insert(topic(), mqtt_msg(), store_state()) -> ok.
 insert(Topic, Msg, #store_state{table = T}) ->
@@ -65,9 +72,10 @@ info(#store_state{table = T}) ->
 terminate(#store_state{table = T}) ->
   ok = dets:close(T).
 
-open_table(Dir, VHost) ->
-    Tab = rabbit_mqtt_util:vhost_name_to_table_name(VHost),
-    Path = rabbit_mqtt_util:path_for(Dir, VHost, ".dets"),
+open_legacy_table(Dir, VHost) ->
+    open_table(rabbit_mqtt_util:vhost_name_to_table_name(VHost), path(Dir, VHost)).
+
+open_table(Tab, Path) ->
     AutoSave = rabbit_misc:get_env(?APP_NAME, retained_message_store_dets_sync_interval, 2000),
     dets:open_file(Tab, [{type, set},
                          {keypos, #retained_message.topic},
@@ -75,3 +83,13 @@ open_table(Dir, VHost) ->
                          {ram_file, false},
                          {repair, true},
                          {auto_save, AutoSave}]).
+
+-spec delete_vhost(rabbit_types:vhost(), vhost:id() | undefined) -> ok | {error, term()}.
+delete_vhost(VHost, Id) ->
+  rabbit_mqtt_retained_msg_store:delete_file(path(rabbit:data_dir(), VHost), Id).
+
+-spec remove_leftovers(file:name_all(), #{rabbit_types:vhost() => term()}) -> ok | {error, term()}.
+remove_leftovers(Dir, Live) ->
+    rabbit_mqtt_retained_msg_store:remove_leftover_files(Dir, ".dets", Live).
+
+path(Dir, VHost) -> rabbit_mqtt_util:path_for(Dir, VHost, ".dets").

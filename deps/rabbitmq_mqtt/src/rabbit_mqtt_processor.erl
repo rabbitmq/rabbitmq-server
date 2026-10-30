@@ -204,6 +204,15 @@ process_connect(
         ok ?= check_user_connection_limit(Username),
         {ok, AuthzCtx} ?= check_vhost_access(VHost, User, ClientId, PeerIp),
         ok ?= check_user_loopback(Username, PeerIp),
+        {ok, VHostId} ?= case rabbit_db_vhost:get(VHost) of
+                            undefined -> {error, ?RC_SERVER_UNAVAILABLE};
+                            V -> {ok, vhost:get_id(V)}
+                        end,
+        Retainer = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost, VHostId),
+        ok ?= case is_pid(Retainer) of
+                  true -> ok;
+                  false -> {error, ?RC_SERVER_UNAVAILABLE}
+              end,
         rabbit_core_metrics:auth_attempt_succeeded(PeerIp, Username, mqtt),
         ok = register_client_id(VHost, ClientId, CleanStart, WillProps),
         ok ?= fence(),
@@ -234,7 +243,7 @@ process_connect(
                           peer_port = PeerPort,
                           send_fun = SendFun,
                           exchange = Exchange,
-                          retainer_pid = rabbit_mqtt_retainer_sup:start_child_for_vhost(VHost),
+                          retainer_pid = Retainer,
                           vhost = VHost,
                           client_id = ClientId,
                           user_prop = maps:get('User-Property', ConnectProps, []),

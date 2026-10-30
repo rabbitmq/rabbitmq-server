@@ -21,8 +21,9 @@
 -include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
 -include_lib("kernel/include/logger.hrl").
--export([start/1, insert/3, lookup/2, delete/2, info/1, terminate/1]).
--export([expire/2]).
+-export([start/1, start/2, insert/3, lookup/2, delete/2, info/1, terminate/1]).
+-export([expire/2, incarnation_path/2, delete_file/2, remove_leftover_files/3,
+         delete_vhost/2, remove_leftovers/1]).
 -export_type([state/0, expire/0, store_info/0]).
 
 -define(STATE, ?MODULE).
@@ -44,6 +45,13 @@
     {ok, State :: any(), expire()} |
     {error, uninitialized}.
 
+-callback open(file:name_all(), rabbit_types:vhost(), vhost:id()) ->
+    {ok, any(), expire()}.
+-callback delete_vhost(rabbit_types:vhost(), vhost:id() | undefined) -> ok | {error, term()}.
+-callback remove_leftovers(file:name_all(), #{rabbit_types:vhost() => vhost:id() | undefined}) ->
+    ok | {error, term()}.
+-optional_callbacks([open/3, delete_vhost/2, remove_leftovers/2]).
+
 -callback insert(topic(), mqtt_msg(), State :: any()) ->
     ok.
 
@@ -61,8 +69,11 @@
 
 -spec start(rabbit_types:vhost()) -> {state(), expire()}.
 start(VHost) ->
+    start_legacy(VHost, rabbit_vhost:legacy_data_dir()).
+
+start_legacy(VHost, Dir) ->
+    ok = filelib:ensure_path(Dir),
     {ok, Mod} = application:get_env(?APP_NAME, retained_message_store),
-    Dir = rabbit:data_dir(),
     ?LOG_INFO("Starting MQTT retained message store ~s for vhost '~ts'",
               [Mod, VHost]),
     {S, Expire} = case Mod:recover(Dir, VHost) of
@@ -78,6 +89,21 @@ start(VHost) ->
                   end,
     {#?STATE{store_mod = Mod,
              store_state = S}, Expire}.
+
+-spec start(rabbit_types:vhost(), vhost:id() | legacy) -> {state(), expire()}.
+start(VHost, legacy) -> start(VHost);
+start(VHost, Id) when is_integer(Id) ->
+    {ok, Mod} = application:get_env(?APP_NAME, retained_message_store),
+    {module, Mod} = code:ensure_loaded(Mod),
+    case erlang:function_exported(Mod, open, 3) of
+        true ->
+            {ok, State, Expire} = Mod:open(rabbit:data_dir(), VHost, Id),
+            {#?STATE{store_mod = Mod, store_state = State}, Expire};
+        false ->
+            Dir = filename:join(rabbit:data_dir(), "mqtt_retained_" ++ integer_to_list(Id)),
+            ok = filelib:ensure_path(Dir),
+            start_legacy(VHost, Dir)
+    end.
 
 -spec insert(topic(), mqtt_msg(), state()) -> ok.
 insert(Topic, Msg, #?STATE{store_mod = Mod,
@@ -139,3 +165,72 @@ convert_mqtt_msg({mqtt_msg, Retain, Qos, Topic, Dup, PacketId, Payload}) ->
               packet_id = PacketId,
               payload = Payload,
               props = #{}}.
+
+-spec delete_vhost(rabbit_types:vhost(), vhost:id() | undefined) -> ok | {error, term()}.
+delete_vhost(VHost, Id) ->
+    optional(delete_vhost, [VHost, Id]).
+
+-spec remove_leftovers(#{rabbit_types:vhost() => vhost:id() | undefined}) -> ok | {error, term()}.
+remove_leftovers(Live) ->
+    optional(remove_leftovers, [rabbit:data_dir(), Live]).
+
+optional(Fun, Args) ->
+    {ok, Mod} = application:get_env(?APP_NAME, retained_message_store),
+    try
+        case code:ensure_loaded(Mod) =:= {module, Mod} andalso
+             erlang:function_exported(Mod, Fun, length(Args)) of
+            true -> erlang:apply(Mod, Fun, Args);
+            false -> ok
+        end
+    catch Class:Reason -> {error, {Class, Reason}}
+    end.
+
+-spec incarnation_path(file:filename(), vhost:id()) -> file:filename().
+incarnation_path(Path, Id) when is_integer(Id), Id > 0 ->
+    Path ++ "." ++ integer_to_list(Id).
+
+-spec delete_file(file:filename(), vhost:id() | undefined) -> ok | {error, term()}.
+delete_file(_Path, undefined) -> ok;
+delete_file(Path, Id) ->
+    remove(incarnation_path(Path, Id)).
+
+-spec remove_leftover_files(file:name_all(), string(), #{rabbit_types:vhost() => term()}) ->
+    ok | {error, term()}.
+remove_leftover_files(Dir, Extension, _Live) ->
+    Candidates = [Path || Path <- filelib:wildcard(filename:join(Dir, "mqtt_retained_*" ++ Extension ++ ".*")),
+                          valid_file_id(filename:extension(Path))],
+    case rabbit_db_vhost:cleanup_snapshot() of
+        {ok, Epoch, Live} ->
+            Current = maps:groups_from_list(
+                        fun({VHost, _}) -> rabbit_mqtt_util:path_for(Dir, VHost, Extension) end,
+                        fun({_, Id}) -> Id end, maps:to_list(Live)),
+            lists:foldl(fun(Path, ok) ->
+                            [$. | Digits] = filename:extension(Path),
+                            Id = list_to_integer(Digits),
+                            Owners = maps:find(filename:rootname(Path), Current),
+                            case {vhost:id_epoch(Id) =:= Epoch, Owners} of
+                                {false, _} -> ok;
+                                {true, error} -> remove(Path);
+                                {true, {ok, Ids}} ->
+                                    case lists:all(fun(New) -> is_integer(New) andalso New > Id end, Ids) of
+                                        true -> remove(Path);
+                                        false -> ok
+                                    end
+                            end;
+                           (_, Error) -> Error
+                        end, ok, Candidates);
+        {error, _} = Error -> Error
+    end.
+
+valid_file_id([$. | Digits]) ->
+    case string:to_integer(Digits) of
+        {Id, []} when Id > 0 -> integer_to_list(Id) =:= Digits;
+        _ -> false
+    end;
+valid_file_id(_) -> false.
+
+remove(Path) ->
+    case file:delete(Path) of
+        {error, enoent} -> ok;
+        Result -> Result
+    end.

@@ -11,7 +11,7 @@
 
 -include("rabbit_mqtt_packet.hrl").
 
--export([new/2, recover/2, insert/3, lookup/2, delete/2, info/1, terminate/1]).
+-export([new/2, recover/2, open/3, delete_vhost/2, remove_leftovers/2, insert/3, lookup/2, delete/2, info/1, terminate/1]).
 
 -record(store_state, {
           table :: ets:tid(),
@@ -23,9 +23,11 @@
 -spec new(file:name_all(), rabbit_types:vhost()) -> store_state().
 new(Dir, VHost) ->
   Path = rabbit_mqtt_util:path_for(Dir, VHost),
-  TableName = rabbit_mqtt_util:vhost_name_to_table_name(VHost),
+  new(Path).
+
+new(Path) ->
   _ = file:delete(Path),
-  Tid = ets:new(TableName, [set, public, {keypos, #retained_message.topic}]),
+  Tid = ets:new(?MODULE, [set, public, {keypos, #retained_message.topic}]),
   #store_state{table = Tid, filename = Path}.
 
 -spec recover(file:name_all(), rabbit_types:vhost()) ->
@@ -33,6 +35,9 @@ new(Dir, VHost) ->
     {error, uninitialized}.
 recover(Dir, VHost) ->
     Path = rabbit_mqtt_util:path_for(Dir, VHost),
+    recover(Path).
+
+recover(Path) ->
     case ets:file2tab(Path) of
         {ok, Tid} ->
             _ = file:delete(Path),
@@ -41,6 +46,15 @@ recover(Dir, VHost) ->
              rabbit_mqtt_retained_msg_store:expire(ets, Tid)};
         {error, _} ->
             {error, uninitialized}
+    end.
+
+-spec open(file:name_all(), rabbit_types:vhost(), vhost:id()) ->
+    {ok, store_state(), rabbit_mqtt_retained_msg_store:expire()}.
+open(Dir, VHost, Id) ->
+    Path = rabbit_mqtt_retained_msg_store:incarnation_path(rabbit_mqtt_util:path_for(Dir, VHost), Id),
+    case recover(Path) of
+        {ok, _, _} = Ok -> Ok;
+        {error, uninitialized} -> {ok, new(Path), #{}}
     end.
 
 -spec insert(topic(), mqtt_msg(), store_state()) -> ok.
@@ -68,3 +82,12 @@ info(#store_state{table = T}) ->
 -spec terminate(store_state()) -> ok.
 terminate(#store_state{table = T, filename = Path}) ->
   ok = ets:tab2file(T, Path, [{extended_info, [object_count]}]).
+
+-spec delete_vhost(rabbit_types:vhost(), vhost:id() | undefined) -> ok | {error, term()}.
+delete_vhost(VHost, Id) ->
+  rabbit_mqtt_retained_msg_store:delete_file(rabbit_mqtt_util:path_for(rabbit:data_dir(), VHost),
+                                             Id).
+
+-spec remove_leftovers(file:name_all(), #{rabbit_types:vhost() => term()}) -> ok | {error, term()}.
+remove_leftovers(Dir, Live) ->
+    rabbit_mqtt_retained_msg_store:remove_leftover_files(Dir, ".ets", Live).

@@ -9,6 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include("rabbit_mqtt_packet.hrl").
 -import(util, [connect/2, connect/3,
                expect_publishes/3,
                assert_message_expiry_interval/2
@@ -40,6 +41,8 @@ tests() ->
      should_translate_amqp2mqtt_on_retention,
      should_translate_amqp2mqtt_on_retention_search,
      recover,
+     vhost_recreation_is_empty,
+     deletion_with_mqtt_stopped,
      recover_with_message_expiry_interval,
      limit_max_messages,
      limit_max_size_bytes,
@@ -341,6 +344,67 @@ limit_max_size_bytes_with_properties(Config) ->
     ok = expect_publishes(C2, <<"size/props">>, [<<"m2">>]),
     ok = emqtt:disconnect(C2).
 
+vhost_recreation_is_empty(Config) ->
+    VHost = <<"mqtt-recreated">>,
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, VHost),
+    {ok, OldId} = rpc(Config, rabbit_vhost, id, [VHost]),
+    Opts = [{username, <<VHost/binary, ":guest">>}, {password, <<"guest">>}],
+    Old = connect(<<"old">>, Config, Opts),
+    unlink(Old),
+    {ok, _} = emqtt:publish(Old, <<"t">>, <<"old">>, [{retain, true}, {qos, 1}]),
+    OldPid = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [VHost]),
+    await_retained(Config, OldPid, <<"old">>),
+    ok = emqtt:disconnect(Old),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, VHost),
+    New = connect(<<"new">>, Config, Opts),
+    try
+        {ok, _, [1]} = emqtt:subscribe(New, <<"t">>, qos1),
+        expect_nothing(),
+        NewPid = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [VHost]),
+        ?assertNotEqual(OldPid, NewPid),
+        {ok, _} = emqtt:publish(New, <<"t">>, <<"new">>, [{retain, true}, {qos, 1}]),
+        await_retained(Config, NewPid, <<"new">>),
+        ok = expect_publishes(New, <<"t">>, [<<"new">>]),
+        ok = rpc(Config, rabbit_mqtt_vhost, vhost_deleted, [VHost, OldId]),
+        await_retained(Config, NewPid, <<"new">>)
+    after
+        catch emqtt:disconnect(New),
+        rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+    end.
+
+deletion_with_mqtt_stopped(Config) ->
+    VHost = <<"mqtt-stopped">>,
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    {ok, Id} = rpc(Config, rabbit_vhost, id, [VHost]),
+    Pid = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [VHost]),
+    Msg = #mqtt_msg{topic = <<"t">>, payload = <<"old">>, props = #{}, retain = true, qos = 0},
+    ok = rpc(Config, rabbit_mqtt_retainer, retain, [Pid, <<"t">>, Msg]),
+    await_retained(Config, Pid, <<"old">>),
+    {ok, Backend} = rpc(Config, application, get_env, [rabbitmq_mqtt, retained_message_store]),
+    Extension = case Backend of rabbit_mqtt_retained_msg_store_ets -> ".ets"; _ -> ".dets" end,
+    Dir = rpc(Config, rabbit, data_dir, []),
+    Path = rpc(Config, rabbit_mqtt_util, path_for, [Dir, VHost, Extension]),
+    File = rpc(Config, rabbit_mqtt_retained_msg_store, incarnation_path, [Path, Id]),
+    ok = rpc(Config, application, stop, [rabbitmq_mqtt]),
+    try
+        ?assert(filelib:is_file(File)),
+        ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+    after
+        ok = rpc(Config, rabbit, start_apps, [[rabbitmq_mqtt]])
+    end,
+    rabbit_ct_helpers:await_condition(fun() -> not filelib:is_file(File) end, 10000).
+
+await_retained(Config, Pid, Payload) ->
+    rabbit_ct_helpers:await_condition(fun() ->
+        case rpc(Config, rabbit_mqtt_retainer, fetch, [Pid, <<"t">>]) of
+            #mqtt_msg{payload = Payload} -> true;
+            _ -> false
+        end
+    end, 10000).
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
@@ -357,11 +421,8 @@ set_limits(Config, MaxMessages, MaxSizeBytes) ->
              [rabbitmq_mqtt, retained_message_store_max_size_bytes, MaxSizeBytes]),
     _ = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [VHost]),
     ok = rpc(Config, rabbit_mqtt_retainer_sup, delete_child_for_vhost, [VHost]),
-    Dir = rpc(Config, rabbit, data_dir, []),
-    DetsPath = rpc(Config, rabbit_mqtt_util, path_for, [Dir, VHost, ".dets"]),
-    EtsPath = rpc(Config, rabbit_mqtt_util, path_for, [Dir, VHost]),
-    _ = rpc(Config, file, delete, [DetsPath]),
-    _ = rpc(Config, file, delete, [EtsPath]),
+    {ok, Id} = rpc(Config, rabbit_vhost, id, [VHost]),
+    ok = rpc(Config, rabbit_mqtt_retained_msg_store, delete_vhost, [VHost, Id]),
     _ = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [VHost]),
     ok.
 
