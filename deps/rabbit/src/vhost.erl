@@ -12,6 +12,7 @@
 -export([
   new/2,
   new/3,
+  new/4,
   fields/0,
   fields/1,
   info_keys/0,
@@ -23,6 +24,9 @@
   get_name/1,
   get_limits/1,
   get_metadata/1,
+  get_id/1,
+  id_epoch/1,
+  id_time/1,
   get_description/1,
   get_tags/1,
   tag_to_binary/1,
@@ -42,7 +46,7 @@
   to_map/1
 ]).
 
--define(record_version, vhost_v2).
+-define(record_version, vhost_v3).
 
 -type(name() :: rabbit_types:vhost()).
 
@@ -59,27 +63,37 @@
 -type(tags() :: [tag()]).
 -type(unparsed_tags() :: undefined | binary() | string() | [atom() | binary() | string()]).
 
--type vhost() :: vhost_v2().
+%% The high bits identify the metadata store; the low 64 bits are a monotonic timestamp.
+-type id() :: pos_integer().
+
+-type vhost() :: vhost_v2() | vhost_v3().
 
 -record(vhost, {
     %% name as a binary
     virtual_host :: name() | '_' | '$1',
     %% proplist of limits configured, if any
     limits :: limits() | undefined | '_',
-    metadata :: metadata() | '_'
+    metadata :: metadata() | '_',
+    id :: id() | '_'
 }).
 
--type vhost_v2() :: #vhost{
+%% Written until `rabbitmq_5.0.0' is enabled.
+-type vhost_v2() :: {vhost, name(), limits(), metadata()}.
+
+-type vhost_v3() :: #vhost{
                           virtual_host :: name(),
                           limits :: limits(),
-                          metadata :: metadata()
+                          metadata :: metadata(),
+                          id :: id()
                          }.
 
--type vhost_pattern() :: vhost_v2_pattern().
--type vhost_v2_pattern() :: #vhost{
+-type vhost_pattern() :: vhost_v2_pattern() | vhost_v3_pattern().
+-type vhost_v2_pattern() :: {vhost, name() | '_' | '$1', '_', '_'}.
+-type vhost_v3_pattern() :: #vhost{
                                   virtual_host :: name() | '_' | '$1',
                                   limits :: '_',
-                                  metadata :: '_'
+                                  metadata :: '_',
+                                  id :: '_'
                                  }.
 
 -export_type([name/0,
@@ -90,38 +104,51 @@
               tag/0,
               unparsed_tags/0,
               tags/0,
+              id/0,
               vhost/0,
               vhost_v2/0,
+              vhost_v3/0,
               vhost_pattern/0,
-              vhost_v2_pattern/0]).
+              vhost_v2_pattern/0,
+              vhost_v3_pattern/0]).
 
 -define(DELETION_PROTECTION_KEY, protected_from_deletion).
 
--spec new(name(), limits()) -> vhost().
+-spec new(name(), limits()) -> vhost_v2().
 new(Name, Limits) ->
-    #vhost{virtual_host = Name, limits = Limits}.
+    new(Name, Limits, undefined).
 
--spec new(name(), limits(), metadata()) -> vhost().
+-spec new(name(), limits(), metadata()) -> vhost_v2().
 new(Name, Limits, Metadata) ->
-    #vhost{virtual_host = Name, limits = Limits, metadata = Metadata}.
+    {vhost, Name, Limits, Metadata}.
 
--spec record_version_to_use() -> vhost_v2.
+-spec new(name(), limits(), metadata(), id()) -> vhost_v3().
+new(Name, Limits, Metadata, Id) when is_integer(Id), Id > 0 ->
+    #vhost{virtual_host = Name, limits = Limits, metadata = Metadata, id = Id}.
+
+-spec record_version_to_use() -> vhost_v2 | vhost_v3.
 
 record_version_to_use() ->
-    ?record_version.
+    case rabbit_feature_flags:is_enabled('rabbitmq_5.0.0') of
+        true -> ?record_version;
+        false -> vhost_v2
+    end.
 
 -spec upgrade(vhost()) -> vhost().
 
-upgrade(#vhost{} = VHost) -> VHost.
+upgrade(VHost) when ?is_vhost(VHost) -> VHost.
 
--spec upgrade_to(vhost_v2, vhost()) -> vhost_v2().
+-spec upgrade_to(vhost_v2 | vhost_v3, vhost()) -> vhost().
 
-upgrade_to(?record_version, #vhost{} = VHost) ->
+upgrade_to(vhost_v2, VHost) when ?is_vhost_v2(VHost) ->
+    VHost;
+upgrade_to(vhost_v3, VHost) when ?is_vhost_v3(VHost) ->
     VHost.
 
 fields() ->
     fields(?record_version).
 
+fields(vhost_v2) -> [virtual_host, limits, metadata];
 fields(?record_version) -> record_info(fields, vhost).
 
 info_keys() ->
@@ -132,36 +159,51 @@ info_keys() ->
      tags,
      default_queue_type,
      protected_from_deletion,
+     created_at,
      metadata,
      tracing,
      cluster_state].
 
--spec pattern_match_all() -> vhost_pattern().
+-spec pattern_match_all() -> [vhost_pattern()].
 
 pattern_match_all() ->
-    #vhost{_ = '_'}.
+    [{vhost, '_', '_', '_'}, #vhost{_ = '_'}].
 
--spec pattern_match_names() -> vhost_pattern().
+-spec pattern_match_names() -> [vhost_pattern()].
 pattern_match_names() ->
-    #vhost{virtual_host = '$1', _ = '_'}.
+    [{vhost, '$1', '_', '_'}, #vhost{virtual_host = '$1', _ = '_'}].
 
+%% The fields that both versions have are at the same positions.
 -spec get_name(vhost()) -> name().
-get_name(#vhost{virtual_host = Value}) -> Value.
+get_name(VHost) when ?is_vhost(VHost) -> ?vhost_v2_field_name(VHost).
 
 %% Records written by older versions can have `undefined` limits.
 -spec get_limits(vhost()) -> limits().
-get_limits(#vhost{limits = undefined}) -> [];
-get_limits(#vhost{limits = Value}) -> Value.
+get_limits(VHost) when ?is_vhost(VHost) ->
+    case ?vhost_v2_field_limits(VHost) of
+        undefined -> [];
+        Limits -> Limits
+    end.
 
 -spec get_metadata(vhost()) -> metadata().
-get_metadata(#vhost{metadata = Value}) -> Value.
+get_metadata(VHost) when ?is_vhost(VHost) -> ?vhost_v2_field_metadata(VHost).
+
+-spec get_id(vhost()) -> id() | undefined.
+get_id(VHost) when ?is_vhost_v3(VHost) -> ?vhost_v3_field_id(VHost);
+get_id(VHost) when ?is_vhost_v2(VHost) -> undefined.
+
+-spec id_epoch(id()) -> non_neg_integer().
+id_epoch(Id) -> Id bsr 64.
+
+-spec id_time(id()) -> non_neg_integer().
+id_time(Id) -> Id band ((1 bsl 64) - 1).
 
 -spec get_description(vhost()) -> binary().
-get_description(#vhost{} = VHost) ->
+get_description(VHost) when ?is_vhost(VHost) ->
     maps:get(description, get_metadata(VHost), undefined).
 
 -spec get_tags(vhost()) -> [tag()].
-get_tags(#vhost{} = VHost) ->
+get_tags(VHost) when ?is_vhost(VHost) ->
     [tag_to_binary(Tag) || Tag <- maps:get(tags, get_metadata(VHost), [])].
 
 -spec tag_to_binary(atom() | string() | binary()) -> tag().
@@ -173,24 +215,24 @@ tag_to_binary(Tag) when is_binary(Tag) ->
     Tag.
 
 -spec get_default_queue_type(vhost()) -> binary() | undefined.
-get_default_queue_type(#vhost{} = VHost) ->
+get_default_queue_type(VHost) when ?is_vhost(VHost) ->
     maps:get(default_queue_type, get_metadata(VHost), undefined);
 get_default_queue_type(_VHost) ->
     undefined.
 
-set_limits(VHost, Value) ->
-    VHost#vhost{limits = Value}.
+set_limits(VHost, Value) when ?is_vhost(VHost) ->
+    setelement(3, VHost, Value).
 
 -spec set_metadata(vhost(), metadata()) -> vhost().
-set_metadata(VHost, Value) ->
-    VHost#vhost{metadata = Value}.
+set_metadata(VHost, Value) when ?is_vhost(VHost) ->
+    setelement(4, VHost, Value).
 
 -spec merge_metadata(vhost(), metadata()) -> vhost().
 merge_metadata(VHost, NewVHostMeta) ->
     CurrentVHostMeta = get_metadata(VHost),
     FinalMeta =  maps:merge_with(
                    fun metadata_merger/3, CurrentVHostMeta, NewVHostMeta),
-    VHost#vhost{metadata = FinalMeta}.
+    set_metadata(VHost, FinalMeta).
 
 %% This is the case where the existing VHost metadata has a default queue type
 %% value and the proposed value is `undefined`. We do not want the proposed

@@ -14,18 +14,18 @@
 
 -behaviour(supervisor).
 -export([init/1]).
--export([start_link/1]).
--export([start_vhost_sup/1]).
+-export([start_link/2]).
+-export([start_vhost_sup/2]).
 
-start_link(VHost) ->
+start_link(VHost, Id) ->
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
         {ok, Pid} ->
             {error, {already_started, Pid}};
         {error, _} ->
-            supervisor:start_link(?MODULE, [VHost])
+            supervisor:start_link(?MODULE, [VHost, Id])
     end.
 
-init([VHost]) ->
+init([VHost, Id]) ->
     %% 2 restarts in 5 minutes. One per message store.
     {ok,
         {#{strategy => one_for_all, intensity => 2, period => 300}, [
@@ -33,7 +33,7 @@ init([VHost]) ->
             %% all data processes.
             #{
                 id => rabbit_vhost_sup,
-                start => {rabbit_vhost_sup_wrapper, start_vhost_sup, [VHost]},
+                start => {rabbit_vhost_sup_wrapper, start_vhost_sup, [VHost, Id]},
                 restart => permanent,
                 shutdown => infinity,
                 type => supervisor,
@@ -52,11 +52,19 @@ init([VHost]) ->
             }
         ]}}.
 
-start_vhost_sup(VHost) ->
+start_vhost_sup(VHost, Id) ->
+    case rabbit_db_vhost:identity(VHost) of
+        {ok, Id, StorageId} -> do_start_vhost_sup(VHost, Id, StorageId);
+        {ok, Current, legacy} when Id =:= undefined -> do_start_vhost_sup(VHost, Current, legacy);
+        {error, _} = Error -> Error;
+        _ -> {error, stale_vhost_id}
+    end.
+
+do_start_vhost_sup(VHost, Id, StorageId) ->
     case rabbit_vhost_sup:start_link(VHost) of
         {ok, Pid} ->
             %% Save vhost sup record with wrapper pid and vhost sup pid.
-            ok = rabbit_vhost_sup_sup:save_vhost_sup(VHost, self(), Pid),
+            ok = rabbit_vhost_sup_sup:save_vhost_sup(VHost, Id, StorageId, self(), Pid),
             {ok, Pid};
         Other ->
             Other

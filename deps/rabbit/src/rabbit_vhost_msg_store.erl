@@ -28,7 +28,8 @@ start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
         {error, {no_such_vhost, VHost}} = E ->
             ?LOG_ERROR("Failed to start a message store for vhost ~ts: vhost no longer exists!",
                              [VHost]),
-            E
+            E;
+        {error, _} = Error -> Error
     end.
 
 stop(VHost, Type) ->
@@ -41,7 +42,8 @@ stop(VHost, Type) ->
             ?LOG_ERROR("Failed to stop a message store for vhost ~ts: vhost no longer exists!",
                              [VHost]),
 
-            ok
+            ok;
+        {error, _} = Error -> Error
     end.
 
 client_init(VHost, Type, Ref, MsgOnDiskFun) ->
@@ -61,10 +63,13 @@ vhost_store_pid(VHost, Type) ->
     case pg:get_local_members({rabbit_msg_store, VHost, Type}) of
         [] ->
             %% Fall back to using the supervisor (sometimes necessary on queue startup).
-            {ok, VHostSup} = rabbit_vhost_sup_sup:get_vhost_sup(VHost),
-            case rabbit_misc:find_child(VHostSup, Type) of
-                [Pid] -> Pid;
-                []    -> no_pid
+            case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
+                {ok, VHostSup} ->
+                    case rabbit_misc:find_child(VHostSup, Type) of
+                        [Pid] -> Pid;
+                        [] -> no_pid
+                    end;
+                {error, _} -> no_pid
             end;
         [Pid|_] ->
             Pid

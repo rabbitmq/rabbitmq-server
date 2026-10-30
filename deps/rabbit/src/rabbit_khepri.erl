@@ -401,6 +401,8 @@ reset() ->
             %% Rabbit should be stopped, but Khepri needs to be running.
             %% Restart it.
             ok = setup(),
+            %% Bind legacy files before reset removes their metadata-store identity.
+            ok = rabbit_vhost:prepare_legacy_storage_reset(),
             ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
             ok = khepri:stop(?RA_CLUSTER_NAME),
 

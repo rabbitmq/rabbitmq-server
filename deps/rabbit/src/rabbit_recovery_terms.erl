@@ -39,7 +39,8 @@ start(VHost) ->
         {error, {no_such_vhost, VHost}} ->
             ?LOG_ERROR("Failed to start a recovery terms manager for vhost ~ts: vhost no longer exists!",
                              [VHost]),
-            {error, {no_such_vhost, VHost}}
+            {error, {no_such_vhost, VHost}};
+        {error, _} = Error -> Error
     end.
 
 -spec stop(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
@@ -56,7 +57,8 @@ stop(VHost) ->
             ?LOG_ERROR("Failed to stop a recovery terms manager for vhost ~ts: vhost no longer exists!",
                              [VHost]),
 
-            ok
+            ok;
+        {error, _} = Error -> Error
     end.
 
 -spec store(rabbit_types:vhost(), file:filename(), term()) -> rabbit_types:ok_or_error(term()).

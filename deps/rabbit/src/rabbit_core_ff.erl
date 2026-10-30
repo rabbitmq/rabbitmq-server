@@ -272,3 +272,12 @@
       stability     => stable,
       depends_on    => ['rabbitmq_4.3.0']
      }}).
+
+%% Also gives every virtual host an id, see `vhost:id()'.
+-rabbit_feature_flag(
+   {'rabbitmq_5.0.0',
+    #{desc          => "Allows rolling upgrades to 5.0.x",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.4.0'],
+      callbacks     => #{enable => {rabbit_db_vhost, assign_ids}}
+     }}).

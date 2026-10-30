@@ -595,7 +595,8 @@ start_apps(Apps, RestartTypes) ->
               case application:ensure_all_started(App, RestartType) of
                   {ok, _}         -> ok;
                   {error, Reason} -> throw({could_not_start, App, Reason})
-              end
+              end,
+              rabbit_vhost_deletion:remove_leftovers([App])
       end, Apps).
 
 -spec stop_apps([app_name()]) -> 'ok'.
@@ -1078,6 +1079,7 @@ do_run_postlaunch_phase(Plugins) ->
                       Error   -> throw(Error)
                   end
           end, Plugins),
+        ok = rabbit_vhost_deletion:remove_leftovers([rabbit | Plugins]),
 
         %% Export definitions after all plugins have been enabled,
         %% see rabbitmq/rabbitmq-server#2384.

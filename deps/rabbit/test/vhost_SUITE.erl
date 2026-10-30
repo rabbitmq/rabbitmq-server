@@ -278,11 +278,11 @@ vhost_update_idempotency(Config) ->
 
         ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
 
-        ?assertMatch({vhost,VHost, _, #{tags := [<<"private">>, <<"replicate">>]}},
+        ?assertMatch({vhost,VHost, _, #{tags := [<<"private">>, <<"replicate">>]}, _},
                      rabbit_ct_broker_helpers:rpc(Config, 0,
                                                   rabbit_vhost, update_tags,
                                                   [VHost, [private, replicate], ActingUser])),
-        ?assertMatch({vhost,VHost, _, #{tags := [<<"private">>, <<"replicate">>]}},
+        ?assertMatch({vhost,VHost, _, #{tags := [<<"private">>, <<"replicate">>]}, _},
                      rabbit_ct_broker_helpers:rpc(Config, 0,
                                                   rabbit_vhost, update_tags,
                                                   [VHost, [replicate, private], ActingUser])),

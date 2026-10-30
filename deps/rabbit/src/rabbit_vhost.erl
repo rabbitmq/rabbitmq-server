@@ -21,8 +21,9 @@
 -export([lookup/1, default_name/0]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, msg_store_dir_base/0, config_file_path/1, ensure_config_file/1]).
--export([delete_storage/1]).
+-export([delete_storage/1, delete_storage/2, legacy_data_dir/0, prepare_legacy_storage_reset/0]).
 -export([vhost_down/1]).
+-export([id/1]).
 -export([put_vhost/6]).
 -export([default_queue_type/1, default_queue_type/2]).
 
@@ -478,21 +479,18 @@ delete_ignoring_protection(Name, ActingUser) ->
     ?LOG_INFO("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [Name]),
     _ = rabbit_runtime_parameters:clear_vhost(Name, ActingUser),
     ?LOG_DEBUG("Removing vhost '~ts' from the metadata storage because it's being deleted", [Name]),
-    Ret = case rabbit_db_vhost:delete(Name) of
-             true ->
+    case rabbit_db_vhost:delete_with_id(Name) of
+             {ok, Id} ->
+                 ok = rabbit_vhost_sup_sup:delete_on_all_nodes(Name, Id),
                  ok = rabbit_event:notify(
                         vhost_deleted,
                         [{name, Name},
                          {user_who_performed_action, ActingUser}]);
-             false ->
+             {error, not_found} ->
                  {error, {no_such_vhost, Name}};
              {error, _} = Err ->
                  Err
-         end,
-    %% After vhost was deleted from the database, we try to stop vhost
-    %% supervisors on all the nodes.
-    rabbit_vhost_sup_sup:delete_on_all_nodes(Name),
-    Ret.
+         end.
 
 -spec put_vhost(vhost:name(),
     binary(),
@@ -634,7 +632,12 @@ vhost_down(VHost) ->
                               {user_who_performed_action, ?INTERNAL_USER}]).
 
 delete_storage(VHost) ->
-    VhostDir = msg_store_dir_path(VHost),
+    delete_storage_dir(VHost, msg_store_dir_path(VHost)).
+
+delete_storage(VHost, StorageId) ->
+    delete_storage_dir(VHost, msg_store_dir_path(VHost, StorageId)).
+
+delete_storage_dir(VHost, VhostDir) ->
     ?LOG_INFO("Deleting message store directory for vhost '~ts' at '~ts'", [VHost, VhostDir]),
     %% Message store should be closed when vhost supervisor is closed.
     case rabbit_file:recursive_delete([VhostDir]) of
@@ -656,6 +659,13 @@ assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the database entries here is safe. If/when the down node
     %% restarts, it will clear out the on-disk storage of the queue.
     ok = rabbit_amqqueue:internal_delete(Q, ActingUser).
+
+%% Read with a consistent query. `feature_flag_disabled' means that
+%% `rabbitmq_5.0.0' is not enabled yet, so vhosts have no ids.
+-spec id(vhost:name()) -> {ok, vhost:id()} | {error, not_found | feature_flag_disabled | term()}.
+
+id(VHost) ->
+    rabbit_db_vhost:get_id(VHost).
 
 -spec exists(vhost:name()) -> boolean().
 
@@ -783,8 +793,63 @@ dir(Vhost) ->
     rabbit_misc:format("~.36B", [Num]).
 
 msg_store_dir_path(VHost) ->
-    EncodedName = dir(VHost),
-    rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(), EncodedName])).
+    StorageId = case rabbit_vhost_sup_sup:storage_id(VHost) of
+                    {ok, S} -> S;
+                    not_found ->
+                        case rabbit_db_vhost:identity(VHost) of
+                            {ok, _, S} -> S;
+                            {error, not_found} -> legacy;
+                            {error, Reason} -> error(Reason)
+                        end
+                end,
+    msg_store_dir_path(VHost, StorageId).
+
+msg_store_dir_path(VHost, legacy) ->
+    filename:join([legacy_data_dir(), "msg_stores", "vhosts", dir(VHost)]);
+msg_store_dir_path(VHost, Id) when is_integer(Id) ->
+    filename:join(msg_store_dir_base(), dir(VHost) ++ "." ++ integer_to_list(Id)).
+
+-spec legacy_data_dir() -> file:filename().
+legacy_data_dir() ->
+    DataDir = rabbit:data_dir(),
+    Key = {?MODULE, legacy_storage_epoch, DataDir},
+    case persistent_term:get(Key, undefined) of
+        undefined ->
+            {ok, Epoch} = rabbit_db_vhost:storage_epoch(),
+            Owner = integer_to_binary(Epoch),
+            Dir = case legacy_storage_owner(Owner) of
+                      Owner -> DataDir;
+                      _ -> filename:join([DataDir, "msg_stores", "legacy", integer_to_list(Epoch)])
+                  end,
+            persistent_term:put(Key, Dir),
+            Dir;
+        Dir -> Dir
+    end.
+
+-spec prepare_legacy_storage_reset() -> ok.
+prepare_legacy_storage_reset() ->
+    Path = rabbit_db_vhost:khepri_storage_epoch_path(),
+    Owner = case rabbit_khepri:get(Path, #{timeout => 5000}) of
+                {ok, Epoch} when is_integer(Epoch) -> integer_to_binary(Epoch);
+                _ -> <<"unidentified">>
+            end,
+    _ = legacy_storage_owner(Owner),
+    persistent_term:erase({?MODULE, legacy_storage_epoch, rabbit:data_dir()}),
+    ok.
+
+legacy_storage_owner(Owner) ->
+    global:trans({{?MODULE, legacy_storage_owner}, self()}, fun() ->
+        %% Mnesia migration removes unrecognised files from the data directory.
+        Path = filename:join([rabbit:data_dir(), "msg_stores", "legacy_storage_owner"]),
+        case file:read_file(Path) of
+            {ok, SavedOwner} -> SavedOwner;
+            {error, enoent} ->
+                ok = filelib:ensure_dir(Path),
+                ok = rabbit_file:write_file(Path, Owner),
+                Owner;
+            {error, Reason} -> error({legacy_storage_owner, Reason})
+        end
+    end, [node()]).
 
 msg_store_dir_wildcard() ->
     rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(), "*"])).
@@ -812,6 +877,11 @@ i(description, VHost) -> vhost:get_description(VHost);
 i(tags, VHost) -> vhost:get_tags(VHost);
 i(default_queue_type, VHost) -> rabbit_queue_type:short_alias_of(default_queue_type(vhost:get_name(VHost)));
 i(protected_from_deletion, VHost) -> vhost:is_protected_from_deletion(VHost);
+i(created_at, VHost) ->
+    case vhost:get_id(VHost) of
+        undefined -> undefined;
+        Id -> list_to_binary(calendar:system_time_to_rfc3339(vhost:id_time(Id), [{unit, microsecond}, {offset, "Z"}]))
+    end;
 i(metadata, VHost) ->
     DQT = rabbit_queue_type:short_alias_of(default_queue_type(vhost:get_name(VHost))),
     case vhost:get_metadata(VHost) of

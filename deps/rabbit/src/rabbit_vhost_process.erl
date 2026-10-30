@@ -62,7 +62,9 @@ handle_cast(_, VHost) ->
 
 handle_info(check_vhost, VHost) ->
     case rabbit_vhost:exists(VHost) of
-        true  -> {noreply, VHost};
+        true  ->
+            check_id(VHost),
+            {noreply, VHost};
         false ->
             %% The ETS-backed projection may be transiently empty / out-of-sync
             %% when Khepri Ra server is recovering (which should never happen
@@ -83,10 +85,8 @@ handle_info(check_vhost, VHost) ->
                     %% Stop vhost's top supervisor in a one-off process to avoid a deadlock:
                     %% us (a child process) waiting for supervisor shutdown and our supervisor(s)
                     %% waiting for us to shutdown.
-                    spawn(
-                        fun() ->
-                            rabbit_vhost_sup_sup:stop_and_delete_vhost(VHost)
-                        end),
+                    Id = rabbit_vhost_sup_sup:id(VHost),
+                    spawn(fun() -> rabbit_vhost_sup_sup:stop_and_delete_vhost(VHost, Id) end),
                     {noreply, VHost};
                 {error, _} ->
                     %% Khepri is unavailable. Cannot confirm the vhost is
@@ -96,6 +96,26 @@ handle_info(check_vhost, VHost) ->
     end;
 handle_info(_, VHost) ->
     {noreply, VHost}.
+
+%% A node that was partitioned away while the vhost was deleted and recreated
+%% still runs the supervision tree of the deleted vhost.
+check_id(VHost) ->
+    Running = rabbit_vhost_sup_sup:id(VHost),
+    Current = case rabbit_db_vhost:get(VHost) of
+                  undefined -> undefined;
+                  Record -> vhost:get_id(Record)
+              end,
+    case is_integer(Current) andalso Running =/= Current andalso
+         rabbit_db_vhost:get_id(VHost) of
+        {ok, Current} ->
+            ?LOG_WARNING("Virtual host '~ts' has a different incarnation. "
+                         "Restarting its top level supervisor.", [VHost]),
+            Process = self(),
+            spawn(fun() -> rabbit_vhost_sup_sup:restart_vhost(VHost, Process) end),
+            ok;
+        _ ->
+            ok
+    end.
 
 terminate(shutdown, VHost) ->
     %% Notify that vhost is stopped.

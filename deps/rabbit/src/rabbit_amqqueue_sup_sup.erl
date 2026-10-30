@@ -54,10 +54,13 @@ find_for_vhost(VHost) ->
 
 -spec find_for_vhost(rabbit_types:vhost(), atom()) -> {ok, pid()} | {error, term()}.
 find_for_vhost(VHost, Node) ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node),
-    case rabbit_misc:find_child(VHostSup, rabbit_amqqueue_sup_sup) of
-        [QSup] -> {ok, QSup};
-        Result -> {error, {queue_supervisor_not_found, Result}}
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node) of
+        {ok, VHostSup} ->
+            case rabbit_misc:find_child(VHostSup, rabbit_amqqueue_sup_sup) of
+                [QSup] -> {ok, QSup};
+                Result -> {error, {queue_supervisor_not_found, Result}}
+            end;
+        {error, _} = Error -> Error
     end.
 
 -spec start_for_vhost(rabbit_types:vhost()) -> {ok, pid()} | {error, term()}.
@@ -77,10 +80,11 @@ start_for_vhost(VHost) ->
         {error, {no_such_vhost, VHost}} ->
             ?LOG_ERROR("Failed to start a queue process supervisor for vhost ~ts: vhost no longer exists!",
                        [VHost]),
-            {error, {no_such_vhost, VHost}}
+            {error, {no_such_vhost, VHost}};
+        {error, _} = Error -> Error
     end.
 
--spec stop_for_vhost(rabbit_types:vhost()) -> ok.
+-spec stop_for_vhost(rabbit_types:vhost()) -> ok | {error, term()}.
 stop_for_vhost(VHost) ->
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
         {ok, VHostSup} ->
@@ -90,5 +94,6 @@ stop_for_vhost(VHost) ->
         {error, {no_such_vhost, VHost}} ->
             ?LOG_ERROR("Failed to stop a queue process supervisor for vhost ~ts: vhost no longer exists!",
                        [VHost]),
-            ok
+            ok;
+        {error, _} = Error -> Error
     end.
