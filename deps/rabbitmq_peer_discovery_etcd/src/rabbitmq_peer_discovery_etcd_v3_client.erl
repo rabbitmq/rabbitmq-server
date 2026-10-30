@@ -153,7 +153,7 @@ recover(internal, start, Data = #statem_data{endpoints = Endpoints, connection_m
                 connection_monitor = monitor(process, Pid)
             }};
         {error, Errors} ->
-            [?LOG_ERROR("etcd peer discovery: failed to connect to endpoint ~tp: ~tp", [Endpoint, Err]) || {Endpoint, Err} <- Errors],
+            _ = [?LOG_ERROR("etcd peer discovery: failed to connect to endpoint ~tp: ~tp", [Endpoint, Err]) || {Endpoint, Err} <- Errors],
             _ = ensure_disconnected(?ETCD_CONN_NAME, Data),
             Actions = [{state_timeout, reconnection_interval(), recover}],
             {keep_state, reset_statem_data(Data), Actions}
