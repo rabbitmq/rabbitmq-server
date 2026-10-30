@@ -27,6 +27,9 @@ groups() ->
 all_tests() ->
     [
      cleanup_queues,
+     refused_removal_keeps_queue_members,
+     running_node_keeps_queue_members,
+     removing_a_non_member_is_ignored,
      backend_errors_do_not_trigger_cleanup,
      backend_not_reporting_all_nodes_does_not_trigger_cleanup
     ].
@@ -130,6 +133,60 @@ cleanup_queues(Config) ->
 
     %% Cleanup.
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+refused_removal_keeps_queue_members(Config) ->
+    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    QQ = <<"quorum-queue">>,
+    declare_queue(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    BootStateKey = {rabbit_boot_state, boot_state},
+
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, C, ["stop_app"]),
+    ok = rpc:call(C, persistent_term, put, [BootStateKey, booting]),
+    try
+        ok = rabbit_ct_broker_helpers:rpc(Config, A,
+                                          rabbit_peer_discovery_cleanup,
+                                          maybe_remove_nodes, [[C], false])
+    after
+        rpc:call(C, persistent_term, erase, [BootStateKey])
+    end,
+
+    ?assertEqual(
+      lists:sort([A, B, C]),
+      begin
+          Info = rpc:call(A, rabbit_quorum_queue, infos,
+                          [rabbit_misc:r(<<"/">>, queue, QQ)]),
+          lists:sort(proplists:get_value(members, Info))
+      end),
+
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+running_node_keeps_queue_members(Config) ->
+    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    QQ = <<"quorum-queue">>,
+    declare_queue(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, A,
+                                      rabbit_peer_discovery_cleanup,
+                                      maybe_remove_nodes, [[C], false]),
+
+    ?assertEqual(
+      lists:sort([A, B, C]),
+      begin
+          Info = rpc:call(A, rabbit_quorum_queue, infos,
+                          [rabbit_misc:r(<<"/">>, queue, QQ)]),
+          lists:sort(proplists:get_value(members, Info))
+      end),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+removing_a_non_member_is_ignored(Config) ->
+    [A, _B, _C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ?assertEqual(ok,
+                 rabbit_ct_broker_helpers:rpc(Config, A,
+                                              rabbit_peer_discovery_cleanup,
+                                              maybe_remove_nodes,
+                                              [['nobody@localhost'], false])).
 
 backend_errors_do_not_trigger_cleanup(Config) ->
     %% The backend could have some transient failures. While the backend is

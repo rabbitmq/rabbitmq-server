@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Distribution, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, Distribution, ExitCodes, Validators}
   import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -50,10 +50,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
     # `forget_member/2` requires the target node's `rabbit` app to be stopped.
     # Verify this precondition before shrinking any members (replicas).
-    case :rabbit_misc.rpc_call(node_name, :rabbit, :is_running, [atom_name]) do
-      true ->
-        {:error,
-         "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+    case :rabbit_misc.rpc_call(node_name, :rpc, :call, [atom_name, :rabbit_boot_state, :get, []]) do
+      boot_state when is_atom(boot_state) and boot_state != :stopped ->
+        boot_state_error(node_to_remove, boot_state)
 
       _ ->
         do_run(node_to_remove, node_name, atom_name)
@@ -101,15 +100,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
     case ret do
       {:error, {:failed_to_remove_node, ^atom_name, :rabbit_still_running}} ->
-        {:error,
-         "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+        boot_state_error(node_to_remove, :ready)
 
       {:error, {:failed_to_remove_node, ^atom_name, {:active, _, _}}} ->
-        {:error,
-         "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+        boot_state_error(node_to_remove, :ready)
 
       {:error, {:failed_to_remove_node, ^atom_name, :unavailable}} ->
         {:error, "Node #{node_to_remove} must be running before it can be removed"}
+
+      {:error, {:unexpected_boot_state, boot_state}} ->
+        boot_state_error(node_to_remove, boot_state)
 
       {:error, _} = error ->
         error
@@ -201,6 +201,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   #
   # Implementation
   #
+
+  defp boot_state_error(node_to_remove, :ready) do
+    {:error,
+     "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+  end
+
+  defp boot_state_error(node_to_remove, :stopping) do
+    {:error, ExitCodes.exit_tempfail(),
+     "RabbitMQ on node #{node_to_remove} is stopping. Run the command again once it has stopped"}
+  end
+
+  defp boot_state_error(node_to_remove, boot_state) do
+    {:error, ExitCodes.exit_tempfail(),
+     "RabbitMQ on node #{node_to_remove} is in boot state '#{boot_state}'. Once it has booted, stop it with 'rabbitmqctl -n #{node_to_remove} stop_app', then run the command again"}
+  end
 
   defp append_err(false, _err, errs) do
     errs
