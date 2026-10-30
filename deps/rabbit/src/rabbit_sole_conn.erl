@@ -298,24 +298,20 @@ stop() ->
     ok.
 
 start_gen_servers() ->
-    case start_gen_server() of
-        ok ->
-            case members() of
-                {ok, Members} ->
-                    lists:foreach(
-                      fun
-                          ({_StoreId, Node}) when Node =:= node() ->
-                              ok;
-                          ({_StoreId, Node}) ->
-                              erpc:call(
-                                Node,
-                                rabbit_sup, start_restartable_child,
-                                [?GEN_SERVER_NAME])
-                      end, Members),
-                    ok;
-                Error ->
-                    Error
-            end;
+    ok = start_gen_server(),
+    case members() of
+        {ok, Members} ->
+            lists:foreach(
+              fun
+                  ({_StoreId, Node}) when Node =:= node() ->
+            ok;
+        ({_StoreId, Node}) ->
+            erpc:call(
+              Node,
+              rabbit_sup, start_restartable_child,
+              [?GEN_SERVER_NAME])
+              end, Members),
+            ok;
         Error ->
             Error
     end.
@@ -674,46 +670,6 @@ start_local_store() ->
 %% (must be called under the bootstrap lock)
 %% -----------------------------------------
 
-%% Called under ?BOOTSTRAP_LOCK, right after this node has bootstrapped a
-%% virgin Khepri cluster. Brings in every other reachable node right away,
-%% instead of leaving it to the periodic resize tick to add them one at a
-%% time. A node that fails to join here falls back to the tick, or to its
-%% own lazy bootstrap on its next `acquire'.
-expand_cluster() ->
-    try
-        case rabbit_nodes:list_reachable() -- [node()] of
-            [] ->
-                ok;
-            Nodes ->
-                lists:foreach(fun expand_cluster_to_node/1, Nodes)
-        end
-    catch
-        Class:Reason ->
-            ?LOG_WARNING("~ts: Failed to list reachable nodes while expanding "
-                         "the sole_conn Khepri cluster. Error: ~p:~p. Nodes will "
-                         "be added by a later resize tick",
-                         [?MODULE, Class, Reason]),
-            ok
-    end.
-
-expand_cluster_to_node(Node) ->
-    try erpc:call(Node, ?MODULE, join_cluster, [node()], ?RPC_TIMEOUT) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            ?LOG_WARNING("~ts: Node ~w did not join the sole_conn Khepri "
-                         "cluster during eager expansion (~p); it may still "
-                         "join, or be added by a later resize tick",
-                         [?MODULE, Node, Reason])
-    catch
-        Class:Reason ->
-            ?LOG_WARNING("~ts: Failed to RPC node ~w to join the sole_conn "
-                         "Khepri cluster during eager expansion. Error: ~p:~p. "
-                         "It may still join, or be added by a later resize tick",
-                         [?MODULE, Node, Class, Reason])
-    end,
-    ok.
-
 %% Called over RPC by the node that has just bootstrapped the store. That
 %% node holds ?BOOTSTRAP_LOCK for the duration of the expansion, which is
 %% what keeps this exclusive: taking the lock here would deadlock.
@@ -983,23 +939,6 @@ do_acquire(close_existing = Plcy, VHost, ContainerId, Username, ConnPid) ->
 %% --------------------------------------------------------------
 %% Internals
 %% --------------------------------------------------------------
-
-%% Iterates through peer nodes and checks if the rabbit_sole_conn process is alive.
-find_active_peer([]) ->
-    undefined;
-find_active_peer([Node | Rest]) ->
-    %% Use a fast RPC call with a 1-second timeout to avoid hanging the client
-    %% if a peer is unresponsive.
-    try erpc:call(Node, erlang, whereis, [?GEN_SERVER_NAME], 1000) of
-        Pid when is_pid(Pid) ->
-            Node;
-        _ ->
-            find_active_peer(Rest)
-    catch
-        error:{erpc, _Reason} ->
-            %% Node is unreachable or timed out, move on to the next one
-            find_active_peer(Rest)
-    end.
 
 default_command_options() ->
     maps:merge(?DEFAULT_COMMAND_OPTIONS,
