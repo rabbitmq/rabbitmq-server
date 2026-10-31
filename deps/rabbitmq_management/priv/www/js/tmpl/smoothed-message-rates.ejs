@@ -1,0 +1,25 @@
+<% if (rates != undefined) { %>
+<h3>Smoothed message rates <span class="help" id="smoothed-message-rates"></span></h3>
+<table class="facts facts-l">
+  <tr>
+    <th>Publish</th>
+    <td><%= fmt_rate(rates.publish) %></td>
+  </tr>
+  <tr>
+    <th>Deliver</th>
+    <td><%= fmt_rate(rates.deliver) %></td>
+  </tr>
+  <tr>
+    <th>Redelivered</th>
+    <td><%= fmt_rate(rates.redeliver) %></td>
+  </tr>
+  <tr>
+    <th><%= t('Ack') %></th>
+    <td><%= fmt_rate(rates.ack) %></td>
+  </tr>
+  <tr>
+    <th>Reject</th>
+    <td><%= fmt_rate(rates.reject) %></td>
+  </tr>
+</table>
+<% } %>

@@ -88,7 +88,12 @@
             %% running | flow | idle
             status,
             %% boolean()
-            single_active_consumer_on
+            single_active_consumer_on,
+            %% folded into `msg_rates` when stats are emitted
+            msg_counts = rabbit_msg_rates:new_counters(),
+            msg_totals = #{},
+            msg_rates = rabbit_msg_rates:new(),
+            msg_rates_ts = erlang:monotonic_time(millisecond)
            }).
 
 %%----------------------------------------------------------------------------
@@ -754,16 +759,19 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
            fun (true)  -> {AckTag, BQS1} =
                               BQ:publish_delivered(
                                 Message, Props, SenderPid, BQS),
-                          {{Message, Delivered, AckTag}, {BQS1, MTC}};
-               (false) -> {{Message, Delivered, undefined},
-                           discard(Delivery, BQ, BQS, MTC, amqqueue:get_name(Q))}
+                          {{Message, Delivered, AckTag}, {BQS1, MTC, true}};
+               (false) -> {BQS1, MTC1} = discard(Delivery, BQ, BQS, MTC,
+                                                 amqqueue:get_name(Q)),
+                          {{Message, Delivered, undefined}, {BQS1, MTC1, false}}
            end, qname(State), State#q.consumers, State#q.single_active_consumer_on, State#q.active_consumer) of
-        {delivered, Blocked, {BQS1, MTC1}, Consumers} ->
+        {delivered, Blocked, {BQS1, MTC1, AckRequired}, Consumers} ->
             {delivered,   maybe_notify_state_change(
                             Blocked, [],
-                            State#q{backing_queue_state = BQS1,
-                                    msg_id_to_channel   = MTC1,
-                                    consumers           = Consumers})};
+                            count_delivery(
+                              AckRequired, Delivered,
+                              State#q{backing_queue_state = BQS1,
+                                      msg_id_to_channel   = MTC1,
+                                      consumers           = Consumers}))};
         {undelivered, Blocked, Consumers} ->
             {undelivered, maybe_notify_state_change(
                             Blocked, [],
@@ -820,7 +828,8 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
                     send_reject_publish(Delivery, State1);
                 false ->
                     %% Enqueue and maybe drop head later
-                    deliver_or_enqueue(Delivery, Delivered, State1)
+                    deliver_or_enqueue(Delivery, Delivered,
+                                       count_rate(publish, 1, State1))
             end
     end.
 
@@ -935,7 +944,45 @@ fetch(AckRequired, State = #q{backing_queue       = BQ,
     %%       we will send expired messages at times.
     {Result, BQS1} = BQ:fetch(AckRequired, BQS),
     State1 = drop_expired_msgs(State#q{backing_queue_state = BQS1}),
-    {Result, notify_decorators_if_became_empty(Result =:= empty, State1)}.
+    State2 = case Result of
+                 empty -> State1;
+                 {_, IsDelivered, _} -> count_delivery(AckRequired, IsDelivered, State1)
+             end,
+    {Result, notify_decorators_if_became_empty(Result =:= empty, State2)}.
+
+count_rate(Metric, Count, State = #q{msg_counts = Counts}) ->
+    ok = rabbit_msg_rates:count(Metric, Count, Counts),
+    State.
+
+update_msg_rates(State = #q{msg_counts = Counts,
+                            msg_totals = Totals0,
+                            msg_rates = Rates0,
+                            msg_rates_ts = LastTs}) ->
+    Ts = erlang:monotonic_time(millisecond),
+    Totals = rabbit_msg_rates:totals(Counts),
+    if Ts > LastTs ->
+           Deltas = maps:map(fun(Metric, Total) ->
+                                     Total - maps:get(Metric, Totals0, 0)
+                             end, Totals),
+           Rates = rabbit_msg_rates:observe_deltas(Deltas, Ts - LastTs, Ts, Rates0),
+           State#q{msg_totals = Totals,
+                   msg_rates = Rates,
+                   msg_rates_ts = Ts};
+       true ->
+           State
+    end.
+
+%% A delivery without acknowledgement is settled on delivery.
+count_delivery(true, Redelivered, State) ->
+    count_redelivered(Redelivered, count_rate(deliver, 1, State));
+count_delivery(false, Redelivered, State) ->
+    count_redelivered(Redelivered,
+                      count_rate(ack, 1, count_rate(deliver, 1, State))).
+
+count_redelivered(true, State) ->
+    count_rate(redeliver, 1, State);
+count_redelivered(false, State) ->
+    State.
 
 ack(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
@@ -949,7 +996,8 @@ requeue(AckTags, DelFailed, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
                   fun (State1) -> requeue_and_run(AckTags, DelFailed, [], State1) end).
 
-discard(AckTags, DelFailed, ChPid, State) ->
+discard(AckTags, DelFailed, ChPid, State0) ->
+    State = count_rate(reject, length(AckTags), State0),
     with_dlx(
       State#q.dlx,
       fun (X) -> subtract_acks(ChPid, AckTags, State,
@@ -1274,7 +1322,8 @@ emit_stats(State, Extra) ->
      {name, Name} | Infos]
     = [{K, V} || {K, V} <- infos(statistics_keys(), State),
                  not lists:member(K, ExtraKs)],
-    rabbit_core_metrics:queue_stats(Name, Extra ++ Infos),
+    Rates = rabbit_msg_rates:snapshot(State#q.msg_rates),
+    rabbit_core_metrics:queue_stats(Name, [{message_rates, Rates} | Extra ++ Infos]),
     rabbit_core_metrics:queue_stats(Name, MR, MU, M, R).
 
 emit_consumer_deleted(ChPid, ConsumerTag, QName, ActingUser) ->
@@ -1611,7 +1660,7 @@ handle_cast({reject, false, AckTags, ChPid}, State) ->
     handle_cast({discard, AckTags, ChPid}, State);
 
 handle_cast({complete, AckTags, ChPid}, State) ->
-    noreply(ack(AckTags, ChPid, State));
+    noreply(ack(AckTags, ChPid, count_rate(ack, length(AckTags), State)));
 
 handle_cast({requeue, AckTags, ChPid}, State) ->
     noreply(requeue(AckTags, false, ChPid, State));
@@ -1751,7 +1800,8 @@ handle_info({drop_expired, Vsn}, State = #q{args_policy_version = Vsn}) ->
 handle_info({drop_expired, _Vsn}, State) ->
     noreply(State);
 
-handle_info(emit_stats, State) ->
+handle_info(emit_stats, State0) ->
+    State = update_msg_rates(State0),
     emit_stats(State),
     %% Don't call noreply/1, we don't want to set timers
     {State1, Timeout} = next_state(rabbit_event:reset_stats_timer(
@@ -1808,8 +1858,9 @@ handle_info(Info, State) ->
 
 handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
     {hibernate, State};
-handle_pre_hibernate(State = #q{backing_queue = BQ,
-                                backing_queue_state = BQS}) ->
+handle_pre_hibernate(State0 = #q{backing_queue = BQ,
+                                 backing_queue_state = BQS}) ->
+    State = update_msg_rates(State0),
     BQS1 = BQ:update_rates(BQS),
     BQS3 = BQ:handle_pre_hibernate(BQS1),
     rabbit_event:if_enabled(

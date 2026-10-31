@@ -16,7 +16,7 @@
     <%= group_heading('queues', 'Messages', []) %>
     <%= group_heading('queues', 'Message bytes', []) %>
 <% if (rates_mode != 'none') { %>
-    <%= group_heading('queues', 'Message rates', []) %>
+    <%= group_heading('queues', 'Message rates', [], queue_rates_heading()) %>
 <% } %>
 <% } %>
 <% } %>
@@ -98,16 +98,19 @@
 <% } %>
 <% if (rates_mode != 'none') { %>
   <% if (show_column('queues', 'rate-incoming')) { %>
-    <th><%= fmt_sort('incoming', 'message_stats.publish_details.rate') %></th>
+    <th><%= fmt_sort('incoming', queue_rate_sort('message_stats.publish_details.rate', 'publish')) %></th>
   <% } %>
   <% if (show_column('queues', 'rate-deliver')) { %>
-    <th><%= fmt_sort('deliver / get', 'message_stats.deliver_get_details.rate') %></th>
+    <th><%= fmt_sort('deliver / get', queue_rate_sort('message_stats.deliver_get_details.rate', 'deliver')) %></th>
   <% } %>
   <% if (show_column('queues', 'rate-redeliver')) { %>
-    <th><%= fmt_sort('redelivered', 'message_stats.redeliver_details.rate') %></th>
+    <th><%= fmt_sort('redelivered', queue_rate_sort('message_stats.redeliver_details.rate', 'redeliver')) %></th>
   <% } %>
   <% if (show_column('queues', 'rate-ack')) { %>
-    <th><%= fmt_sort('ack', 'message_stats.ack_details.rate') %></th>
+    <th><%= fmt_sort('ack', queue_rate_sort('message_stats.ack_details.rate', 'ack')) %></th>
+  <% } %>
+  <% if (show_column('queues', 'rate-reject')) { %>
+    <th><%= fmt_sort('reject', 'message_rates.reject') %></th>
   <% } %>
 <% } %>
 <% } %>
@@ -203,16 +206,19 @@
 <% } %>
 <% if (rates_mode != 'none') { %>
   <% if (show_column('queues', 'rate-incoming')) { %>
-    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'publish') %></td>
+    <td class="r"><%= fmt_queue_rate(queue, 'publish', 'publish') %></td>
   <% } %>
   <% if (show_column('queues', 'rate-deliver')) { %>
-    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'deliver_get') %></td>
+    <td class="r"><%= fmt_queue_rate(queue, 'deliver_get', 'deliver') %></td>
   <% } %>
   <% if (show_column('queues', 'rate-redeliver')) { %>
-    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'redeliver') %></td>
+    <td class="r"><%= fmt_queue_rate(queue, 'redeliver', 'redeliver') %></td>
   <% } %>
   <% if (show_column('queues', 'rate-ack')) { %>
-    <td class="r"><%= fmt_detail_rate(queue.message_stats, 'ack') %></td>
+    <td class="r"><%= fmt_queue_rate(queue, 'ack', 'ack') %></td>
+  <% } %>
+  <% if (show_column('queues', 'rate-reject')) { %>
+    <td class="r"><%= fmt_message_rate(queue.message_rates, 'reject') %></td>
   <% } %>
 <% } %>
 <% } %>
