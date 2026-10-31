@@ -84,6 +84,7 @@ run_setup_steps(Config, ExtraSteps) ->
                 fun init_skip_as_error_flag/1,
                 fun guess_tested_erlang_app_name/1,
                 fun ensure_secondary_dist/1,
+                fun ensure_secondary_erl/1,
                 fun ensure_secondary_umbrella/1,
                 fun ensure_current_srcdir/1,
                 fun ensure_rabbitmq_ct_helpers_srcdir/1,
@@ -203,6 +204,17 @@ ensure_secondary_dist(Config) ->
         false -> error(secondary_dist_path_invalid)
     end,
     set_config(Config, {secondary_dist, Path}).
+
+ensure_secondary_erl(Config) ->
+    Path = case get_config(Config, secondary_erl) of
+               undefined -> os:getenv("SECONDARY_ERL");
+               P         -> P
+           end,
+    case Path =:= false orelse filelib:is_regular(Path) of
+        true -> ok;
+        false -> error(secondary_erl_path_invalid)
+    end,
+    set_config(Config, {secondary_erl, Path}).
 
 ensure_secondary_umbrella(Config) ->
     Path = case get_config(Config, secondary_umbrella) of
