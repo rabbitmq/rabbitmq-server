@@ -373,10 +373,7 @@ start_cluster(Q) ->
                                             #{nodes => UIDs})
             end,
 
-    Versions = [V || {ok, V} <- erpc:multicall(FollowerNodes,
-                                               rabbit_fifo, version, [],
-                                               ?RPC_TIMEOUT)],
-    MinVersion = lists:min([rabbit_fifo:version() | Versions]),
+    MinVersion = min_machine_version(FollowerNodes),
 
     ?LOG_DEBUG("Will start up to ~w replicas for quorum ~ts with "
                      "leader on node '~ts', initial machine version ~b",
@@ -1054,7 +1051,8 @@ recover(_Vhost, Queues) ->
                                           [rabbit_misc:rs(QName), Err1]),
                        % queue was never started on this node
                        % so needs to be started from scratch.
-                       case start_server(make_ra_conf(Q, ServerId)) of
+                       case start_server(make_ra_conf(Q, ServerId, voter,
+                                                 min_machine_version(get_nodes(Q)))) of
                            ok ->
                                _ = ra:trigger_election(ServerId),
                                ok;
@@ -1666,7 +1664,8 @@ do_add_member(Q0, Node, Membership, Timeout)
     case erpc_call(Node, rabbit_fifo, version, [], infinity) of
         {error, _} = Err ->
             Err;
-        MachineVersion ->
+        NodeVersion ->
+            MachineVersion = min(NodeVersion, min_machine_version(get_nodes(Q0))),
             Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
             case ra:start_server(?RA_SYSTEM, Conf) of
                 ok ->
@@ -2406,8 +2405,10 @@ members(Q) when ?amqqueue_is_quorum(Q) ->
 format_ra_event(ServerId, Evt, QRef) ->
     {'$gen_cast', {queue_event, QRef, {ServerId, Evt}}}.
 
-make_ra_conf(Q, ServerId) ->
-    make_ra_conf(Q, ServerId, voter, rabbit_fifo:version()).
+min_machine_version(Nodes) ->
+    Versions = [V || {ok, V} <- erpc:multicall(Nodes, rabbit_fifo, version, [],
+                                               ?RPC_TIMEOUT)],
+    lists:min([rabbit_fifo:version() | Versions]).
 
 make_ra_conf(Q, ServerId, Membership, MacVersion)
   when is_integer(MacVersion) ->
