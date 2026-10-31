@@ -101,7 +101,7 @@
 %% Initialisation.
 -export([setup/0,
          setup/1,
-         init/1,
+         init/0,
          reset/0,
 
          dir/0,
@@ -117,7 +117,6 @@
          do_join/1, %% Internal RPC from this module.
          remove_member/1,
 
-         members/0,
          locally_known_members/0,
          nodes/0,
          locally_known_nodes/0,
@@ -219,6 +218,11 @@
 -define(RA_FRIENDLY_NAME, "RabbitMQ metadata store").
 -define(STORE_ID, ?RA_CLUSTER_NAME).
 -define(MIGRATION_ID, <<"rabbitmq_metadata">>).
+
+%% `khepri_cluster:members/2' returns `noproc' at once for a stopped store, but
+%% also while the supervisor restarts the Ra server, for up to about 5 s.
+-define(MEMBERS_NOPROC_TIMEOUT, 10_000).
+-define(MEMBERS_RETRY_INTERVAL, 200).
 
 %% By default we should try to reply from the cluster member that makes a
 %% request to change the store. Projections are immediately consistent on the
@@ -332,41 +336,66 @@ retry_timeout() ->
         undefined                                 -> 300_000
     end.
 
--spec init(IsVirgin) -> Ret when
-      IsVirgin :: boolean(),
-      Ret :: ok | timeout_error().
+-spec init() -> Ret when
+      Ret :: ok | khepri:error().
 %% @doc Ensures the store has caught up with the cluster.
 %%
 %% In addition to making sure the local Khepri store is on the same page as the
-%% leader, it initialises the Khepri projections if this node is virgin.
+%% leader, it initialises the Khepri projections.
 %%
 %% Finally, it requests the deletion of transient queues on this node.
 
-init(IsVirgin) ->
-    case members() of
-        [] ->
-            timer:sleep(1000),
-            init(IsVirgin);
-        Members ->
-            ?LOG_NOTICE(
-               "Found the following metadata store members: ~p", [Members],
+init() ->
+    maybe
+        {ok, Members} ?= wait_for_members(),
+        ?LOG_NOTICE(
+           "Found the following metadata store members: ~p", [Members],
+           #{domain => ?RMQLOG_DOMAIN_DB}),
+        ok ?= await_replication(),
+        ?LOG_DEBUG(
+           "local Khepri-based " ?RA_FRIENDLY_NAME " member is caught "
+           "up to the Raft cluster leader", [],
+           #{domain => ?RMQLOG_DOMAIN_DB}),
+        ok ?= register_projections(),
+        %% With Khepri, `rabbit_amqqueue:on_node_down/1' keeps transient queues.
+        rabbit_amqqueue:delete_transient_queues_on_node(node())
+    end.
+
+wait_for_members() ->
+    Deadline = erlang:monotonic_time(millisecond) + retry_timeout(),
+    wait_for_members(Deadline, undefined).
+
+wait_for_members(Deadline, NoprocSince) ->
+    Now = erlang:monotonic_time(millisecond),
+    Timeout = min(max(0, Deadline - Now), khepri_app:get_default_timeout()),
+    Options = #{timeout => Timeout},
+    case khepri_cluster:members(?RA_CLUSTER_NAME, Options) of
+        {ok, _} = Ok ->
+            Ok;
+        {error, noproc} = Error when NoprocSince =:= undefined ->
+            retry_members(Error, Deadline, Now);
+        {error, noproc} = Error ->
+            retry_members(Error, Deadline, NoprocSince);
+        {error, _} = Error ->
+            retry_members(Error, Deadline, undefined)
+    end.
+
+retry_members(Error, Deadline, NoprocSince) ->
+    Limit = case NoprocSince of
+                undefined -> Deadline;
+                _         -> min(Deadline, NoprocSince + ?MEMBERS_NOPROC_TIMEOUT)
+            end,
+    %% Give up rather than start a query that has no time left.
+    case erlang:monotonic_time(millisecond) + ?MEMBERS_RETRY_INTERVAL >= Limit of
+        true ->
+            ?LOG_ERROR(
+               "Khepri-based " ?RA_FRIENDLY_NAME " gave up waiting for its "
+               "members: ~p", [Error],
                #{domain => ?RMQLOG_DOMAIN_DB}),
-            maybe
-                ok ?= await_replication(),
-                ?LOG_DEBUG(
-                   "local Khepri-based " ?RA_FRIENDLY_NAME " member is caught "
-                   "up to the Raft cluster leader", [],
-                   #{domain => ?RMQLOG_DOMAIN_DB}),
-                ok ?= register_projections(),
-                %% Delete transient queues on init.
-                %% Note that we also do this in the
-                %% `rabbit_amqqueue:on_node_down/1' callback. We must try this
-                %% deletion during init because the cluster may have been in a
-                %% minority when this node went down. We wait for a majority
-                %% while registering projections above though so this deletion
-                %% is likely to succeed.
-                rabbit_amqqueue:delete_transient_queues_on_node(node())
-            end
+            Error;
+        false ->
+            timer:sleep(?MEMBERS_RETRY_INTERVAL),
+            wait_for_members(Deadline, NoprocSince)
     end.
 
 await_replication() ->
@@ -758,21 +787,6 @@ retry_khepri_op(Fun, N) ->
             retry_khepri_op(Fun, N - 1);
         Any ->
             Any
-    end.
-
--spec members() -> Members when
-      Members :: [ra:server_id()].
-%% @doc Returns the list of Ra server identifiers that are part of the
-%% cluster.
-%%
-%% The membership is as it is known to the Ra leader in the cluster.
-%%
-%% The returned list is empty if there was an error.
-
-members() ->
-    case khepri_cluster:members(?RA_CLUSTER_NAME) of
-        {ok, Members}    -> Members;
-        {error, _Reason} -> []
     end.
 
 -spec locally_known_members() -> Members when
