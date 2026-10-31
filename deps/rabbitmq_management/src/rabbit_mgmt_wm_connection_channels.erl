@@ -28,7 +28,7 @@ resource_exists(ReqData, Context = #context{impl = Conn}) ->
 
 to_json(ReqData, Context = #context{impl = Conn}) ->
     Name = proplists:get_value(name, Conn),
-    Chs = rabbit_mgmt_db:get_all_channels(rabbit_mgmt_util:range(ReqData)),
+    Chs = rabbit_mgmt_db:get_all_channels(rabbit_mgmt_util:list_range(ReqData)),
     rabbit_mgmt_util:reply_list(
       [rabbit_mgmt_format:clean_connection_details(Ch)
        || Ch <- rabbit_mgmt_util:filter_conn_ch_list(Chs, ReqData, Context),
@@ -40,7 +40,7 @@ is_authorized(ReqData, Context) ->
         rabbit_mgmt_util:is_authorized_user(
           ReqData, Context,
           fun() ->
-                  _ = rabbit_mgmt_util:range(ReqData),
+                  _ = rabbit_mgmt_util:list_range(ReqData),
                   rabbit_mgmt_wm_connection:conn(ReqData)
           end)
     catch

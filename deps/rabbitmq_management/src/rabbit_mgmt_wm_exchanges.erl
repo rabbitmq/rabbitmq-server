@@ -55,7 +55,7 @@ is_authorized(ReqData, Context) ->
 augment(Basic, ReqData) ->
     case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
-            rabbit_mgmt_db:augment_exchanges(Basic, rabbit_mgmt_util:range(ReqData),
+            rabbit_mgmt_db:augment_exchanges(Basic, rabbit_mgmt_util:list_range(ReqData),
                                              basic);
         true ->
             Basic
@@ -64,7 +64,7 @@ augment(Basic, ReqData) ->
 augmented(ReqData, Context) ->
     rabbit_mgmt_db:augment_exchanges(
       rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context),
-      rabbit_mgmt_util:range(ReqData), basic).
+      rabbit_mgmt_util:list_range(ReqData), basic).
 
 basic(ReqData) ->
     [rabbit_mgmt_format:exchange(X) || X <- exchanges0(ReqData)].

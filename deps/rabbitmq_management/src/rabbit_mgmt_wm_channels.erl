@@ -41,7 +41,7 @@ augmented(ReqData, Context) ->
     [rabbit_mgmt_format:clean_connection_details(Ch)
      || Ch <- rabbit_mgmt_util:filter_conn_ch_list(
                 rabbit_mgmt_db:get_all_channels(
-                  rabbit_mgmt_util:range(ReqData)), ReqData, Context)].
+                  rabbit_mgmt_util:list_range(ReqData)), ReqData, Context)].
 
 do_channels_query(ReqData, Context) ->
     case rabbit_mgmt_util:disable_stats(ReqData) of
