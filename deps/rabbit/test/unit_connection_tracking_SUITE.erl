@@ -196,6 +196,9 @@ tracking_handlers_survive_errors(Config) ->
                          {channel_closed, [{pid, self()}]}]),
     ?awaitMatch({0, 0, []}, tracked_connections(Config, Name, Name), ?TIMEOUT),
     ?awaitMatch({0, []}, tracked_channels(Config, Name), ?TIMEOUT),
+    [ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_event, sync_notify,
+                                        [Type, invalid])
+     || Type <- [connection_created, connection_closed]],
     Handlers = rabbit_ct_broker_helpers:rpc(Config, 0, gen_event, which_handlers,
                                             [rabbit_event]),
     ?assert(lists:member(rabbit_connection_tracking_handler, Handlers)),
