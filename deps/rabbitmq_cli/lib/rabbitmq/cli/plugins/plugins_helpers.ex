@@ -7,7 +7,6 @@
 defmodule RabbitMQ.CLI.Plugins.Helpers do
   import RabbitMQ.CLI.Core.DataCoercion
   import RabbitCommon.Records
-  import RabbitMQ.CLI.Core.Platform, only: [path_separator: 0]
   import RabbitMQ.CLI.Core.{CodePath, Paths}
   alias RabbitMQ.CLI.Core.{Config, Validators}
 
@@ -153,7 +152,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   defp list_local(opts) do
     case plugins_dir(opts) do
       {:ok, dir} ->
-        add_all_to_path(dir)
+        add_plugins_to_load_path(opts)
         :lists.usort(:rabbit_plugins.list(to_charlist(dir)))
 
       {:error, _} ->
@@ -448,20 +447,5 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
       {:error, _} = err ->
         err
     end
-  end
-
-  defp add_all_to_path(plugins_directories) do
-    directories = String.split(to_string(plugins_directories), path_separator())
-
-    Enum.each(directories, fn directory ->
-      with {:ok, subdirs} <- File.ls(directory) do
-        for subdir <- subdirs do
-          Path.join([directory, subdir, "ebin"])
-          |> Code.append_path()
-        end
-      end
-    end)
-
-    :ok
   end
 end

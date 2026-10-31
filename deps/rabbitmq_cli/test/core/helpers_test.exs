@@ -170,35 +170,76 @@ defmodule HelpersTest do
 
   ## ------------------- require_rabbit/1 tests --------------------
 
-  test "locate plugin with version number in filename" do
-    plugins_directory_03 = fixture_plugins_path("plugins-subdirectory-03")
-    rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
-    opts = %{plugins_dir: to_string(plugins_directory_03), rabbitmq_home: rabbitmq_home}
+  for {directory, name, version} <- [
+        {"plugins-subdirectory-03", :mock_rabbitmq_plugins_03, ~c"0.1.0"},
+        {"plugins-subdirectory-04", :mock_rabbitmq_plugins_04, ~c"rolling"}
+      ] do
+    @tag :tmp_dir
+    test "locate extracted plugin from #{directory}", %{tmp_dir: plugins_dir} do
+      fixture_dir = fixture_plugins_path(unquote(directory))
+      [archive] = Path.wildcard(Path.join(fixture_dir, "*.ez"))
+      {:ok, _} = :zip.extract(to_charlist(archive), cwd: to_charlist(plugins_dir))
+      original_path = :code.get_path()
+      name = unquote(name)
 
-    desc = ~c"A mock RabbitMQ plugin to be used in tests"
-    vsn = ~c"0.1.0"
+      try do
+        opts = %{
+          plugins_dir: plugins_dir,
+          rabbitmq_home: :code.lib_dir(:rabbit)
+        }
 
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, desc, vsn}) ==
-             false
-
-    require_rabbit_and_plugins(opts)
-    Application.load(:mock_rabbitmq_plugins_03)
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, desc, vsn})
+        assert :ok = require_rabbit_and_plugins(opts)
+        assert :ok = Application.load(name)
+        assert Application.spec(name, :vsn) == unquote(version)
+        assert File.dir?(:code.lib_dir(name))
+        refute Enum.any?(:code.get_path(), &String.contains?(to_string(&1), ".ez/"))
+      after
+        Application.unload(name)
+        :code.set_path(original_path)
+      end
+    end
   end
 
-  test "locate plugin without version number in filename" do
-    plugins_directory_04 = fixture_plugins_path("plugins-subdirectory-04")
-    rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
-    opts = %{plugins_dir: to_string(plugins_directory_04), rabbitmq_home: rabbitmq_home}
+  @tag :tmp_dir
+  test "locate unpacked plugins outside the current directory", %{tmp_dir: plugins_dir} do
+    ebin = Path.join([plugins_dir, "unpacked_plugin", "ebin"])
+    File.mkdir_p!(ebin)
 
-    desc = ~c"A mock RabbitMQ plugin to be used in tests"
-    vsn = ~c"rolling"
+    File.write!(
+      Path.join(ebin, "unpacked_plugin.app"),
+      "{application, unpacked_plugin, [{vsn, \"1.0\"}]}."
+    )
 
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, desc, vsn}) ==
-             false
+    original_path = :code.get_path()
 
-    require_rabbit_and_plugins(opts)
-    Application.load(:mock_rabbitmq_plugins_04)
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, desc, vsn})
+    try do
+      add_plugins_to_load_path(%{plugins_dir: plugins_dir})
+      assert to_charlist(Path.expand(ebin)) in :code.get_path()
+    after
+      :code.set_path(original_path)
+    end
+  end
+
+  @tag :tmp_dir
+  test "plugin discovery does not add the broker expansion directory", %{tmp_dir: root} do
+    plugins_dir = Path.join(root, "plugins")
+    expand_dir = Path.join(root, "expanded")
+    ebin = Path.join([expand_dir, "broker_plugin", "ebin"])
+    File.mkdir_p!(plugins_dir)
+    File.mkdir_p!(ebin)
+    original_path = :code.get_path()
+
+    try do
+      assert :ok =
+               add_plugins_to_load_path(%{
+                 plugins_dir: plugins_dir,
+                 plugins_expand_dir: expand_dir,
+                 offline: true
+               })
+
+      refute to_charlist(Path.expand(ebin)) in :code.get_path()
+    after
+      :code.set_path(original_path)
+    end
   end
 end
