@@ -21,7 +21,7 @@
          terminate/2, code_change/3]).
 -export([info/1, info/2]).
 
--export([fmt_proplist/1]). %% testing
+-export([fmt_proplist/1, event_props/2]). %% testing
 
 -define(APP_NAME, rabbitmq_event_exchange).
 
@@ -96,7 +96,7 @@ handle_event(#event{type = Type,
             {ok, State};
         Key ->
             XName = exchange(VHost),
-            try mc_init(Protocol, XName, Key, Props, Timestamp) of
+            try mc_init(Protocol, XName, Key, event_props(Type, Props), Timestamp) of
                 Mc ->
                     _ = rabbit_queue_type:publish_at_most_once(XName, Mc)
             catch throw:Reason ->
@@ -107,6 +107,14 @@ handle_event(#event{type = Type,
     end;
 handle_event(_Event, State) ->
     {ok, State}.
+
+event_props(parameter_set, Props) ->
+    case application:get_env(?APP_NAME, runtime_parameters_include_value, false) of
+        true -> Props;
+        _    -> proplists:delete(value, Props)
+    end;
+event_props(_Type, Props) ->
+    Props.
 
 handle_info({event_exchange, added_first_binding}, State) ->
     {ok, State#state{has_any_bindings = true}};
