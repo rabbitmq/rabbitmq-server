@@ -1347,7 +1347,7 @@ settle_acks(Acks, State = #state{queue_states = QueueStates0}) ->
                   case rabbit_queue_type:settle(QRef, complete, CTag,
                                                 MsgIds, Acc0) of
                       {ok, Acc, ActionsAcc} ->
-                          %% incr_queue_stats(QRef, MsgIds, State),
+                          messages_acknowledged(QRef, length(MsgIds), State),
                           {Acc, ActionsAcc0 ++ ActionsAcc};
                       {protocol_error, ErrorType, Reason, ReasonArgs} ->
                           rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
@@ -1441,6 +1441,7 @@ send_delivery(QName, MsgId,
                          Body,
                          State),
             maybe_notify_sent(DeliveryCtx),
+            messages_delivered(QName, AckMode, Redelivered, State),
             case AckMode of
                 client ->
                     DeliveredAt = os:system_time(millisecond),
@@ -1464,6 +1465,35 @@ maybe_notify_sent(undefined) ->
     ok;
 maybe_notify_sent({_, QPid, _}) ->
     ok = rabbit_amqqueue:notify_sent(QPid, self()).
+
+messages_delivered(QName, AckMode, Redelivered,
+                   #state{queue_states = QStates,
+                          cfg = #cfg{proto_ver = ProtoVer}}) ->
+    case rabbit_queue_type:module(QName, QStates) of
+        {ok, QType} ->
+            rabbit_global_counters:messages_delivered(ProtoVer, QType, 1),
+            case AckMode of
+                client ->
+                    rabbit_global_counters:messages_delivered_consume_manual_ack(ProtoVer, QType, 1);
+                _ ->
+                    rabbit_global_counters:messages_delivered_consume_auto_ack(ProtoVer, QType, 1)
+            end,
+            case Redelivered of
+                true -> rabbit_global_counters:messages_redelivered(ProtoVer, QType, 1);
+                false -> ok
+            end;
+        _ ->
+            ok
+    end.
+
+messages_acknowledged(QName, Num, #state{queue_states = QStates,
+                                         cfg = #cfg{proto_ver = ProtoVer}}) ->
+    case rabbit_queue_type:module(QName, QStates) of
+        {ok, QType} ->
+            rabbit_global_counters:messages_acknowledged(ProtoVer, QType, Num);
+        _ ->
+            ok
+    end.
 
 %%----------------------------------------------------------------------------
 %% Reply-To
