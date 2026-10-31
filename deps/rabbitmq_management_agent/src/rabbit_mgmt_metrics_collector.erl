@@ -182,26 +182,35 @@ aggregate_metrics(Timestamp, #state{table = Table,
     remove_closed_created_stats(Table, Ops),
     State0#state{old_aggr_stats = Next}.
 
-%% A connection or channel that terminates between the fold over the core
-%% table and the insert below deletes its core entry before it emits the
+%% A connection, channel or consumer that terminates between the fold over
+%% the core table and the insert below deletes its core entry before it emits the
 %% closed event, so `rabbit_mgmt_metrics_gc` skip over a stale entry.
 %%
 %% Re-checking the core table after the insert solves the problem.
 remove_closed_created_stats(Table, Ops)
-  when Table =:= connection_created; Table =:= channel_created ->
+  when Table =:= connection_created; Table =:= channel_created;
+       Table =:= consumer_created ->
     StatsTable = created_stats_table(Table),
     TableOps = maps:get(StatsTable, Ops, #{}),
     maps:foreach(fun(Id, _Op) ->
                          case ets:member(Table, Id) of
                              true -> ok;
-                             false -> ets:delete(StatsTable, Id)
+                             false -> delete_created_stats(StatsTable, Id)
                          end
                  end, TableOps);
 remove_closed_created_stats(_Table, _Ops) ->
     ok.
 
 created_stats_table(connection_created) -> connection_created_stats;
-created_stats_table(channel_created) -> channel_created_stats.
+created_stats_table(channel_created) -> channel_created_stats;
+created_stats_table(consumer_created) -> consumer_stats.
+
+delete_created_stats(consumer_stats, {Q, Ch, _} = Id) ->
+    ets:delete(consumer_stats, Id),
+    ets:delete_object(index_table(consumer_stats, queue), {Q, Id}),
+    ets:delete_object(index_table(consumer_stats, channel), {Ch, Id});
+delete_created_stats(StatsTable, Id) ->
+    ets:delete(StatsTable, Id).
 
 exec_table_ops(Table, Timestamp, TableOps) ->
     maps:fold(fun(_Id, {insert, Entry}, A) ->
