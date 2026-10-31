@@ -192,6 +192,8 @@ all_tests() ->
      idempotent_recover,
      server_system_recover,
      vhost_with_quorum_queue_is_deleted,
+     internal_name_is_not_shared,
+     internal_name_is_not_shared_with_legacy_name,
      vhost_with_default_queue_type_declares_quorum_queue,
      node_wide_default_queue_type_declares_quorum_queue,
      delete_immediately_by_resource,
@@ -931,6 +933,68 @@ vhost_with_quorum_queue_is_deleted(Config) ->
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
     %% validate quorum queues got deleted
     undefined = rpc:call(Node, ra_directory, where_is, [quorum_queues, RaName]),
+    ok.
+
+internal_name_is_not_shared(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    User = ?config(rmq_username, Config),
+    %% "vh_2" ++ "_" ++ "q" =:= "vh" ++ "_" ++ "2_q", and `rabbitmq_metadata` is
+    %% the registered name of the metadata store's Ra server.
+    QNames = [rabbit_misc:r(<<"vh_2">>, queue, <<"q">>),
+              rabbit_misc:r(<<"vh">>, queue, <<"2_q">>),
+              rabbit_misc:r(<<"rabbitmq">>, queue, <<"metadata">>)],
+    RaNames = [begin
+                   ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost, User),
+                   ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+                   Conn = rabbit_ct_client_helpers:open_unmanaged_connection(
+                            Config, Node, VHost),
+                   {ok, Ch} = amqp_connection:open_channel(Conn),
+                   ?assertEqual({'queue.declare_ok', Name, 0, 0},
+                                declare(Ch, Name, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+                   ok = rabbit_ct_client_helpers:close_connection(Conn),
+                   {ok, Q} = rpc:call(Node, rabbit_amqqueue, lookup, [QName]),
+                   {RaName, _} = amqqueue:get_pid(Q),
+                   %% Declaring the queue again would keep its name.
+                   ?assertNot(rpc:call(Node, rabbit_queue_type_util,
+                                       is_internal_name_in_use, [RaName, QName])),
+                   RaName
+               end || #resource{virtual_host = VHost, name = Name} = QName <- QNames],
+    ?assertMatch(['vh%5F2_q', vh_2_q, _], RaNames),
+    ?assertEqual(length(QNames), length(lists:usort(RaNames))),
+    ?assertNot(lists:member(rabbitmq_metadata, RaNames)),
+    [ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+     || #resource{virtual_host = VHost} <- QNames],
+    ok.
+
+internal_name_is_not_shared_with_legacy_name(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    User = ?config(rmq_username, Config),
+    Declare = fun(#resource{virtual_host = VHost, name = Name} = QName) ->
+                      ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost, User),
+                      ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+                      Conn = rabbit_ct_client_helpers:open_unmanaged_connection(
+                               Config, Node, VHost),
+                      {ok, Ch} = amqp_connection:open_channel(Conn),
+                      ?assertEqual({'queue.declare_ok', Name, 0, 0},
+                                   declare(Ch, Name, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+                      ok = rabbit_ct_client_helpers:close_connection(Conn),
+                      {ok, Q} = rpc:call(Node, rabbit_amqqueue, lookup, [QName]),
+                      amqqueue:get_pid(Q)
+              end,
+    Legacy = rabbit_misc:r(<<"vh_2">>, queue, <<"q">>),
+    New = rabbit_misc:r(<<"vh">>, queue, <<"2_q">>),
+    {_, LNode} = RealPid = Declare(Legacy),
+    %% Pretend the queue was declared before virtual hosts were escaped. No
+    %% process is registered under that name, only the queue record has it.
+    _ = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_amqqueue, update,
+                                     [Legacy, fun(Q) -> amqqueue:set_pid(Q, {'vh_2_q', LNode}) end]),
+    undefined = rpc:call(Node, erlang, whereis, ['vh_2_q']),
+    {NewRaName, _} = Declare(New),
+    _ = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_amqqueue, update,
+                                     [Legacy, fun(Q) -> amqqueue:set_pid(Q, RealPid) end]),
+    ?assertNotEqual('vh_2_q', NewRaName),
+    [ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
+     || #resource{virtual_host = VHost} <- [Legacy, New]],
     ok.
 
 vhost_with_default_queue_type_declares_quorum_queue(Config) ->
