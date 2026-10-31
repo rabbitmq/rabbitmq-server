@@ -111,6 +111,7 @@ groups() ->
         send_unroutable_with_receipt,
         global_counters,
         global_counters_after_close,
+        delivery_counters,
         consumer_counter_after_server_cancel,
         stream_readers_closed_with_connection
     ],
@@ -506,6 +507,59 @@ global_counters_after_close(Config) ->
     {ok, _, _, _} = stomp_receive(Client2, 'ERROR', 30_000),
     ?awaitMatch({0, 0}, Counters(), 30_000),
     rabbit_ct_helpers:consistently(?_assertEqual({0, 0}, Counters()), 200, 5).
+
+delivery_counters(Config) ->
+    Version = ?config(version, Config),
+    ProtoVer = stomp_proto_ver(Version),
+    Client = ?config(stomp_client, Config),
+    Topic = iolist_to_binary(["/topic/delivery-counters-", Version]),
+    Queue = iolist_to_binary(["/queue/delivery-counters-", Version]),
+    Counters = fun() ->
+                       maps:get(#{protocol => ProtoVer,
+                                  queue_type => rabbit_classic_queue},
+                                rabbit_ct_broker_helpers:rpc(
+                                  Config, 0, rabbit_global_counters, overview, []))
+               end,
+    #{messages_delivered_total := D0,
+      messages_delivered_consume_auto_ack_total := Auto0,
+      messages_delivered_consume_manual_ack_total := Manual0,
+      messages_acknowledged_total := Acked0} = Counters(),
+
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, Topic}, {<<"id">>, <<"auto">>},
+                            {<<"receipt">>, <<"r1">>}]),
+    Client1 = stomp_receive_receipt(Client, <<"r1">>),
+    rabbit_stomp_client:send(Client1, 'SEND', [{<<"destination">>, Topic}], ["hello"]),
+    {ok, Client2, _, _} = stomp_receive(Client1, 'MESSAGE'),
+    D1 = D0 + 1,
+    Auto1 = Auto0 + 1,
+    ?awaitMatch(#{messages_delivered_total := D1,
+                  messages_delivered_consume_auto_ack_total := Auto1,
+                  messages_delivered_consume_manual_ack_total := Manual0,
+                  messages_acknowledged_total := Acked0},
+                Counters(), 30_000),
+
+    rabbit_stomp_client:send(
+      Client2, 'SUBSCRIBE', [{<<"destination">>, Queue}, {<<"id">>, <<"manual">>},
+                             {<<"ack">>, <<"client">>}, {<<"receipt">>, <<"r2">>}]),
+    Client3 = stomp_receive_receipt(Client2, <<"r2">>),
+    rabbit_stomp_client:send(Client3, 'SEND', [{<<"destination">>, Queue}], ["hello"]),
+    {ok, Client4, Hdrs, _} = stomp_receive(Client3, 'MESSAGE'),
+    D2 = D1 + 1,
+    Manual1 = Manual0 + 1,
+    ?awaitMatch(#{messages_delivered_total := D2,
+                  messages_delivered_consume_auto_ack_total := Auto1,
+                  messages_delivered_consume_manual_ack_total := Manual1,
+                  messages_acknowledged_total := Acked0},
+                Counters(), 30_000),
+
+    rabbit_stomp_client:send(
+      Client4, 'ACK', [{rabbit_stomp_util:ack_header_name(Version),
+                        maps:get(rabbit_stomp_util:msg_header_name(Version), Hdrs)},
+                       {<<"receipt">>, <<"r3">>}]),
+    stomp_receive_receipt(Client4, <<"r3">>),
+    Acked1 = Acked0 + 1,
+    ?assertMatch(#{messages_acknowledged_total := Acked1}, Counters()).
 
 consumer_counter_after_server_cancel(Config) ->
     ProtoVer = stomp_proto_ver(?config(version, Config)),
