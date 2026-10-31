@@ -3,7 +3,8 @@ PROJECT_DESCRIPTION = Event Exchange Type
 
 define PROJECT_ENV
 	  [
-		{protocol, amqp_0_9_1}
+		{protocol, amqp_0_9_1},
+		{runtime_parameters_include_value, false}
 	  ]
 endef
 
