@@ -23,6 +23,20 @@
 
          forget_node/1,
          forget_removes_things/1,
+         forget_booting_node_on_older_version/1,
+         forget_stopped_node_on_older_version/1,
+         mock_older_version/0,
+         forget_member_reports_failed_reset/1,
+         forget_cluster_node_reports_refusal/1,
+         forget_cluster_node_reports_stopping_node/1,
+         forget_cluster_node_reports_node_that_booted/1,
+         mock_refusing_reset_running/0,
+         forget_older_node_reports_failed_reset/1,
+         mock_refusing_reset/0,
+         mock_older_version_failing_setup/0,
+         mock_failing_reset/0,
+         refused_forget_keeps_replicas/1,
+         refused_forget_member_keeps_node_metadata/1,
          reset/1,
          reset_removes_things/1,
          reset_and_join_while_booting/1,
@@ -70,6 +84,13 @@ groups() ->
        {cluster_size_2, [], [
                              forget_node,
                              forget_removes_things,
+                             forget_booting_node_on_older_version,
+                             forget_stopped_node_on_older_version,
+                             forget_member_reports_failed_reset,
+                             forget_cluster_node_reports_refusal,
+                             forget_cluster_node_reports_stopping_node,
+                             forget_cluster_node_reports_node_that_booted,
+                             forget_older_node_reports_failed_reset,
                              reset,
                              reset_removes_things,
                              reset_and_join_while_booting,
@@ -87,6 +108,8 @@ groups() ->
      {clustered_3_nodes, [],
       [{cluster_size_3, [], [
                              forget_unavailable_node,
+                             refused_forget_keeps_replicas,
+                             refused_forget_member_keeps_node_metadata,
                              forget_unavailable_node_in_minority
                             ]}]},
      {unclustered_3_nodes, [],
@@ -357,6 +380,209 @@ forget_node(Config) ->
     assert_cluster_status({[Hare], [Hare]}, [Hare]),
 
     ok.
+
+forget_booting_node_on_older_version(Config) ->
+    [Rabbit, Hare] = cluster_members(Config),
+    ok = stop_app(Config, Hare),
+    Ret = maybe_mock_older_version(
+            Config, Hare,
+            fun() ->
+                    while_in_boot_state(
+                      Hare, booting,
+                      fun() ->
+                              rpc:call(Rabbit, rabbit_db_cluster,
+                                       forget_member, [Hare, false])
+                      end)
+            end),
+    ?assertEqual({error, {unexpected_boot_state, booting}}, Ret),
+
+    ok = start_app(Config, Hare),
+    assert_clustered([Rabbit, Hare]).
+
+forget_stopped_node_on_older_version(Config) ->
+    [Rabbit, Hare] = cluster_members(Config),
+    ok = stop_app(Config, Hare),
+    Ret = maybe_mock_older_version(
+            Config, Hare,
+            fun() ->
+                    rpc:call(Rabbit, rabbit_db_cluster, forget_member, [Hare, false])
+            end),
+    ?assertEqual(ok, Ret),
+    assert_not_clustered(Rabbit).
+
+forget_member_reports_failed_reset(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            [Rabbit, Hare] = cluster_members(Config),
+            ok = stop_app(Config, Hare),
+            Ret = with_mocked_khepri(
+                    Config, Hare, mock_failing_reset,
+                    fun() ->
+                            rpc:call(Rabbit, rabbit_db_cluster, forget_member,
+                                     [Hare, false])
+                    end),
+            ?assertMatch({error, {failed_to_remove_node, Hare, {badrpc, _}}}, Ret);
+        true ->
+            {skip, "Mocks a function the previous version lacks"}
+    end.
+
+forget_older_node_reports_failed_reset(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            [Rabbit, Hare] = cluster_members(Config),
+            ok = stop_app(Config, Hare),
+            Ret = with_mocked_khepri(
+                    Config, Hare, mock_older_version_failing_setup,
+                    fun() ->
+                            rpc:call(Rabbit, rabbit_db_cluster, forget_member,
+                                     [Hare, false])
+                    end),
+            ?assertMatch(
+               {error, {failed_to_remove_node, Hare, {badrpc, {'EXIT', setup_failed}}}},
+               Ret);
+        true ->
+            {skip, "Mocks a function the previous version lacks"}
+    end.
+
+forget_cluster_node_reports_refusal(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            [Rabbit, Hare] = cluster_members(Config),
+            ok = stop_app(Config, Hare),
+            Ret = with_mocked_khepri(
+                    Config, Hare, mock_refusing_reset,
+                    fun() -> forget_cluster_node(Config, Rabbit, Hare) end),
+            ?assertMatch({error, 75, _}, Ret),
+            {error, 75, Output} = Ret,
+            Hint = "rabbitmqctl -n " ++ atom_to_list(Hare) ++ " stop_app",
+            ?assertNotEqual(nomatch, string:find(Output, Hint));
+        true ->
+            {skip, "Mocks a function the previous version lacks"}
+    end.
+
+forget_cluster_node_reports_node_that_booted(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            [Rabbit, Hare] = cluster_members(Config),
+            ok = stop_app(Config, Hare),
+            Ret = with_mocked_khepri(
+                    Config, Hare, mock_refusing_reset_running,
+                    fun() -> forget_cluster_node(Config, Rabbit, Hare) end),
+            ?assertMatch({error, 69, _}, Ret),
+            {error, 69, Output} = Ret,
+            ?assertNotEqual(nomatch, string:find(Output, "must be stopped"));
+        true ->
+            {skip, "Mocks a function the previous version lacks"}
+    end.
+
+forget_cluster_node_reports_stopping_node(Config) ->
+    [Rabbit, Hare] = cluster_members(Config),
+    ok = stop_app(Config, Hare),
+    Ret = while_in_boot_state(
+            Hare, stopping,
+            fun() -> forget_cluster_node(Config, Rabbit, Hare) end),
+    ?assertMatch({error, 75, _}, Ret),
+    {error, 75, Output} = Ret,
+    ?assertNotEqual(nomatch, string:find(Output, "once it has stopped")).
+
+refused_forget_keeps_replicas(Config) ->
+    [Rabbit, Hare, Bunny] = cluster_members(Config),
+    All = [Rabbit, Hare, Bunny],
+    QQ = <<"quorum-queue">>,
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
+    ?assertMatch(#'queue.declare_ok'{},
+                 amqp_channel:call(
+                   Ch, #'queue.declare'{
+                          queue = QQ,
+                          durable = true,
+                          arguments = [{<<"x-queue-type">>, longstr,
+                                        <<"quorum">>}]})),
+    ?assertEqual(lists:sort(All), lists:sort(quorum_queue_nodes(Config, QQ))),
+
+    ok = stop_app(Config, Hare),
+    Ret = while_in_boot_state(
+            Hare, booting, fun() -> forget_cluster_node(Config, Rabbit, Hare) end),
+    ?assertMatch({error, 75, _}, Ret),
+    ?assertEqual(lists:sort(All), lists:sort(quorum_queue_nodes(Config, QQ))),
+
+    ok = start_app(Config, Hare),
+    assert_clustered(All).
+
+refused_forget_member_keeps_node_metadata(Config) ->
+    [Rabbit, Hare, Bunny] = cluster_members(Config),
+    ok = stop_app(Config, Hare),
+    Ret = while_in_boot_state(
+            Hare, booting,
+            fun() ->
+                    rpc:call(Rabbit, rabbit_db_cluster, forget_member, [Hare, false])
+            end),
+    ?assertEqual({error, {unexpected_boot_state, booting}}, Ret),
+    ?assertNotEqual(#{}, rpc:call(Rabbit, rabbit_db_node_metadata, get, [Hare])),
+
+    ok = start_app(Config, Hare),
+    assert_clustered([Rabbit, Hare, Bunny]).
+
+%% The faked boot state is erased even if `Fun' fails, so that the teardown
+%% can stop the node.
+while_in_boot_state(Node, BootState, Fun) ->
+    Key = {rabbit_boot_state, boot_state},
+    ok = rpc:call(Node, persistent_term, put, [Key, BootState]),
+    try
+        Fun()
+    after
+        rpc:call(Node, persistent_term, erase, [Key])
+    end.
+
+%% In the mixed-version job the node already runs the previous version.
+maybe_mock_older_version(Config, Node, Fun) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true  -> Fun();
+        false -> with_mocked_khepri(Config, Node, mock_older_version, Fun)
+    end.
+
+with_mocked_khepri(Config, Node, Mock, Fun) ->
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    try
+        ok = rabbit_ct_broker_helpers:rpc(Config, Node, ?MODULE, Mock, []),
+        Fun()
+    after
+        rpc:call(Node, meck, unload, [rabbit_khepri])
+    end.
+
+mock_refusing_reset() ->
+    ok = meck:new(rabbit_khepri, [passthrough, no_link]),
+    ok = meck:expect(rabbit_khepri, reset_removed_member,
+                     fun() -> {error, {unexpected_boot_state, booting}} end).
+
+mock_refusing_reset_running() ->
+    ok = meck:new(rabbit_khepri, [passthrough, no_link]),
+    ok = meck:expect(rabbit_khepri, reset_removed_member,
+                     fun() -> {error, {unexpected_boot_state, ready}} end).
+
+mock_failing_reset() ->
+    ok = meck:new(rabbit_khepri, [passthrough, no_link]),
+    ok = meck:expect(rabbit_khepri, reset_removed_member,
+                     fun() -> erlang:error(reset_failed) end).
+
+mock_older_version_failing_setup() ->
+    ok = mock_older_version(),
+    ok = meck:expect(rabbit_khepri, setup, fun() -> exit(setup_failed) end).
+
+%% Makes this node look like one without `rabbit_khepri:reset_removed_member/0'.
+mock_older_version() ->
+    ok = meck:new(rabbit_khepri, [passthrough, no_link]),
+    ok = meck:expect(rabbit_khepri, reset_removed_member,
+                     fun() ->
+                             erlang:raise(error, undef,
+                                          [{rabbit_khepri, reset_removed_member, [], []}])
+                     end).
+
+quorum_queue_nodes(Config, QName) ->
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(
+                Config, 0, rabbit_amqqueue, lookup,
+                [rabbit_misc:r(<<"/">>, queue, QName)]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, get_quorum_nodes, [Q]).
 
 forget_removes_things(Config) ->
     ClassicQueue = <<"classic-queue">>,

@@ -239,10 +239,15 @@ join_using_khepri(ClusterNodes, disc) ->
 join_using_khepri(_ClusterNodes, ram = NodeType) ->
     {error, {node_type_unsupported, khepri, NodeType}}.
 
--spec forget_member(Node, RemoveWhenOffline) -> ok when
+-spec forget_member(Node, RemoveWhenOffline) -> Ret when
       Node :: node(),
-      RemoveWhenOffline :: boolean().
+      RemoveWhenOffline :: boolean(),
+      Ret :: ok | {error, any()}.
 %% @doc Removes `Node' from the cluster.
+%%
+%% A reachable node is refused unless it is stopped: a running node with
+%% `{error, {failed_to_remove_node, Node, rabbit_still_running}}', any other
+%% node with `{error, {unexpected_boot_state, BootState}}'.
 
 forget_member(Node, RemoveWhenOffline) ->
     case forget_member0(Node, RemoveWhenOffline) of
@@ -270,8 +275,13 @@ forget_member_using_khepri(_Node, true) ->
        #{domain => ?RMQLOG_DOMAIN_DB}),
     {error, not_supported};
 forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
-    _ = rabbit_db_node_metadata:delete(Node),
-    rabbit_khepri:remove_member(Node).
+    case rabbit_khepri:remove_member(Node) of
+        ok ->
+            _ = rabbit_db_node_metadata:delete(Node),
+            ok;
+        Error ->
+            Error
+    end.
 
 %% -------------------------------------------------------------------
 %% Cluster update.
