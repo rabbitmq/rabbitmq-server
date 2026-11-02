@@ -31,9 +31,8 @@ start_child_for_vhost(VHost)
 
 -spec delete_child_for_vhost(rabbit_types:vhost()) -> ok.
 delete_child_for_vhost(VHost) ->
-    Id = vhost_to_atom(VHost),
-    ok = supervisor:terminate_child(?MODULE, Id),
-    ok = supervisor:delete_child(?MODULE, Id).
+    ok = supervisor:terminate_child(?MODULE, VHost),
+    ok = supervisor:delete_child(?MODULE, VHost).
 
 -spec init([]) ->
     {ok, {supervisor:sup_flags(),
@@ -52,14 +51,6 @@ child_specs(VHosts) ->
 -spec child_spec(rabbit_types:vhost()) ->
     supervisor:child_spec().
 child_spec(VHost) ->
-    #{id => vhost_to_atom(VHost),
+    #{id => VHost,
       start => {rabbit_mqtt_retainer, start_link, [VHost]},
       shutdown => 120_000}.
-
--spec vhost_to_atom(rabbit_types:vhost()) -> atom().
-vhost_to_atom(VHost) ->
-    %% we'd like to avoid any conversion here because
-    %% this atom isn't meant to be human-readable, only
-    %% unique. This makes sure we don't get noisy process restarts
-    %% with really unusual vhost names used by various HTTP API test suites
-    rabbit_data_coercion:to_atom(VHost, latin1).
