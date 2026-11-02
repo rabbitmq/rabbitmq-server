@@ -38,7 +38,8 @@ all() ->
         reader_process_flags,
         user_deletion_closes_connection,
         vhost_connection_limit,
-        user_connection_limit
+        user_connection_limit,
+        connection_churn
     ].
 
 merge_app_env(Config) ->
@@ -489,3 +490,36 @@ connect_error(Config, User) ->
     {#stomp_frame{command = 'ERROR'} = Frame, _} = rabbit_stomp_client:recv(Client),
     gen_tcp:close(Sock),
     iolist_to_binary(lists:reverse(Frame#stomp_frame.body_iolist_rev)).
+
+connection_churn(Config) ->
+    User = atom_to_binary(?FUNCTION_NAME),
+    ok = rabbit_ct_broker_helpers:add_user(Config, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    Port = get_stomp_port(Config),
+    Open = churn_connect(Port, User),
+    Workers = [spawn_monitor(
+                 fun() ->
+                         [ok = gen_tcp:close(churn_connect(Port, User))
+                          || _ <- lists:seq(1, 50)]
+                 end) || _ <- lists:seq(1, 20)],
+    [receive {'DOWN', Ref, process, Pid, Reason} -> ?assertEqual(normal, Reason)
+     end || {Pid, Ref} <- Workers],
+    Tracked = fun() ->
+                      {rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
+                                                    count_tracked_items_in, [{user, User}]),
+                       rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
+                                                    list_of_user, [User])}
+              end,
+    ?awaitMatch({1, [_]}, Tracked(), 30_000),
+    ok = gen_tcp:close(Open),
+    ?awaitMatch({0, []}, Tracked(), 30_000),
+    ok = rabbit_ct_broker_helpers:delete_user(Config, User).
+
+churn_connect(Port, User) ->
+    {ok, Sock} = gen_tcp:connect(localhost, Port, [{active, false}, binary]),
+    Client = {Sock, []},
+    rabbit_stomp_client:send(Client, 'CONNECT', [{<<"accept-version">>, <<"1.2">>},
+                                                 {<<"login">>, User},
+                                                 {<<"passcode">>, User}]),
+    {#stomp_frame{command = 'CONNECTED'}, _} = rabbit_stomp_client:recv(Client, 30_000),
+    Sock.
