@@ -11,8 +11,7 @@
 %% on its local node. Similar to the rabbit_connection_tracking_handler,
 %% the primary goal here is to decouple channel tracking from rabbit_reader
 %% and isolate channel tracking to its own process to avoid blocking connection
-%% creation events. Additionaly, creation events are also non-blocking in that
-%% they spawn a short-live process for updating the tracking tables in realtime.
+%% creation events.
 %%
 %% Events from other nodes are ignored.
 
@@ -44,9 +43,6 @@ handle_event(#event{type = channel_created, props = Details}, State) ->
     {ok, State};
 handle_event(#event{type = channel_closed, props = Details}, State) ->
     ok = rabbit_channel_tracking:update_tracked({channel_closed, Details}),
-    {ok, State};
-handle_event(#event{type = connection_closed, props = Details}, State) ->
-    ok = rabbit_channel_tracking:update_tracked({connection_closed, Details}),
     {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
     ok = rabbit_channel_tracking:update_tracked({user_deleted, Details}),
