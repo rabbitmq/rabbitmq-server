@@ -24,15 +24,65 @@ start_link() ->
 -spec start_child_for_vhost(rabbit_types:vhost()) -> pid().
 start_child_for_vhost(VHost)
   when is_binary(VHost) ->
-    case supervisor:start_child(?MODULE, child_spec(VHost)) of
-        {ok, Pid}                       -> Pid;
-        {error, {already_started, Pid}} -> Pid
+    case start_child(VHost) of
+        {error, already_present} ->
+            with_vhost_lock(VHost, fun() -> restart_child(VHost) end);
+        Pid ->
+            Pid
     end.
 
--spec delete_child_for_vhost(rabbit_types:vhost()) -> ok.
+start_child(VHost) ->
+    case supervisor:start_child(?MODULE, child_spec(VHost)) of
+        {ok, Pid}                       -> Pid;
+        {error, {already_started, Pid}} -> Pid;
+        {error, already_present} = Err  -> Err
+    end.
+
+%% `delete_child_for_vhost/1` leaves the child stopped when it fails to
+%% delete the files of a deleted vhost.
+restart_child(VHost) ->
+    case start_child(VHost) of
+        {error, already_present} ->
+            ok = delete_storage(VHost),
+            ok = supervisor:delete_child(?MODULE, VHost),
+            start_child(VHost);
+        Pid ->
+            Pid
+    end.
+
+-spec delete_child_for_vhost(rabbit_types:vhost()) -> rabbit_types:ok_or_error(any()).
 delete_child_for_vhost(VHost) ->
-    ok = supervisor:terminate_child(?MODULE, VHost),
-    ok = supervisor:delete_child(?MODULE, VHost).
+    with_vhost_lock(VHost, fun() -> do_delete_child_for_vhost(VHost) end).
+
+do_delete_child_for_vhost(VHost) ->
+    Stop = case whereis(?MODULE) of
+               undefined -> {error, not_found};
+               _ -> supervisor:terminate_child(?MODULE, VHost)
+           end,
+    case Stop of
+        ok ->
+            case delete_storage(VHost) of
+                ok ->
+                    supervisor:delete_child(?MODULE, VHost);
+                %% Keep the stopped child so that the next connection deletes
+                %% the files before it starts a new store.
+                Error ->
+                    Error
+            end;
+        {error, not_found} ->
+            delete_storage(VHost);
+        Error ->
+            Error
+    end.
+
+with_vhost_lock(VHost, Fun) ->
+    global:trans({{?MODULE, VHost}, self()}, Fun, [node()]).
+
+delete_storage(VHost) ->
+    Dir = rabbit:data_dir(),
+    rabbit_file:recursive_delete(
+      [rabbit_mqtt_util:path_for(Dir, VHost),
+       rabbit_mqtt_util:path_for(Dir, VHost, ".dets")]).
 
 -spec init([]) ->
     {ok, {supervisor:sup_flags(),

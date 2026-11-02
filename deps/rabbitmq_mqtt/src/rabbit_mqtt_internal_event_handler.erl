@@ -17,17 +17,23 @@
 -import(rabbit_misc, [pget/2]).
 
 -define(STATE, []).
+%% Above the 120 second shutdown timeout of a retainer.
+-define(DELETE_TIMEOUT, 150_000).
 
 init([]) ->
     {ok, ?STATE}.
 
 handle_event({event, vhost_created, Info, _, _}, ?STATE) ->
     Name = pget(name, Info),
-    rabbit_mqtt_retainer_sup:start_child_for_vhost(Name),
+    case catch rabbit_mqtt_retainer_sup:start_child_for_vhost(Name) of
+        Pid when is_pid(Pid) -> ok;
+        Error -> ?LOG_ERROR("Failed to start MQTT retained message store for vhost '~ts': ~tp",
+                            [Name, Error])
+    end,
     {ok, ?STATE};
 handle_event({event, vhost_deleted, Info, _, _}, ?STATE) ->
     Name = pget(name, Info),
-    rabbit_mqtt_retainer_sup:delete_child_for_vhost(Name),
+    _ = spawn(fun() -> delete_retained_msg_store_cluster_wide(Name) end),
     {ok, ?STATE};
 handle_event({event, maintenance_connections_closed, _Info, _, _}, ?STATE) ->
     {ok, NConnections} = rabbit_mqtt:close_local_client_connections(maintenance),
@@ -41,3 +47,15 @@ handle_call(_Request, ?STATE) ->
 
 handle_info(_Info, State) ->
     {ok, State}.
+
+delete_retained_msg_store_cluster_wide(VHost) ->
+    Nodes = rabbit_nodes:list_running(),
+    Results = erpc:multicall(Nodes, rabbit_mqtt_retainer_sup, delete_child_for_vhost,
+                             [VHost], ?DELETE_TIMEOUT),
+    lists:foreach(
+      fun({_Node, {ok, ok}}) ->
+              ok;
+         ({Node, Error}) ->
+              ?LOG_WARNING("Failed to delete MQTT retained message store for vhost '~ts' "
+                           "on node ~ts: ~tp", [VHost, Node, Error])
+      end, lists:zip(Nodes, Results)).
