@@ -9,3 +9,8 @@ end}.
 {mapping, "event_exchange.protocol", "rabbitmq_event_exchange.protocol", [
     {datatype, {enum, [amqp_0_9_1, amqp_1_0]}}
 ]}.
+
+{mapping, "event_exchange.runtime_parameters.include_value",
+ "rabbitmq_event_exchange.runtime_parameters_include_value", [
+    {datatype, {enum, [true, false]}}
+]}.

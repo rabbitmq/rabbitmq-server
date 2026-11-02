@@ -12,7 +12,32 @@
 
 -compile(export_all).
 
-all() -> [ encoding ].
+all() -> [ encoding,
+           parameter_set_value_is_dropped,
+           parameter_set_value_is_included_when_enabled ].
+
+parameter_set_value_is_dropped(_) ->
+    Props = [{name, <<"p">>},
+             {value, [{<<"src-uri">>, <<"amqp://u:secret@host">>}]},
+             {user_who_performed_action, <<"guest">>}],
+    ?assertEqual([{name, <<"p">>}, {user_who_performed_action, <<"guest">>}],
+                 rabbit_exchange_type_event:event_props(parameter_set, Props)),
+    ?assertEqual(Props,
+                 rabbit_exchange_type_event:event_props(queue_created, Props)).
+
+parameter_set_value_is_included_when_enabled(_) ->
+    Props = [{name, <<"p">>},
+             {value, [{<<"src-uri">>, <<"amqp://u:secret@host">>}]}],
+    ok = application:set_env(rabbitmq_event_exchange, runtime_parameters_include_value, true),
+    try
+        ?assertEqual(Props,
+                     rabbit_exchange_type_event:event_props(parameter_set, Props)),
+        ok = application:set_env(rabbitmq_event_exchange, runtime_parameters_include_value, "true"),
+        ?assertEqual([{name, <<"p">>}],
+                     rabbit_exchange_type_event:event_props(parameter_set, Props))
+    after
+        application:unset_env(rabbitmq_event_exchange, runtime_parameters_include_value)
+    end.
 
 encoding(_) ->
     T = fun (In, Exp) ->

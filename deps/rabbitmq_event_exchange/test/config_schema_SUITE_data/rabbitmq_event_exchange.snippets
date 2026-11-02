@@ -30,5 +30,21 @@
         {protocol, amqp_0_9_1}
     ]}],
     [rabbitmq_event_exchange]
+},
+
+{runtime_parameters_include_value_true,
+    "event_exchange.runtime_parameters.include_value = true",
+    [{rabbitmq_event_exchange, [
+        {runtime_parameters_include_value, true}
+    ]}],
+    [rabbitmq_event_exchange]
+},
+
+{runtime_parameters_include_value_false,
+    "event_exchange.runtime_parameters.include_value = false",
+    [{rabbitmq_event_exchange, [
+        {runtime_parameters_include_value, false}
+    ]}],
+    [rabbitmq_event_exchange]
 }
 ].
