@@ -902,6 +902,18 @@ decode(Keys, Body) ->
         Else -> Else
     end.
 
+-define(DECODE_MAX_HEAP_SIZE_WORDS, 8_000_000).
+
+decode_with_heap_limit(Body) ->
+    Previous = erlang:process_flag(max_heap_size,
+                                   #{size => ?DECODE_MAX_HEAP_SIZE_WORDS,
+                                     kill => true}),
+    try
+        rabbit_json:decode(Body)
+    after
+        erlang:process_flag(max_heap_size, Previous)
+    end.
+
 -type parsed_json() :: map() | atom() | binary().
 -spec decode(binary()) -> {ok, parsed_json()} | {error, term()}.
 
@@ -914,7 +926,7 @@ decode(<<"undefined">>) ->
     {ok, #{}};
 decode(Body) ->
     try
-        case rabbit_json:decode(Body) of
+        case decode_with_heap_limit(Body) of
             Val when is_map(Val) ->
                 {ok, Val};
             %% handle double encoded JSON, see rabbitmq/rabbitmq-management#839

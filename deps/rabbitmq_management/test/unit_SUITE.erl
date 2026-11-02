@@ -22,7 +22,9 @@ groups() ->
     [
      {unit_tests, [parallel], [
          parse_ackmode_valid_values,
-         parse_ackmode_rejects_unknown
+         parse_ackmode_rejects_unknown,
+         decode_large_string_body,
+         decode_body_exceeding_heap_limit
      ]},
      {property_tests, [parallel], [
          parse_ackmode_never_creates_atoms
@@ -73,3 +75,21 @@ parse_ackmode_never_creates_atoms(_Config) ->
                 end
         end),
     ?assert(proper:quickcheck(Prop, [quiet, {numtests, 500}])).
+
+%%
+%% rabbit_mgmt_util:decode/1
+%%
+
+decode_large_string_body(_Config) ->
+    Payload = binary:copy(<<"a">>, 5_000_000),
+    Body = rabbit_json:encode(#{<<"payload">> => Payload}),
+    {Pid, MRef} = spawn_monitor(
+                    fun() ->
+                            {ok, #{<<"payload">> := Payload}} = rabbit_mgmt_util:decode(Body)
+                    end),
+    receive {'DOWN', MRef, process, Pid, Reason} -> ?assertEqual(normal, Reason) end.
+
+decode_body_exceeding_heap_limit(_Config) ->
+    Body = rabbit_json:encode(#{<<"padding">> => lists:duplicate(2_000_000, 1)}),
+    {Pid, MRef} = spawn_monitor(fun() -> rabbit_mgmt_util:decode(Body) end),
+    receive {'DOWN', MRef, process, Pid, Reason} -> ?assertEqual(killed, Reason) end.
