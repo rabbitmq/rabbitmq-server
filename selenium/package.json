@@ -15,7 +15,7 @@
     "proxy-agent": "6.5.0"
   },
   "dependencies": {
-    "amqplib": "2.2.0",
+    "amqplib": "2.2.1",
     "chromedriver": "^156.0.0",
     "ejs": "^7.0.2",
     "express": "^5.1.0",
