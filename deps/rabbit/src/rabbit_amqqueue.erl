@@ -1971,11 +1971,16 @@ internal_delete(Queue, ActingUser, Reason) ->
 
 queue_identity_pattern(Q) ->
     Pattern = amqqueue:pattern_match_all(),
-    Pid = case amqqueue:get_pid(Q) of
-              {Name, _Node} -> {Name, '_'};
-              Other -> Other
-          end,
-    amqqueue:set_pid(Pattern, Pid).
+    case {amqqueue:get_type(Q), amqqueue:get_type_state(Q)} of
+        {rabbit_stream_queue, #{name := Name}} ->
+            amqqueue:set_type_state(Pattern, #{name => Name});
+        _ ->
+            Pid = case amqqueue:get_pid(Q) of
+                      {Name, _Node} -> {Name, '_'};
+                      Other -> Other
+                  end,
+            amqqueue:set_pid(Pattern, Pid)
+    end.
 
 -spec forget_all(node()) -> 'ok'.
 

@@ -220,12 +220,20 @@ check_initial_offset(Q) ->
              "x-stream-initial-offset value must be a non-negative integer", []}
     end.
 
-create_stream(Q0) ->
+create_stream(Q) ->
+    case rabbit_db_vhost:identity(amqqueue:get_vhost(Q)) of
+        {ok, VHostId, _} -> create_stream(Q, VHostId);
+        {error, Reason} ->
+            {protocol_error, internal_error, "Cannot verify virtual host for ~ts: ~tp",
+             [rabbit_misc:rs(amqqueue:get_name(Q)), Reason]}
+    end.
+
+create_stream(Q0, VHostId) ->
     Arguments = amqqueue:get_arguments(Q0),
     QName = amqqueue:get_name(Q0),
     Opts = amqqueue:get_options(Q0),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
-    Conf0 = make_stream_conf(Q0),
+    Conf0 = make_stream_conf(Q0, VHostId),
     InitialClusterSize = initial_cluster_size(
                            args_policy_lookup(<<"initial-cluster-size">>,
                                               fun policy_precedence/2, Q0)),
@@ -263,6 +271,9 @@ create_stream(Q0) ->
             end;
         {existing, Q} ->
             {existing, Q};
+        {error, stale_vhost_id} ->
+            {protocol_error, internal_error, "Virtual host changed while declaring ~ts",
+             [rabbit_misc:rs(QName)]};
         {error, timeout} ->
             {protocol_error, internal_error,
              "Could not declare ~ts on node '~ts' because the metadata store "
@@ -1269,11 +1280,12 @@ is_match(Subj, E) ->
 get_resource_name(#resource{name = Name}) ->
     Name.
 
-make_stream_conf(Q) ->
+make_stream_conf(Q, VHostId) ->
     QName = amqqueue:get_name(Q),
     Name = stream_name(QName),
     Formatter = {?MODULE, format_osiris_event, [QName]},
     update_stream_conf(Q, #{reference => QName,
+                            vhost_id => VHostId,
                             name => Name,
                             event_formatter => Formatter,
                             epoch => 1}).

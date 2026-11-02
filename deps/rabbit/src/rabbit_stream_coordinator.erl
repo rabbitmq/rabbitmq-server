@@ -43,6 +43,8 @@
          register_listener/1,
          register_local_member_listener/1]).
 
+-export([start_member/2]).
+
 -export([local_pid/1,
          writer_pid/1,
          members/1,
@@ -91,6 +93,7 @@
 
 -include("rabbit_stream_coordinator.hrl").
 -include("amqqueue.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -define(REPLICA_FRESHNESS_LIMIT_MS, (10 * 1000)). %% 10s
@@ -1224,11 +1227,50 @@ stream_exists(StreamId, RaAux) ->
 wrap_reply(From, Reply) ->
     [{reply, From, {wrap_reply, Reply}}].
 
+start_member(Node, Role, Conf) ->
+    case rabbit_feature_flags:is_enabled('rabbitmq_5.0.0') of
+        true -> erpc:call(Node, ?MODULE, start_member, [Role, Conf], infinity);
+        false -> start_member_unchecked(Node, Role, Conf)
+    end.
+
+-spec start_member(writer | replica, map()) -> supervisor:startchild_ret().
+start_member(Role, #{name := StreamId, reference := #resource{virtual_host = VHost} = QName} = Conf) ->
+    VHostPath = rabbit_db_vhost:khepri_vhost_path(VHost),
+    QueuePath = rabbit_db_queue:khepri_queue_path(QName),
+    Result = try rabbit_khepri:transaction(fun() ->
+        case {khepri_tx:get(VHostPath), khepri_tx:get(QueuePath)} of
+            {{ok, V}, {ok, Q}} when ?is_amqqueue(Q), ?amqqueue_is_stream(Q) ->
+                case amqqueue:get_type_state(Q) of
+                    #{name := StreamId} ->
+                        case maps:get(vhost_id, Conf, undefined) of
+                            undefined -> ok;
+                            Id -> case vhost:get_id(V) of
+                                      Id -> ok;
+                                      _ -> {error, stale_vhost_id}
+                                  end
+                        end;
+                    _ -> {error, stale_stream_id}
+                end;
+            _ -> {error, not_found}
+        end
+    end, rw, #{timeout => 5000})
+    catch throw:{error, _} = Error -> Error
+    end,
+    case Result of
+        ok -> start_member_unchecked(node(), Role, Conf);
+        {error, _} = Failure -> Failure
+    end.
+
+start_member_unchecked(Node, writer, #{leader_node := Node} = Conf) ->
+    osiris:start_writer(Conf);
+start_member_unchecked(Node, replica, Conf) ->
+    osiris_replica:start(Node, Conf).
+
 phase_start_replica(StreamId, #{epoch := Epoch,
                                 node := Node} = Args, Conf0) ->
     fun() ->
             Conf1 = maybe_update_replica_conf(Conf0),
-            try osiris_replica:start(Node, Conf1) of
+            try start_member(Node, replica, Conf1) of
                 {ok, Pid} ->
                     ?LOG_INFO("~ts: ~ts: replica started on ~ts in ~b pid ~w",
                               [?MODULE, StreamId, Node, Epoch, Pid]),
@@ -1275,6 +1317,8 @@ send_action_failed(StreamId, Action, Arg, Backoff) ->
 backoff_class({{nodedown, _}, _}) ->
     nodeup;
 backoff_class({error, nodedown}) ->
+    nodeup;
+backoff_class({erpc, noconnection}) ->
     nodeup;
 backoff_class(_) ->
     short.
@@ -1338,12 +1382,15 @@ phase_stop_member(StreamId, #{node := Node, epoch := Epoch} = Arg0, Conf) ->
 
 phase_start_writer(StreamId, #{epoch := Epoch, node := Node} = Args0, Conf) ->
     fun() ->
-            try osiris:start_writer(Conf) of
+            try start_member(Node, writer, Conf) of
                 {ok, Pid} ->
                     Args = Args0#{epoch => Epoch, pid => Pid},
                     ?LOG_INFO("~ts: started writer ~ts on ~w in ~b",
                                     [?MODULE, StreamId, Node, Epoch]),
                     send_self_command({member_started, StreamId, Args});
+                {error, Reason} when Reason =:= not_found; Reason =:= stale_stream_id;
+                                     Reason =:= stale_vhost_id; Reason =:= timeout ->
+                    send_action_failed(StreamId, starting, Args0, short);
                 Err ->
                     %% no sleep for writer failures as we want to trigger a new
                     %% election asap

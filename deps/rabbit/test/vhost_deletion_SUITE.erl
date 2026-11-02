@@ -28,6 +28,7 @@ groups() ->
                         records_without_an_id_get_one,
                         legacy_upgrade_preserves_storage,
                         recreation_uses_separate_storage,
+                        stale_stream_members_are_not_started,
                         deletion_calls_the_handler,
                         leftovers_are_listed_with_ids,
                         a_recreated_vhost_restarts_its_supervisor,
@@ -38,11 +39,13 @@ groups() ->
                         stale_queue_operations_keep_replacements,
                         uncertain_deletion_keeps_the_supervisor,
                         cleanup_rechecks_candidates,
+                        stream_reset_keeps_orphan_data_stopped,
                         legacy_reset_keeps_foreign_data]},
      {cluster, [], [deletion_calls_the_handler_on_every_node,
                     deletion_does_not_wait_for_a_stopped_node,
                     minority_cannot_authorize_cleanup,
-                    classic_recreation_after_node_restart]}].
+                    classic_recreation_after_node_restart,
+                    stream_recreation_after_node_restart]}].
 
 suite() ->
     [{timetrap, {minutes, 5}}].
@@ -165,6 +168,37 @@ recreation_uses_separate_storage(Config) ->
     ?assertEqual({error, enoent}, rpc(Config, 0, file, read_file, [filename:join(NewPath, "kept")])),
     ?assertEqual({ok, <<"old">>}, rpc(Config, 0, file, read_file, [Marker])).
 
+stale_stream_members_are_not_started(Config) ->
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, ?VHOST),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, ?VHOST),
+    QName = rabbit_misc:r(?VHOST, queue, <<"stream">>),
+    {Conn, Ch} = declare_stream(Config),
+    {ok, Q} = rpc(Config, 0, rabbit_amqqueue, lookup, [QName]),
+    Conf = amqqueue:get_type_state(Q),
+    ok = amqp_channel:close(Ch),
+    ok = amqp_connection:close(Conn),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, ?VHOST),
+    [?assertEqual({error, not_found}, rpc(Config, 0, rabbit_stream_coordinator, start_member, [Role, Conf]))
+     || Role <- [writer, replica]],
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, ?VHOST),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, ?VHOST),
+    {NewConn, NewCh} = declare_stream(Config),
+    [?assertEqual({error, stale_stream_id}, rpc(Config, 0, rabbit_stream_coordinator, start_member, [Role, Conf]))
+     || Role <- [writer, replica]],
+    ok = rpc(Config, 0, meck, new, [rabbit_khepri, [passthrough, no_link]]),
+    try
+        ok = rpc(Config, 0, meck, expect, [rabbit_khepri, transaction, 3, {error, timeout}]),
+        [?assertEqual({error, timeout}, rpc(Config, 0, rabbit_stream_coordinator, start_member, [Role, Conf]))
+         || Role <- [writer, replica]]
+    after
+        ok = rpc(Config, 0, meck, unload, [rabbit_khepri])
+    end,
+    {ok, NewQ} = rpc(Config, 0, rabbit_amqqueue, lookup, [QName]),
+    ?assertNotEqual(maps:get(name, Conf), maps:get(name, amqqueue:get_type_state(NewQ))),
+    ?assertEqual(true, rpc(Config, 0, erlang, is_process_alive, [amqqueue:get_pid(NewQ)])),
+    ok = amqp_channel:close(NewCh),
+    ok = amqp_connection:close(NewConn).
+
 legacy_reset_keeps_foreign_data(Config) ->
     ok = rpc(Config, 0, ?MODULE, disable_incarnation_flag, []),
     OldPath = try
@@ -189,8 +223,42 @@ legacy_reset_keeps_foreign_data(Config) ->
         ok = rpc(Config, 0, meck, unload, [rabbit_feature_flags])
     end.
 
+stream_reset_keeps_orphan_data_stopped(Config) ->
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, ?VHOST),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, ?VHOST),
+    {Conn, Ch} = declare_stream(Config),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"stream">>}, #amqp_msg{payload = <<"old">>}),
+    true = amqp_channel:wait_for_confirms(Ch),
+    QName = rabbit_misc:r(?VHOST, queue, <<"stream">>),
+    {ok, Q} = rpc(Config, 0, rabbit_amqqueue, lookup, [QName]),
+    Conf = amqqueue:get_type_state(Q),
+    OldName = maps:get(name, Conf),
+    OldDir = rpc(Config, 0, osiris_log, directory, [Conf]),
+    ok = amqp_channel:close(Ch),
+    ok = amqp_connection:close(Conn),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["stop_app"]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["reset"]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["start_app"]),
+    ?assert(filelib:is_dir(OldDir)),
+    ?assertEqual({error, not_found}, rpc(Config, 0, rabbit_stream_coordinator, start_member, [writer, Conf])),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, ?VHOST),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, ?VHOST),
+    {FreshConn, FreshCh} = declare_stream(Config),
+    {ok, FreshQ} = rpc(Config, 0, rabbit_amqqueue, lookup, [QName]),
+    ?assertNotEqual(OldName, maps:get(name, amqqueue:get_type_state(FreshQ))),
+    ?assertEqual({ok, 0, 0}, rpc(Config, 0, rabbit_queue_type, stat, [FreshQ])),
+    Children = rpc(Config, 0, supervisor, which_children, [osiris_server_sup]),
+    ?assertNot(lists:any(fun({Name, Pid, _, _}) -> Name =:= OldName andalso is_pid(Pid) end, Children)),
+    ?assert(filelib:is_dir(OldDir)),
+    ok = amqp_channel:close(FreshCh),
+    ok = amqp_connection:close(FreshConn).
+
 classic_recreation_after_node_restart(Config) ->
     recreation_after_node_restart(Config, <<"classic">>).
+
+stream_recreation_after_node_restart(Config) ->
+    recreation_after_node_restart(Config, <<"stream">>).
 
 recreation_after_node_restart(Config, Type) ->
     ok = rabbit_ct_broker_helpers:add_vhost(Config, ?VHOST),
@@ -223,6 +291,13 @@ recreation_after_node_restart(Config, Type) ->
     ?assertEqual({ok, 0, 0}, rpc(Config, 2, rabbit_queue_type, stat, [Q])),
     ok = amqp_channel:close(FreshCh),
     ok = amqp_connection:close(FreshConn).
+
+declare_stream(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, ?VHOST),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream">>, durable = true,
+        arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
+    {Conn, Ch}.
 
 deletion_calls_the_handler(Config) ->
     ok = install_handler(Config, 0),
@@ -339,7 +414,7 @@ metadata_recovery_retries_vhost_start(Config) ->
     end, 15000).
 
 stale_queue_operations_keep_replacements(Config) ->
-    [stale_queue_operations_keep_replacement(Config, Type) || Type <- [<<"classic">>, <<"quorum">>]],
+    [stale_queue_operations_keep_replacement(Config, Type) || Type <- [<<"classic">>, <<"quorum">>, <<"stream">>]],
     ok.
 
 stale_queue_operations_keep_replacement(Config, Type) ->
@@ -368,6 +443,12 @@ stale_queue_operations_keep_replacement(Config, Type) ->
     ok = rpc(Config, 0, rabbit_amqqueue, internal_delete, [OldQ, <<"guest">>]),
     {ok, KeptQ} = rpc(Config, 0, rabbit_amqqueue, lookup, [Resource]),
     ?assertEqual(amqqueue:get_pid(NewQ), amqqueue:get_pid(KeptQ)),
+    case Type of
+        <<"stream">> ->
+            ?assertEqual(maps:get(name, amqqueue:get_type_state(NewQ)),
+                         maps:get(name, amqqueue:get_type_state(KeptQ)));
+        _ -> ok
+    end,
     case Type of
         <<"classic">> -> ok;
         _ -> ?assertEqual({error, stale_vhost_id}, rpc(Config, 0, rabbit_db_queue, create_or_get, [OldQ]))

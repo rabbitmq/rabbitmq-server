@@ -2110,6 +2110,7 @@ sleeping_nodeup_redriven_by_action_failed(_) ->
 %% A replica start that fails because the writer went away mid-start must back
 %% off (short) rather than hot-loop; the failure shapes are classified as such.
 backoff_class_classification(_) ->
+    ?assertEqual(nodeup, rabbit_stream_coordinator:backoff_class({erpc, noconnection})),
     C = fun rabbit_stream_coordinator:backoff_class/1,
     %% node down -> wait for nodeup
     ?assertEqual(nodeup, C({{nodedown, some_node}, {gen_server, call, [x]}})),
