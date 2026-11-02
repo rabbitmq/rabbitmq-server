@@ -72,7 +72,12 @@ end_per_suite(Config) ->
     Config.
 
 init_per_group(cluster, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}, {mqtt_version, v4}]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "nodes of the older version do not delete retained message stores"};
+        false ->
+            rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}, {mqtt_version, v4}])
+    end;
 init_per_group(G, Config)
   when G =:= v4;
        G =:= v5 ->
