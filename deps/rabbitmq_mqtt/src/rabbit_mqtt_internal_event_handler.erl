@@ -25,10 +25,10 @@ init([]) ->
 
 handle_event({event, vhost_created, Info, _, _}, ?STATE) ->
     Name = pget(name, Info),
-    case catch rabbit_mqtt_retainer_sup:start_child_for_vhost(Name) of
-        Pid when is_pid(Pid) -> ok;
-        Error -> ?LOG_ERROR("Failed to start MQTT retained message store for vhost '~ts': ~tp",
-                            [Name, Error])
+    try rabbit_mqtt_retainer_sup:start_child_for_vhost(Name)
+    catch Class:Reason ->
+              ?LOG_ERROR("Failed to start MQTT retained message store for vhost '~ts': ~tp:~tp",
+                         [Name, Class, Reason])
     end,
     {ok, ?STATE};
 handle_event({event, vhost_deleted, Info, _, _}, ?STATE) ->
