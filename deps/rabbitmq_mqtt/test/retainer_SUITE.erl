@@ -28,7 +28,7 @@ groups() ->
 
 sub_groups() ->
     [
-     {dets, [shuffle], tests()},
+     {dets, [shuffle], tests() ++ [recover_after_migration_cleanup]},
      {ets, [shuffle], tests()},
      {noop, [shuffle], [does_not_retain]}
     ].
@@ -119,6 +119,9 @@ end_per_testcase(Testcase, Config)
        Testcase =:= limit_max_size_bytes_with_properties ->
     ok = set_limits(Config, 100_000, 1_073_741_824),
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(recover_after_migration_cleanup = Testcase, Config) ->
+    _ = rabbit_ct_broker_helpers:delete_vhost(Config, atom_to_binary(Testcase)),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -193,6 +196,28 @@ recover(Config) ->
     {ok, _, _} = emqtt:subscribe(C2, Topic, qos1),
     ok = expect_publishes(C2, Topic, [Payload]),
     ok = emqtt:disconnect(C2).
+
+recover_after_migration_cleanup(Config) ->
+    Topic = VHost2 = atom_to_binary(?FUNCTION_NAME),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost2),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VHost2),
+    Creds2 = [{username, <<VHost2/binary, ":guest">>}, {password, <<"guest">>}],
+    Cases = [{[], <<"payload-1">>}, {Creds2, <<"payload-2">>}],
+    [begin
+         C = connect(Payload, Config, Creds),
+         {ok, _} = emqtt:publish(C, Topic, Payload, [{retain, true}, {qos, 1}]),
+         ok = emqtt:disconnect(C)
+     end || {Creds, Payload} <- Cases],
+    ok = rpc(Config, rabbit_khepri, khepri_db_migration_post_enable,
+             [#{feature_name => khepri_db, enabled => true}]),
+    ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
+    rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_mqtt),
+    [begin
+         C = connect(<<"sub-", Payload/binary>>, Config, Creds),
+         {ok, _, _} = emqtt:subscribe(C, Topic, qos1),
+         ok = expect_publishes(C, Topic, [Payload]),
+         ok = emqtt:disconnect(C)
+     end || {Creds, Payload} <- Cases].
 
 recover_with_message_expiry_interval(Config) ->
     ClientId = atom_to_binary(?FUNCTION_NAME),
