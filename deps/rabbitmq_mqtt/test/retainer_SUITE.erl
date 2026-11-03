@@ -51,6 +51,7 @@ tests() ->
      should_translate_amqp2mqtt_on_retention_search,
      recover,
      delete_vhost_long_name,
+     delete_orphaned_storage,
      recover_with_message_expiry_interval,
      limit_max_messages,
      limit_max_size_bytes,
@@ -290,6 +291,20 @@ delete_vhost(Config, VHost) ->
               ok = emqtt:disconnect(C2)
       end, Nodes),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
+
+delete_orphaned_storage(Config) ->
+    Dir = rpc(Config, rabbit, data_dir, []),
+    Orphaned = [rabbit_mqtt_util:path_for(Dir, <<"deleted vhost">>, Suffix)
+                || Suffix <- [".ets", ".dets"]],
+    RepairFile = rabbit_mqtt_util:path_for(Dir, <<"deleted vhost">>, ".dets.TMP"),
+    [ok = rpc(Config, file, write_file, [P, <<>>]) || P <- [RepairFile | Orphaned]],
+    Kept = [P || P <- [RepairFile | [rabbit_mqtt_util:path_for(Dir, <<"/">>, Suffix)
+                                     || Suffix <- [".ets", ".dets"]]],
+                 rpc(Config, filelib, is_file, [P])],
+    ok = rpc(Config, rabbit_mqtt_retainer_sup, delete_orphaned_storage, []),
+    ?assertEqual([], [P || P <- Orphaned, rpc(Config, filelib, is_file, [P])]),
+    ?assertEqual(Kept, [P || P <- Kept, rpc(Config, filelib, is_file, [P])]),
+    ok = rpc(Config, file, delete, [RepairFile]).
 
 delete_vhost_without_plugin(Config) ->
     VHost = Topic = Payload = ClientId = atom_to_binary(?FUNCTION_NAME),
