@@ -74,6 +74,7 @@ groups() ->
        declare_queue,
        declare_queue_dlx_queue,
        declare_queue_dlx_exchange,
+       declare_queue_dlx_routing_key,
        declare_queue_vhost_queue_limit,
        delete_queue,
        purge_queue,
@@ -706,6 +707,32 @@ declare_queue_dlx_exchange(Config) ->
     ?assertEqual({error, {session_ended, ExpectedErr}},
                  rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps)),
     ok = close_connection_sync(Conn).
+
+declare_queue_dlx_routing_key(Config) ->
+    {Conn, _, LinkPair} = init_pair(Config),
+    QName = <<"orders-dead-letters">>,
+    DlxName = <<"amq.topic">>,
+    User = ?config(test_user, Config),
+    Vhost = ?config(test_vhost, Config),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, Vhost),
+    ok = set_topic_permissions(Config, DlxName, <<"^public\\..*$">>, <<"^$">>),
+
+    Args = fun(RoutingKey) ->
+                   #{arguments => #{<<"x-dead-letter-exchange">> => {utf8, DlxName},
+                                    <<"x-dead-letter-routing-key">> => {utf8, RoutingKey}}}
+           end,
+    ExpectedErr = error_unauthorized(
+                    <<"write access to topic 'admin.secret' in exchange 'amq.topic' "
+                      "in vhost 'test vhost' refused for user 'test user'">>),
+    ?assertEqual({error, {session_ended, ExpectedErr}},
+                 rabbitmq_amqp_client:declare_queue(LinkPair, QName, Args(<<"admin.secret">>))),
+    ok = close_connection_sync(Conn),
+
+    {Conn2, _, LinkPair2} = init_pair(Config),
+    ?assertMatch({ok, _},
+                 rabbitmq_amqp_client:declare_queue(LinkPair2, QName, Args(<<"public.orders">>))),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair2, QName),
+    ok = close_connection_sync(Conn2).
 
 declare_queue_vhost_queue_limit(Config) ->
     QName = <<"🍿"/utf8>>,
