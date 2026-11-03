@@ -939,6 +939,19 @@ check_write_permitted_on_topics(#exchange{type = topic} = Resource, User, Mc, Au
 check_write_permitted_on_topics(_, _, _, _) ->
     ok.
 
+check_dead_letter_routing_key(DLX, Args, User, AuthzContext) ->
+    case rabbit_misc:table_lookup(Args, <<"x-dead-letter-routing-key">>) of
+        {longstr, RoutingKey} ->
+            case rabbit_exchange:lookup(DLX) of
+                {ok, X} ->
+                    check_topic_authorisation(X, User, RoutingKey, AuthzContext, write);
+                {error, not_found} ->
+                    ok
+            end;
+        _ ->
+            ok
+    end.
+
 check_read_permitted_on_topic(Resource, User, RoutingKey, AuthzContext) ->
     check_topic_authorisation(Resource, User, RoutingKey, AuthzContext, read).
 
@@ -2587,7 +2600,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                DLX ->
                    check_read_permitted(QueueName, User, AuthzContext),
                    check_write_permitted(DLX, User, AuthzContext),
-                   ok
+                   check_dead_letter_routing_key(DLX, Args, User, AuthzContext)
             end,
             case rabbit_amqqueue:declare(QueueName, Durable, AutoDelete,
                                          Args, Owner, Username) of
