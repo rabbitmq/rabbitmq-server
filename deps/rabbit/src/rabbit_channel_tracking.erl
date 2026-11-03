@@ -47,13 +47,26 @@
 %% API
 %%
 
+%% Channel events are handled in the calling `rabbit_event` process, so
+%% that `channel_closed` cannot be processed before `channel_created`.
+%% `connection_closed` scans the table, so it is handled asynchronously.
 -spec update_tracked(term()) -> ok.
 
-update_tracked(Event) ->
-    spawn(?MODULE, handle_cast, [Event]),
-    ok.
+update_tracked({Type, _} = Event) ->
+    try
+        _ = case Type of
+                channel_created -> handle_cast(Event);
+                channel_closed -> handle_cast(Event);
+                _ -> spawn(?MODULE, handle_cast, [Event])
+            end,
+        ok
+    catch
+        Class:Reason ->
+            ?LOG_WARNING("Could not update channel tracking for ~ts event: ~tp:~tp",
+                         [Type, Class, Reason], #{domain => ?RMQLOG_DOMAIN_CHAN}),
+            ok
+    end.
 
-%% Asynchronously handle update events
 -spec handle_cast(term()) -> ok.
 
 handle_cast({channel_created, Details}) ->
@@ -127,11 +140,15 @@ register_tracked(TrackedCh = #tracked_channel{pid = ChPid, username = Username,
 
 -spec unregister_tracked_by_pid(pid()) -> any().
 unregister_tracked_by_pid(ChPid) when node(ChPid) == node() ->
-    case ets:lookup(?TRACKED_CHANNEL_TABLE, ChPid) of
+    case ets:take(?TRACKED_CHANNEL_TABLE, ChPid) of
         []     -> ok;
         [#tracked_channel{username = Username}] ->
-            _ = ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, -1),
-            ets:delete(?TRACKED_CHANNEL_TABLE, ChPid)
+            try
+                _ = ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, -1),
+                ok
+            catch
+                error:badarg -> ok
+            end
     end.
 
 %% @doc This function is exported and implements a rabbit_tracking
