@@ -26,6 +26,11 @@ groups() ->
        amqp_x_cc_annotation,
        amqpl_cc_headers,
        amqpl_bcc_headers,
+       dead_letter_routing_key_refused,
+       dead_letter_routing_key_permitted,
+       dead_letter_routing_key_missing_exchange,
+       dead_letter_routing_key_direct_exchange,
+       dead_letter_routing_key_no_topic_permissions,
        topic_permission_database_access,
        topic_permission_checks,
        topic_permission_khepri_error_fails_closed,
@@ -216,6 +221,86 @@ amqpl_headers(Header, Config) ->
                  amqp_channel:call(Ch3, #'queue.delete'{queue = QName2})),
     ok = rabbit_ct_client_helpers:close_channel(Ch3),
     ok = clear_topic_permissions(Config).
+
+dead_letter_routing_key_refused(Config) ->
+    ok = set_topic_permissions(Config, "^public\\..*$", ".*"),
+    QName = <<"orders-dead-letters">>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    monitor(process, Ch),
+    catch amqp_channel:call(
+            Ch, #'queue.declare'{queue = QName,
+                                 durable = true,
+                                 arguments = dead_letter_args(<<"amq.topic">>,
+                                                              <<"admin.secret">>)}),
+    ok = assert_channel_down(
+           Ch,
+           <<"ACCESS_REFUSED - write access to topic 'admin.secret' in exchange "
+             "'amq.topic' in vhost '/' refused for user 'guest'">>),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config),
+    ?assertEqual(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch2, #'queue.delete'{queue = QName})),
+    ok = rabbit_ct_client_helpers:close_channel(Ch2),
+    ok = clear_topic_permissions(Config).
+
+dead_letter_routing_key_permitted(Config) ->
+    ok = set_topic_permissions(Config, "^public\\..*$", ".*"),
+    QName = <<"orders-dead-letters">>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = QName,
+                                                   durable = true,
+                                                   arguments = dead_letter_args(
+                                                                 <<"amq.topic">>,
+                                                                 <<"public.orders">>)}),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+    ok = clear_topic_permissions(Config).
+
+dead_letter_routing_key_missing_exchange(Config) ->
+    ok = set_topic_permissions(Config, "^public\\..*$", ".*"),
+    QName = <<"orders-dead-letters">>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = QName,
+                                                   durable = true,
+                                                   arguments = dead_letter_args(
+                                                                 <<"no-such-exchange">>,
+                                                                 <<"admin.secret">>)}),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+    ok = clear_topic_permissions(Config).
+
+dead_letter_routing_key_direct_exchange(Config) ->
+    ok = set_topic_permissions(Config, "^public\\..*$", ".*"),
+    QName = <<"orders-dead-letters">>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = QName,
+                                                   durable = true,
+                                                   arguments = dead_letter_args(
+                                                                 <<"amq.direct">>,
+                                                                 <<"admin.secret">>)}),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+    ok = clear_topic_permissions(Config).
+
+dead_letter_routing_key_no_topic_permissions(Config) ->
+    QName = <<"orders-dead-letters">>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = QName,
+                                                   durable = true,
+                                                   arguments = dead_letter_args(
+                                                                 <<"amq.topic">>,
+                                                                 <<"admin.secret">>)}),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch).
+
+dead_letter_args(DLX, RoutingKey) ->
+    [{<<"x-dead-letter-exchange">>, longstr, DLX},
+     {<<"x-dead-letter-routing-key">>, longstr, RoutingKey},
+     {<<"x-message-ttl">>, long, 0}].
 
 topic_permission_database_access(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, ?MODULE, clear_tables, []),
