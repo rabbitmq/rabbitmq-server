@@ -4612,6 +4612,27 @@ post_requires_json_content_type_test(Config) ->
                                            "application/json; charset=utf-8",
                                            BindingBody),
     [#{routing_key := <<"orders.created">>}] = http_get(Config, BindingPath, ?OK),
+
+    PublishPath = "/exchanges/%2F/orders/publish",
+    PublishBody = "{\"properties\":{\"content_type\":\"application/json\"},"
+                  "\"routing_key\":\"orders.created\","
+                  "\"payload\":\"{\\\"order_id\\\":1042}\",\"payload_encoding\":\"string\"}",
+    GetPath = "/queues/%2F/orders.fulfilment/get",
+    GetBody = "{\"count\":1,\"ackmode\":\"ack_requeue_false\",\"encoding\":\"auto\"}",
+    [?assertEqual({Path, ContentType, 415},
+                  {Path, ContentType,
+                   http_post_with_content_type(Config, Path, ContentType, Body)})
+     || {Path, Body} <- [{PublishPath, PublishBody}, {GetPath, GetBody}],
+        ContentType <- ["text/plain",
+                        "application/x-www-form-urlencoded",
+                        "multipart/form-data; boundary=x",
+                        "",
+                        none]],
+    [] = http_post_json(Config, GetPath, GetBody, ?OK),
+    #{routed := true} = http_post_json(Config, PublishPath, PublishBody, ?OK),
+    [#{payload := <<"{\"order_id\":1042}">>,
+       routing_key := <<"orders.created">>}] =
+        http_post_json(Config, GetPath, GetBody, ?OK),
     %% No queue actions remain, so a well-formed request is rejected by the handler.
     ?BAD_REQUEST = http_post_with_content_type(Config, ActionsPath,
                                                "application/json", ActionsBody),
