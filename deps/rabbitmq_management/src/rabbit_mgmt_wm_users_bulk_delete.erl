@@ -26,7 +26,7 @@ variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{'*', accept_content}], ReqData, Context}.
+   {[{{<<"application">>, <<"json">>, '*'}, accept_content}], ReqData, Context}.
 
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.

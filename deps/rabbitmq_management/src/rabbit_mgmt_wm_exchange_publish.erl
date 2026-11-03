@@ -46,7 +46,7 @@ allow_missing_post(ReqData, Context) ->
     {false, ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-   {[{'*', accept_content}], ReqData, Context}.
+   {[{{<<"application">>, <<"json">>, '*'}, accept_content}], ReqData, Context}.
 
 accept_content(ReqData, Context) ->
     case rabbit_alarm:get_alarms() of
