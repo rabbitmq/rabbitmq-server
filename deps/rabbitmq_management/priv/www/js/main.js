@@ -1551,6 +1551,9 @@ function with_req(method, path, body, fun, on404fun) {
         req.setRequestHeader('authorization', header);
     }
     req.setRequestHeader('x-vhost', current_vhost);
+    if (typeof body === 'string') {
+        req.setRequestHeader('content-type', 'application/json');
+    }
     req.onreadystatechange = function () {
         if (req.readyState == 4) {
             var ix = jQuery.inArray(req, outstanding_reqs);
