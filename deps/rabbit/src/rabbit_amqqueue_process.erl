@@ -1822,6 +1822,8 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
                                            #q.stats_timer),
     {hibernate, stop_rate_timer(State1)}.
 
+format_state({{reply_to, From}, #q{}=S}) ->
+    {{reply_to, From}, format_state(S)};
 format_state(#q{}=S) ->
     maybe_format_backing_queue_state(S).
 
