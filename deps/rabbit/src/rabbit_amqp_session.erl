@@ -108,6 +108,7 @@
          conserve_resources/3,
          check_resource_access/4,
          check_read_permitted_on_topic/4,
+         check_write_permitted_on_topics/4,
          reset_authz/2,
          info/1,
          connection_pid/1,
