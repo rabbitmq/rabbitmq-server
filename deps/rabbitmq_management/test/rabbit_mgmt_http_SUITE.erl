@@ -28,6 +28,7 @@
                                 http_get_no_auth/3,
                                 http_get_no_decode/5,
                                 http_put/4, http_put/6,
+                                http_post_with_content_type/4,
                                 http_post/4, http_post/6,
                                 http_post_json/4,
                                 http_upload_raw/8,
@@ -232,6 +233,7 @@ all_tests() -> [
     extensions_test,
     cors_test,
     cross_site_state_change_test,
+    post_requires_json_content_type_test,
     vhost_limits_list_test,
     vhost_limit_set_test,
     rates_test,
@@ -4572,6 +4574,75 @@ cross_site_state_change_test(Config) ->
     http_delete(Config, "/users/cross_site_user", ?NO_CONTENT),
     rpc(Config, application, set_env,
         [rabbitmq_management, cors_allow_origins, []]),
+    passed.
+
+post_requires_json_content_type_test(Config) ->
+    http_put(Config, "/exchanges/%2F/orders", #{type => <<"topic">>, durable => true},
+             {group, '2xx'}),
+    http_put(Config, "/queues/%2F/orders.fulfilment", #{durable => true},
+             {group, '2xx'}),
+    [http_put(Config, "/users/" ++ U, #{password => <<"s3kRe7">>, tags => <<"">>},
+              {group, '2xx'})
+     || U <- ["ci-runner", "legacy-billing"]],
+    BindingPath = "/bindings/%2F/e/orders/q/orders.fulfilment",
+    BindingBody = "{\"routing_key\":\"orders.created\",\"arguments\":{}}",
+    ActionsPath = "/queues/%2F/orders.fulfilment/actions",
+    ActionsBody = "{\"action\":\"sync\"}",
+    BulkDeletePath = "/users/bulk-delete",
+    BulkDeleteBody = "{\"users\":[\"ci-runner\",\"legacy-billing\"]}",
+    lists:foreach(
+      fun({Path, Body}) ->
+              [?assertEqual({Path, ContentType, 415},
+                            {Path, ContentType,
+                             http_post_with_content_type(Config, Path, ContentType, Body)})
+               || ContentType <- ["text/plain",
+                                  "application/x-www-form-urlencoded",
+                                  "multipart/form-data; boundary=x",
+                                  "",
+                                  none]]
+      end,
+      [{BindingPath, BindingBody},
+       {ActionsPath, ActionsBody},
+       {BulkDeletePath, BulkDeleteBody}]),
+    [] = http_get(Config, BindingPath, ?OK),
+    http_get(Config, "/users/ci-runner", ?OK),
+    http_get(Config, "/users/legacy-billing", ?OK),
+
+    ?CREATED = http_post_with_content_type(Config, BindingPath,
+                                           "application/json; charset=utf-8",
+                                           BindingBody),
+    [#{routing_key := <<"orders.created">>}] = http_get(Config, BindingPath, ?OK),
+
+    PublishPath = "/exchanges/%2F/orders/publish",
+    PublishBody = "{\"properties\":{\"content_type\":\"application/json\"},"
+                  "\"routing_key\":\"orders.created\","
+                  "\"payload\":\"{\\\"order_id\\\":1042}\",\"payload_encoding\":\"string\"}",
+    GetPath = "/queues/%2F/orders.fulfilment/get",
+    GetBody = "{\"count\":1,\"ackmode\":\"ack_requeue_false\",\"encoding\":\"auto\"}",
+    [?assertEqual({Path, ContentType, 415},
+                  {Path, ContentType,
+                   http_post_with_content_type(Config, Path, ContentType, Body)})
+     || {Path, Body} <- [{PublishPath, PublishBody}, {GetPath, GetBody}],
+        ContentType <- ["text/plain",
+                        "application/x-www-form-urlencoded",
+                        "multipart/form-data; boundary=x",
+                        "",
+                        none]],
+    [] = http_post_json(Config, GetPath, GetBody, ?OK),
+    #{routed := true} = http_post_json(Config, PublishPath, PublishBody, ?OK),
+    [#{payload := <<"{\"order_id\":1042}">>,
+       routing_key := <<"orders.created">>}] =
+        http_post_json(Config, GetPath, GetBody, ?OK),
+    %% No queue actions remain, so a well-formed request is rejected by the handler.
+    ?BAD_REQUEST = http_post_with_content_type(Config, ActionsPath,
+                                               "application/json", ActionsBody),
+    ?NO_CONTENT = http_post_with_content_type(Config, BulkDeletePath,
+                                              "application/json", BulkDeleteBody),
+    http_get(Config, "/users/ci-runner", ?NOT_FOUND),
+    http_get(Config, "/users/legacy-billing", ?NOT_FOUND),
+
+    http_delete(Config, "/queues/%2F/orders.fulfilment", {group, '2xx'}),
+    http_delete(Config, "/exchanges/%2F/orders", {group, '2xx'}),
     passed.
 
 check_cors_all_endpoints(Config) ->

@@ -16,7 +16,8 @@
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3, restart_node/2]).
 -import(rabbit_ct_helpers, [eventually/3]).
--import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_post/4, http_delete/3, http_delete/4]).
+-import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_post/4, http_delete/3, http_delete/4,
+                                http_post_with_content_type/4]).
 -import(rabbit_misc, [pget/2]).
 
 -compile(nowarn_export_all).
@@ -57,7 +58,8 @@ groups() ->
                                qq_replicas_add,
                                qq_replicas_delete,
                                qq_replicas_grow,
-                               qq_replicas_shrink
+                               qq_replicas_shrink,
+                               qq_replicas_post_requires_json
                               ]}
     ].
 
@@ -210,6 +212,48 @@ qq_replicas_shrink(Config) ->
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
 
+    ok.
+
+qq_replicas_post_requires_json(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_quorum(Chan, <<"invoices">>),
+    ?awaitMatch(#{members := [_, _]}, http_get(Config, "/queues/%2F/invoices"), 30000),
+    Nodename1 = rabbit_data_coercion:to_list(get_node_config(Config, 1, nodename)),
+    RemoveMember = fun() ->
+                           http_delete(Config, "/queues/quorum/%2F/invoices/replicas/delete",
+                                       ?ACCEPTED, [{node, Nodename1}]),
+                           ?awaitMatch(#{members := [_]},
+                                       http_get(Config, "/queues/%2F/invoices"), 30000)
+                   end,
+    NonJson = ["text/plain", "application/x-www-form-urlencoded",
+               "multipart/form-data; boundary=x", "", none],
+
+    RemoveMember(),
+    AddPath = "/queues/quorum/%2F/invoices/replicas/add",
+    AddBody = "{\"node\":\"" ++ Nodename1 ++ "\"}",
+    [?assertEqual({ContentType, 415},
+                  {ContentType, http_post_with_content_type(Config, AddPath, ContentType, AddBody)})
+     || ContentType <- NonJson],
+    #{members := [_]} = http_get(Config, "/queues/%2F/invoices"),
+    ?NO_CONTENT = http_post_with_content_type(Config, AddPath, "application/json", AddBody),
+    ?awaitMatch(#{members := [_, _]}, http_get(Config, "/queues/%2F/invoices"), 30000),
+
+    RemoveMember(),
+    GrowPath = "/queues/quorum/replicas/on/" ++ Nodename1 ++ "/grow",
+    GrowBody = "{\"strategy\":\"all\",\"queue_pattern\":\"^invoices$\","
+               "\"vhost_pattern\":\".*\"}",
+    [?assertEqual({ContentType, 415},
+                  {ContentType, http_post_with_content_type(Config, GrowPath, ContentType, GrowBody)})
+     || ContentType <- NonJson],
+    #{members := [_]} = http_get(Config, "/queues/%2F/invoices"),
+    ?NO_CONTENT = http_post_with_content_type(Config, GrowPath,
+                                              "application/json; charset=utf-8", GrowBody),
+    ?awaitMatch(#{members := [_, _]}, http_get(Config, "/queues/%2F/invoices"), 30000),
+
+    http_delete(Config, "/queues/%2F/invoices", ?NO_CONTENT),
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
     ok.
 
 queue_on_other_node(Config) ->
