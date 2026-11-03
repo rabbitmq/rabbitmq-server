@@ -138,7 +138,7 @@ Jobs and run results can be inspected via `gh` on the command line.
  * [`rabbitmq/server-packages`](https://github.com/rabbitmq/server-packages) contains workflows for producing open source RabbitMQ releases
  * [`rabbitmq/build-env-images`](https://github.com/rabbitmq/build-env-images) contains OCI build environment images
 
- 
+
 ## Comments
 
 The default number of new comments in a change is zero.
@@ -361,6 +361,20 @@ When fetching a GitHub pull request details or diffs, prefer the Web option over
 ## Security
 
 `.github/SECURITY.md` describes the security policy.
+
+Before working on submitting an analysis, make sure to understand
+what this codebase is, what its security recommendations are and
+what a realistic deployment looks like.
+
+To get there:
+
+ * Study [RabbitMQ documentation](https://rabbitmq.com) ([source repository](https://github.com/rabbitmq/rabbitmq-website/)) and its security recommendations
+   before doing any security analysis
+ * Consider the `policymaker`, `administrator` user tags to be high privilege roles NOT assigned to most users
+ * Consider that the default `guest` user is replaced with another one with generated credentials,
+   not a standard "feature" of every installation
+ * Consider that the use of TLS in general and HTTPS in particular are very common and is often mandated
+   by infrastructure operations teams
 
 For GitHub Security Advisories, make sure to:
 
