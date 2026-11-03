@@ -46,7 +46,7 @@
 
 -include("amqqueue.hrl").
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -export([start_link/10, start_link/11, flush/1, shutdown/1]).
 -export([send_command/2, message_too_large/4]).
@@ -58,9 +58,7 @@
 -export([update_user_state/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1, handle_post_hibernate/1,
-         prioritise_call/4, prioritise_cast/3, prioritise_info/3,
-         format_state/1, format_message_queue/2]).
+         handle_info/2, format_status/1]).
 
 %% Internal
 -export([list_local/0, emit_info_local/3]).
@@ -172,7 +170,8 @@
              publishing_mode = false :: boolean(),
              %% for clients that do not respond to a `basic.cancel` with a `basic.cancel_ok`
              pending_consumer_cancels = #{} :: #{rabbit_types:ctag() => reference()},
-             pending_replies = {0, 0} :: {non_neg_integer(), non_neg_integer()} | untracked
+             pending_replies = {0, 0} :: {non_neg_integer(), non_neg_integer()} | untracked,
+             coalescing_confirms = false :: boolean()
             }).
 
 -define(QUEUE, lqueue).
@@ -236,6 +235,8 @@
             put({Type, Key}, none)
         end).
 
+-define(HIBERNATE_AFTER, 6_000).
+
 %%----------------------------------------------------------------------------
 
 -export_type([channel_number/0]).
@@ -278,7 +279,7 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, User,
 
 start(Channel, ReaderPid, WriterPid, ConnPid, ConnName, User,
       VHost, Capabilities, CollectorPid, Limiter, AmqpParams, PendingReplies) ->
-    gen_server2:start_link(
+    gen_server:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName,
                 User, VHost, Capabilities, CollectorPid, Limiter, AmqpParams,
                 PendingReplies], []).
@@ -286,23 +287,23 @@ start(Channel, ReaderPid, WriterPid, ConnPid, ConnName, User,
 -spec flush(pid()) -> 'ok'.
 
 flush(Pid) ->
-    gen_server2:call(Pid, flush, infinity).
+    gen_server:call(Pid, flush, infinity).
 
 -spec shutdown(pid()) -> 'ok'.
 
 shutdown(Pid) ->
-    gen_server2:cast(Pid, terminate).
+    gen_server:cast(Pid, terminate).
 
 -spec send_command(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 
 send_command(Pid, Msg) ->
-    gen_server2:cast(Pid,  {command, Msg}).
+    gen_server:cast(Pid,  {command, Msg}).
 
 -spec message_too_large(pid(), rabbit_framing:amqp_method_record(),
                         non_neg_integer(), pos_integer()) -> 'ok'.
 
 message_too_large(Pid, Method, Size, MaxMessageSize) ->
-    gen_server2:cast(Pid, {message_too_large, Method, Size, MaxMessageSize}).
+    gen_server:cast(Pid, {message_too_large, Method, Size, MaxMessageSize}).
 
 -spec list() -> [pid()].
 
@@ -326,7 +327,7 @@ info_keys() -> ?INFO_KEYS.
 info(Pid) ->
     {Timeout, Deadline} = get_operation_timeout_and_deadline(),
     try
-        case gen_server2:call(Pid, {info, Deadline}, Timeout) of
+        case gen_server:call(Pid, {info, Deadline}, Timeout) of
             {ok, Res}      -> Res;
             {error, Error} -> throw(Error)
         end
@@ -341,7 +342,7 @@ info(Pid) ->
 info(Pid, Items) ->
     {Timeout, Deadline} = get_operation_timeout_and_deadline(),
     try
-        case gen_server2:call(Pid, {{info, Items}, Deadline}, Timeout) of
+        case gen_server:call(Pid, {{info, Items}, Deadline}, Timeout) of
             {ok, Res}      -> Res;
             {error, Error} -> throw(Error)
         end
@@ -381,7 +382,7 @@ refresh_config_local() ->
     _ = rabbit_misc:upmap(
       fun (C) ->
         try
-          gen_server2:call(C, refresh_config, infinity)
+          gen_server:call(C, refresh_config, infinity)
         catch _:Reason ->
           ?LOG_ERROR("Failed to refresh channel config "
                      "for channel ~tp. Reason ~tp",
@@ -395,7 +396,7 @@ refresh_interceptors() ->
     _ = rabbit_misc:upmap(
       fun (C) ->
         try
-          gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
+          gen_server:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
         catch _:Reason ->
           ?LOG_ERROR("Failed to refresh channel interceptors "
                      "for channel ~tp. Reason ~tp",
@@ -411,11 +412,11 @@ refresh_interceptors() ->
 % This event is necessary for the stats timer to be initialized with
 % the correct values once the management agent has started
 force_event_refresh(Ref) ->
-    [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
+    [gen_server:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
 
 list_queue_states(Pid) ->
-    gen_server2:call(Pid, list_queue_states).
+    gen_server:call(Pid, list_queue_states).
 
 -spec update_user_state(pid(), rabbit_types:user()) -> 'ok' | {error, channel_terminated}.
 
@@ -518,28 +519,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, User, VHost,
                             fun() -> emit_stats(State2) end),
     put_operation_timeout(),
     State3 = init_tick_timer(State2),
-    {ok, State3, hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
-
-prioritise_call(Msg, _From, _Len, _State) ->
-    case Msg of
-        info           -> 9;
-        {info, _Items} -> 9;
-        _              -> 0
-    end.
-
-prioritise_cast(Msg, _Len, _State) ->
-    case Msg of
-        {confirm,            _MsgSeqNos, _QPid} -> 5;
-        {reject_publish,     _MsgSeqNos, _QPid} -> 5;
-        _                                       -> 0
-    end.
-
-prioritise_info(Msg, _Len, _State) ->
-    case Msg of
-        emit_stats                   -> 7;
-        _                            -> 0
-    end.
+    {ok, State3, ?HIBERNATE_AFTER}.
 
 handle_call(flush, _From, State) ->
     reply(ok, State);
@@ -580,7 +560,7 @@ handle_call(refresh_interceptors, _From, State) ->
 handle_call(list_queue_states, _From, State = #ch{queue_states = QueueStates}) ->
     %% For testing of cleanup only
     %% HACK
-    {reply, maps:keys(element(2, QueueStates)), State};
+    reply(maps:keys(element(2, QueueStates)), State);
 
 handle_call(_Request, _From, State) ->
     noreply(State).
@@ -694,15 +674,19 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     noreply(State);
 
-handle_info(timeout, State) ->
+%% Both `noreply_coalesce/1` and the idle timeout use the
+%% legacy `gen_server` time-out, which is delivered as `timeout`.
+handle_info(timeout, #ch{coalescing_confirms = true} = State) ->
     noreply(State);
+handle_info(timeout, State) ->
+    hibernate(State);
 
 handle_info(emit_stats, State) ->
     emit_stats(State),
     State1 = rabbit_event:reset_stats_timer(State, #ch.stats_timer),
     %% NB: don't call noreply/1 since we don't want to kick off the
     %% stats timer.
-    {noreply, send_confirms_and_nacks(State1), hibernate};
+    {noreply, send_confirms_and_nacks(not_coalescing(State1)), ?HIBERNATE_AFTER};
 
 handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             #ch{queue_states = QStates0} = State0) ->
@@ -719,7 +703,7 @@ handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
 
 handle_info({'DOWN', _MRef, process, Pid, normal}, State) ->
     ?LOG_DEBUG("Process ~0p monitored by channel ~0p exited", [Pid, self()]),
-    {noreply, State};
+    noreply(State);
 
 %% `erpc` encodes a successful return as `{Ref, return, Value}` and the spawned
 %% helper exits with that reason; ignore it rather than crashing the channel.
@@ -751,27 +735,22 @@ handle_info(tick, #ch{} = State0) ->
       _ ->
             ok
     end,
-    noreply(init_tick_timer(reset_tick_timer(State0)));
+    noreply(reset_tick_timer(State0));
 handle_info({update_user_state, User}, State = #ch{cfg = Cfg}) ->
     ok = clear_permission_cache(),
     State1 = State#ch{cfg = Cfg#conf{user = User}},
     noreply(recheck_consumers(State1)).
 
-
-handle_pre_hibernate(State0) ->
+hibernate(State0) ->
     ok = clear_permission_cache(),
-    State = maybe_cancel_tick_timer(State0),
+    State = cancel_tick_timer(State0),
     rabbit_event:if_enabled(
       State, #ch.stats_timer,
       fun () -> emit_stats(State,
                            [{idle_since,
                              os:system_time(millisecond)}])
       end),
-    {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
-
-handle_post_hibernate(State0) ->
-    State = init_tick_timer(State0),
-    {noreply, State}.
+    {noreply, rabbit_event:stop_stats_timer(State, #ch.stats_timer), hibernate}.
 
 terminate(_Reason,
           State = #ch{cfg = #conf{user = #user{username = Username}},
@@ -808,18 +787,16 @@ terminate(_Reason,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-format_state(#ch{} = S) ->
-    format_state(application:get_env(rabbit, summarize_process_state_when_logged, false), S).
-
-format_state(false, #ch{} = S) ->
-    S;
-format_state(true, #ch{unacked_message_q = UAMQ} = S) ->
-    UAMQLen = ?QUEUE:len(UAMQ),
-    Msg0 = io_lib:format("unacked_message_q (~b elements) (truncated)", [UAMQLen]),
-    Msg1 = rabbit_data_coercion:to_utf8_binary(Msg0),
-    S#ch{unacked_message_q = Msg1}.
-
-format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+format_status(#{state := #ch{unacked_message_q = UAMQ} = State} = Status) ->
+    case application:get_env(rabbit, summarize_process_state_when_logged, false) of
+        true ->
+            Msg = io_lib:format("unacked_message_q (~b elements) (truncated)",
+                                [?QUEUE:len(UAMQ)]),
+            Status#{state := State#ch{unacked_message_q =
+                                          rabbit_data_coercion:to_utf8_binary(Msg)}};
+        false ->
+            Status
+    end.
 
 get_consumer_timeout() ->
     case application:get_env(rabbit, consumer_timeout) of
@@ -831,17 +808,26 @@ get_consumer_timeout() ->
 
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
+reply(Reply, NewState) -> {reply, Reply, next_state(NewState), ?HIBERNATE_AFTER}.
 
-noreply(NewState) -> {noreply, next_state(NewState), hibernate}.
+noreply(NewState) -> {noreply, next_state(NewState), ?HIBERNATE_AFTER}.
 
-next_state(State) -> ensure_stats_timer(send_confirms_and_nacks(State)).
+next_state(State) ->
+    ensure_timers(send_confirms_and_nacks(not_coalescing(State))).
 
 noreply_coalesce(#ch{confirmed = [], rejected = []} = State) ->
-    {noreply, ensure_stats_timer(State), hibernate};
+    {noreply, ensure_timers(not_coalescing(State)), ?HIBERNATE_AFTER};
 noreply_coalesce(#ch{} = State) ->
     % Immediately process 'timeout' info message
-    {noreply, ensure_stats_timer(State), 0}.
+    {noreply, ensure_timers(State#ch{coalescing_confirms = true}), 0}.
+
+not_coalescing(#ch{coalescing_confirms = false} = State) ->
+    State;
+not_coalescing(State) ->
+    State#ch{coalescing_confirms = false}.
+
+ensure_timers(State) ->
+    init_tick_timer(ensure_stats_timer(State)).
 
 ensure_stats_timer(State) ->
     rabbit_event:ensure_stats_timer(State, #ch.stats_timer, emit_stats).
@@ -2898,20 +2884,11 @@ init_tick_timer(State) ->
 reset_tick_timer(State) ->
     State#ch{tick_timer = undefined}.
 
-maybe_cancel_tick_timer(#ch{tick_timer = undefined} = State) ->
+cancel_tick_timer(#ch{tick_timer = undefined} = State) ->
     State;
-maybe_cancel_tick_timer(#ch{tick_timer = TRef,
-                            unacked_message_q = UMQ} = State) ->
-    case ?QUEUE:len(UMQ) of
-        0 ->
-            %% we can only cancel the tick timer if the unacked messages
-            %% queue is empty.
-            _ = erlang:cancel_timer(TRef),
-            State#ch{tick_timer = undefined};
-        _ ->
-            %% let the timer continue
-            State
-    end.
+cancel_tick_timer(#ch{tick_timer = TRef} = State) ->
+    _ = erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+    State#ch{tick_timer = undefined}.
 
 now_millis() ->
     erlang:monotonic_time(millisecond).
