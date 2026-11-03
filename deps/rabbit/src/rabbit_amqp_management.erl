@@ -8,7 +8,8 @@
 
 -import(rabbit_amqp_session,
         [check_resource_access/4,
-         check_read_permitted_on_topic/4]).
+         check_read_permitted_on_topic/4,
+         check_write_permitted_on_topics/4]).
 -import(rabbit_misc,
         [queue_resource/2,
          exchange_resource/2]).
@@ -17,6 +18,7 @@
 -export([check_routing_arg/5,
          check_alternate_exchange/4,
          check_dead_letter_exchange/4,
+         check_dead_letter_routing_key/4,
          handle_http_req/8,
          args_amqp_to_amqpl/1,
          decode_queue/1,
@@ -30,6 +32,7 @@
                               rabbit_amqp_session:topic_permission_cache()}.
 
 -define(DEAD_LETTER_EXCHANGE_KEY, <<"x-dead-letter-exchange">>).
+-define(DEAD_LETTER_ROUTING_KEY_KEY, <<"x-dead-letter-routing-key">>).
 -define(ALTERNATE_EXCHANGE_KEY, <<"alternate-exchange">>).
 
 -spec handle_request(binary(),
@@ -171,7 +174,9 @@ handle_http_req(HttpMethod = <<"PUT">>,
             Result;
         {error, not_found} ->
             PermCache = check_dead_letter_exchange(QName, QArgs, User, PermCache1),
-            PermCaches = {PermCache, TopicPermCache},
+            TopicPermCache1 = check_dead_letter_routing_key(
+                                QName, QArgs, User, TopicPermCache),
+            PermCaches = {PermCache, TopicPermCache1},
             try rabbit_amqqueue:declare(
                   QName, Durable, AutoDelete, QArgs, Owner, Username) of
                 {new, Q} ->
@@ -756,6 +761,20 @@ prohibit_reserved_amq(#resource{}) ->
 
 check_dead_letter_exchange(QName, QArgs, User, PermCache) ->
     check_routing_arg(QName, QArgs, ?DEAD_LETTER_EXCHANGE_KEY, User, PermCache).
+
+check_dead_letter_routing_key(#resource{virtual_host = Vhost}, QArgs, User, TopicPermCache) ->
+    case {rabbit_misc:r_arg(Vhost, exchange, QArgs, ?DEAD_LETTER_EXCHANGE_KEY),
+          rabbit_misc:table_lookup(QArgs, ?DEAD_LETTER_ROUTING_KEY_KEY)} of
+        {#resource{} = DLX, {longstr, RoutingKey}} ->
+            case rabbit_exchange:lookup(DLX) of
+                {ok, X} ->
+                    check_write_permitted_on_topics(X, User, [RoutingKey], TopicPermCache);
+                {error, not_found} ->
+                    TopicPermCache
+            end;
+        _ ->
+            TopicPermCache
+    end.
 
 check_alternate_exchange(XName, XArgs, User, PermCache) ->
     check_routing_arg(XName, XArgs, ?ALTERNATE_EXCHANGE_KEY, User, PermCache).
