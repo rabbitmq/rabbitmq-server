@@ -339,10 +339,10 @@ channel_idle(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     [ChPid] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel, list_local, []),
-    ?awaitMatch({true, {gen_server, loop_hibernate, _}}, channel_idle_state(Config, ChPid), 30000),
+    ?awaitMatch({true, true}, channel_idle_state(Config, ChPid), 30000),
     #'basic.qos_ok'{} = amqp_channel:call(Chan, #'basic.qos'{prefetch_count = 1}),
     ?awaitMatch({false, _}, channel_idle_state(Config, ChPid), 30000),
-    ?awaitMatch({true, {gen_server, loop_hibernate, _}}, channel_idle_state(Config, ChPid), 30000),
+    ?awaitMatch({true, true}, channel_idle_state(Config, ChPid), 30000),
     ok = rabbit_ct_client_helpers:close_connection(Conn).
 
 channel_idle_state(Config, ChPid) ->
@@ -353,7 +353,12 @@ channel_idle_state(Config, ChPid) ->
     {current_function, Fun} = rabbit_ct_broker_helpers:rpc(
                                 Config, 0, erlang, process_info,
                                 [ChPid, current_function]),
-    {IsIdle, Fun}.
+    IsHibernating = case Fun of
+                        {gen_server, loop_hibernate, _} -> true;
+                        {erlang, hibernate, 3} -> true;
+                        _ -> false
+                    end,
+    {IsIdle, IsHibernating}.
 
 channel_queue_delete_queue(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
