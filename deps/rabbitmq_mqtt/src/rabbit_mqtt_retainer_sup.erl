@@ -9,13 +9,16 @@
 
 -behaviour(supervisor).
 
+-include_lib("kernel/include/logger.hrl").
+
 %% supervsior callback
 -export([init/1]).
 
 %% API
 -export([start_link/0,
          start_child_for_vhost/1,
-         delete_child_for_vhost/1]).
+         delete_child_for_vhost/1,
+         delete_orphaned_storage/0]).
 
 -spec start_link() -> supervisor:startlink_ret().
 start_link() ->
@@ -79,10 +82,41 @@ with_vhost_lock(VHost, Fun) ->
     global:trans({{?MODULE, VHost}, self()}, Fun, [node()]).
 
 delete_storage(VHost) ->
+    rabbit_file:recursive_delete(storage_paths(rabbit:data_dir(), VHost)).
+
+storage_paths(Dir, VHost) ->
+    [rabbit_mqtt_util:path_for(Dir, VHost),
+     rabbit_mqtt_util:path_for(Dir, VHost, ".dets")].
+
+%% Deletes the stores of vhosts that were deleted while this node was down.
+-spec delete_orphaned_storage() -> ok.
+delete_orphaned_storage() ->
     Dir = rabbit:data_dir(),
-    rabbit_file:recursive_delete(
-      [rabbit_mqtt_util:path_for(Dir, VHost),
-       rabbit_mqtt_util:path_for(Dir, VHost, ".dets")]).
+    %% Excludes the `.TMP` file that DETS writes while it repairs a table.
+    Files = [filename:join(Dir, F)
+             || F <- filelib:wildcard("mqtt_retained_*.{ets,dets}", Dir)],
+    case rabbit_vhost:list_names() of
+        %% The metadata store may not be ready yet.
+        [] ->
+            ok;
+        VHosts ->
+            Expected = maps:from_keys(
+                         lists:append([storage_paths(Dir, V) || V <- VHosts]), true),
+            case [F || F <- Files, not maps:is_key(F, Expected)] of
+                [] ->
+                    ok;
+                Orphaned ->
+                    ?LOG_INFO("Deleting MQTT retained message stores of deleted vhosts: ~tp",
+                              [Orphaned]),
+                    case rabbit_file:recursive_delete(Orphaned) of
+                        ok ->
+                            ok;
+                        {error, Reason} ->
+                            ?LOG_WARNING("Failed to delete MQTT retained message stores "
+                                         "of deleted vhosts: ~tp", [Reason])
+                    end
+            end
+    end.
 
 -spec init([]) ->
     {ok, {supervisor:sup_flags(),
