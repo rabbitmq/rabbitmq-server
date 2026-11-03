@@ -15,6 +15,9 @@
 
 -import(rabbit_misc, [pget/2]).
 
+-define(CLUSTER_NAME, <<"cluster_name">>).
+-define(INTERNAL_CLUSTER_ID, <<"internal_cluster_id">>).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
@@ -57,11 +60,20 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
       end).
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
-    ok = rabbit_runtime_parameters:clear_global(name(ReqData), Username),
-    {true, ReqData, Context}.
+    case name(ReqData) of
+        ?INTERNAL_CLUSTER_ID ->
+            rabbit_mgmt_util:bad_request(
+              <<"internal_cluster_id cannot be deleted">>, ReqData, Context);
+        Name ->
+            ok = rabbit_runtime_parameters:clear_global(Name, Username),
+            {true, ReqData, Context}
+    end.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_global_parameters(ReqData, Context).
+    case requires_administrator(cowboy_req:method(ReqData), name(ReqData)) of
+        true  -> rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
+        false -> rabbit_mgmt_util:is_authorized_global_parameters(ReqData, Context)
+    end.
 
 %%--------------------------------------------------------------------
 
@@ -69,3 +81,8 @@ parameter(ReqData) ->
     rabbit_runtime_parameters:lookup_global(name(ReqData)).
 
 name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).
+
+requires_administrator(Method, Name) when Method =:= <<"PUT">>; Method =:= <<"DELETE">> ->
+    Name =:= ?CLUSTER_NAME orelse Name =:= ?INTERNAL_CLUSTER_ID;
+requires_administrator(_, _) ->
+    false.
