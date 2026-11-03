@@ -166,7 +166,10 @@ mnesia_and_msg_store_files() ->
             IgnoredFiles = [filename:basename(File) || File <- IgnoredFiles0],
             ?LOG_DEBUG("Files and directories found in node's data directory: ~ts, of them to be ignored: ~ts",
                             [string:join(lists:usort(List0), ", "), string:join(lists:usort(IgnoredFiles), ", ")]),
-            List = List0 -- IgnoredFiles,
+            %% The MQTT retained message store DETS files should
+            %% be preserved during Mnesia->Khepri migration
+            List = [File || File <- List0 -- IgnoredFiles,
+                            not lists:prefix("mqtt_retained_", File)],
             ?LOG_DEBUG("Files and directories found in node's data directory sans ignored ones: ~ts", [string:join(lists:usort(List), ", ")]),
             List
     end.
