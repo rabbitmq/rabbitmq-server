@@ -48,7 +48,7 @@ resource_exists(ReqData, {Mode, Context}) ->
     end.
 
 content_types_accepted(ReqData, Context) ->
-    {[{'*', accept_content}], ReqData, Context}.
+    {[{{<<"application">>, <<"json">>, '*'}, accept_content}], ReqData, Context}.
 
 %% Methods to add to the CORS header.
 %% This clause is called by rabbit_mgmt_cors:handle_options/2
