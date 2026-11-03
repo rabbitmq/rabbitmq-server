@@ -156,6 +156,27 @@ http_post_raw(Config, Path, Body, User, Pass, CodeExp, MoreHeaders) ->
     http_upload_raw(Config, post, Path, Body, User, Pass, CodeExp, MoreHeaders).
 
 
+http_post_with_content_type(Config, Path, none, Body) ->
+    %% `httpc` always sends a `content-type` header, even an empty one.
+    Port = mgmt_port(Config, 0),
+    {ok, Sock} = gen_tcp:connect("localhost", Port, [binary, {active, false}]),
+    {_, Auth} = auth_header("guest", "guest"),
+    ok = gen_tcp:send(
+           Sock,
+           ["POST ", get_uri_prefix(Config), "/api", Path, " HTTP/1.1\r\n"
+            "host: localhost\r\n"
+            "authorization: ", Auth, "\r\n"
+            "content-length: ", integer_to_list(iolist_size(Body)), "\r\n"
+            "connection: close\r\n\r\n", Body]),
+    {ok, <<"HTTP/1.1 ", Code:3/binary, _/binary>>} = gen_tcp:recv(Sock, 0, 10000),
+    gen_tcp:close(Sock),
+    binary_to_integer(Code);
+http_post_with_content_type(Config, Path, ContentType, Body) ->
+    {ok, {{_, Code, _}, _, _}} =
+        req(Config, 0, post, Path,
+            [auth_header("guest", "guest"), {"content-type", ContentType}], Body),
+    Code.
+
 http_upload_raw(Config, Type, Path, Body, User, Pass, CodeExp, MoreHeaders) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
     req(Config, 0, Type, Path, [auth_header(User, Pass)] ++ MoreHeaders, Body),

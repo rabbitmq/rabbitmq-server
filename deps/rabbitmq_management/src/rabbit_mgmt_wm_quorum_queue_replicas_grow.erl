@@ -23,7 +23,7 @@ allowed_methods(ReqData, Context) ->
   {[<<"POST">>, <<"OPTIONS">>], ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
-  {[{'*', accept_content}], ReqData, Context}.
+  {[{{<<"application">>, <<"json">>, '*'}, accept_content}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
   case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
