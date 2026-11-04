@@ -262,7 +262,8 @@ all_tests() -> [
     amqpl_sessions,
     enable_plugin_amqp,
     cluster_and_node_tags_test,
-    version_test
+    version_test,
+    queue_arguments_do_not_reference_request_body_test
 ].
 
 %% -------------------------------------------------------------------
@@ -3913,6 +3914,42 @@ publish_large_message_test(Config) ->
   assert_item(Msg, Msg3),
   http_delete(Config, "/queues/%2F/publish_accept_json_test", {group, '2xx'}),
   passed.
+
+-define(PADDING_BYTES, 1000000).
+
+with_padding(Body) ->
+    Body#{<<"padding_ignored_by_handler">> => binary:copy(<<"p">>, ?PADDING_BYTES)}.
+
+assert_not_referencing_body(Sizes) ->
+    ?assertNotEqual([], Sizes),
+    ?assertEqual([], [Size || Size <- Sizes, Size >= ?PADDING_BYTES]).
+
+long_binaries_referenced_byte_sizes(B) when is_binary(B), byte_size(B) > 64 ->
+    [binary:referenced_byte_size(B)];
+long_binaries_referenced_byte_sizes(T) when is_tuple(T) ->
+    long_binaries_referenced_byte_sizes(tuple_to_list(T));
+long_binaries_referenced_byte_sizes(M) when is_map(M) ->
+    long_binaries_referenced_byte_sizes(maps:to_list(M));
+long_binaries_referenced_byte_sizes(L) when is_list(L) ->
+    lists:flatmap(fun long_binaries_referenced_byte_sizes/1, L);
+long_binaries_referenced_byte_sizes(_) ->
+    [].
+
+queue_arguments_do_not_reference_request_body_test(Config) ->
+    QName = <<"queue_arguments_do_not_reference_request_body_test">>,
+    Long = binary:copy(<<"a">>, 100),
+    Args = #{Long => Long, <<"table">> => #{Long => Long}, <<"array">> => [Long]},
+    http_put(Config, "/queues/%2F/" ++ binary_to_list(QName),
+             with_padding(#{durable => true, arguments => Args}),
+             {group, '2xx'}),
+    assert_not_referencing_body(
+      rpc(Config, ?MODULE, queue_arguments_referenced_byte_sizes, [QName])),
+    http_delete(Config, "/queues/%2F/" ++ binary_to_list(QName), {group, '2xx'}),
+    passed.
+
+queue_arguments_referenced_byte_sizes(QName) ->
+    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
+    long_binaries_referenced_byte_sizes(amqqueue:get_arguments(Q)).
 
 -define(EXCESSIVELY_LARGE_BODY_BYTES, 35000000).
 
