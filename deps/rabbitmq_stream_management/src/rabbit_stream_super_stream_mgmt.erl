@@ -80,7 +80,8 @@ maybe_create_super_stream(ReqData0, Context, VHost, Name) ->
                                end,
               case validate_partitions_or_binding_keys(PartitionsBin, BindingKeysBin, ReqData, Context) of
                   ok ->
-                      Arguments = maps:get(arguments, BodyMap, #{}),
+                      Arguments = rabbit_mgmt_format:copy_binaries(
+                                    maps:get(arguments, BodyMap, #{})),
                       case get_node(BodyMap) of
                           {error, not_member} ->
                               N = maps:get(<<"node">>, BodyMap, <<>>),
@@ -92,7 +93,7 @@ maybe_create_super_stream(ReqData0, Context, VHost, Name) ->
                               case PartitionsBin of
                                   undefined ->
                                       BindingKeys =
-                                          rabbit_stream_utils:binding_keys(BindingKeysBin),
+                                          [binary:copy(K) || K <- rabbit_stream_utils:binding_keys(BindingKeysBin)],
                                       Streams =
                                         rabbit_stream_utils:streams_from_binding_keys(Name, BindingKeys),
                                       check_and_create_super_stream(
