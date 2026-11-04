@@ -106,7 +106,7 @@ val_format(_ReqData, _Context, _VHost, _Name, Trace) ->
 val_create(ReqData, Context, VHost, Name, Trace) ->
     case rabbit_tracing_util:apply_on_node(
            ReqData, Context, rabbit_tracing_traces, create,
-           [VHost, Name, maps:to_list(Trace)]) of
+           [VHost, Name, maps:to_list(rabbit_mgmt_format:copy_binaries(Trace))]) of
         {ok, _} -> ok;
         _       -> ?ERR
     end.
