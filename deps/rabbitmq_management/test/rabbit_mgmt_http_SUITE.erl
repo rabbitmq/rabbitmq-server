@@ -269,7 +269,8 @@ all_tests() -> [
     queue_arguments_do_not_reference_request_body_test,
     policy_does_not_reference_request_body_test,
     permissions_do_not_reference_request_body_test,
-    vhost_does_not_reference_request_body_test
+    vhost_does_not_reference_request_body_test,
+    parameters_do_not_reference_request_body_test
 ].
 
 %% -------------------------------------------------------------------
@@ -4068,6 +4069,31 @@ vhost_does_not_reference_request_body_test(Config) ->
 
 vhost_referenced_byte_sizes(VHost) ->
     long_binaries_referenced_byte_sizes(rabbit_db_vhost:get(VHost)).
+
+parameters_do_not_reference_request_body_test(Config) ->
+    Long = binary:copy(<<"a">>, 100),
+    GlobalName = <<"parameters_do_not_reference_request_body_test">>,
+    GlobalPath = "/global-parameters/" ++ binary_to_list(GlobalName),
+    register_parameters_and_policy_validator(Config),
+    http_put(Config, GlobalPath, with_padding(#{value => #{Long => Long}}), {group, '2xx'}),
+    http_put(Config, "/parameters/test/%2F/good", with_padding(#{value => #{Long => Long}}),
+             {group, '2xx'}),
+    #{name := ClusterName} = http_get(Config, "/cluster-name"),
+    http_put(Config, "/cluster-name", with_padding(#{name => Long}), {group, '2xx'}),
+    Sizes = rpc(Config, ?MODULE, parameters_referenced_byte_sizes, [GlobalName]),
+    http_put(Config, "/cluster-name", #{name => ClusterName}, {group, '2xx'}),
+    http_delete(Config, "/parameters/test/%2F/good", {group, '2xx'}),
+    http_delete(Config, GlobalPath, {group, '2xx'}),
+    unregister_parameters_and_policy_validator(Config),
+    assert_not_referencing_body(Sizes),
+    passed.
+
+parameters_referenced_byte_sizes(GlobalName) ->
+    Params = [rabbit_runtime_parameters:lookup_global(GlobalName),
+              rabbit_runtime_parameters:lookup(<<"/">>, <<"test">>, <<"good">>),
+              rabbit_runtime_parameters:lookup_global(<<"cluster_name">>)],
+    false = lists:member(not_found, Params),
+    long_binaries_referenced_byte_sizes(Params).
 
 runtime_parameter_referenced_byte_sizes(Component, Name) ->
     long_binaries_referenced_byte_sizes(
