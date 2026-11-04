@@ -1348,9 +1348,8 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
         ?config(enabled_plugins_file, NodeConfig)},
-<<<<<<< HEAD
       {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
-    ],
+    ] ++ secondary_erl_path_env(Config, UseSecondaryDist),
     Ret = rabbit_ct_helpers:get_config(
             NodeConfig, enabled_feature_flags_list_file),
     Env = case Ret of
@@ -1360,12 +1359,6 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
                   Env0 ++
                   [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
           end,
-=======
-      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"},
-      {"RABBITMQ_FEATURE_FLAGS_FILE",
-        ?config(enabled_feature_flags_list_file, NodeConfig)}
-    ] ++ secondary_erl_path_env(Config, UseSecondaryDist),
->>>>>>> 141d675 (Mixed-version CI: run previous-version nodes on a separate OTP release)
     Cmd = [Rabbitmqctl, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}, {timeout, Timeout}]).
 
