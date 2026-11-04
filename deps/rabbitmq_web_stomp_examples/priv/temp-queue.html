@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html><head>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="stomp.js"></script>
+  <script src="stomp.umd.min.js"></script>
   <style>
       .box {
           width: 440px;
@@ -46,7 +46,7 @@
 
     <p>When you type text in the form's input, the application will send a message to the <code>/queue/test</code> destination
       with the <code>reply-to</code> header set to <code>/temp-queue/foo</code>.</p>
-    <p>The STOMP client sets a default <code>onreceive</code> callback to receive messages from this temporary queue and display the message's text.</p>
+    <p>The STOMP client sets a default <code>onUnhandledMessage</code> callback to receive messages from this temporary queue and display the message's text.</p>
     <p>Finally, the client subscribes to the <code>/queue/test</code> destination. When it receives message from this destination, it reverses the message's
        text and reply by sending the reversed text to the destination defined by the message's <code>reply-to</code> header.</p>
 
@@ -62,15 +62,17 @@
     </div>
 
     <script>
-      var ws = new WebSocket('ws://' + window.location.hostname + ':15674/ws');
-      var client = Stomp.over(ws);
+      var client = new StompJs.Client({
+          brokerURL: 'ws://' + window.location.hostname + ':15674/ws',
+          connectHeaders: {login: 'guest', passcode: 'guest', host: '/'}
+      });
 
       client.debug = function(e) {
         $('#second div').append($("<code>").text(e));
       };
 
       // default receive callback to get message from temporary queues
-      client.onreceive = function(m) {
+      client.onUnhandledMessage = function(m) {
         $('#first div').append($("<code>").text(m.body));
       }
 
@@ -78,18 +80,20 @@
           id = client.subscribe("/queue/test", function(m) {
             // reply by sending the reversed text to the temp queue defined in the "reply-to" header
             var reversedText = m.body.split("").reverse().join("");
-            client.send(m.headers['reply-to'], {"content-type":"text/plain"}, reversedText);
+            client.publish({destination: m.headers['reply-to'], headers: {"content-type":"text/plain"}, body: reversedText});
           });
       };
       var on_error =  function() {
         console.log('error');
       };
-      client.connect('guest', 'guest', on_connect, on_error, '/');
+      client.onConnect = on_connect;
+      client.onStompError = on_error;
+      client.activate();
 
       $('#first form').submit(function() {
         var text = $('#first form input').val();
         if (text) {
-          client.send('/queue/test', {'reply-to': '/temp-queue/foo'}, text);
+          client.publish({destination: '/queue/test', headers: {'reply-to': '/temp-queue/foo'}, body: text});
             $('#first form input').val("");
           }
           return false;
