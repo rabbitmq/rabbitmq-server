@@ -1609,11 +1609,11 @@ will_delay(WillDelay, SessionExpiry, ClientId, Config)
     ok = emqtt:disconnect(Sub).
 
 will_delay_session_expiry_zero(Config) ->
-    Topic = <<"a/b">>,
-    Msg = <<"msg">>,
+    Topic = Msg = atom_to_binary(?FUNCTION_NAME),
     Opts = [{will_props, #{'Will-Delay-Interval' => 1}},
             {will_topic, Topic},
-            {will_payload, Msg}],
+            {will_payload, Msg},
+            {will_retain, true}],
     C = connect(?FUNCTION_NAME, Config, Opts),
     Sub = connect(<<"subscriber">>, Config),
     {ok, _, [0]} = emqtt:subscribe(Sub, Topic),
@@ -1623,7 +1623,20 @@ will_delay_session_expiry_zero(Config) ->
     receive {publish, #{payload := Msg}} -> ok
     after ?TIMEOUT -> ct:fail(will_message_timeout)
     end,
-    ok = emqtt:disconnect(Sub).
+    ok = emqtt:disconnect(Sub),
+
+    RPid = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [<<"/">>]),
+    eventually(?_assertNotEqual(undefined, rpc(Config, rabbit_mqtt_retainer, fetch, [RPid, Topic]))),
+    Sub2 = connect(<<"subscriber2">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub2, Topic),
+    receive {publish, #{payload := Msg,
+                        retain := true,
+                        properties := Props}} ->
+                ?assertNot(maps:is_key('Will-Delay-Interval', Props))
+    after ?TIMEOUT -> ct:fail(retained_will_message_timeout)
+    end,
+    {ok, _} = emqtt:publish(Sub2, Topic, <<>>, [{retain, true}, {qos, 1}]),
+    ok = emqtt:disconnect(Sub2).
 
 will_delay_reconnect_no_will(Config) ->
     Topic = <<"my/topic">>,
