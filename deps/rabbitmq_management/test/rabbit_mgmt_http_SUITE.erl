@@ -268,7 +268,8 @@ all_tests() -> [
     version_test,
     queue_arguments_do_not_reference_request_body_test,
     policy_does_not_reference_request_body_test,
-    permissions_do_not_reference_request_body_test
+    permissions_do_not_reference_request_body_test,
+    vhost_does_not_reference_request_body_test
 ].
 
 %% -------------------------------------------------------------------
@@ -4053,6 +4054,20 @@ permissions_referenced_byte_sizes(User, Exchange) ->
     #topic_permission{} = TopicPerm =
         rabbit_db_user:get_topic_permissions(User, <<"/">>, Exchange),
     long_binaries_referenced_byte_sizes([UserPerm, TopicPerm]).
+
+vhost_does_not_reference_request_body_test(Config) ->
+    VHost = <<"vhost_does_not_reference_request_body_test">>,
+    Long = binary:copy(<<"a">>, 100),
+    http_put(Config, "/vhosts/" ++ binary_to_list(VHost),
+             with_padding(#{description => Long, tags => [Long]}),
+             {group, '2xx'}),
+    assert_not_referencing_body(
+      rpc(Config, ?MODULE, vhost_referenced_byte_sizes, [VHost])),
+    http_delete(Config, "/vhosts/" ++ binary_to_list(VHost), {group, '2xx'}),
+    passed.
+
+vhost_referenced_byte_sizes(VHost) ->
+    long_binaries_referenced_byte_sizes(rabbit_db_vhost:get(VHost)).
 
 runtime_parameter_referenced_byte_sizes(Component, Name) ->
     long_binaries_referenced_byte_sizes(
