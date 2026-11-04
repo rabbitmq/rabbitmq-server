@@ -72,6 +72,7 @@ groups() ->
             amqp_table_conversion,
             utf8_safe_matches_reference,
             utf8_safe_line_wrapping,
+            amqp_table_non_utf8_keys,
             name_type,
             get_erl_path,
             hexify,
@@ -651,6 +652,30 @@ amqp_table_conversion(_Config) ->
                  [{<<"x-forwarding">>, array,
                    [{table, [{<<"uri">>, longstr,
                               <<"amqp://localhost/%2F/upstream">>}]}]}]).
+
+amqp_table_non_utf8_keys(_Config) ->
+    Utf8Key = <<"ключ 🐰"/utf8>>,
+    ?assertEqual(#{Utf8Key => 1},
+                 rabbit_misc:amqp_table([{Utf8Key, long, 1}])),
+
+    Sanitised = rabbit_misc:utf8_safe(<<255>>),
+    ?assertNotEqual(<<255>>, Sanitised),
+    ?assertEqual(#{Sanitised => 1},
+                 rabbit_misc:amqp_table([{<<255>>, long, 1}])),
+
+    Table = [{<<255>>, longstr, <<"v">>},
+             {<<254>>, longstr, <<"w">>},
+             {<<"nested">>, table, [{<<255>>, long, 2}]},
+             {<<"arr">>, array, [{table, [{<<255>>, long, 3}]}]}],
+    Map = rabbit_misc:amqp_table(Table),
+    ?assertEqual(4, maps:size(Map)),
+    ?assertEqual(#{Sanitised => 2}, maps:get(<<"nested">>, Map)),
+    ?assertEqual([#{Sanitised => 3}], maps:get(<<"arr">>, Map)),
+    ?assert(is_binary(iolist_to_binary(rabbit_json:encode(Map)))),
+
+    ?assertEqual(#{client_id => <<"c">>},
+                 rabbit_misc:amqp_table([{client_id, longstr, <<"c">>}])),
+    ok.
 
 assert_table(JSON, AMQP) ->
     ?assertEqual(JSON, rabbit_misc:amqp_table(AMQP)),

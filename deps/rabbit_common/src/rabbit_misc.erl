@@ -399,8 +399,11 @@ amqp_table(unknown)   -> unknown;
 amqp_table(undefined) -> amqp_table([]);
 amqp_table([])        -> #{};
 amqp_table(#{})       -> #{};
-amqp_table(Table)     -> maps:from_list([{Name, amqp_value(Type, Value)} ||
+amqp_table(Table)     -> maps:from_list([{table_key(Name), amqp_value(Type, Value)} ||
                                             {Name, Type, Value} <- Table]).
+
+table_key(Name) when is_binary(Name) -> utf8_safe(Name);
+table_key(Name)                      -> Name.
 
 amqp_value(array, Vs)                  -> [amqp_value(T, V) || {T, V} <- Vs];
 amqp_value(table, V)                   -> amqp_table(V);
