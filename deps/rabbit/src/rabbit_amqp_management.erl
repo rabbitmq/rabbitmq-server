@@ -25,7 +25,8 @@
          decode_exchange/1,
          decode_binding/1,
          parse_uri/1,
-         decode_binding_path_segment/1]).
+         decode_binding_path_segment/1,
+         require_utf8/1]).
 -endif.
 
 -type permission_caches() :: {rabbit_amqp_session:permission_cache(),
@@ -149,6 +150,7 @@ handle_http_req(HttpMethod = <<"PUT">>,
         _ -> ok
     end,
     ok = prohibit_cr_lf(QNameBin),
+    ok = require_utf8(QNameBin),
     QName = queue_resource(Vhost, QNameBin),
     ok = prohibit_reserved_amq(QName),
     PermCache1 = check_resource_access(QName, configure, User, PermCache0),
@@ -239,6 +241,7 @@ handle_http_req(<<"PUT">>,
                 {FoundX, PermCache1};
             {error, not_found} ->
                 ok = prohibit_cr_lf(XNameBin),
+                ok = require_utf8(XNameBin),
                 ok = prohibit_reserved_amq(XName),
                 PermCache2 = check_alternate_exchange(XName, XArgs, User, PermCache1),
                 case rabbit_exchange:declare(
@@ -721,6 +724,14 @@ prohibit_cr_lf(NameBin) ->
             throw(<<"400">>,
                   <<"Bad name '~ts': line feed and carriage return characters not allowed">>,
                   [NameBin])
+    end.
+
+require_utf8(NameBin) ->
+    case rabbit_binary_parser:validate_utf8(NameBin) of
+        ok ->
+            ok;
+        error ->
+            throw(<<"400">>, <<"Bad name: not valid UTF-8">>, [])
     end.
 
 prohibit_default_exchange(#resource{kind = exchange,

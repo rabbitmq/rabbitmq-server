@@ -11,6 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("rabbitmq_amqp_client/include/rabbitmq_amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile([nowarn_export_all,
@@ -208,6 +209,7 @@ groups() ->
        x_cc_annotation_exchange_routing_key_empty,
        x_cc_annotation_queue,
        x_cc_annotation_null,
+       non_utf8_names,
        bad_x_cc_annotation_exchange,
        decimal_types,
        consumer_timeout_quorum_queue_policy,
@@ -8260,6 +8262,54 @@ x_cc_annotation_queue(Config) ->
     {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
+
+non_utf8_names(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, QResp} = management_request(
+                    LinkPair,
+                    #{subject => <<"PUT">>, to => <<"/queues/%FF">>},
+                    {map, []}),
+    ?assertMatch(#{subject := <<"400">>}, amqp10_msg:properties(QResp)),
+    {ok, XResp} = management_request(
+                    LinkPair,
+                    #{subject => <<"PUT">>, to => <<"/exchanges/%FF">>},
+                    {map, [{{utf8, <<"type">>}, {utf8, <<"direct">>}}]}),
+    ?assertMatch(#{subject := <<"400">>}, amqp10_msg:properties(XResp)),
+    ?assertEqual([], rpc(Config, rabbit_amqqueue, list, [])),
+
+    ValidName = <<"é"/utf8>>,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, ValidName, #{}),
+    ok = rabbitmq_amqp_client:declare_exchange(LinkPair, ValidName, #{}),
+    ok = rabbitmq_amqp_client:delete_exchange(LinkPair, ValidName),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, ValidName),
+
+    %% A queue that already exists with an invalid name can still be deleted.
+    QName = rabbit_misc:r(<<"/">>, queue, <<255>>),
+    {new, _} = rpc(Config, rabbit_amqqueue, declare,
+                   [QName, true, false, [], none, <<"acting-user">>]),
+    {ok, DResp} = management_request(
+                    LinkPair,
+                    #{subject => <<"DELETE">>, to => <<"/queues/%FF">>},
+                    null),
+    ?assertMatch(#{subject := <<"200">>}, amqp10_msg:properties(DResp)),
+    ?assertEqual([], rpc(Config, rabbit_amqqueue, list, [])),
+
+    ok = close({Connection, Session, LinkPair}).
+
+management_request(#link_pair{outgoing_link = OutgoingLink,
+                              incoming_link = IncomingLink},
+                   Props, Body) ->
+    MessageId = rand:bytes(8),
+    Request0 = amqp10_msg:new(<<>>, #'v1_0.amqp_value'{content = Body}, true),
+    Request = amqp10_msg:set_properties(
+                Props#{message_id => {binary, MessageId},
+                       reply_to => <<"$me">>}, Request0),
+    ok = amqp10_client:flow_link_credit(IncomingLink, 1, never),
+    ok = amqp10_client:send_msg(OutgoingLink, Request),
+    receive {amqp10_msg, IncomingLink, Response} ->
+                {ok, Response}
+    after 9000 -> ct:fail({missing_response, ?LINE})
+    end.
 
 %% Test that x-cc routing keys work together with target address 'null'
 x_cc_annotation_null(Config) ->
