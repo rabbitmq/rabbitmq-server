@@ -2765,6 +2765,16 @@ end}.
     end
 }.
 
+{mapping, "runtime_parameters.global.max_name_length", "rabbit.runtime_parameters.global.max_name_length", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "runtime_parameters.global.max_value_size", "rabbit.runtime_parameters.global.max_value_size", [
+    {datatype, bytesize},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
 %%
 %% Channel interceptors
 %%

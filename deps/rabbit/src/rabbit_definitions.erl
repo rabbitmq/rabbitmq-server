@@ -803,7 +803,7 @@ add_parameter(VHost, Param, Username) ->
 add_global_parameter(Param, Username) ->
     Key   = maps:get(name,      Param, undefined),
     Term  = maps:get(value,     Param, undefined),
-    case is_map(Term) of
+    Result = case is_map(Term) of
         true ->
             %% coerce maps to proplists for backwards compatibility.
             %% See rabbitmq-management#528.
@@ -811,6 +811,12 @@ add_global_parameter(Param, Username) ->
             rabbit_runtime_parameters:set_global(Key, TermProplist, Username);
         _ ->
             rabbit_runtime_parameters:set_global(Key, Term, Username)
+    end,
+    case Result of
+        ok                -> ok;
+        {error_string, E} ->
+            exit(rabbit_data_coercion:to_utf8_binary(
+                   rabbit_misc:format("global parameter '~ts': ~ts", [Key, E])))
     end.
 
 add_policy(Param, Username) ->

@@ -15,7 +15,8 @@ all() ->
     [
         test_limits,
         boots_with_legacy_atom_keyed_internal_cluster_id,
-        set_global_writes_atom_key_until_feature_flag_is_enabled
+        set_global_writes_atom_key_until_feature_flag_is_enabled,
+        set_global_enforces_name_and_value_limits
     ].
 
 %% -------------------------------------------------------------------
@@ -107,5 +108,43 @@ set_global_writes_atom_key_until_feature_flag_is_enabled1() ->
     after
         meck:unload(rabbit_feature_flags),
         rabbit_runtime_parameters:clear_global(Name, <<"acting-user">>)
+    end,
+    ok.
+
+set_global_enforces_name_and_value_limits(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE,
+           set_global_enforces_name_and_value_limits1, []).
+
+set_global_enforces_name_and_value_limits1() ->
+    User = <<"acting-user">>,
+    LongName = binary:copy(<<"a">>, 1025),
+    MaxName = binary:copy(<<"b">>, 1024),
+    {error_string, _} = rabbit_runtime_parameters:set_global(LongName, <<"x">>, User),
+    not_found = rabbit_runtime_parameters:lookup_global(LongName),
+    ok = rabbit_runtime_parameters:set_global(MaxName, <<"x">>, User),
+    ok = rabbit_runtime_parameters:clear_global(MaxName, User),
+
+    Name = <<"zzz_limits_test">>,
+    Big = binary:copy(<<"a">>, 131073),
+    {error_string, Msg} = rabbit_runtime_parameters:set_global(Name, Big, User),
+    nomatch = string:find(Msg, "aaaa"),
+    not_found = rabbit_runtime_parameters:lookup_global(Name),
+    {error_string, _} = rabbit_runtime_parameters:parse_set_global(
+                          Name, rabbit_json:encode(#{v => Big}), User),
+    not_found = rabbit_runtime_parameters:lookup_global(Name),
+    ok = rabbit_runtime_parameters:set_global(Name, binary:copy(<<"a">>, 131000), User),
+    ok = rabbit_runtime_parameters:clear_global(Name, User),
+
+    application:set_env(rabbit, runtime_parameters,
+                        [{global, [{max_name_length, 4}, {max_value_size, 32}]}]),
+    try
+        ok = rabbit_runtime_parameters:set_global(<<"abcd">>, <<"x">>, User),
+        {error_string, _} = rabbit_runtime_parameters:set_global(<<"abcde">>, <<"x">>, User),
+        {error_string, _} = rabbit_runtime_parameters:set_global(
+                              <<"abcd">>, binary:copy(<<"a">>, 64), User)
+    after
+        application:unset_env(rabbit, runtime_parameters),
+        rabbit_runtime_parameters:clear_global(<<"abcd">>, User)
     end,
     ok.
