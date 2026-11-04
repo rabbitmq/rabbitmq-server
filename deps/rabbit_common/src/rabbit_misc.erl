@@ -521,10 +521,13 @@ utf8_safe(V) ->
     end.
 
 %% MIME enforces a limit on line length of base 64-encoded data to 76 characters.
-split_lines(<<Text:76/binary, Rest/binary>>) ->
-    <<Text/binary, $\n, (split_lines(Rest))/binary>>;
 split_lines(Text) ->
-    Text.
+    iolist_to_binary(split_lines0(Text)).
+
+split_lines0(<<Line:76/binary, Rest/binary>>) ->
+    [Line, $\n | split_lines0(Rest)];
+split_lines0(Text) ->
+    [Text].
 
 
 %% This is a modified version of Luke Gorrie's pmap -
