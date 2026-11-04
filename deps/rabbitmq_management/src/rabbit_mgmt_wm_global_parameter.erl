@@ -55,8 +55,12 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
           Val = if is_map(Value) -> maps:to_list(Value);
                     true         -> Value
                 end,
-          rabbit_runtime_parameters:set_global(name(ReqData), Val, Username),
-          {true, ReqData, Context}
+          case rabbit_runtime_parameters:set_global(name(ReqData), Val, Username) of
+              ok ->
+                  {true, ReqData, Context};
+              {error_string, Error} ->
+                  rabbit_mgmt_util:bad_request(Error, ReqData, Context)
+          end
       end).
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
