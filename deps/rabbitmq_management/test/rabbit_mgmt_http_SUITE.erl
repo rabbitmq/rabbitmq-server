@@ -263,7 +263,8 @@ all_tests() -> [
     enable_plugin_amqp,
     cluster_and_node_tags_test,
     version_test,
-    queue_arguments_do_not_reference_request_body_test
+    queue_arguments_do_not_reference_request_body_test,
+    policy_does_not_reference_request_body_test
 ].
 
 %% -------------------------------------------------------------------
@@ -3950,6 +3951,23 @@ queue_arguments_do_not_reference_request_body_test(Config) ->
 queue_arguments_referenced_byte_sizes(QName) ->
     {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
     long_binaries_referenced_byte_sizes(amqqueue:get_arguments(Q)).
+
+policy_does_not_reference_request_body_test(Config) ->
+    Name = <<"policy_does_not_reference_request_body_test">>,
+    Long = binary:copy(<<"a">>, 100),
+    http_put(Config, "/policies/%2F/" ++ binary_to_list(Name),
+             with_padding(#{pattern => Long,
+                            definition => #{'dead-letter-exchange' => Long}}),
+             {group, '2xx'}),
+    assert_not_referencing_body(
+      rpc(Config, ?MODULE, runtime_parameter_referenced_byte_sizes,
+          [<<"policy">>, Name])),
+    http_delete(Config, "/policies/%2F/" ++ binary_to_list(Name), {group, '2xx'}),
+    passed.
+
+runtime_parameter_referenced_byte_sizes(Component, Name) ->
+    long_binaries_referenced_byte_sizes(
+      rabbit_runtime_parameters:lookup(<<"/">>, Component, Name)).
 
 -define(EXCESSIVELY_LARGE_BODY_BYTES, 35000000).
 
