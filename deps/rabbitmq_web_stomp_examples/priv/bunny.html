@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="stomp.js"></script>
+    <script src="stomp.umd.min.js"></script>
 
     <style>
       #cnvs {
@@ -107,8 +107,10 @@ else {
 }
 
 // Stomp.js boilerplate
-var ws = new WebSocket('ws://' + window.location.hostname + ':15674/ws');
-var client = Stomp.over(ws);
+var client = new StompJs.Client({
+  brokerURL: 'ws://' + window.location.hostname + ':15674/ws',
+  connectHeaders: {login: 'guest', passcode: 'guest', host: '/'}
+});
 
 client.debug = function() {
   if (window.console && console.log && console.log.apply) {
@@ -117,7 +119,7 @@ client.debug = function() {
 };
 
 send = function(data) {
-  client.send('/topic/bunny', {}, data);
+  client.publish({destination: '/topic/bunny', body: data});
 };
 
 var on_connect = function(x) {
@@ -130,7 +132,9 @@ var on_connect = function(x) {
 var on_error = function() {
   console.log('error');
 };
-client.connect('guest', 'guest', on_connect, on_error, '/');
+client.onConnect = on_connect;
+client.onStompError = on_error;
+client.activate();
 
 </script>
 </body></html>
