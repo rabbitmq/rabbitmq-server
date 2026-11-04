@@ -20,7 +20,7 @@ do(Pid, Method) ->
             'ok'.
 
 do(Pid, Method, Content) ->
-    gen_server2:cast(Pid, {method, Method, Content, noflow}).
+    gen_server:cast(Pid, {method, Method, Content, noflow}).
 
 -spec do_flow
         (pid(), rabbit_framing:amqp_method_record(),
@@ -31,9 +31,9 @@ do_flow(Pid, Method, Content) ->
     %% Here we are tracking messages sent by the rabbit_reader
     %% process. We are accessing the rabbit_reader process dictionary.
     credit_flow:send(Pid),
-    gen_server2:cast(Pid, {method, Method, Content, flow}).
+    gen_server:cast(Pid, {method, Method, Content, flow}).
 
 -spec ready_for_close(pid()) -> 'ok'.
 
 ready_for_close(Pid) ->
-    gen_server2:cast(Pid, ready_for_close).
+    gen_server:cast(Pid, ready_for_close).
