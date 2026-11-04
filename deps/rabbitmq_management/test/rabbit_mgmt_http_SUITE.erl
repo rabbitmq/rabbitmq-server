@@ -190,6 +190,7 @@ all_tests() -> [
     consumers_require_virtual_host_access_test,
     arguments_test,
     arguments_table_test,
+    binary_fields_listing_test,
     queue_purge_test,
     queue_actions_test,
     exclusive_consumer_test,
@@ -2988,6 +2989,52 @@ arguments_table_test(Config) ->
     http_put(Config, "/exchanges/%2F/arguments-table-test-x", XArgs, {group, '2xx'}),
     Args = maps:get(arguments, http_get(Config, "/exchanges/%2F/arguments-table-test-x", ?OK)),
     http_delete(Config, "/exchanges/%2F/arguments-table-test-x", {group, '2xx'}),
+    passed.
+
+binary_fields_listing_test(Config) ->
+    {Conn, Ch} = open_connection_and_channel(Config),
+    Args = [{<<255>>, longstr, <<"v">>},
+            {<<"t">>, table, [{<<254>>, long, 1}]}],
+    QName = <<"binary-fields-q">>,
+    XName = <<"binary-fields-x">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true, arguments = Args}),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Ch, #'exchange.declare'{exchange = XName,
+                                                  type = <<"headers">>,
+                                                  arguments = Args}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Ch, #'queue.bind'{queue = QName,
+                                            exchange = XName,
+                                            arguments = Args}),
+    #'basic.consume_ok'{} =
+        amqp_channel:call(Ch, #'basic.consume'{queue = QName,
+                                               consumer_tag = <<"binary-fields-c">>,
+                                               arguments = Args}),
+    amqp_channel:call(Ch, #'basic.publish'{exchange = <<>>, routing_key = QName},
+                      #amqp_msg{props = #'P_basic'{headers = Args},
+                                payload = <<"m">>}),
+    await_condition(
+      fun() ->
+              [_] = http_get(Config, "/consumers/%2F", ?OK),
+              true
+      end),
+    http_get(Config, "/queues", ?OK),
+    http_get(Config, "/queues/%2F", ?OK),
+    http_get(Config, "/queues/%2F/binary-fields-q", ?OK),
+    http_get(Config, "/exchanges", ?OK),
+    http_get(Config, "/exchanges/%2F/binary-fields-x", ?OK),
+    http_get(Config, "/bindings", ?OK),
+    http_get(Config, "/bindings/%2F", ?OK),
+    http_get(Config, "/consumers", ?OK),
+    http_get(Config, "/definitions", ?OK),
+    http_post(Config, "/queues/%2F/binary-fields-q/get",
+              #{count => 1, ackmode => <<"ack_requeue_true">>,
+                encoding => <<"auto">>}, ?OK),
+    amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    amqp_channel:call(Ch, #'exchange.delete'{exchange = XName}),
+    close_channel(Ch),
+    close_connection(Conn),
     passed.
 
 queue_purge_test(Config) ->
