@@ -217,6 +217,7 @@ groups() ->
        consumer_timeout_classic_queue_consumer_arg,
        consumer_timeout_classic_queue_disposition_ack_id,
        consumer_timeout_classic_queue_single_active_consumer,
+       consumer_timeout_classic_queue_reports_parked_consumer,
        handle_in_use
       ]},
 
@@ -8593,6 +8594,57 @@ consumer_timeout_classic_queue_disposition_ack_id(Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session0),
     ok = close_connection_sync(Connection).
+
+%% A consumer timeout on a classic queue parks the receiving link's consumer,
+%% and the management metrics (the `consumer_created' table) report it as
+%% blocked rather than keeping the `up' status it had before the timeout.
+consumer_timeout_classic_queue_reports_parked_consumer(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Connection} = amqp10_client:open_connection(connection_config(Config)),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
+                       Session, <<"mgmt link pair">>),
+    {ok, #{type := <<"classic">>}} = rabbitmq_amqp_client:declare_queue(
+                                       LinkPair, QName,
+                                       #{arguments => #{<<"x-queue-type">> => {utf8, <<"classic">>}}}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag0">>, <<"msg0">>, false)),
+    ok = wait_for_accepts(1),
+    ok = detach_link_sync(Sender),
+
+    LinkProperties = #{<<"rabbitmq:consumer-timeout">> => {uint, 1000}},
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address,
+                       unsettled, none, #{}, LinkProperties),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
+    receive {amqp10_msg, Receiver, _} -> ok
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    ?awaitMatch({true, up}, consumer_activity(Config, QName), 9000),
+
+    receive {amqp10_event, {link, Receiver, {disposition, released, _}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ?awaitMatch({_, blocked}, consumer_activity(Config, QName), 9000),
+
+    ok = detach_link_sync(Receiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
+
+%% The {Active, ActivityStatus} pair the management metrics report for the
+%% only consumer of a queue on node 0. AMQP 1.0 consumer tags are link
+%% handles, which other sessions reuse, so the queue identifies the consumer.
+consumer_activity(Config, QName) ->
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    case rpc(Config, 0, ets, match,
+             [consumer_created, {{QRes, '_', '_'}, '_', '_', '_', '$1', '$2', '_'}]) of
+        [[Active, ActivityStatus]] -> {Active, ActivityStatus};
+        [] -> not_found
+    end.
 
 consumer_timeout(Config, QName, LinkProperties, QueueType) ->
     Address = rabbitmq_amqp_address:queue(QName),
