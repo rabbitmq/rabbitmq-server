@@ -70,6 +70,8 @@ groups() ->
             map_exception_does_not_fail_with_unicode_explaination_case1,
             map_exception_does_not_fail_with_unicode_explaination_case2,
             amqp_table_conversion,
+            utf8_safe_matches_reference,
+            utf8_safe_line_wrapping,
             name_type,
             get_erl_path,
             hexify,
@@ -400,6 +402,40 @@ data_coercion_to_list(_Config) ->
     IPv6 = {0, 0, 0, 0, 0, 0, 0, 1},
     IPv6Result = rabbit_data_coercion:to_list(IPv6),
     ?assert(is_list(IPv6Result)).
+
+utf8_safe_matches_reference(_Config) ->
+    Sizes = [0, 1, 3, 56, 57, 58, 113, 114, 115, 228_000],
+    [begin
+         V = binary:copy(<<255>>, N),
+         ?assertEqual(reference_utf8_safe(V), rabbit_misc:utf8_safe(V))
+     end || N <- Sizes],
+    Valid = <<"abc"/utf8, 1087/utf8>>,
+    ?assertEqual(Valid, rabbit_misc:utf8_safe(Valid)).
+
+utf8_safe_line_wrapping(_Config) ->
+    V = binary:copy(<<255>>, 200),
+    Prefix = <<"Not UTF-8, base64 is: ">>,
+    Result = rabbit_misc:utf8_safe(V),
+    ?assertMatch(<<Prefix:22/binary, _/binary>>, Result),
+    <<_:22/binary, Enc/binary>> = Result,
+    Lines = binary:split(Enc, <<"\n">>, [global]),
+    [?assertEqual(76, byte_size(L)) || L <- lists:droplast(Lines)],
+    ?assert(byte_size(lists:last(Lines)) =< 76),
+    ?assertEqual(base64:encode(V), iolist_to_binary(Lines)).
+
+reference_utf8_safe(V) ->
+    case unicode:characters_to_binary(V, unicode, unicode) of
+        B when is_binary(B) ->
+            B;
+        _ ->
+            Enc = reference_split_lines(base64:encode(V)),
+            <<"Not UTF-8, base64 is: ", Enc/binary>>
+    end.
+
+reference_split_lines(<<Text:76/binary, Rest/binary>>) ->
+    <<Text/binary, $\n, (reference_split_lines(Rest))/binary>>;
+reference_split_lines(Text) ->
+    Text.
 
 format_term(_Config) ->
     Deep = lists:foldl(fun(_, Acc) -> [Acc] end, x, lists:seq(1, 20_000)),
