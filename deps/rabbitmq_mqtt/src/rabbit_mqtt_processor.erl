@@ -1025,7 +1025,10 @@ send_retained_message(TopicFilter0, SubscribeQos,
             Qos = effective_qos(MsgQos, SubscribeQos),
             %% Wildcards are currently not supported when fetching retained
             %% messages. Therefore, TopicFilter must must be a topic name.
-            {Topic, Props, State1} = process_topic_alias_outbound(TopicFilter, Props0, State0),
+            {Topic, Props, State1} = process_topic_alias_outbound(
+                                       TopicFilter,
+                                       maps:remove('Will-Delay-Interval', Props0),
+                                       State0),
             {PacketId, State} = case Qos of
                                     ?QOS_0 ->
                                         {undefined, State1};
