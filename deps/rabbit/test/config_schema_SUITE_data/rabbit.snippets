@@ -1407,6 +1407,30 @@ credential_validator.regexp = ^abc\\d+",
   %% Runtime parameters
   %%
 
+  {runtime_parameters_limits_and_global_limits,
+  "
+   runtime_parameters.limits.shovel = 1
+   runtime_parameters.global.max_name_length = 512
+   runtime_parameters.global.max_value_size = 64KB
+  ",
+   [{rabbit, [{runtime_parameters, [{global, [
+       {max_name_length, 512},
+       {max_value_size, 65536}
+     ]},
+     {limits, [{<<"shovel">>, 1}]}]}]}],
+   []},
+
+  {runtime_parameters_global_limits,
+  "
+   runtime_parameters.global.max_name_length = 512
+   runtime_parameters.global.max_value_size = 64KB
+  ",
+   [{rabbit, [{runtime_parameters, [{global, [
+       {max_name_length, 512},
+       {max_value_size, 65536}
+     ]}]}]}],
+   []},
+
   {runtime_parameters_limits,
   "
    runtime_parameters.limits.federation = 2
