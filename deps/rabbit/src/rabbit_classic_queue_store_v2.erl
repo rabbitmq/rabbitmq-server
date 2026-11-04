@@ -272,16 +272,15 @@ flush_buffer_build([], _, _, _, WriteOffset, WriteAcc, Acc) ->
 build_data({_, Size, Msg}, CheckCRC32) ->
     MsgIovec = term_to_iovec(Msg),
     Padding = (Size - iolist_size(MsgIovec)) * 8,
+    Data = [MsgIovec, <<0:Padding>>],
     %% Calculate the CRC for the data if configured to do so.
     %% We will truncate the CRC to 16 bits to save on space. (Idea taken from postgres.)
+    %% The CRC covers the padding because reads check all `Size` bytes.
     {UseCRC32, CRC32} = case CheckCRC32 of
-        true -> {1, erlang:crc32(MsgIovec)};
+        true -> {1, erlang:crc32(Data)};
         false -> {0, 0}
     end,
-    [
-        <<Size:32/unsigned, 0:7, UseCRC32:1, CRC32:16, 0:8>>,
-        MsgIovec, <<0:Padding>>
-    ].
+    [<<Size:32/unsigned, 0:7, UseCRC32:1, CRC32:16, 0:8>> | Data].
 
 -spec read(rabbit_variable_queue:seq_id(), msg_location(), State)
         -> {mc:state(), State} when State::state().
