@@ -267,7 +267,8 @@ all_tests() -> [
     cluster_and_node_tags_test,
     version_test,
     queue_arguments_do_not_reference_request_body_test,
-    policy_does_not_reference_request_body_test
+    policy_does_not_reference_request_body_test,
+    permissions_do_not_reference_request_body_test
 ].
 
 %% -------------------------------------------------------------------
@@ -4026,6 +4027,32 @@ policy_does_not_reference_request_body_test(Config) ->
           [<<"policy">>, Name])),
     http_delete(Config, "/policies/%2F/" ++ binary_to_list(Name), {group, '2xx'}),
     passed.
+
+permissions_do_not_reference_request_body_test(Config) ->
+    User = <<"permissions_do_not_reference_request_body_test">>,
+    UserPath = binary_to_list(User),
+    Long = binary:copy(<<"a">>, 100),
+    XPath = "/exchanges/%2F/" ++ binary_to_list(Long),
+    http_put(Config, XPath, #{type => <<"topic">>}, {group, '2xx'}),
+    http_put(Config, "/users/" ++ UserPath, #{password => <<"pass">>, tags => <<"">>},
+             {group, '2xx'}),
+    http_put(Config, "/permissions/%2F/" ++ UserPath,
+             with_padding(#{configure => Long, write => Long, read => Long}),
+             {group, '2xx'}),
+    http_put(Config, "/topic-permissions/%2F/" ++ UserPath,
+             with_padding(#{exchange => Long, write => Long, read => Long}),
+             {group, '2xx'}),
+    assert_not_referencing_body(
+      rpc(Config, ?MODULE, permissions_referenced_byte_sizes, [User, Long])),
+    http_delete(Config, "/users/" ++ UserPath, {group, '2xx'}),
+    http_delete(Config, XPath, {group, '2xx'}),
+    passed.
+
+permissions_referenced_byte_sizes(User, Exchange) ->
+    #user_permission{} = UserPerm = rabbit_db_user:get_user_permissions(User, <<"/">>),
+    #topic_permission{} = TopicPerm =
+        rabbit_db_user:get_topic_permissions(User, <<"/">>, Exchange),
+    long_binaries_referenced_byte_sizes([UserPerm, TopicPerm]).
 
 runtime_parameter_referenced_byte_sizes(Component, Name) ->
     long_binaries_referenced_byte_sizes(
