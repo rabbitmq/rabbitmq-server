@@ -30,6 +30,13 @@ groups() ->
          delete_does_not_create_atom,
          put_does_not_create_atom,
          crud_lifecycle,
+         name_at_limit_is_accepted,
+         name_over_limit_is_rejected,
+         value_under_limit_is_accepted,
+         value_over_limit_is_rejected,
+         cluster_name_can_still_be_set,
+         cluster_name_over_limit_is_rejected,
+         configured_limits_are_used,
          plugin_style_name_works,
          get_does_not_create_atoms_prop,
          put_does_not_create_atoms_prop,
@@ -119,6 +126,63 @@ crud_lifecycle(Config) ->
         http_get(Config, "/global-parameters/test_crud_param", ?OK),
     http_delete(Config, "/global-parameters/test_crud_param", {group, '2xx'}),
     http_get(Config, "/global-parameters/test_crud_param", ?NOT_FOUND).
+
+name_at_limit_is_accepted(Config) ->
+    Name = lists:duplicate(1024, $a),
+    Path = "/global-parameters/" ++ Name,
+    http_put(Config, Path, [{value, <<"x">>}], {group, '2xx'}),
+    http_get(Config, Path, ?OK),
+    http_delete(Config, Path, {group, '2xx'}).
+
+name_over_limit_is_rejected(Config) ->
+    Name = lists:duplicate(1025, $a),
+    Path = "/global-parameters/" ++ Name,
+    http_put(Config, Path, [{value, <<"x">>}], ?BAD_REQUEST),
+    http_get(Config, Path, ?NOT_FOUND).
+
+value_under_limit_is_accepted(Config) ->
+    Path = "/global-parameters/test_value_under_limit",
+    Value = binary:copy(<<"a">>, 131072 - 64),
+    http_put(Config, Path, [{value, Value}], {group, '2xx'}),
+    #{value := Value} = http_get(Config, Path, ?OK),
+    http_delete(Config, Path, {group, '2xx'}).
+
+value_over_limit_is_rejected(Config) ->
+    Path = "/global-parameters/test_value_over_limit",
+    Value = binary:copy(<<"a">>, 131072 + 1),
+    Body = rabbit_json:encode(#{value => Value}),
+    {ok, {{_, 400, _}, _, ResBody}} =
+        rabbit_mgmt_test_util:req(Config, 0, put, Path,
+                                  [rabbit_mgmt_test_util:auth_header("guest", "guest")],
+                                  Body),
+    nomatch = binary:match(iolist_to_binary(ResBody), <<"aaaa">>),
+    http_get(Config, Path, ?NOT_FOUND).
+
+cluster_name_can_still_be_set(Config) ->
+    Path = "/global-parameters/cluster_name",
+    http_put(Config, Path, [{value, <<"limits-test">>}], {group, '2xx'}),
+    #{value := <<"limits-test">>} = http_get(Config, Path, ?OK).
+
+cluster_name_over_limit_is_rejected(Config) ->
+    http_put(Config, "/cluster-name",
+             [{name, binary:copy(<<"a">>, 131073)}], ?BAD_REQUEST),
+    http_put(Config, "/cluster-name", [{name, <<"limits-test-2">>}], {group, '2xx'}),
+    #{name := <<"limits-test-2">>} = http_get(Config, "/cluster-name", ?OK).
+
+configured_limits_are_used(Config) ->
+    Limits = [{global, [{max_name_length, 8}, {max_value_size, 64}]}],
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, runtime_parameters, Limits]),
+    try
+        http_put(Config, "/global-parameters/abcdefgh", [{value, <<"x">>}], {group, '2xx'}),
+        http_put(Config, "/global-parameters/abcdefghi", [{value, <<"x">>}], ?BAD_REQUEST),
+        http_put(Config, "/global-parameters/abcdefgh",
+                 [{value, binary:copy(<<"a">>, 100)}], ?BAD_REQUEST),
+        http_delete(Config, "/global-parameters/abcdefgh", {group, '2xx'})
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                          [rabbit, runtime_parameters])
+    end.
 
 %% Plugin-style underscore-separated names must work for both write and read.
 plugin_style_name_works(Config) ->

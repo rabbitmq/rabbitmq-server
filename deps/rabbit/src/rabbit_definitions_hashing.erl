@@ -117,7 +117,7 @@ store_global_hash(Value) ->
 -spec store_global_hash(Value0 :: term(), Username :: rabbit_types:username()) -> ok.
 store_global_hash(Value0, Username) ->
     Value = rabbit_data_coercion:to_binary(Value0),
-    rabbit_runtime_parameters:set_global(?GLOBAL_RUNTIME_PARAMETER_KEY, Value, Username).
+    ok = rabbit_runtime_parameters:set_global(?GLOBAL_RUNTIME_PARAMETER_KEY, Value, Username).
 
 -spec store_vhost_specific_hash(Value0 :: term(), VirtualHost :: vhost:name(), Username :: rabbit_types:username()) -> ok.
 store_vhost_specific_hash(VirtualHost, Value0, Username) ->

@@ -128,7 +128,7 @@ seed_internal_cluster_id() ->
         not_found ->
             Id = rabbit_guid:binary(rabbit_guid:gen(), "rabbitmq-cluster-id"),
             ?LOG_INFO("Initialising internal cluster ID to '~ts'", [Id]),
-            rabbit_runtime_parameters:set_global(?INTERNAL_CLUSTER_ID_PARAM_NAME, Id, ?INTERNAL_USER),
+            ok = rabbit_runtime_parameters:set_global(?INTERNAL_CLUSTER_ID_PARAM_NAME, Id, ?INTERNAL_USER),
             Id;
         Param ->
             #{value := Val, name := ?INTERNAL_CLUSTER_ID_PARAM_NAME} = maps:from_list(Param),
@@ -140,15 +140,16 @@ seed_user_provided_cluster_name() ->
         undefined -> ok;
         {ok, Name} ->
             ?LOG_INFO("Setting cluster name to '~ts' as configured", [Name]),
-            set_cluster_name(rabbit_data_coercion:to_binary(Name))
+            ok = set_cluster_name(rabbit_data_coercion:to_binary(Name))
     end.
 
--spec set_cluster_name(binary()) -> 'ok'.
+-spec set_cluster_name(binary()) -> rabbit_runtime_parameters:ok_or_error_string().
 
 set_cluster_name(Name) ->
     set_cluster_name(Name, ?INTERNAL_USER).
 
--spec set_cluster_name(binary(), rabbit_types:username()) -> 'ok'.
+-spec set_cluster_name(binary(), rabbit_types:username()) ->
+    rabbit_runtime_parameters:ok_or_error_string().
 
 set_cluster_name(Name, Username) ->
     %% Cluster name should be binary
