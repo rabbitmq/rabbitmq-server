@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html><head>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="stomp.js"></script>
+  <script src="stomp.umd.min.js"></script>
   <style>
       .box {
           width: 440px;
@@ -80,11 +80,14 @@
 
       // Stomp.js boilerplate
       const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      var client = Stomp.client(wsProtocol + '//' + window.location.hostname + ':15674/ws');
+      var client = new StompJs.Client({
+          brokerURL: wsProtocol + '//' + window.location.hostname + ':15674/ws',
+          connectHeaders: {login: 'guest', passcode: 'guest', host: '/'}
+      });
       client.debug = pipe('#second');
 
       var print_first = pipe('#first', function(data) {
-          client.send('/topic/test', {"content-type":"text/plain"}, data);
+          client.publish({destination: '/topic/test', headers: {"content-type":"text/plain"}, body: data});
       });
       var on_connect = function(x) {
           id = client.subscribe("/topic/test", function(d) {
@@ -94,7 +97,9 @@
       var on_error =  function() {
         console.log('error');
       };
-      client.connect('guest', 'guest', on_connect, on_error, '/');
+      client.onConnect = on_connect;
+      client.onStompError = on_error;
+      client.activate();
 
       $('#first input').focus(function() {
           if (!has_had_focus) {

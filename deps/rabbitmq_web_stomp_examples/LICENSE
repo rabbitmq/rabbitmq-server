@@ -1,8 +1,8 @@
 This package, the rabbitmq-web-stomp-examples, is licensed under the
 MPL 2.0. For the MPL, please see LICENSE-MPL-RabbitMQ.
 
-priv/stomp.js is a part of stomp-websocket project
-(https://github.com/jmesnil/stomp-websocket) and is released under
-APL2. For the license see LICENSE-APL2-Stomp-Websocket.
+priv/stomp.umd.min.js is a part of the STOMP.js project
+(https://github.com/stomp-js/stompjs) and is released under
+APL2. For the license see LICENSE-APL2-StompJS.
 
 If you have any questions regarding licensing, please contact us at rabbitmq-core@groups.vmware.com.
