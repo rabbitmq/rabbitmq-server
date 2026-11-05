@@ -79,6 +79,7 @@ subscription_option_retain_handling(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier_star_and_dot(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier_retained_message(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+subscription_identifier_retained_message_sparkplug(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier_amqp091(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier_at_most_once_dead_letter(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 at_most_once_dead_letter_detect_cycle(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
