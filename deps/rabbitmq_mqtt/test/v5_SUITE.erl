@@ -90,6 +90,7 @@ cluster_size_1_tests() ->
      subscription_option_retain_handling,
      subscription_identifier,
      subscription_identifier_star_and_dot,
+     subscription_identifier_retained_message,
      subscription_identifier_amqp091,
      subscription_identifier_at_most_once_dead_letter,
      at_most_once_dead_letter_detect_cycle,
@@ -1087,6 +1088,26 @@ subscription_identifier_star_and_dot(Config) ->
                 ?assertEqual(#{'Subscription-Identifier' => 2}, Props2)
     after ?TIMEOUT -> ct:fail("did not receive m2")
     end,
+    ok = emqtt:disconnect(C),
+    ok = emqtt:disconnect(Pub).
+
+%% "If the Client specified a Subscription Identifier for any of the overlapping
+%% subscriptions the Server MUST send those Subscription Identifiers in the message
+%% which is published as the result of the subscriptions [MQTT-3.3.4-3]." [v5 3.3.4]
+subscription_identifier_retained_message(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    Pub = connect(<<"publisher">>, Config),
+    {ok, _} = emqtt:publish(Pub, Topic, <<"m1">>, [{retain, true}, {qos, 1}]),
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{Topic, []}]),
+    receive {publish, #{client_pid := C,
+                        payload := <<"m1">>,
+                        retain := true,
+                        properties := Props}} ->
+                ?assertEqual(#{'Subscription-Identifier' => 1}, Props)
+    after ?TIMEOUT -> ct:fail("did not receive m1")
+    end,
+    {ok, _} = emqtt:publish(Pub, Topic, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(C),
     ok = emqtt:disconnect(Pub).
 
