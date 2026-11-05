@@ -55,10 +55,15 @@ to_json(ReqData, Context) ->
 
 accept_content(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(exchange, ReqData),
-    rabbit_mgmt_util:direct_request(
-      'exchange.declare',
-      fun rabbit_mgmt_format:format_accept_content/1,
-      [{exchange, Name}], "Declare exchange error: ~ts", ReqData, Context).
+    case rabbit_binary_parser:validate_utf8(Name) of
+        ok ->
+            rabbit_mgmt_util:direct_request(
+              'exchange.declare',
+              fun rabbit_mgmt_format:format_accept_content/1,
+              [{exchange, Name}], "Declare exchange error: ~ts", ReqData, Context);
+        error ->
+            rabbit_mgmt_util:bad_request(<<"Bad name: not valid UTF-8">>, ReqData, Context)
+    end.
 
 delete_resource(ReqData, Context) ->
     %% We need to retrieve manually if-unused, as the HTTP API uses '-'
