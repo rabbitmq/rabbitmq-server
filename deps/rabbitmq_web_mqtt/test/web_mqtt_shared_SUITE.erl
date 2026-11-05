@@ -61,6 +61,7 @@ non_clean_sess_reconnect_qos1(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config
 non_clean_sess_reconnect_qos0(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 non_clean_sess_reconnect_qos0_and_qos1(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 non_clean_sess_empty_client_id(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+non_clean_sess_unsubscribe_star_and_dot(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 subscribe_same_topic_same_qos(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 subscribe_same_topic_different_qos(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 subscribe_multiple(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
