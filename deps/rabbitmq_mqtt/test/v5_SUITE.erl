@@ -91,6 +91,7 @@ cluster_size_1_tests() ->
      subscription_identifier,
      subscription_identifier_star_and_dot,
      subscription_identifier_retained_message,
+     subscription_identifier_retained_message_sparkplug,
      subscription_identifier_amqp091,
      subscription_identifier_at_most_once_dead_letter,
      at_most_once_dead_letter_detect_cycle,
@@ -1110,6 +1111,30 @@ subscription_identifier_retained_message(Config) ->
     {ok, _} = emqtt:publish(Pub, Topic, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(C),
     ok = emqtt:disconnect(Pub).
+
+subscription_identifier_retained_message_sparkplug(Config) ->
+    ok = rpc(Config, application, set_env, [?APP, sparkplug, true]),
+    ok = rpc(Config, rabbit_mqtt_util, init_sparkplug, []),
+    try
+        Topic = <<"spBv1.0/group/DDATA/node">>,
+        Pub = connect(<<"publisher">>, Config),
+        {ok, _} = emqtt:publish(Pub, Topic, <<"m1">>, [{retain, true}, {qos, 1}]),
+        C = connect(?FUNCTION_NAME, Config),
+        {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{Topic, []}]),
+        receive {publish, #{client_pid := C,
+                            payload := <<"m1">>,
+                            properties := Props}} ->
+                    ?assertEqual(#{'Subscription-Identifier' => 1}, Props)
+        after ?TIMEOUT -> ct:fail("did not receive m1")
+        end,
+        {ok, _} = emqtt:publish(Pub, Topic, <<>>, [{retain, true}, {qos, 1}]),
+        ok = emqtt:disconnect(C),
+        ok = emqtt:disconnect(Pub)
+    after
+        ok = rpc(Config, application, unset_env, [?APP, sparkplug]),
+        [true = rpc(Config, persistent_term, erase, [K])
+         || K <- [sparkplug_mp_mqtt_to_amqp, sparkplug_mp_amqp_to_mqtt]]
+    end.
 
 subscription_identifier_amqp091(Config) ->
     C1 = connect(<<"sub 1">>, Config),
