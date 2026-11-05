@@ -199,6 +199,7 @@ all_tests() -> [
     exclusive_consumer_test,
     exclusive_queue_test,
     connections_channels_pagination_test,
+    columns_applied_after_sort_and_filter_test,
     exchanges_pagination_test,
     exchanges_pagination_permissions_test,
     queues_detailed_test,
@@ -3201,6 +3202,50 @@ connections_channels_pagination_test(Config) ->
     amqp_channel:close(Ch2),
     amqp_connection:close(Conn2),
 
+    passed.
+
+open_connection_with_client_properties(Config, Props) ->
+    {ok, Conn} = amqp_connection:start(
+                   #amqp_params_network{
+                      port = amqp_port(Config),
+                      client_properties = [{K, longstr, V} || {K, V} <- Props]}),
+    Conn.
+
+await_connection_count(Config, Count) ->
+    await_condition(
+      fun () ->
+              Count =:= maps:get(total_count,
+                                 http_get(Config, "/connections?page=1&page_size=100", ?OK))
+      end).
+
+columns_applied_after_sort_and_filter_test(Config) ->
+    Pears = open_connection_with_client_properties(Config, [{<<"product">>, <<"pears">>}]),
+    Apples = open_connection_with_client_properties(Config, [{<<"product">>, <<"apples">>}]),
+    Page = "/connections?page=1&page_size=100",
+    try
+        await_connection_count(Config, 2),
+        Names = fun(Path) -> [N || #{name := N} <- maps:get(items, http_get(Config, Path, ?OK))] end,
+        [PearsName] = [N || #{name := N, client_properties := #{product := <<"pears">>}}
+                                <- maps:get(items, http_get(Config, Page, ?OK))],
+
+        %% Sorting may use a field that is not among the requested columns.
+        SortPath = Page ++ "&columns=name&sort=client_properties.product",
+        [_, PearsName] = Names(SortPath),
+        [PearsName, _] = Names(SortPath ++ "&sort_reverse=true"),
+        [Item | _] = maps:get(items, http_get(Config, SortPath, ?OK)),
+        ?assertEqual([name], maps:keys(Item)),
+
+        %% So may the name filter.
+        ByName = http_get(Config, Page ++ "&columns=vhost&name=127.0.0.1", ?OK),
+        ?assertEqual(2, maps:get(filtered_count, ByName)),
+
+        %% Endpoints that do not paginate still apply columns.
+        [VHostItem | _] = http_get(Config, "/vhosts/%2F/connections?page=1&columns=name", ?OK),
+        ?assertEqual([name], maps:keys(VHostItem))
+    after
+        amqp_connection:close(Pears),
+        amqp_connection:close(Apples)
+    end,
     passed.
 
 exchanges_pagination_test(Config) ->

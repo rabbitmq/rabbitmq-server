@@ -320,7 +320,7 @@ get_sorts_param(ReqData, Def) ->
 reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
     SortList =
         sort_list_and_paginate(
-              extract_columns_list(Facts, ReqData),
+              Facts,
               DefaultSorts,
               get_sorts_param(ReqData, undefined),
               get_sort_reverse(ReqData), Pagination),
@@ -333,13 +333,6 @@ get_sort_reverse(ReqData) ->
         "true" -> true;
         _      -> false
     end.
-
--spec is_pagination_requested(#pagination{} | undefined) -> boolean().
-is_pagination_requested(undefined) ->
-    false;
-is_pagination_requested(#pagination{}) ->
-    true.
-
 
 with_valid_pagination(ReqData, Context, Fun) ->
     try
@@ -677,12 +670,15 @@ maybe_pagination(Item, true, ReqData) ->
     [maybe_pagination(X, true, ReqData) || X <- Item].
 
 extract_columns(Item, ReqData) ->
-    maybe_pagination(Item, is_pagination_requested(pagination_params(ReqData)),
-		     ReqData).
+    maybe_pagination(Item, is_range_response(Item), ReqData).
 
-extract_columns_list(Items, ReqData) ->
-    Cols = columns(ReqData),
-    [extract_column_items(Item, Cols) || Item <- Items].
+%% Endpoints that do not paginate ignore the pagination parameters,
+%% so the shape of the reply decides how columns are extracted. The
+%% keys may be in any order, see rabbit_mgmt_format:strip_pids/1.
+is_range_response([{_, _} | _] = Reply) ->
+    lists:keymember(total_count, 1, Reply) andalso lists:keymember(items, 1, Reply);
+is_range_response(_) ->
+    false.
 
 columns(ReqData) ->
     case qs_val(<<"columns">>, ReqData) of
