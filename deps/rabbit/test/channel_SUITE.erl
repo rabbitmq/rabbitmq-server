@@ -23,17 +23,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
           ready_for_close_with_dead_writer,
-<<<<<<< HEAD
-          terminate_safely_handles_cleanup_failures
-=======
           ready_for_close_with_blocked_writer,
-          terminate_safely_handles_cleanup_failures,
-          replies_taken_by_writer,
-          replies_not_taken_by_writer,
-          tx_commit_replies_not_taken_by_writer,
-          basic_get_replies_not_taken_by_writer,
-          basic_get_reply_bytes_not_taken_by_writer
->>>>>>> ac40f6f (AMQP 0-9-1: use a short timeout for `channel.close-ok` responses)
+          terminate_safely_handles_cleanup_failures
         ]}
     ].
 
