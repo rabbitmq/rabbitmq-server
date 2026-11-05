@@ -26,6 +26,7 @@ groups() ->
           disparate_invalid_header_entries_accumulate_separately,
           corrupt_or_invalid_headers_are_overwritten,
           invalid_same_header_entry_accumulation,
+          non_array_entry_in_existing_invalid_headers,
           content_framing,
           content_transcoding,
           table_codec
@@ -87,6 +88,19 @@ invalid_same_header_entry_accumulation(_Config) ->
     {array, [{longstr,<<"bad header1b">>},
              {longstr,<<"bad header1a">>}]} =
         rabbit_misc:table_lookup(InvalidHeaders, <<"header1">>),
+    passed.
+
+non_array_entry_in_existing_invalid_headers(_Config) ->
+    Headers = [{<<"header1">>, longstr, <<"y">>},
+               {?INVALID_HEADERS_KEY, table,
+                [{<<"header1">>, longstr, <<"y">>}]}],
+    Headers1 = rabbit_basic:prepend_table_header(
+                 <<"header1">>, ?ROUTE_TABLE, Headers),
+    {array, [{table, ?ROUTE_TABLE}]} =
+        rabbit_misc:table_lookup(Headers1, <<"header1">>),
+    {table, Invalid} = rabbit_misc:table_lookup(Headers1, ?INVALID_HEADERS_KEY),
+    {array, [{longstr, <<"y">>}]} =
+        rabbit_misc:table_lookup(Invalid, <<"header1">>),
     passed.
 
 prepend_check(HeaderKey, HeaderTable, Headers) ->
