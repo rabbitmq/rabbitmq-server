@@ -218,7 +218,7 @@ join_using_khepri(ClusterNodes, disc) ->
 join_using_khepri(_ClusterNodes, ram = NodeType) ->
     {error, {node_type_unsupported, khepri, NodeType}}.
 
--spec forget_member(Node, RemoveWhenOffline) -> ok when
+-spec forget_member(Node, RemoveWhenOffline) -> rabbit_types:ok_or_error(any()) when
       Node :: node(),
       RemoveWhenOffline :: boolean().
 %% @doc Removes `Node' from the cluster.

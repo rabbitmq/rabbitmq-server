@@ -666,7 +666,7 @@ post_add_member(JoiningNode, JoinedNode, Error) ->
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     Error.
 
--spec remove_member(NodeToRemove) -> ok when
+-spec remove_member(NodeToRemove) -> rabbit_types:ok_or_error(any()) when
       NodeToRemove :: node().
 %% @doc Removes `NodeToRemove' from its cluster.
 %%
@@ -722,6 +722,21 @@ remove_reachable_member(NodeToRemove) ->
        [NodeToRemove, ?RA_CLUSTER_NAME],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
 
+    case rabbit_misc:rpc_call(NodeToRemove, rabbit_boot_state, get, []) of
+        stopped ->
+            reset_reachable_member(NodeToRemove);
+        BootState when is_atom(BootState) ->
+            ?LOG_WARNING(
+               "Remote node ~s is in boot state '~s' and was not removed "
+               "from Khepri cluster \"~s\"",
+               [NodeToRemove, BootState, ?RA_CLUSTER_NAME],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            {error, {unexpected_boot_state, BootState}};
+        {badrpc, _} = BadRpc ->
+            {error, {failed_to_remove_node, NodeToRemove, BadRpc}}
+    end.
+
+reset_reachable_member(NodeToRemove) ->
     %% We need the Khepri store to run on the node to remove, to be
     %% able to reset it.
     ok = rabbit_misc:rpc_call(
