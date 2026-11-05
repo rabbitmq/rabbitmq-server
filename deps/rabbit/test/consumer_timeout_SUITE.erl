@@ -23,6 +23,9 @@
 %% precedence over the queue's setting, so they run in one group of their own.
 -define(MULTI_DELIVERY_TIMEOUT, 6000).
 -define(DELIVERY_GAP, 3000).
+-define(SOAK_MESSAGES, 400).
+-define(SOAK_TIMEOUT, 1000).
+-define(SOAK_DEADLINE, 120000).
 
 -define(GROUP_CONFIG,
         #{multiple_deliveries => [{rabbit, []},
@@ -89,6 +92,7 @@ groups() ->
          delivery_pending_in_transaction_times_out_after_cancel_ok,
          timeout_after_credential_update_cancel_keeps_channel,
          second_delivery_timeout_after_leader_change_keeps_channel,
+         consumer_timeouts_under_load_never_close_channel,
          single_active_consumer_takes_over_after_timeout],
     [
      {multiple_deliveries, [], [{quorum_queue, [], MultipleDeliveryTests}]},
@@ -782,6 +786,148 @@ second_delivery_timeout_after_leader_change_keeps_channel(Config) ->
               assert_channel_stays_open(Ch),
               ?assertEqual([], server_cancelled_consumers(Config))
       end).
+
+%% Deliveries timing out at many different moments, settled early, late or
+%% never, across server cancellations answered at once, late or not at all,
+%% and resubscriptions with new or reused tags, never close the channel.
+consumer_timeouts_under_load_never_close_channel(Config) ->
+    _ = rand:seed(exsss),
+    ct:pal("soak seed ~p", [rand:export_seed()]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, consumer_cancel_ok_timeout, 500]),
+    try
+        with_manual_cancel_ok_channel(
+          Config,
+          fun (Conn, Ch, QName) ->
+                  #'basic.qos_ok'{} = amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 50}),
+                  erlang:monitor(process, Ch),
+                  {ok, PubCh} = amqp_connection:open_channel(Conn),
+                  Self = self(),
+                  _ = spawn_link(fun () ->
+                                         soak_publish(PubCh, QName, ?SOAK_MESSAGES),
+                                         Self ! publisher_done
+                                 end),
+                  Tag = soak_subscribe(Ch, QName, <<>>),
+                  erlang:send_after(?SOAK_DEADLINE, self(), soak_deadline),
+                  Stats = soak_loop(Config, Ch, QName,
+                                    #{tag => Tag, held => #{}, draining => false,
+                                      cancel_ok_sent => #{}, cancels => 0,
+                                      cancels_holding_more => 0, same_tag_resubscribes => 0}),
+                  ct:pal("soak stats ~p", [Stats]),
+                  ?assert(maps:get(cancels, Stats) >= 5),
+                  ?assert(maps:get(cancels_holding_more, Stats) >= 3),
+                  ?assert(maps:get(same_tag_resubscribes, Stats) > 0),
+                  ?awaitMatch([], server_cancelled_consumers(Config), ?RECEIVE_TIMEOUT, 50),
+                  assert_channel_stays_open(Ch)
+          end)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                          [rabbit, consumer_cancel_ok_timeout])
+    end.
+
+soak_publish(_Ch, _QName, 0) ->
+    ok;
+soak_publish(Ch, QName, N) ->
+    timer:sleep(rand:uniform(75)),
+    publish(Ch, QName, [integer_to_binary(N)]),
+    soak_publish(Ch, QName, N - 1).
+
+soak_subscribe(Ch, QName, Tag) ->
+    #'basic.consume_ok'{consumer_tag = Actual} =
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName,
+                                                    consumer_tag = Tag,
+                                                    arguments = [{<<"x-consumer-timeout">>,
+                                                                  long, ?SOAK_TIMEOUT}]},
+                               self()),
+    Actual.
+
+soak_ack(Ch, DTag, #{held := Held} = S) ->
+    case maps:is_key(DTag, Held) of
+        true ->
+            ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
+            S#{held := maps:remove(DTag, Held)};
+        false ->
+            S
+    end.
+
+soak_loop(Config, Ch, QName, S0 = #{held := Held, draining := Draining}) ->
+    receive
+        {#'basic.deliver'{delivery_tag = DTag, consumer_tag = CTag}, _} ->
+            S1 = S0#{held := Held#{DTag => CTag}},
+            R = rand:uniform(),
+            S = if Draining; R < 0.4 -> soak_ack(Ch, DTag, S1);
+                   R < 0.7 -> erlang:send_after(rand:uniform(1500), self(), {ack, DTag}),
+                              S1;
+                   true -> S1
+                end,
+            soak_loop(Config, Ch, QName, S);
+        {ack, DTag} ->
+            soak_loop(Config, Ch, QName, soak_ack(Ch, DTag, S0));
+        #'basic.cancel'{consumer_tag = CTag} ->
+            #{cancels := C, cancels_holding_more := M} = S0,
+            Holding = length([T || T <- maps:values(Held), T =:= CTag]),
+            S1 = S0#{cancels := C + 1,
+                     cancels_holding_more := M + min(1, max(0, Holding - 1))},
+            R = rand:uniform(),
+            S = if R < 0.6 -> soak_cancel_ok(Ch, CTag, S1);
+                   R < 0.8 -> erlang:send_after(rand:uniform(300), self(), {cancel_ok, CTag}),
+                              S1;
+                   true -> S1
+                end,
+            erlang:send_after(200 + rand:uniform(300), self(), {resubscribe, CTag}),
+            soak_loop(Config, Ch, QName, S);
+        {cancel_ok, CTag} ->
+            soak_loop(Config, Ch, QName, soak_cancel_ok(Ch, CTag, S0));
+        {resubscribe, OldTag} ->
+            %% Reusing a tag is only safe once the channel has removed the
+            %% old consumer, which a `basic.cancel_ok` sent earlier ensures.
+            #{cancel_ok_sent := Sent, same_tag_resubscribes := N} = S0,
+            %% The first chance to reuse a tag always does, so every run
+            %% covers it.
+            Reuse = maps:is_key(OldTag, Sent) andalso
+                        (N =:= 0 orelse rand:uniform() < 0.5),
+            Tag = soak_subscribe(Ch, QName, case Reuse of
+                                                true -> OldTag;
+                                                false -> <<>>
+                                            end),
+            soak_loop(Config, Ch, QName,
+                      S0#{tag := Tag,
+                          cancel_ok_sent := maps:remove(OldTag, Sent),
+                          same_tag_resubscribes := N + case Reuse of
+                                                           true -> 1;
+                                                           false -> 0
+                                                       end});
+        publisher_done ->
+            erlang:send_after(3000, self(), drain),
+            soak_loop(Config, Ch, QName, S0);
+        drain ->
+            S = lists:foldl(fun (DTag, Acc) -> soak_ack(Ch, DTag, Acc) end,
+                            S0#{draining := true}, maps:keys(Held)),
+            self() ! drained_check,
+            soak_loop(Config, Ch, QName, S);
+        drained_check ->
+            case {map_size(Held), queue_counts(Config, QName)} of
+                {0, {0, 0}} ->
+                    S0;
+                _ ->
+                    S = lists:foldl(fun (DTag, Acc) -> soak_ack(Ch, DTag, Acc) end,
+                                    S0, maps:keys(Held)),
+                    erlang:send_after(200, self(), drained_check),
+                    soak_loop(Config, Ch, QName, S)
+            end;
+        soak_deadline ->
+            exit({soak_deadline, S0, queue_counts(Config, QName)});
+        #'basic.consume_ok'{} ->
+            soak_loop(Config, Ch, QName, S0);
+        #'basic.cancel_ok'{} ->
+            soak_loop(Config, Ch, QName, S0);
+        {'DOWN', _, process, Ch, Reason} ->
+            exit({channel_closed, Reason, S0})
+    end.
+
+soak_cancel_ok(Ch, CTag, #{cancel_ok_sent := Sent} = S) ->
+    ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = CTag}),
+    S#{cancel_ok_sent := Sent#{CTag => true}}.
 
 %% After the server cancels a consumer for a delivery timeout, settling the
 %% timed-out delivery late must not make the queue deliver to it again.
