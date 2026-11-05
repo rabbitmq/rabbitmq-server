@@ -185,6 +185,11 @@
              %% but never settled with the queue, where the message id can name a
              %% newer delivery to a consumer resubscribed with the same tag
              released_deliveries = #{} :: #{non_neg_integer() => true},
+             %% delivery timeouts for consumers whose `basic.consume_ok` the queue
+             %% has not sent yet, handled once it is, so that a `basic.cancel`
+             %% never precedes it
+             awaiting_consume_ok = #{} :: #{rabbit_types:ctag() =>
+                                                [{rabbit_amqqueue:name(), [term()]}]},
              pending_replies = {0, 0} :: {non_neg_integer(), non_neg_integer()} | untracked,
              coalescing_confirms = false :: boolean()
             }).
@@ -645,10 +650,10 @@ handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
 handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg},
             #ch{consumer_mapping = CMap} = State)
   when is_map_key(CTag, CMap) ->
-    noreply(consumer_monitor(CTag, send_reply(Msg, State)));
-handle_cast({command, #'basic.consume_ok'{}}, State) ->
+    noreply(handle_held_timeouts(CTag, consumer_monitor(CTag, send_reply(Msg, State))));
+handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag}}, State) ->
     %% a consumer was not found so just ignore this
-    noreply(State);
+    noreply(handle_held_timeouts(CTag, State));
 handle_cast({command, Msg}, State) ->
     noreply(send_reply(Msg, State));
 
@@ -1860,7 +1865,9 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                         true ->
                             consumer_monitor(ActualConsumerTag, State1);
                         false ->
-                            State1
+                            Awaiting = State1#ch.awaiting_consume_ok,
+                            State1#ch{awaiting_consume_ok =
+                                          Awaiting#{ActualConsumerTag => []}}
                     end,
             {noreply, State};
         {{error, Type, Reason, ReasonArgs}, _Q} ->
@@ -1910,8 +1917,10 @@ cancel_consumer(CTag, QName, #ch{cfg = #conf{},
     rabbit_event:notify(consumer_deleted, [{consumer_tag, CTag},
                                            {channel, self()},
                                            {queue, QName}]),
+    %% The queue is gone, and the deliveries it returned with it.
     clear_pending_consumer_cancel(
-      CTag, State#ch{consumer_mapping = maps:remove(CTag, CMap)}).
+      CTag, State#ch{consumer_mapping = maps:remove(CTag, CMap),
+                     awaiting_consume_ok = maps:remove(CTag, State#ch.awaiting_consume_ok)}).
 
 client_supports_consumer_cancel_notify(#ch{cfg = #conf{capabilities = Capabilities}}) ->
     {bool, true} == rabbit_misc:table_lookup(Capabilities,
@@ -1978,11 +1987,12 @@ cancel_consumer_recheck(CTag, Q,
     rabbit_event:notify(consumer_deleted, [{consumer_tag, CTag},
                                            {channel, self()},
                                            {queue, QName}]),
-    clear_pending_consumer_cancel(
-      CTag, remember_server_cancelled_consumer(
-              QName, CTag, [], State#ch{consumer_mapping = maps:remove(CTag, CMap),
-                                        queue_consumers = QCons1,
-                                        queue_states = QStates1})).
+    handle_held_timeouts(
+      CTag, clear_pending_consumer_cancel(
+              CTag, remember_server_cancelled_consumer(
+                      QName, CTag, [], State#ch{consumer_mapping = maps:remove(CTag, CMap),
+                                                queue_consumers = QCons1,
+                                                queue_states = QStates1}))).
 
 binding_action_with_checks(
   Action, SourceNameBin0, DestinationType, DestinationNameBin0,
@@ -3012,6 +3022,16 @@ server_cancelled_consumers(Pid) ->
     Cancelled.
 -endif.
 
+handle_held_timeouts(CTag, #ch{awaiting_consume_ok = Awaiting0} = State) ->
+    case maps:take(CTag, Awaiting0) of
+        {Held, Awaiting} ->
+            lists:foldl(fun ({QName, MsgIds}, S) ->
+                                handle_consumer_delivery_timeout(CTag, MsgIds, QName, S)
+                        end, State#ch{awaiting_consume_ok = Awaiting}, lists:reverse(Held));
+        error ->
+            State
+    end.
+
 consumer_cancel_ok_timeout() ->
     application:get_env(rabbit, consumer_cancel_ok_timeout,
                         ?CONSUMER_CANCEL_OK_TIMEOUT).
@@ -3146,8 +3166,14 @@ handle_queue_actions(Actions, State) ->
               S = S0#ch{unconfirmed = U},
               record_rejects(Rej, S);
          ({released, QRef, CTag, MsgSeqNos, timeout}, S0) ->
-              handle_consumer_delivery_timeout(
-                CTag, MsgSeqNos, QRef, mark_released(QRef, CTag, MsgSeqNos, S0));
+              S1 = mark_released(QRef, CTag, MsgSeqNos, S0),
+              case S1#ch.awaiting_consume_ok of
+                  #{CTag := Held} = Awaiting ->
+                      S1#ch{awaiting_consume_ok =
+                                Awaiting#{CTag := [{QRef, MsgSeqNos} | Held]}};
+                  _ ->
+                      handle_consumer_delivery_timeout(CTag, MsgSeqNos, QRef, S1)
+              end;
          ({deliver, CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(CTag, AckRequired, Msgs, S0);
          ({queue_down, QRef}, S0) ->
@@ -3197,6 +3223,14 @@ unsupported_single_active_consumer_error(Q) ->
       [rabbit_misc:rs(amqqueue:get_name(Q)),
        rabbit_queue_type:short_alias_of(amqqueue:get_type(Q))]).
 
+cancel_consumer(ConsumerTag, NoWait, OkMsg, State0) ->
+    case cancel_consumer0(ConsumerTag, NoWait, OkMsg, State0) of
+        {noreply, State} ->
+            {noreply, handle_held_timeouts(ConsumerTag, State)};
+        {reply, Reply, State} ->
+            {reply, Reply, handle_held_timeouts(ConsumerTag, State)}
+    end.
+
 remove_queue_consumer(QName, CTag, QCons) ->
     case maps:find(QName, QCons) of
         error ->
@@ -3209,7 +3243,7 @@ remove_queue_consumer(QName, CTag, QCons) ->
             end
     end.
 
-cancel_consumer(ConsumerTag, NoWait, OkMsg, State0) ->
+cancel_consumer0(ConsumerTag, NoWait, OkMsg, State0) ->
     %% A consumer awaiting its `basic.cancel_ok` was cancelled at the queue
     %% already, and a second cancel there would count it out twice.
     CancelledAtQueue = is_map_key(ConsumerTag, State0#ch.pending_consumer_cancels),

@@ -69,6 +69,7 @@ groups() ->
       ],
     MultipleDeliveryTests =
         [no_delivery_after_late_ack_while_cancel_pending,
+         timeout_during_resubscribe_cancels_after_consume_ok,
          late_ack_after_tag_reuse_does_not_settle_new_delivery,
          returned_deliveries_of_old_consumer_not_tracked_after_tag_reuse,
          late_ack_of_old_consumer_after_tag_reuse_keeps_channel,
@@ -907,6 +908,51 @@ returned_deliveries_of_old_consumer_not_tracked_after_tag_reuse(Config) ->
               ?awaitMatch([], server_cancelled_consumers(Config), ?RECEIVE_TIMEOUT, 50)
       end).
 
+%% A timeout of the old consumer's delivery that the channel handles while
+%% resubscribing with the same tag cancels the new consumer, which the queue
+%% merged with the old one, but only after its `basic.consume_ok`.
+timeout_during_resubscribe_cancels_after_consume_ok(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              %% The client hands a cancel for a tag it has not registered yet
+              %% to the default consumer instead of crashing.
+              ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
+              hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              %% Queue the resubscription and then the second delivery's timeout
+              %% behind it, so the channel handles both before the
+              %% `basic.consume_ok` the queue sends back to it.
+              ServerCh = server_channel(Config, Conn),
+              ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, suspend, [ServerCh]),
+              Self = self(),
+              _ = spawn_link(
+                    fun () ->
+                            amqp_channel:subscribe(
+                              Ch, #'basic.consume'{queue = QName,
+                                                   consumer_tag = <<"ctag">>,
+                                                   arguments = consumer_timeout_args()},
+                              Self)
+                    end),
+              await_counts(Config, QName, 2, 0),
+              ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, resume, [ServerCh]),
+              receive
+                  #'basic.consume_ok'{consumer_tag = <<"ctag">>} -> ok;
+                  #'basic.cancel'{consumer_tag = <<"ctag">>} ->
+                      exit(basic_cancel_before_consume_ok)
+              after ?RECEIVE_TIMEOUT ->
+                        exit(consume_ok_expected)
+              end,
+              %% Well before any delivery to the new consumer could time out.
+              receive
+                  #'basic.cancel'{consumer_tag = <<"ctag">>} -> ok
+              after 2000 ->
+                        exit(basic_cancel_expected)
+              end
+      end).
+
 %% With a single active consumer, the waiting consumer takes over once the
 %% timed-out one is gone, on the same channel, and gets both deliveries.
 single_active_consumer_takes_over_after_timeout(Config) ->
@@ -1022,6 +1068,19 @@ transfer_queue_leadership(Config, QName) ->
     _ = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
                                      transfer_leadership, [Q, New]),
     ?awaitMatch({_, New}, Leader(), ?RECEIVE_TIMEOUT, 50).
+
+%% The channel process on node 0 serving `Conn', which has one channel.
+server_channel(Config, Conn) ->
+    [{sock, Sock}] = amqp_connection:info(Conn, [sock]),
+    {ok, {_, Port}} = inet:sockname(Sock),
+    [Pid] = [P || P <- rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel, list_local, []),
+                  [{connection, CPid}] <-
+                      [rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel, info,
+                                                    [P, [connection]])],
+                  [{peer_port, Port}] =:=
+                      rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_reader, info,
+                                                   [CPid, [peer_port]])],
+    Pid.
 
 assert_channel_stays_open(Ch) ->
     receive
