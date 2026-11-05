@@ -180,6 +180,11 @@
              %% that one of them timing out does not close the channel
              server_cancelled_consumers = #{} :: #{{rabbit_amqqueue:name(), rabbit_types:ctag()} =>
                                                        sets:set(term())},
+             %% delivery tags of deliveries the queue returned after a consumer
+             %% timeout; listed so that a late settlement is not an unknown tag,
+             %% but never settled with the queue, where the message id can name a
+             %% newer delivery to a consumer resubscribed with the same tag
+             released_deliveries = #{} :: #{non_neg_integer() => true},
              pending_replies = {0, 0} :: {non_neg_integer(), non_neg_integer()} | untracked,
              coalescing_confirms = false :: boolean()
             }).
@@ -1628,6 +1633,7 @@ handle_method(#'basic.recover_async'{requeue = true},
                              queue_states = QueueStates0}) ->
     OkFun = fun () -> ok end,
     UAMQL = ?QUEUE:to_list(UAMQ),
+    {LiveUAMQL, State0} = without_released(UAMQL, forget_settled_deliveries(UAMQL, State)),
 
     {QueueStates, Actions} =
         foreach_per_queue(
@@ -1639,12 +1645,10 @@ handle_method(#'basic.recover_async'{requeue = true},
                                                QRef, requeue, CTag, MsgIds, Acc0),
                             {Acc, Act ++ Actions0}
                     end)
-          end, lists:reverse(UAMQL), {QueueStates0, []}),
+          end, lists:reverse(LiveUAMQL), {QueueStates0, []}),
     ok = notify_limiter(Limiter, UAMQL),
-    State1 = handle_queue_actions(
-               Actions, forget_settled_deliveries(
-                          UAMQL, State#ch{unacked_message_q = ?QUEUE:new(),
-                                          queue_states = QueueStates})),
+    State1 = handle_queue_actions(Actions, State0#ch{unacked_message_q = ?QUEUE:new(),
+                                                     queue_states = QueueStates}),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
     {noreply, State1};
@@ -1770,7 +1774,9 @@ handle_method(#'tx.commit'{}, _, #ch{tx = none}) ->
 
 handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Deliveries, Acks},
                                              limiter = Limiter}) ->
-    State1 = ?QUEUE:fold(fun deliver_to_queues/2, State, Deliveries),
+    State1 = forget_settled_deliveries(
+               lists:append([L || {_, L} <- Acks]),
+               ?QUEUE:fold(fun deliver_to_queues/2, State, Deliveries)),
     Rev = fun (X) -> lists:reverse(lists:sort(X)) end,
     {State2, Actions2} =
         lists:foldl(fun ({ack, A}, {Acc, Actions}) ->
@@ -1780,9 +1786,7 @@ handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Deliveries, Acks},
                             {Acc0, Actions0} = internal_reject(Op, Rev(A), Limiter, Acc),
                             {Acc0, Actions ++ Actions0}
                     end, {State1, []}, lists:reverse(Acks)),
-    State3 = handle_queue_actions(
-               Actions2,
-               forget_settled_deliveries(lists:append([L || {_, L} <- Acks]), State2)),
+    State3 = handle_queue_actions(Actions2, State2),
     {noreply, maybe_complete_tx(State3#ch{tx = committing})};
 
 handle_method(#'tx.rollback'{}, _, #ch{tx = none}) ->
@@ -2062,8 +2066,8 @@ reject(DeliveryTag, Op, Multiple,
               end}.
 
 %% NB: Acked is in youngest-first order
-internal_reject(Op, Acked, Limiter,
-                State = #ch{queue_states = QueueStates0}) ->
+internal_reject(Op, Acked, Limiter, State0) ->
+    {Live, State = #ch{queue_states = QueueStates0}} = without_released(Acked, State0),
     {QueueStates, Actions} =
         foreach_per_queue(
           fun({QRef, CTag}, MsgIds, {Acc0, Actions0}) ->
@@ -2073,7 +2077,7 @@ internal_reject(Op, Acked, Limiter,
                       {protocol_error, ErrorType, Reason, ReasonArgs} ->
                           rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
                   end
-          end, Acked, {QueueStates0, []}),
+          end, Live, {QueueStates0, []}),
     ok = notify_limiter(Limiter, Acked),
     {State#ch{queue_states = QueueStates}, Actions}.
 
@@ -2170,7 +2174,8 @@ collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
 
 %% Settles (acknowledges) messages at the queue replica process level.
 %% This happens in the oldest-first order (ascending by delivery tag).
-settle_acks(Acks, State = #ch{queue_states = QueueStates0}) ->
+settle_acks(Acks, State0) ->
+    {Live, State = #ch{queue_states = QueueStates0}} = without_released(Acks, State0),
     {QueueStates, Actions} =
         foreach_per_queue(
           fun ({QRef, CTag}, MsgIds, {Acc0, ActionsAcc0}) ->
@@ -2182,7 +2187,7 @@ settle_acks(Acks, State = #ch{queue_states = QueueStates0}) ->
                       {protocol_error, ErrorType, Reason, ReasonArgs} ->
                           rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
                   end
-          end, Acks, {QueueStates0, []}),
+          end, Live, {QueueStates0, []}),
     ok = notify_limiter(State#ch.limiter, Acks),
     {State#ch{queue_states = QueueStates}, Actions}.
 
@@ -3016,15 +3021,16 @@ consumer_cancel_ok_timeout() ->
 remember_server_cancelled_consumer(QName, CTag, Released,
                                    #ch{unacked_message_q = UAMQ,
                                        tx = Tx,
+                                       released_deliveries = Returned,
                                        server_cancelled_consumers = Cancelled} = State) ->
     InTx = case Tx of
                none -> [];
                {_, Acks} -> lists:append([L || {_, L} <- Acks])
            end,
     Held0 = sets:from_list(
-              [MsgId || #pending_ack{queue = Q, tag = T, msg_id = MsgId}
+              [MsgId || #pending_ack{queue = Q, tag = T, msg_id = MsgId, delivery_tag = DTag}
                             <- InTx ++ ?QUEUE:to_list(UAMQ),
-                        Q =:= QName, T =:= CTag],
+                        Q =:= QName, T =:= CTag, not is_map_key(DTag, Returned)],
               [{version, 2}]),
     Held = sets:subtract(Held0, sets:from_list(Released, [{version, 2}])),
     Key = {QName, CTag},
@@ -3052,10 +3058,50 @@ forget_held_deliveries(Key, MsgIds, #ch{server_cancelled_consumers = Cancelled} 
 forget_settled_deliveries(_Settled, #ch{server_cancelled_consumers = Cancelled} = State)
   when map_size(Cancelled) =:= 0 ->
     State;
-forget_settled_deliveries(Settled, State) ->
-    lists:foldl(fun (#pending_ack{queue = QName, tag = CTag, msg_id = MsgId}, S) ->
+forget_settled_deliveries(Settled, #ch{released_deliveries = Returned} = State) ->
+    lists:foldl(fun (#pending_ack{delivery_tag = DTag}, S) when is_map_key(DTag, Returned) ->
+                        S;
+                    (#pending_ack{queue = QName, tag = CTag, msg_id = MsgId}, S) ->
                         forget_held_deliveries({QName, CTag}, [MsgId], S)
                 end, State, Settled).
+
+%% Marks the entries for the deliveries the queue returned. An entry already
+%% marked can share its message id, so the newest unmarked one is the match.
+mark_released(QName, CTag, MsgIds, #ch{unacked_message_q = UAMQ, tx = Tx,
+                                       released_deliveries = Returned0} = State) ->
+    InTx = case Tx of
+               none -> [];
+               {_, Acks} -> lists:append([L || {_, L} <- Acks])
+           end,
+    Wanted = sets:from_list(MsgIds, [{version, 2}]),
+    ByMsgId = lists:foldl(
+                fun (#pending_ack{queue = Q, tag = T, msg_id = MsgId, delivery_tag = DTag}, Acc)
+                      when Q =:= QName, T =:= CTag ->
+                        case sets:is_element(MsgId, Wanted) andalso
+                             not is_map_key(DTag, Returned0) of
+                            true -> Acc#{MsgId => DTag};
+                            false -> Acc
+                        end;
+                    (_, Acc) ->
+                        Acc
+                end, #{},
+                lists:keysort(#pending_ack.delivery_tag, InTx ++ ?QUEUE:to_list(UAMQ))),
+    Returned = maps:fold(fun (_, DTag, Acc) -> Acc#{DTag => true} end, Returned0, ByMsgId),
+    State#ch{released_deliveries = Returned}.
+
+%% Splits off the entries the queue already returned, which are settled here
+%% only, and forgets them.
+without_released(Acks, #ch{released_deliveries = Returned} = State)
+  when map_size(Returned) =:= 0 ->
+    {Acks, State};
+without_released(Acks, #ch{released_deliveries = Returned0} = State) ->
+    {Released, Live} = lists:partition(
+                         fun (#pending_ack{delivery_tag = DTag}) ->
+                                 is_map_key(DTag, Returned0)
+                         end, Acks),
+    Returned = maps:without([DTag || #pending_ack{delivery_tag = DTag} <- Released],
+                            Returned0),
+    {Live, State#ch{released_deliveries = Returned}}.
 
 clear_pending_consumer_cancel(CTag, #ch{pending_consumer_cancels = Pending} = State) ->
     case maps:take(CTag, Pending) of
@@ -3100,7 +3146,8 @@ handle_queue_actions(Actions, State) ->
               S = S0#ch{unconfirmed = U},
               record_rejects(Rej, S);
          ({released, QRef, CTag, MsgSeqNos, timeout}, S0) ->
-              handle_consumer_delivery_timeout(CTag, MsgSeqNos, QRef, S0);
+              handle_consumer_delivery_timeout(
+                CTag, MsgSeqNos, QRef, mark_released(QRef, CTag, MsgSeqNos, S0));
          ({deliver, CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(CTag, AckRequired, Msgs, S0);
          ({queue_down, QRef}, S0) ->

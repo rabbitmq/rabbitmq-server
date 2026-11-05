@@ -69,6 +69,9 @@ groups() ->
       ],
     MultipleDeliveryTests =
         [no_delivery_after_late_ack_while_cancel_pending,
+         late_ack_after_tag_reuse_does_not_settle_new_delivery,
+         returned_deliveries_of_old_consumer_not_tracked_after_tag_reuse,
+         late_ack_of_old_consumer_after_tag_reuse_keeps_channel,
          client_cancel_while_cancel_ok_pending_is_answered,
          second_delivery_timeout_after_cancel_ok_keeps_channel,
          second_delivery_timeout_after_cancel_ok_window_keeps_channel,
@@ -817,6 +820,91 @@ client_cancel_while_cancel_ok_pending_is_answered(Config) ->
                   amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>}),
               ?assertEqual(0, channel_consumer_count(Config)),
               assert_channel_stays_open(Ch)
+      end).
+
+%% A consumer resubscribed with the tag of one the queue has dropped starts
+%% its message ids from 0 again, the same ids as the old consumer's
+%% deliveries the channel still lists. A late settlement of one of those must
+%% not stand in for the new consumer's delivery with the same id.
+late_ack_of_old_consumer_after_tag_reuse_keeps_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              {ok, PubCh} = amqp_connection:open_channel(Conn),
+              [_OldDTag1, OldDTag2] = hold_two_staggered_deliveries(PubCh, Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_counts(Config, QName, 2, 0),
+              %% Settle both returned messages elsewhere so the queue drops
+              %% the old consumer and the new one starts from message id 0.
+              _ = [begin
+                       {#'basic.get_ok'{delivery_tag = T}, _} =
+                           amqp_channel:call(PubCh, #'basic.get'{queue = QName}),
+                       ok = amqp_channel:cast(PubCh, #'basic.ack'{delivery_tag = T})
+                   end || _ <- [1, 2]],
+              await_counts(Config, QName, 0, 0),
+              [_DTag1, _DTag2] = hold_two_staggered_deliveries(PubCh, Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = OldDTag2}),
+              erlang:monitor(process, Ch),
+              await_counts(Config, QName, 2, 0),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% A late acknowledgement of a delivery that timed out must not settle another
+%% message delivered to a consumer resubscribed with the same tag, which the
+%% queue numbers from message id 0 again.
+late_ack_after_tag_reuse_does_not_settle_new_delivery(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              {ok, PubCh} = amqp_connection:open_channel(Conn),
+              publish_and_confirm(PubCh, QName, [<<"m1">>]),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              OldDTag = receive_delivery(<<"ctag">>, false),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              ?awaitMatch(0, channel_consumer_count(Config), ?RECEIVE_TIMEOUT, 50),
+              await_counts(Config, QName, 1, 0),
+              {#'basic.get_ok'{delivery_tag = GetTag}, _} =
+                  amqp_channel:call(PubCh, #'basic.get'{queue = QName}),
+              ok = amqp_channel:cast(PubCh, #'basic.ack'{delivery_tag = GetTag}),
+              await_counts(Config, QName, 0, 0),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              publish(PubCh, QName, [<<"m2">>]),
+              _ = receive_delivery(<<"ctag">>, false),
+              await_counts(Config, QName, 0, 1),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = OldDTag}),
+              timer:sleep(1000),
+              ?assertEqual({0, 1}, queue_counts(Config, QName))
+      end).
+
+%% The old consumer's returned deliveries the channel still lists are not the
+%% resubscribed consumer's, so they do not keep it tracked after its own
+%% deliveries have returned.
+returned_deliveries_of_old_consumer_not_tracked_after_tag_reuse(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              {ok, PubCh} = amqp_connection:open_channel(Conn),
+              hold_two_staggered_deliveries(PubCh, Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_counts(Config, QName, 2, 0),
+              _ = [begin
+                       {#'basic.get_ok'{delivery_tag = T}, _} =
+                           amqp_channel:call(PubCh, #'basic.get'{queue = QName}),
+                       ok = amqp_channel:cast(PubCh, #'basic.ack'{delivery_tag = T})
+                   end || _ <- [1, 2]],
+              await_counts(Config, QName, 0, 0),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              publish(PubCh, QName, [<<"m3">>]),
+              _ = receive_delivery(<<"ctag">>, false),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_counts(Config, QName, 1, 0),
+              ?awaitMatch([], server_cancelled_consumers(Config), ?RECEIVE_TIMEOUT, 50)
       end).
 
 %% With a single active consumer, the waiting consumer takes over once the
