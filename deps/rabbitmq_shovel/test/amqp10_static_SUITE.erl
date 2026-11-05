@@ -248,7 +248,7 @@ setup_amqp10_destination_shovel(Config, Queue, AckMode, Exchange) ->
                   {queue, <<>>}]},
                 {destination,
                  [{protocol, amqp10},
-                  {uris, [rabbit_misc:format("amqp://~ts:~b",
+                  {uris, [rabbit_misc:format("amqp://guest:guest@~ts:~b",
                                              [Hostname, Port])]},
                   {add_forward_headers, true},
                   {add_timestamp_header, true},

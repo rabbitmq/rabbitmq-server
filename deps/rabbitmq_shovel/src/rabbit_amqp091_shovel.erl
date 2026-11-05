@@ -266,7 +266,7 @@ validate_dest_funs(_Def, User) ->
 
 connect_source(Conf = #{name := Name,
                         source := #{uris := Uris} = Src}) ->
-    {Conn, Chan, Uri} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
+    {Conn, Chan, Uri, _User} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
     Conf#{source => Src#{current => {Conn, Chan, Uri}}}.
 
 init_source(Conf = #{name := Name,
@@ -303,8 +303,8 @@ init_source(Conf = #{name := Name,
     Conf#{source => rabbit_shovel_util:sched_expire_after_duration(Name, Src1)}.
 
 connect_dest(Conf = #{name := Name, dest := #{uris := Uris} = Dst}) ->
-    {Conn, Chan, URI} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
-    Conf#{dest => Dst#{current => {Conn, Chan, URI}}}.
+    {Conn, Chan, URI, User} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
+    Conf#{dest => Dst#{current => {Conn, Chan, URI}, user => User}}.
 
 init_dest(Conf = #{ack_mode := AckMode,
                    dest := #{current := {Conn, Chan, _},
@@ -392,6 +392,7 @@ forward(IncomingTag, Mc, State) ->
 do_forward(IncomingTag, Mc0,
            State0 = #{dest := #{props_fun := {M, F, Args},
                                 current := {_, _, DstUri},
+                                user := User,
                                 fields_fun := {Mf, Ff, Argsf}}}) ->
     SrcUri = rabbit_shovel_behaviour:source_uri(State0),
     % do publish
@@ -403,10 +404,16 @@ do_forward(IncomingTag, Mc0,
     Method = #'basic.publish'{exchange = Exchange, routing_key = RoutingKey},
     Method1 = apply(Mf, Ff, Argsf ++ [SrcUri, DstUri, Method]),
     Mc = mc:convert(mc_amqpl, Mc0),
-    {Props, Payload} = rabbit_basic_common:from_content(mc:protocol_state(Mc)),
+    {Props0, Payload} = rabbit_basic_common:from_content(mc:protocol_state(Mc)),
+    Props = clear_user_id(User, Props0),
     Msg1 = #amqp_msg{props = apply(M, F, Args ++ [SrcUri, DstUri, Props]),
                      payload = Payload},
     publish(IncomingTag, Method1, Msg1, State0).
+
+clear_user_id(User, #'P_basic'{user_id = User} = Props) ->
+    Props;
+clear_user_id(_User, Props) ->
+    Props#'P_basic'{user_id = undefined}.
 
 handle_source(#'basic.consume_ok'{}, State) ->
     State;
@@ -612,12 +619,16 @@ do_make_conn_and_chan(URIs, ShovelName) ->
             link(Conn),
             {ok, Ch} = amqp_connection:open_channel(Conn),
             link(Ch),
-            {Conn, Ch, list_to_binary(amqp_uri:remove_credentials(URI))};
+            {Conn, Ch, list_to_binary(amqp_uri:remove_credentials(URI)),
+             username(AmqpParam)};
         {error, not_allowed} ->
             throw({error, not_allowed, URI});
         {error, Reason} ->
             throw({error, Reason, URI})
     end.
+
+username(#amqp_params_network{username = Username}) -> Username;
+username(#amqp_params_direct{username = Username}) -> Username.
 
 get_connection_name(ShovelName) when is_atom(ShovelName) ->
     Prefix = <<"Shovel ">>,

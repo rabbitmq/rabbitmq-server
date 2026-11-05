@@ -109,6 +109,8 @@ tests() ->
      no_vhost_access,
      no_user_access,
      application_properties,
+     user_id_differs_from_dest_user,
+     user_id_matches_dest_user,
      delete_src_queue,
      shovel_status,
      change_definition,
@@ -673,6 +675,72 @@ application_properties(Config) ->
               AppProps = amqp10_msg:application_properties(MsgRcv),
               ?assertMatch(#{<<"key">> := <<"value">>},
                            AppProps)
+      end).
+
+user_id_differs_from_dest_user(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
+    DestUser = <<"dest_user_", Param/binary>>,
+    rabbit_ct_broker_helpers:add_user(Config, DestUser, DestUser),
+    rabbit_ct_broker_helpers:set_permissions(
+      Config, DestUser, <<"/">>, <<".*">>, <<".*">>, <<".*">>),
+    SrcUri = make_uri(Config, 0),
+    DestUri = make_uri(Config, 0, DestUser, DestUser),
+    ShovelArgs = ?config(shovel_args, Config) ++
+        [{<<"src-uri">>, SrcUri}, {<<"dest-uri">>, [DestUri]}],
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_runtime_parameters, set,
+           [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
+    try
+        shovel_test_utils:await_shovel(Config, 0, Param),
+        with_amqp10_session(
+          Config,
+          fun (Sess) ->
+                  Tag = <<"tag1">>,
+                  Msg = amqp10_msg:set_properties(
+                          #{user_id => <<"guest">>},
+                          amqp10_msg:set_headers(
+                            #{durable => true},
+                            amqp10_msg:new(Tag, <<"hello">>, false))),
+                  SrcAddress = rabbitmq_amqp_address:queue(Src),
+                  DestAddress = rabbitmq_amqp_address:queue(Dest),
+                  amqp10_publish_msg(Sess, SrcAddress, Tag, Msg),
+                  _ = amqp10_expect_one(Sess, DestAddress),
+                  ?awaitMatch({_Name, dynamic, {running, _}, #{forwarded := 1}, _},
+                              shovel_status(Config, {<<"/">>, Param}),
+                              30000)
+          end)
+    after
+        rabbit_ct_broker_helpers:delete_user(Config, DestUser)
+    end.
+
+user_id_matches_dest_user(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
+    Uri = make_uri(Config, 0, <<"guest">>, <<"guest">>),
+    ShovelArgs = ?config(shovel_args, Config) ++
+        [{<<"src-uri">>, Uri}, {<<"dest-uri">>, [Uri]}],
+    with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              ok = rabbit_ct_broker_helpers:rpc(
+                     Config, 0, rabbit_runtime_parameters, set,
+                     [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
+              shovel_test_utils:await_shovel(Config, 0, Param),
+              Tag = <<"tag1">>,
+              Msg = amqp10_msg:set_properties(
+                      #{user_id => <<"guest">>},
+                      amqp10_msg:set_headers(
+                        #{durable => true},
+                        amqp10_msg:new(Tag, <<"hello">>, false))),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              amqp10_publish_msg(Sess, SrcAddress, Tag, Msg),
+              MsgRcv = amqp10_expect_one(Sess, DestAddress),
+              ?assertMatch(#{user_id := <<"guest">>},
+                           amqp10_msg:properties(MsgRcv))
       end).
 
 delete_src_queue(Config) ->

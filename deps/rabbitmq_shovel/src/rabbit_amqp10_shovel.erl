@@ -236,13 +236,18 @@ connect_dest(State = #{name := Name,
                                     AttachFun, undefined, Predeclared),
     %% wait for link credit here as if there are messages waiting we may try
     %% to forward before we've received credit
-    State#{dest => Dst#{current => #{conn => Conn,
+    {ok, #{sasl := Sasl}} = amqp10_client:parse_uri(Uri),
+    State#{dest => Dst#{user => username(Sasl),
+                        current => #{conn => Conn,
                                      session => Sess,
                                      link_state => attached,
                                      pending => [],
                                      link => LinkRef,
                                      uri => list_to_binary(
                                               amqp_uri:remove_credentials(Uri))}}}.
+
+username({plain, Username, _Password}) -> Username;
+username(_Sasl) -> undefined.
 
 connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun, LinkNameOverride, Predeclared) ->
     {ok, Config0} = amqp10_client:parse_uri(Uri),
@@ -517,11 +522,12 @@ forward(Tag, Mc,
     State#{dest => Dst#{pending => {Pend}}};
 forward(Tag, Msg0,
         #{dest := #{current := #{link := Link},
+                    user := User,
                     unacked := Unacked},
           ack_mode := AckMode} = State) ->
     OutTag = rabbit_data_coercion:to_binary(Tag),
     Msg1 = add_timestamp_header(State, add_forward_headers(State, Msg0)),
-    Msg2 = mc:protocol_state(mc:convert(mc_amqp, Msg1)),
+    Msg2 = clear_user_id(User, mc:protocol_state(mc:convert(mc_amqp, Msg1))),
     Msg3 = amqp10_raw_msg:new(AckMode =/= on_confirm, Tag, iolist_to_binary(Msg2)),
     case send_msg(Link, Msg3) of
         ok ->
@@ -539,6 +545,17 @@ forward(Tag, Msg0,
         Stop ->
             Stop
     end.
+
+clear_user_id(User, Sections) ->
+    [amqp10_framing:encode_bin(clear_user_id_section(User, S))
+     || S <- amqp10_framing:decode_bin(iolist_to_binary(Sections))].
+
+clear_user_id_section(User, #'v1_0.properties'{user_id = {binary, User}} = Props) ->
+    Props;
+clear_user_id_section(_User, #'v1_0.properties'{} = Props) ->
+    Props#'v1_0.properties'{user_id = undefined};
+clear_user_id_section(_User, Section) ->
+    Section.
 
 send_msg(Link, Msg) ->
     case amqp10_client:send_msg(Link, Msg) of
