@@ -191,6 +191,7 @@ all_tests() -> [
     arguments_test,
     arguments_table_test,
     binary_fields_listing_test,
+    non_utf8_names_test,
     queue_purge_test,
     queue_actions_test,
     exclusive_consumer_test,
@@ -3035,6 +3036,20 @@ binary_fields_listing_test(Config) ->
     amqp_channel:call(Ch, #'exchange.delete'{exchange = XName}),
     close_channel(Ch),
     close_connection(Conn),
+    passed.
+
+non_utf8_names_test(Config) ->
+    http_put(Config, "/queues/%2F/%FF", #{durable => true}, ?BAD_REQUEST),
+    http_put(Config, "/exchanges/%2F/%FF", #{type => <<"direct">>}, ?BAD_REQUEST),
+    http_get(Config, "/queues", ?OK),
+    http_get(Config, "/exchanges", ?OK),
+
+    QName = rabbit_misc:r(<<"/">>, queue, <<255>>),
+    {new, _} = rabbit_ct_broker_helpers:rpc(
+                 Config, 0, rabbit_amqqueue, declare,
+                 [QName, true, false, [], none, <<"guest">>]),
+    http_delete(Config, "/queues/%2F/%FF", {group, '2xx'}),
+    http_get(Config, "/queues", ?OK),
     passed.
 
 queue_purge_test(Config) ->
