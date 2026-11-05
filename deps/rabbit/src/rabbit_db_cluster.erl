@@ -249,17 +249,7 @@ forget_member_using_khepri(_Node, true) ->
        #{domain => ?RMQLOG_DOMAIN_DB}),
     {error, not_supported};
 forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
-<<<<<<< HEAD
     rabbit_khepri:remove_member(Node).
-=======
-    case rabbit_khepri:remove_member(Node) of
-        ok ->
-            _ = rabbit_db_node_metadata:delete(Node),
-            ok;
-        Error ->
-            Error
-    end.
->>>>>>> 682f991 (CLI, peer discovery: refuse removal of members that are still booting)
 
 %% -------------------------------------------------------------------
 %% Cluster update.
