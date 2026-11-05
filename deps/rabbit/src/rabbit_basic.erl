@@ -173,7 +173,8 @@ set_invalid(NewHdr, Headers) ->
 update_invalid(Name, Value, ExistingHdr, Header) ->
     Values = case rabbit_misc:table_lookup(ExistingHdr, Name) of
                  undefined      -> [Value];
-                 {array, Prior} -> [Value | Prior]
+                 {array, Prior} -> [Value | Prior];
+                 _              -> [Value]
              end,
     NewHdr = rabbit_misc:set_table_value(ExistingHdr, Name, array, Values),
     set_invalid(NewHdr, Header).
