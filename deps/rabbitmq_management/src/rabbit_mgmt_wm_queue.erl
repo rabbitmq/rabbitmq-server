@@ -69,10 +69,15 @@ accept_content(ReqData, Context) ->
     %% NOTE: ?FRAMING currently defined as 0.9.1 hence validating length
     case rabbit_parameter_validation:amqp091_queue_name(queue, Name) of
         ok ->
-            rabbit_mgmt_util:direct_request(
-            'queue.declare',
-            fun rabbit_mgmt_format:format_accept_content/1,
-            [{queue, Name}], "Declare queue error: ~ts", ReqData, Context);
+            case rabbit_binary_parser:validate_utf8(Name) of
+                ok ->
+                    rabbit_mgmt_util:direct_request(
+                      'queue.declare',
+                      fun rabbit_mgmt_format:format_accept_content/1,
+                      [{queue, Name}], "Declare queue error: ~ts", ReqData, Context);
+                error ->
+                    rabbit_mgmt_util:bad_request(<<"Bad name: not valid UTF-8">>, ReqData, Context)
+            end;
         {error, F, A} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(io_lib:format(F ++ "~n", A)), ReqData, Context)
     end.
