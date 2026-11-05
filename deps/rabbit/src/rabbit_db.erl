@@ -69,7 +69,7 @@ init() ->
             ok
     end,
 
-    Ret = init_using_khepri(IsVirgin),
+    Ret = init_using_khepri(),
     case Ret of
         ok ->
             ?LOG_DEBUG(
@@ -94,11 +94,11 @@ pre_init(IsVirgin) ->
     OtherMembers = rabbit_nodes:nodes_excl_me(Members),
     rabbit_db_cluster:ensure_feature_flags_are_in_sync(OtherMembers, IsVirgin).
 
-init_using_khepri(IsVirgin) ->
+init_using_khepri() ->
     ?LOG_DEBUG(
       "DB: initialize Khepri",
       #{domain => ?RMQLOG_DOMAIN_DB}),
-    rabbit_khepri:init(IsVirgin).
+    rabbit_khepri:init().
 
 init_finished() ->
     %% Used during initialisation by rabbit_logger_exchange_h.erl
