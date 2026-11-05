@@ -23,6 +23,7 @@ groups() ->
     [
       {non_parallel_tests, [], [
           ready_for_close_with_dead_writer,
+          ready_for_close_with_blocked_writer,
           terminate_safely_handles_cleanup_failures,
           replies_taken_by_writer,
           replies_not_taken_by_writer,
@@ -98,6 +99,67 @@ ready_for_close_with_dead_writer1(_Config) ->
     after ?TIMEOUT ->
         throw(channel_did_not_terminate)
     end,
+    passed.
+
+ready_for_close_with_blocked_writer(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, ready_for_close_with_blocked_writer1, [Config]).
+
+ready_for_close_with_blocked_writer1(_Config) ->
+    {ok, LSock} = gen_tcp:listen(0, [binary, {active, false}]),
+    {ok, Port} = inet:port(LSock),
+    {ok, Client} = gen_tcp:connect({127, 0, 0, 1}, Port,
+                                   [binary, {active, false}, {recbuf, 4096}]),
+    {ok, Sock} = gen_tcp:accept(LSock),
+    ok = gen_tcp:close(LSock),
+    ok = inet:setopts(Sock, [{sndbuf, 4096}]),
+    Me = self(),
+    {ok, Writer} = rabbit_writer:start_link(Sock, 1, 0, Me, ?MODULE, false),
+    {ok, Limiter} = rabbit_limiter:start_link(no_id),
+    {ok, Ch} = rabbit_channel:start_link(1, Me, Writer, Me, "",
+                                         rabbit_ct_broker_helpers:user(<<"guest">>),
+                                         <<"/">>, [], Me,
+                                         Limiter),
+    MRef = erlang:monitor(process, Ch),
+    ok = rabbit_channel_common:do(Ch, #'channel.open'{}),
+    Deliver = #'basic.deliver'{consumer_tag = <<"ctag">>,
+                               delivery_tag = 1,
+                               redelivered = false,
+                               exchange = <<>>,
+                               routing_key = <<"rk">>},
+    Content = rabbit_basic:build_content(
+                #'P_basic'{}, binary:copy(<<"x">>, 1_048_576)),
+    [ok = rabbit_writer:send_command(Writer, Deliver, Content)
+     || _ <- lists:seq(1, 64)],
+    ok = rabbit_ct_helpers:await_condition(
+           fun() ->
+                   {message_queue_len, Len} =
+                       erlang:process_info(Writer, message_queue_len),
+                   Len > 0
+           end, 10_000),
+
+    rabbit_channel_common:do(Ch, #'channel.close'{reply_code = 200,
+                                                  reply_text = <<"OK">>,
+                                                  class_id = 0,
+                                                  method_id = 0}),
+    receive
+        {channel_closing, Ch} -> ok
+    after ?TIMEOUT ->
+        throw(failed_to_receive_channel_closing)
+    end,
+    rabbit_channel_common:ready_for_close(Ch),
+    receive
+        {'DOWN', MRef, process, Ch, normal} -> ok;
+        {'DOWN', MRef, process, Ch, Reason} ->
+            throw({channel_exited_abnormally, Reason})
+    after 15_000 ->
+        throw(channel_did_not_terminate)
+    end,
+    unlink(Writer),
+    exit(Writer, kill),
+    unlink(Limiter),
+    exit(Limiter, kill),
+    ok = gen_tcp:close(Client),
     passed.
 
 terminate_safely_handles_cleanup_failures(Config) ->
