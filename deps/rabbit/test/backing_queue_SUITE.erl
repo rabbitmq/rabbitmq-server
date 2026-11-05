@@ -3584,7 +3584,7 @@ queue_name(Name) ->
     rabbit_misc:r(<<"/">>, queue, Name).
 
 test_queue() ->
-    queue_name(rabbit_guid:gen()).
+    queue_name(rabbit_guid:binary(rabbit_guid:gen(), "bq")).
 
 init_test_queue(QName) ->
     PRef = rabbit_guid:gen(),
