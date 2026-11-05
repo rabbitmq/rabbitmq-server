@@ -68,7 +68,9 @@ groups() ->
        {quorum_queue, [], AllTests}
       ],
     MultipleDeliveryTests =
-        [second_delivery_timeout_after_cancel_ok_keeps_channel,
+        [no_delivery_after_late_ack_while_cancel_pending,
+         client_cancel_while_cancel_ok_pending_is_answered,
+         second_delivery_timeout_after_cancel_ok_keeps_channel,
          second_delivery_timeout_after_cancel_ok_window_keeps_channel,
          cancelled_consumer_forgotten_once_its_deliveries_return,
          delivery_acked_before_its_timeout_after_cancel_ok,
@@ -355,13 +357,15 @@ consumer_removed_when_cancel_ok_never_arrives(Config) ->
     _ = receive_delivery(<<"ctag">>, false),
     await_basic_cancel(<<"ctag">>),
     timer:sleep(3000),
-    ?assertMatch(#{quorum_queue_consumers := 1}, consumer_state(Config, QName)),
+    %% The queue drops the consumer at the timeout; the channel keeps it
+    %% until the `basic.cancel_ok` window ends.
+    ?assertMatch(#{quorum_queue_consumers := 0}, consumer_state(Config, QName)),
     ?assertEqual(1, channel_consumer_count(Config)),
     ?awaitMatch(#{consumers := 0,
                   quorum_queue_consumers := 0,
                   consumer_metrics := []},
                 consumer_state(Config, QName), ?RECEIVE_TIMEOUT),
-    ?assertEqual(0, channel_consumer_count(Config)),
+    ?awaitMatch(0, channel_consumer_count(Config), ?RECEIVE_TIMEOUT, 100),
     ?assert(is_process_alive(Ch)),
     amqp_connection:close(Conn).
 
@@ -771,6 +775,48 @@ second_delivery_timeout_after_leader_change_keeps_channel(Config) ->
               await_counts(Config, QName, 2, 0),
               assert_channel_stays_open(Ch),
               ?assertEqual([], server_cancelled_consumers(Config))
+      end).
+
+%% After the server cancels a consumer for a delivery timeout, settling the
+%% timed-out delivery late must not make the queue deliver to it again.
+no_delivery_after_late_ack_while_cancel_pending(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
+              publish_and_confirm(Ch, QName, [<<"m1">>]),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              DTag1 = receive_delivery(<<"ctag">>, false),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag1}),
+              timer:sleep(500),
+              publish(Ch, QName, [<<"m2">>]),
+              receive
+                  {#'basic.deliver'{consumer_tag = <<"ctag">>} = D, _} ->
+                      exit({delivered_to_cancelled_consumer, D})
+              after 2000 ->
+                        ok
+              end
+      end).
+
+%% A client cancelling a consumer itself while the server waits for its
+%% `basic.cancel_ok` still gets a `basic.cancel_ok` back.
+client_cancel_while_cancel_ok_pending_is_answered(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              %% The Erlang client forgets the tag on the server's cancel, so
+              %% it hands the `basic.cancel_ok` to the default consumer.
+              ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
+              publish_and_confirm(Ch, QName, [<<"m1">>]),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              _ = receive_delivery(<<"ctag">>, false),
+              await_basic_cancel(<<"ctag">>),
+              erlang:monitor(process, Ch),
+              #'basic.cancel_ok'{} =
+                  amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>}),
+              ?assertEqual(0, channel_consumer_count(Config)),
+              assert_channel_stays_open(Ch)
       end).
 
 %% With a single active consumer, the waiting consumer takes over once the

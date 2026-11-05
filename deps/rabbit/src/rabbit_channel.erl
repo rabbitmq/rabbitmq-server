@@ -172,7 +172,8 @@
              queue_states,
              tick_timer,
              publishing_mode = false :: boolean(),
-             %% for clients that do not respond to a `basic.cancel` with a `basic.cancel_ok`
+             %% consumers cancelled at the queue for a delivery timeout, kept until the
+             %% client's `basic.cancel_ok` or the timer, for clients that never send one
              pending_consumer_cancels = #{} :: #{rabbit_types:ctag() => reference()},
              %% consumers the server cancelled while the queue still had deliveries
              %% checked out to them, by the message ids of those deliveries, so
@@ -2972,12 +2973,29 @@ notify_consumer_of_cancelation_after_delivery_timeout(
   when is_map_key(CTag, Pending) ->
     forget_held_deliveries({QName, CTag}, MsgIds, State);
 notify_consumer_of_cancelation_after_delivery_timeout(
-  CTag, QName, MsgIds, #ch{pending_consumer_cancels = Pending} = State) ->
-    ok = send(#'basic.cancel'{consumer_tag = CTag, nowait = true}, State),
+  CTag, QName, MsgIds, #ch{pending_consumer_cancels = Pending,
+                           consumer_mapping = CMap} = State0) ->
+    ok = send(#'basic.cancel'{consumer_tag = CTag, nowait = true}, State0),
+    %% Cancelled at the queue now: settling its timed-out deliveries would
+    %% otherwise make the queue deliver to it again.
+    {Q, _} = maps:get(CTag, CMap),
+    State = cancel_at_queue(CTag, Q, State0),
     TRef = erlang:start_timer(consumer_cancel_ok_timeout(), self(),
                               {consumer_cancel_ok_timeout, CTag}),
     remember_server_cancelled_consumer(
       QName, CTag, MsgIds, State#ch{pending_consumer_cancels = Pending#{CTag => TRef}}).
+
+cancel_at_queue(CTag, Q, #ch{cfg = #conf{user = #user{username = Username}},
+                             queue_states = QueueStates0} = State) ->
+    Spec = #{consumer_tag => CTag,
+             ok_msg => undefined,
+             user => Username},
+    case rabbit_misc:with_exit_handler(
+           fun () -> {error, not_found} end,
+           fun () -> rabbit_queue_type:cancel(Q, Spec, QueueStates0) end) of
+        {ok, QueueStates} -> State#ch{queue_states = QueueStates};
+        {error, not_found} -> State
+    end.
 
 -ifdef(TEST).
 server_cancelled_consumers(Pid) ->
@@ -3132,7 +3150,22 @@ unsupported_single_active_consumer_error(Q) ->
       [rabbit_misc:rs(amqqueue:get_name(Q)),
        rabbit_queue_type:short_alias_of(amqqueue:get_type(Q))]).
 
+remove_queue_consumer(QName, CTag, QCons) ->
+    case maps:find(QName, QCons) of
+        error ->
+            QCons;
+        {ok, CTags} ->
+            CTags1 = gb_sets:delete_any(CTag, CTags),
+            case gb_sets:is_empty(CTags1) of
+                true -> maps:remove(QName, QCons);
+                false -> maps:put(QName, CTags1, QCons)
+            end
+    end.
+
 cancel_consumer(ConsumerTag, NoWait, OkMsg, State0) ->
+    %% A consumer awaiting its `basic.cancel_ok` was cancelled at the queue
+    %% already, and a second cancel there would count it out twice.
+    CancelledAtQueue = is_map_key(ConsumerTag, State0#ch.pending_consumer_cancels),
     #ch{cfg = #conf{user = #user{username = Username}},
         consumer_mapping = ConsumerMapping,
         queue_consumers = QCons,
@@ -3142,6 +3175,12 @@ cancel_consumer(ConsumerTag, NoWait, OkMsg, State0) ->
         error ->
             %% Spec requires we ignore this situation.
             return_ok(State, NoWait, OkMsg);
+        {ok, {Q, _CParams}} when CancelledAtQueue ->
+            rabbit_global_counters:consumer_deleted(amqp091),
+            return_ok(State#ch{consumer_mapping = maps:remove(ConsumerTag, ConsumerMapping),
+                               queue_consumers = remove_queue_consumer(
+                                                   amqqueue:get_name(Q), ConsumerTag, QCons)},
+                      NoWait, OkMsg);
         {ok, {Q, _CParams}} when ?is_amqqueue(Q) ->
             QName = amqqueue:get_name(Q),
             ConsumerMapping1 = maps:remove(ConsumerTag, ConsumerMapping),
