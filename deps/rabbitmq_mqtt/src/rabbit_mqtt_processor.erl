@@ -489,11 +489,12 @@ process_request(?SUBSCRIBE,
               %% as failed instead of creating bindings because we are going
               %% to close the client connection anyway.
               {[E | L], R, S};
-         (#mqtt_subscription{topic_filter = TopicFilter,
+         (#mqtt_subscription{topic_filter = TopicFilter0,
                              options = Opts0 = #mqtt_subscription_opts{
                                                   qos = Qos0,
                                                   retain_handling = Rh}},
           {L0, R0, S0}) ->
+              TopicFilter = subscription_key(TopicFilter0),
               QoS = maybe_downgrade_qos(Qos0),
               Opts = Opts0#mqtt_subscription_opts{qos = QoS},
               L = [QoS | L0],
@@ -556,8 +557,9 @@ process_request(?UNSUBSCRIBE,
     ?LOG_DEBUG("Received an UNSUBSCRIBE for topic filter(s) ~p", [TopicFilters]),
     {ReasonCodes, State} =
     lists:foldl(
-      fun(TopicFilter, {L, #state{subscriptions = Subs0,
-                                  cfg = #cfg{proto_ver = ProtoVer}} = S0}) ->
+      fun(TopicFilter0, {L, #state{subscriptions = Subs0,
+                                   cfg = #cfg{proto_ver = ProtoVer}} = S0}) ->
+              TopicFilter = subscription_key(TopicFilter0),
               case maps:take(TopicFilter, Subs0) of
                   {Opts, Subs} ->
                       BindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts),
@@ -1576,6 +1578,11 @@ consume(Q, QoS, #state{
         {error, access_refused} = Err ->
             Err
     end.
+
+%% Delivery and `init_subscriptions0/2` only have the binding key, so subscriptions
+%% are keyed by the topic filter it maps back to, for example `a/+` for `a/*`.
+subscription_key(TopicFilter) ->
+    amqp_to_mqtt(mqtt_to_amqp(TopicFilter)).
 
 binding_args_for_proto_ver(?MQTT_PROTO_V3, _, _) ->
     [];
