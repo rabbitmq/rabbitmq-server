@@ -2512,6 +2512,19 @@ or:
               Enables regular expression for the param name
             </td>
           </tr>
+          <tr>
+            <td><code>filter_field</code></td>
+            <td>String</td>
+            <td>
+              Field matched by the <code>name</code> filter (default value: <code>name</code>);
+              nested fields are separated by dots, for example <code>client_properties.connection_name</code>,
+              so keys that contain dots cannot be used.
+              Numbers and booleans are matched as text; tables, arrays and null values never match.
+              Like <code>name</code>, it only applies when <code>page</code> is set.
+              Filtering on a field that is computed lazily, such as <code>messages</code> for queues,
+              is as expensive as sorting on it
+            </td>
+          </tr>
         </table>
       </p>
 
@@ -2534,6 +2547,12 @@ or:
             <td><code>http://localhost:15672/api/exchanges?page=1&page_size=100&name=%5Eamq&use_regex=true&pagination=true</code></td>
             <td>
               Filter the first exchanges page, 100 elements, with named filtered using the regular expression "^amq"
+            </td>
+          </tr>
+          <tr>
+            <td><code>http://localhost:15672/api/connections?page=1&page_size=100&filter_field=client_properties.connection_name&name=%5Eorders-&use_regex=true</code></td>
+            <td>
+              Filter the first connections page to connections whose client-provided name matches the regular expression "^orders-"
             </td>
           </tr>
         </table>

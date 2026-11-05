@@ -938,6 +938,15 @@ function paginate_ui(pages, context, label){
     res += '<th><span><label for="'+ context +'-name"> - Filter: </label> <input id="'+ context +'-name"  data-page-start="1"  class="pagination_class pagination_class_input" type="text"';
     res +=   'value="' + fmt_filter_name_request(context, "") + '">';
     res +=   '</input></th></span>';
+    if (FILTER_FIELD_SUGGESTIONS[context] != undefined) {
+        res += '<th><span><label for="'+ context +'-filter-field"> on field: </label> <input id="'+ context +'-filter-field" data-page-start="1" class="pagination_class pagination_class_input filter-field" type="text" placeholder="name" maxlength="1024" list="'+ context +'-filter-fields"';
+        res +=   ' value="' + fmt_filter_field_request(context, "") + '"></input>';
+        res += '<datalist id="'+ context +'-filter-fields">';
+        for (var f of FILTER_FIELD_SUGGESTIONS[context]) {
+            res += '<option value="' + fmt_escape_html(f) + '"></option>';
+        }
+        res += '</datalist> <span class="help" id="filter-field"></span></span></th>';
+    }
 
     res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class pagination_class_checkbox" id="'+ context +'-filter-regex-mode"' ;
 
@@ -1073,6 +1082,10 @@ function fmt_page_size_request(template, defaultPageSize){
 
 function fmt_filter_name_request(template, defaultName){
     return fmt_escape_html(stored_value_or_default(template + '_current_filter_name', defaultName));
+}
+
+function fmt_filter_field_request(template, defaultName){
+    return fmt_escape_html(stored_value_or_default(template + '_current_filter_field', defaultName));
 }
 
 function fmt_regex_request(template, defaultName){
