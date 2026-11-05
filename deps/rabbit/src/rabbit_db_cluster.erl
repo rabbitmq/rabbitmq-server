@@ -218,7 +218,7 @@ join_using_khepri(ClusterNodes, disc) ->
 join_using_khepri(_ClusterNodes, ram = NodeType) ->
     {error, {node_type_unsupported, khepri, NodeType}}.
 
--spec forget_member(Node, RemoveWhenOffline) -> ok when
+-spec forget_member(Node, RemoveWhenOffline) -> rabbit_types:ok_or_error(any()) when
       Node :: node(),
       RemoveWhenOffline :: boolean().
 %% @doc Removes `Node' from the cluster.
@@ -249,7 +249,17 @@ forget_member_using_khepri(_Node, true) ->
        #{domain => ?RMQLOG_DOMAIN_DB}),
     {error, not_supported};
 forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
+<<<<<<< HEAD
     rabbit_khepri:remove_member(Node).
+=======
+    case rabbit_khepri:remove_member(Node) of
+        ok ->
+            _ = rabbit_db_node_metadata:delete(Node),
+            ok;
+        Error ->
+            Error
+    end.
+>>>>>>> 682f991 (CLI, peer discovery: refuse removal of members that are still booting)
 
 %% -------------------------------------------------------------------
 %% Cluster update.

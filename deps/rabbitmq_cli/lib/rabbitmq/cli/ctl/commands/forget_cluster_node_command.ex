@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Distribution, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, Distribution, ExitCodes, Validators}
   import RabbitMQ.CLI.Core.DataCoercion
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -50,10 +50,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
     # `forget_member/2` requires the target node's `rabbit` app to be stopped.
     # Verify this precondition before shrinking any members (replicas).
-    case :rabbit_misc.rpc_call(node_name, :rabbit, :is_running, [atom_name]) do
-      true ->
+    case :rabbit_misc.rpc_call(node_name, :rpc, :call, [atom_name, :rabbit_boot_state, :get, []]) do
+      :ready ->
         {:error,
          "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+
+      boot_state when is_atom(boot_state) and boot_state != :stopped ->
+        boot_state_error(node_to_remove, boot_state)
 
       _ ->
         do_run(node_to_remove, node_name, atom_name)
@@ -100,6 +103,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
       {:error, {:failed_to_remove_node, ^atom_name, :unavailable}} ->
         {:error, "Node #{node_to_remove} must be running before it can be removed"}
+
+      {:error, {:unexpected_boot_state, boot_state}} ->
+        boot_state_error(node_to_remove, boot_state)
 
       {:error, _} = error ->
         error
@@ -149,6 +155,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
       other ->
         other
     end
+  end
+
+  defp boot_state_error(node_to_remove, boot_state) do
+    {:error, ExitCodes.exit_tempfail(),
+     "RabbitMQ on node #{node_to_remove} is in boot state '#{boot_state}'. Run the command again once it has finished booting or stopping"}
   end
 
   use RabbitMQ.CLI.DefaultOutput
