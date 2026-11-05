@@ -2967,13 +2967,44 @@ handle_consumer_delivery_timeout(CTag, MsgIds, QName, State) ->
                         hd(MsgIds)]),
             forget_held_deliveries(Key, MsgIds, State);
         false ->
-            %% The node is configured to use the pre-4.3 behavior, this client
-            %% does not advertise support for `consumer_cancel_notify`, or the
-            %% delivery came from `basic.get` or from a consumer the client
-            %% cancelled itself, which never received a `basic.cancel`.
-            {_, State1} = handle_consumer_timed_out(CTag, hd(MsgIds), QName, State),
-            State1
+            case still_unacked(QName, CTag, MsgIds, State) of
+                true ->
+                    %% The node is configured to use the pre-4.3 behavior, this
+                    %% client does not advertise support for
+                    %% `consumer_cancel_notify`, or the delivery came from
+                    %% `basic.get` or from a consumer the client cancelled itself,
+                    %% which never received a `basic.cancel`.
+                    {_, State1} = handle_consumer_timed_out(CTag, hd(MsgIds), QName, State),
+                    State1;
+                false ->
+                    %% The client's acknowledgement crossed the timeout.
+                    ?LOG_DEBUG("Consumer '~ts' on channel ~w and ~ts had a delivery "
+                               "with message id ~b time out after the client had "
+                               "settled it",
+                               [CTag, State#ch.cfg#conf.channel, rabbit_misc:rs(QName),
+                                hd(MsgIds)]),
+                    State
+            end
     end.
+
+%% Whether the channel still lists one of these deliveries as unacknowledged;
+%% an acknowledgement in an uncommitted transaction has not settled it yet.
+still_unacked(QName, CTag, MsgIds, #ch{unacked_message_q = UAMQ, tx = Tx}) ->
+    InTx = case Tx of
+               none -> [];
+               {_, Acks} -> lists:append([L || {_, L} <- Acks])
+           end,
+    lists:any(fun (#pending_ack{queue = Q, tag = T, msg_id = MsgId}) ->
+                      Q =:= QName andalso is_same_ctag(T, CTag) andalso
+                          lists:member(MsgId, MsgIds)
+              end, InTx ++ ?QUEUE:to_list(UAMQ)).
+
+%% The channel lists a `basic.get' delivery under its integer delivery tag; a
+%% quorum queue reports it under that tag as a binary, a classic queue as `none'.
+is_same_ctag(CTag, CTag) -> true;
+is_same_ctag(Int, Bin) when is_integer(Int), is_binary(Bin) -> integer_to_binary(Int) =:= Bin;
+is_same_ctag(Int, none) when is_integer(Int) -> true;
+is_same_ctag(_, _) -> false.
 
 %% A tag in the consumer mapping can belong to a different queue than the
 %% delivery that timed out, when it was reused after its consumer was removed.
@@ -3096,8 +3127,9 @@ mark_released(QName, CTag, MsgIds, #ch{unacked_message_q = UAMQ, tx = Tx,
     Wanted = sets:from_list(MsgIds, [{version, 2}]),
     ByMsgId = lists:foldl(
                 fun (#pending_ack{queue = Q, tag = T, msg_id = MsgId, delivery_tag = DTag}, Acc)
-                      when Q =:= QName, T =:= CTag ->
-                        case sets:is_element(MsgId, Wanted) andalso
+                      when Q =:= QName ->
+                        case is_same_ctag(T, CTag) andalso
+                             sets:is_element(MsgId, Wanted) andalso
                              not is_map_key(DTag, Returned0) of
                             true -> Acc#{MsgId => DTag};
                             false -> Acc
