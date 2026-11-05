@@ -63,6 +63,10 @@
 %% Internal
 -export([list_local/0, emit_info_local/3]).
 -export([is_local/1]).
+
+-ifdef(TEST).
+-export([server_cancelled_consumers/1]).
+-endif.
 -export([get_vhost/1, get_user/1]).
 %% For testing
 -export([build_topic_variable_map/3]).
@@ -170,6 +174,11 @@
              publishing_mode = false :: boolean(),
              %% for clients that do not respond to a `basic.cancel` with a `basic.cancel_ok`
              pending_consumer_cancels = #{} :: #{rabbit_types:ctag() => reference()},
+             %% consumers the server cancelled while the queue still had deliveries
+             %% checked out to them, by the message ids of those deliveries, so
+             %% that one of them timing out does not close the channel
+             server_cancelled_consumers = #{} :: #{{rabbit_amqqueue:name(), rabbit_types:ctag()} =>
+                                                       sets:set(term())},
              pending_replies = {0, 0} :: {non_neg_integer(), non_neg_integer()} | untracked,
              coalescing_confirms = false :: boolean()
             }).
@@ -1376,7 +1385,10 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple     = Multiple},
               _, State = #ch{unacked_message_q = UAMQ, tx = Tx}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
-    State1 = State#ch{unacked_message_q = Remaining},
+    State1 = case Tx of
+                 none -> forget_settled_deliveries(Acked, State#ch{unacked_message_q = Remaining});
+                 _ -> State#ch{unacked_message_q = Remaining}
+             end,
     {noreply, case Tx of
                   none         -> {State2, Actions} = settle_acks(Acked, State1),
                                   handle_queue_actions(Actions, State2);
@@ -1628,8 +1640,10 @@ handle_method(#'basic.recover_async'{requeue = true},
                     end)
           end, lists:reverse(UAMQL), {QueueStates0, []}),
     ok = notify_limiter(Limiter, UAMQL),
-    State1 = handle_queue_actions(Actions, State#ch{unacked_message_q = ?QUEUE:new(),
-                                                    queue_states = QueueStates}),
+    State1 = handle_queue_actions(
+               Actions, forget_settled_deliveries(
+                          UAMQL, State#ch{unacked_message_q = ?QUEUE:new(),
+                                          queue_states = QueueStates})),
     %% No answer required - basic.recover is the newer, synchronous
     %% variant of this method
     {noreply, State1};
@@ -1765,7 +1779,9 @@ handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Deliveries, Acks},
                             {Acc0, Actions0} = internal_reject(Op, Rev(A), Limiter, Acc),
                             {Acc0, Actions ++ Actions0}
                     end, {State1, []}, lists:reverse(Acks)),
-    State3 = handle_queue_actions(Actions2, State2),
+    State3 = handle_queue_actions(
+               Actions2,
+               forget_settled_deliveries(lists:append([L || {_, L} <- Acks]), State2)),
     {noreply, maybe_complete_tx(State3#ch{tx = committing})};
 
 handle_method(#'tx.rollback'{}, _, #ch{tx = none}) ->
@@ -1827,8 +1843,14 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
                     ConsumerMapping),
+            %% The queue merges a consumer resubscribing with the same tag into
+            %% the one it timed out, deliveries included, so its timeouts are
+            %% the new consumer's again.
+            Cancelled = maps:remove({amqqueue:get_name(Q), ActualConsumerTag},
+                                    State0#ch.server_cancelled_consumers),
             State1 = State0#ch{consumer_mapping = CM1,
-                               queue_states = QueueStates},
+                               queue_states = QueueStates,
+                               server_cancelled_consumers = Cancelled},
             State = case NoWait of
                         true ->
                             consumer_monitor(ActualConsumerTag, State1);
@@ -1952,9 +1974,10 @@ cancel_consumer_recheck(CTag, Q,
                                            {channel, self()},
                                            {queue, QName}]),
     clear_pending_consumer_cancel(
-      CTag, State#ch{consumer_mapping = maps:remove(CTag, CMap),
-                     queue_consumers = QCons1,
-                     queue_states = QStates1}).
+      CTag, remember_server_cancelled_consumer(
+              QName, CTag, [], State#ch{consumer_mapping = maps:remove(CTag, CMap),
+                                        queue_consumers = QCons1,
+                                        queue_states = QStates1})).
 
 binding_action_with_checks(
   Action, SourceNameBin0, DestinationType, DestinationNameBin0,
@@ -2024,7 +2047,10 @@ basic_return(Content, RoutingKey, XNameBin,
 reject(DeliveryTag, Op, Multiple,
        State = #ch{unacked_message_q = UAMQ, tx = Tx}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
-    State1 = State#ch{unacked_message_q = Remaining},
+    State1 = case Tx of
+                 none -> forget_settled_deliveries(Acked, State#ch{unacked_message_q = Remaining});
+                 _ -> State#ch{unacked_message_q = Remaining}
+             end,
     {noreply, case Tx of
                   none ->
                       {State2, Actions} = internal_reject(Op, Acked, State1#ch.limiter, State1),
@@ -2906,29 +2932,112 @@ get_operation_timeout_and_deadline() ->
 consumer_timeout_response() ->
     application:get_env(rabbit, consumer_timeout_response, notify_consumer).
 
-handle_consumer_delivery_timeout(CTag, MsgId, QName, State) ->
-    case consumer_timeout_response() =:= notify_consumer andalso
-         client_supports_consumer_cancel_notify(State) andalso
-         is_map_key(CTag, State#ch.consumer_mapping) of
+handle_consumer_delivery_timeout(CTag, MsgIds, QName, State) ->
+    Notify = consumer_timeout_response() =:= notify_consumer andalso
+             client_supports_consumer_cancel_notify(State),
+    Key = {QName, CTag},
+    case Notify andalso consumer_on_queue(CTag, QName, State) of
         true ->
-            notify_consumer_of_cancelation_after_delivery_timeout(CTag, State);
+            notify_consumer_of_cancelation_after_delivery_timeout(CTag, QName, MsgIds, State);
+        false when Notify andalso
+                   is_map_key(Key, State#ch.server_cancelled_consumers) ->
+            %% The channel already sent this consumer a `basic.cancel`, and the
+            %% queue has returned these deliveries, so there is nothing to close
+            %% the channel for.
+            ?LOG_DEBUG("Consumer '~ts' on channel ~w and ~ts, already cancelled "
+                       "by the server, had another delivery with message id ~b "
+                       "time out; it was returned to the queue",
+                       [CTag, State#ch.cfg#conf.channel, rabbit_misc:rs(QName),
+                        hd(MsgIds)]),
+            forget_held_deliveries(Key, MsgIds, State);
         false ->
-            %% The node is configured to use the pre-4.3 behavior
-            %% or this client does not advertise support for `consumer_cancel_notify`.
-            {_, State1} = handle_consumer_timed_out(CTag, MsgId, QName, State),
+            %% The node is configured to use the pre-4.3 behavior, this client
+            %% does not advertise support for `consumer_cancel_notify`, or the
+            %% delivery came from `basic.get` or from a consumer the client
+            %% cancelled itself, which never received a `basic.cancel`.
+            {_, State1} = handle_consumer_timed_out(CTag, hd(MsgIds), QName, State),
             State1
     end.
 
+%% A tag in the consumer mapping can belong to a different queue than the
+%% delivery that timed out, when it was reused after its consumer was removed.
+consumer_on_queue(CTag, QName, #ch{consumer_mapping = CMap}) ->
+    case maps:find(CTag, CMap) of
+        {ok, {Q, _}} -> amqqueue:get_name(Q) =:= QName;
+        error -> false
+    end.
+
 notify_consumer_of_cancelation_after_delivery_timeout(
-  CTag, #ch{pending_consumer_cancels = Pending} = State)
+  CTag, QName, MsgIds, #ch{pending_consumer_cancels = Pending} = State)
   when is_map_key(CTag, Pending) ->
-    State;
+    forget_held_deliveries({QName, CTag}, MsgIds, State);
 notify_consumer_of_cancelation_after_delivery_timeout(
-  CTag, #ch{pending_consumer_cancels = Pending} = State) ->
+  CTag, QName, MsgIds, #ch{pending_consumer_cancels = Pending} = State) ->
     ok = send(#'basic.cancel'{consumer_tag = CTag, nowait = true}, State),
-    TRef = erlang:start_timer(?CONSUMER_CANCEL_OK_TIMEOUT, self(),
+    TRef = erlang:start_timer(consumer_cancel_ok_timeout(), self(),
                               {consumer_cancel_ok_timeout, CTag}),
-    State#ch{pending_consumer_cancels = Pending#{CTag => TRef}}.
+    remember_server_cancelled_consumer(
+      QName, CTag, MsgIds, State#ch{pending_consumer_cancels = Pending#{CTag => TRef}}).
+
+-ifdef(TEST).
+server_cancelled_consumers(Pid) ->
+    %% `gen_server2` can wrap the callback module's state in its own record.
+    #ch{server_cancelled_consumers = Cancelled} = case sys:get_state(Pid) of
+                                                      #ch{} = Ch -> Ch;
+                                                      Wrapped -> element(4, Wrapped)
+                                                  end,
+    Cancelled.
+-endif.
+
+consumer_cancel_ok_timeout() ->
+    application:get_env(rabbit, consumer_cancel_ok_timeout,
+                        ?CONSUMER_CANCEL_OK_TIMEOUT).
+
+%% Records the deliveries the queue still has checked out to a consumer the
+%% server just cancelled, leaving out `Released`, which it has returned.
+remember_server_cancelled_consumer(QName, CTag, Released,
+                                   #ch{unacked_message_q = UAMQ,
+                                       tx = Tx,
+                                       server_cancelled_consumers = Cancelled} = State) ->
+    InTx = case Tx of
+               none -> [];
+               {_, Acks} -> lists:append([L || {_, L} <- Acks])
+           end,
+    Held0 = sets:from_list(
+              [MsgId || #pending_ack{queue = Q, tag = T, msg_id = MsgId}
+                            <- InTx ++ ?QUEUE:to_list(UAMQ),
+                        Q =:= QName, T =:= CTag],
+              [{version, 2}]),
+    Held = sets:subtract(Held0, sets:from_list(Released, [{version, 2}])),
+    Key = {QName, CTag},
+    State#ch{server_cancelled_consumers =
+                 case sets:is_empty(Held) of
+                     true -> maps:remove(Key, Cancelled);
+                     false -> Cancelled#{Key => Held}
+                 end}.
+
+forget_held_deliveries(Key, MsgIds, #ch{server_cancelled_consumers = Cancelled} = State) ->
+    case Cancelled of
+        #{Key := Held0} ->
+            Held = lists:foldl(fun sets:del_element/2, Held0, MsgIds),
+            State#ch{server_cancelled_consumers =
+                         case sets:is_empty(Held) of
+                             true -> maps:remove(Key, Cancelled);
+                             false -> Cancelled#{Key := Held}
+                         end};
+        _ ->
+            State
+    end.
+
+%% Called when deliveries are settled with the queue, which inside a
+%% transaction is at commit rather than at the acknowledgement.
+forget_settled_deliveries(_Settled, #ch{server_cancelled_consumers = Cancelled} = State)
+  when map_size(Cancelled) =:= 0 ->
+    State;
+forget_settled_deliveries(Settled, State) ->
+    lists:foldl(fun (#pending_ack{queue = QName, tag = CTag, msg_id = MsgId}, S) ->
+                        forget_held_deliveries({QName, CTag}, [MsgId], S)
+                end, State, Settled).
 
 clear_pending_consumer_cancel(CTag, #ch{pending_consumer_cancels = Pending} = State) ->
     case maps:take(CTag, Pending) of
@@ -2973,7 +3082,7 @@ handle_queue_actions(Actions, State) ->
               S = S0#ch{unconfirmed = U},
               record_rejects(Rej, S);
          ({released, QRef, CTag, MsgSeqNos, timeout}, S0) ->
-              handle_consumer_delivery_timeout(CTag, hd(MsgSeqNos), QRef, S0);
+              handle_consumer_delivery_timeout(CTag, MsgSeqNos, QRef, S0);
          ({deliver, CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(CTag, AckRequired, Msgs, S0);
          ({queue_down, QRef}, S0) ->

@@ -1602,6 +1602,16 @@ end}.
     {datatype, {enum, [notify_consumer, close_channel]}}
 ]}.
 
+%% How long, in milliseconds, an AMQP 0-9-1 channel waits for a
+%% basic.cancel_ok after cancelling a consumer for a delivery timeout
+%% before removing the consumer itself.
+%%
+%% {consumer_cancel_ok_timeout, 10000},
+
+{mapping, "consumer_cancel_ok_timeout", "rabbit.consumer_cancel_ok_timeout", [
+    {datatype, {integer, positive}}
+]}.
+
 %% Product name & version overrides.
 
 {mapping, "product.name", "rabbit.product_name", [
