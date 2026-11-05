@@ -186,6 +186,8 @@
 
 -define(CONSUMER_CANCEL_OK_TIMEOUT, 10_000).
 
+-define(CLOSE_OK_TIMEOUT, 5_000).
+
 -define(STATISTICS_KEYS,
         [reductions,
          pid,
@@ -604,7 +606,8 @@ handle_cast(ready_for_close,
             State = #ch{cfg = #conf{state = closing,
                                     writer_pid = WriterPid}}) ->
     try
-        ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{})
+        ok = rabbit_writer:send_command_sync_timeout(
+               WriterPid, #'channel.close_ok'{}, ?CLOSE_OK_TIMEOUT)
     catch
         _Class:Reason ->
             ?LOG_DEBUG("Failed to send 'channel.close_ok' on a terminating connection, reason: ~tp", [Reason])
