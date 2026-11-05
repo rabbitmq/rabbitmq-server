@@ -38,7 +38,7 @@
          code_change/3]).
 
 -export([send_command/2, send_command/3,
-         send_command_sync/2, send_command_sync/3,
+         send_command_sync/2, send_command_sync/3, send_command_sync_timeout/3,
          send_command_and_notify/4, send_command_and_notify/5,
          send_command_flow/2, send_command_flow/3,
          send_command_and_ack/2, send_command_and_ack/3,
@@ -92,6 +92,8 @@
 -spec send_command_sync
         (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content()) ->
             'ok'.
+-spec send_command_sync_timeout
+        (pid(), rabbit_framing:amqp_method_record(), timeout()) -> 'ok'.
 -spec send_command_and_notify
         (pid(), pid(), pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 -spec send_command_and_notify
@@ -281,6 +283,9 @@ send_command_sync(W, MethodRecord) ->
 
 send_command_sync(W, MethodRecord, Content) ->
     call(W, {send_command_sync, MethodRecord, Content}).
+
+send_command_sync_timeout(W, MethodRecord, Timeout) ->
+    gen_server:call(W, {send_command_sync, MethodRecord}, Timeout).
 
 send_command_and_notify(W, Q, ChPid, MethodRecord) ->
     W ! {send_command_and_notify, Q, ChPid, MethodRecord},
