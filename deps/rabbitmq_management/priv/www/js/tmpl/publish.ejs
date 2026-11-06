@@ -31,7 +31,7 @@
         </tr>
 <% } %>
         <% if (mode == 'queue' && is_classic(queue)) { %>
-        <tr>
+        <tr class="amqp091-only" style="display: none">
           <th><label>Delivery mode:</label></th>
           <td>
             <select name="delivery_mode">

@@ -1479,7 +1479,7 @@ function publish_amqp_params(params) {
         }
         props[name] = value;
     }
-    var header = {durable: params['delivery_mode'] == '2'};
+    var header = {durable: true};
     if (params['amqp_priority'] != '')
         header['priority'] = parse_int_in_range('Priority', params['amqp_priority'], 0, 255);
     if (params['amqp_ttl'] != '')
