@@ -477,23 +477,8 @@ var HELP = {
       Outcome</a> in the RabbitMQ documentation.',
 
     'message-publish-amqp-properties':
-      '<p>The immutable <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-properties">properties</a> \
-      of the message. Invalid properties are rejected. Valid properties are:</p>\
-      <ul>\
-      <li>message_id</li>\
-      <li>user_id</li>\
-      <li>to</li>\
-      <li>subject</li>\
-      <li>reply_to</li>\
-      <li>correlation_id</li>\
-      <li>content_type</li>\
-      <li>content_encoding</li>\
-      <li>absolute_expiry_time (milliseconds since the epoch)</li>\
-      <li>creation_time (milliseconds since the epoch)</li>\
-      <li>group_id</li>\
-      <li>group_sequence</li>\
-      <li>reply_to_group_id</li>\
-      </ul>',
+      'The immutable <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-properties">properties</a> \
+      of the message. Choose the property name from the list.',
 
     'message-publish-properties':
       '<p>You can set other message properties here (delivery mode and headers \

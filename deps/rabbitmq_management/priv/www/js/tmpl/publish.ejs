@@ -98,16 +98,26 @@
             <div class="multifield" id="headers"></div>
           </td>
         </tr>
-        <tr>
+        <tr class="amqp091-only" style="display: none">
           <th>
             <label>
               Properties:
-              <span class="help amqp091-only" style="display: none" id="message-publish-properties"></span>
-              <span class="help amqp-only" id="message-publish-amqp-properties"></span>
+              <span class="help" id="message-publish-properties"></span>
             </label>
           </th>
           <td>
             <div class="multifield string-only" id="props"></div>
+          </td>
+        </tr>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Properties:
+              <span class="help" id="message-publish-amqp-properties"></span>
+            </label>
+          </th>
+          <td>
+            <div class="multifield string-only" id="amqpprops" data-keys="message_id,user_id,to,subject,reply_to,correlation_id,content_type,content_encoding,absolute_expiry_time,creation_time,group_id,group_sequence,reply_to_group_id"></div>
           </td>
         </tr>
         <tr class="amqp-only">
