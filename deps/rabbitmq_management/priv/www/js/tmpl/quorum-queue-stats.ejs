@@ -33,13 +33,13 @@
       <% } %>
       <% if (queue.next_delayed_at) { %>
       <tr>
-        <th>Next delayed retry</th>
+        <th>Next delayed delivery</th>
         <td><%= fmt_date(new Date(queue.next_delayed_at)) %></td>
       </tr>
       <% } %>
       <% if (queue.last_delayed_at) { %>
       <tr>
-        <th>Last delayed retry</th>
+        <th>Last delayed delivery</th>
         <td><%= fmt_date(new Date(queue.last_delayed_at)) %></td>
       </tr>
       <% } %>
