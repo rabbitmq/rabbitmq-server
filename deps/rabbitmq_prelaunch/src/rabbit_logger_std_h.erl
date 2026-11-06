@@ -746,21 +746,30 @@ is_date_based_rotation_needed(#{last_rotation_ts:=PrevTimestamp,
 is_date_based_rotation_needed(Rotation) ->
     {false,Rotation#{last_rotation_ts=>rotation_timestamp()}}.
 
-is_date_based_rotation_needed(#{every:=day,hour:=Hour},
-                              {Date1,Time1},{Date2,Time2})
-  when (Date1<Date2 orelse (Date1=:=Date2 andalso Time1<{Hour,0,0})) andalso
-       Time2>={Hour,0,0} ->
+is_date_based_rotation_needed(#{every := hour, minute := Minute},
+                              DateTime1, {Date2, {Hour2, Minute2, _}} = DateTime2) ->
+    Seconds2 = calendar:datetime_to_gregorian_seconds({Date2, {Hour2, Minute, 0}}),
+    TargetSeconds = if
+                        Minute2 < Minute -> Seconds2 - 3600;
+                        true -> Seconds2
+                    end,
+    TargetDateTime = calendar:gregorian_seconds_to_datetime(TargetSeconds),
+    DateTime1 < TargetDateTime andalso DateTime2 >= TargetDateTime;
+is_date_based_rotation_needed(#{every := day, hour := Hour},
+                              {Date1, Time1}, {Date2, Time2})
+  when (Date1 < Date2 orelse (Date1 =:= Date2 andalso Time1 < {Hour, 0, 0})) andalso
+       Time2 >= {Hour, 0, 0} ->
     true;
-is_date_based_rotation_needed(#{every:=day,hour:=Hour},
-                              {Date1,_}=DateTime1,{Date2,Time2}=DateTime2)
-  when Date1<Date2 andalso
-       Time2<{Hour,0,0} ->
+is_date_based_rotation_needed(#{every := day, hour := Hour},
+                              {Date1, _} = DateTime1, {Date2, Time2} = DateTime2)
+  when Date1 < Date2 andalso
+       Time2 < {Hour, 0, 0} ->
     GregDays2 = calendar:date_to_gregorian_days(Date2),
     TargetDate = calendar:gregorian_days_to_date(GregDays2 - 1),
     TargetDateTime = {TargetDate,{Hour,0,0}},
     DateTime1<TargetDateTime andalso DateTime2>=TargetDateTime;
-is_date_based_rotation_needed(#{every:=week,day_of_week:=TargetDoW,hour:=Hour},
-                              DateTime1,{Date2,_}=DateTime2) ->
+is_date_based_rotation_needed(#{every := week, day_of_week := TargetDoW, hour := Hour},
+                              DateTime1, {Date2, _} = DateTime2) ->
     DoW2 = calendar:day_of_the_week(Date2) rem 7,
     DaysSinceTargetDoW = ((DoW2 - TargetDoW) + 7) rem 7,
     GregDays2 = calendar:date_to_gregorian_days(Date2),
@@ -768,8 +777,8 @@ is_date_based_rotation_needed(#{every:=week,day_of_week:=TargetDoW,hour:=Hour},
     TargetDate = calendar:gregorian_days_to_date(TargetGregDays),
     TargetDateTime = {TargetDate,{Hour,0,0}},
     DateTime1<TargetDateTime andalso DateTime2>=TargetDateTime;
-is_date_based_rotation_needed(#{every:=month,day_of_month:=last,hour:=Hour},
-                              DateTime1,{{Year2,Month2,_}=Date2,_}=DateTime2) ->
+is_date_based_rotation_needed(#{every := month, day_of_month := last, hour := Hour},
+                              DateTime1, {{Year2, Month2, _} = Date2, _} = DateTime2) ->
     DoMA = calendar:last_day_of_the_month(Year2, Month2),
     DateA = {Year2,Month2,DoMA},
     TargetDate = if
@@ -786,8 +795,8 @@ is_date_based_rotation_needed(#{every:=month,day_of_month:=last,hour:=Hour},
                  end,
     TargetDateTime = {TargetDate,{Hour,0,0}},
     DateTime1<TargetDateTime andalso DateTime2>=TargetDateTime;
-is_date_based_rotation_needed(#{every:=month,day_of_month:=DoM,hour:=Hour},
-                              DateTime1,{{Year2,Month2,_}=Date2,_}=DateTime2) ->
+is_date_based_rotation_needed(#{every := month, day_of_month := DoM, hour := Hour},
+                              DateTime1, {{Year2, Month2, _} = Date2, _} = DateTime2) ->
     DateA = {Year2,Month2,adapt_day_of_month(Year2,Month2,DoM)},
     TargetDate = if
                      DateA>Date2 ->
@@ -803,7 +812,7 @@ is_date_based_rotation_needed(#{every:=month,day_of_month:=DoM,hour:=Hour},
                  end,
     TargetDateTime = {TargetDate,{Hour,0,0}},
     DateTime1<TargetDateTime andalso DateTime2>=TargetDateTime;
-is_date_based_rotation_needed(_,_,_) ->
+is_date_based_rotation_needed(_, _, _) ->
     false.
 
 adapt_day_of_month(Year,Month,Day) ->
