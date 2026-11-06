@@ -264,6 +264,9 @@ function setup_constant_events() {
                 interval = parseInt(interval);
             set_timer_interval(interval);
         });
+    $('#terminology-switcher').on('click', toggle_terminology).on('keydown', function(e) {
+            if (e.key === 'Enter') toggle_terminology();
+        });
     $('#show-vhost').on('change', function() {
             current_vhost = $(this).val();
             store_pref('vhost', current_vhost);
@@ -532,6 +535,7 @@ function reset_current_reqs() {
 }
 
 function update() {
+    check_channels_present();
     replace_content('debug', '');
     clearInterval(timer);
     with_update(function(html) {
@@ -547,6 +551,7 @@ function update() {
 }
 
 function partial_update() {
+    check_channels_present();
     if (!$(".pagination_class").is(":focus")) {
         if ($('.updatable').length > 0) {
             if (update_counter >= 200) {
@@ -591,6 +596,9 @@ function update_navigation() {
             if (!leaf(val) && val[2] && ac.canAccessVhosts()) {
                 descend = nav(val)
             }
+        }
+        if (k === 'Channels' && !channels_visible()) {
+            continue;
         }
         if (show(path)) {
           if (val.length < 3 || ( val[2] && ac.canAccessVhosts() )) {
@@ -991,7 +999,7 @@ function postprocess() {
     });
 
     $(document).on('click', '.help', function() {
-      show_popup('help', HELP[$(this).attr('id')]);
+      show_popup('help', help_text($(this).attr('id')));
     });
 
     $(document).on('click', '.popup-options-link', function() {
