@@ -216,6 +216,7 @@ all_tests() -> [
     get_payload_limit_test,
     get_encoding_test,
     get_fail_test,
+    get_amqp_exclusive_queue_test,
     publish_test,
     publish_amqp_test,
     publish_amqp_topic_permissions_test,
@@ -3937,6 +3938,23 @@ get_fail_test(Config) ->
     http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
+
+get_amqp_exclusive_queue_test(Config) ->
+    {Conn, Ch} = open_connection_and_channel(Config),
+    #'queue.declare_ok'{queue = QName} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = QName},
+                      #amqp_msg{payload = <<"m">>}),
+    amqp_channel:wait_for_confirms_or_die(Ch, 5),
+    Path = "/queues/%2F/" ++ rabbit_http_util:quote_plus(QName) ++ "/get",
+    Body = #{ackmode => ack_requeue_false, count => 1, encoding => auto},
+    http_post(Config, Path, Body, ?BAD_REQUEST),
+    http_post(Config, Path, Body#{protocol => <<"amqp">>}, ?BAD_REQUEST),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true})),
+    amqp_channel:close(Ch),
+    close_connection(Conn).
 
 
 -define(LARGE_BODY_BYTES, 5000000).

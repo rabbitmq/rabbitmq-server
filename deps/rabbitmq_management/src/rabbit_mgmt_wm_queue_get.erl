@@ -117,21 +117,23 @@ get_amqp(VHost, QNameBin, AckModeBin, CountBin, EncBin, Body, ReqData,
     Enc = parse_encoding(EncBin),
     Trunc = parse_truncate(Body),
     QName = rabbit_misc:r(VHost, queue, QNameBin),
-    try rabbit_access_control:check_resource_access(User, QName, read, #{}) of
-        ok ->
-            case rabbit_amqqueue:lookup(QName) of
-                {ok, Q} ->
-                    IcptCtx = #{protocol => amqp10,
-                                vhost => VHost,
-                                username => User#user.username,
-                                connection_name => <<"HTTP API">>},
-                    Msgs = amqp_gets(Count, MaxPayloadBytes, Q, AckMode, Enc, Trunc,
-                                     IcptCtx, rabbit_queue_type:init(), 1, 0, []),
-                    rabbit_mgmt_util:reply(Msgs, ReqData, Context);
-                {error, not_found} ->
-                    rabbit_mgmt_util:not_found(queue_not_found, ReqData, Context)
-            end
+    try
+        ok = rabbit_access_control:check_resource_access(User, QName, read, #{}),
+        rabbit_amqqueue:with_exclusive_access_or_die(QName, self(), fun(Q) -> Q end)
+    of
+        Q ->
+            IcptCtx = #{protocol => amqp10,
+                        vhost => VHost,
+                        username => User#user.username,
+                        connection_name => <<"HTTP API">>},
+            Msgs = amqp_gets(Count, MaxPayloadBytes, Q, AckMode, Enc, Trunc,
+                             IcptCtx, rabbit_queue_type:init(), 1, 0, []),
+            rabbit_mgmt_util:reply(Msgs, ReqData, Context)
     catch
+        exit:#amqp_error{name = not_found} ->
+            rabbit_mgmt_util:not_found(queue_not_found, ReqData, Context);
+        exit:#amqp_error{name = resource_locked, explanation = Expl} ->
+            rabbit_mgmt_util:bad_request(Expl, ReqData, Context);
         exit:#amqp_error{explanation = Expl} ->
             rabbit_mgmt_util:not_authorised(Expl, ReqData, Context)
     end.
