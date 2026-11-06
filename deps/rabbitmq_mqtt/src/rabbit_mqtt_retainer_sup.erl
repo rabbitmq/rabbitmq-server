@@ -27,94 +27,59 @@ start_link() ->
 -spec start_child_for_vhost(rabbit_types:vhost()) -> pid().
 start_child_for_vhost(VHost)
   when is_binary(VHost) ->
-    case start_child(VHost) of
-        {error, already_present} ->
-            with_vhost_lock(VHost, fun() -> restart_child(VHost) end);
-        Pid ->
-            Pid
-    end.
-
-start_child(VHost) ->
     case supervisor:start_child(?MODULE, child_spec(VHost)) of
         {ok, Pid}                       -> Pid;
-        {error, {already_started, Pid}} -> Pid;
-        {error, already_present} = Err  -> Err
-    end.
-
-%% `delete_child_for_vhost/1` leaves the child stopped when it fails to
-%% delete the files of a deleted vhost.
-restart_child(VHost) ->
-    case start_child(VHost) of
-        {error, already_present} ->
-            ok = delete_storage(VHost),
-            ok = supervisor:delete_child(?MODULE, VHost),
-            start_child(VHost);
-        Pid ->
-            Pid
+        {error, {already_started, Pid}} -> Pid
     end.
 
 -spec delete_child_for_vhost(rabbit_types:vhost()) -> rabbit_types:ok_or_error(any()).
 delete_child_for_vhost(VHost) ->
-    with_vhost_lock(VHost, fun() -> do_delete_child_for_vhost(VHost) end).
+    Running = whereis(?MODULE) =/= undefined,
+    _ = Running andalso supervisor:terminate_child(?MODULE, VHost),
+    %% The stopped child stays until the files are gone, so that a concurrent
+    %% start cannot open them.
+    Result = delete_storage(VHost),
+    _ = Running andalso supervisor:delete_child(?MODULE, VHost),
+    Result.
 
-do_delete_child_for_vhost(VHost) ->
-    Stop = case whereis(?MODULE) of
-               undefined -> {error, not_found};
-               _ -> supervisor:terminate_child(?MODULE, VHost)
-           end,
-    case Stop of
-        ok ->
-            case delete_storage(VHost) of
-                ok ->
-                    supervisor:delete_child(?MODULE, VHost);
-                %% Keep the stopped child so that the next connection deletes
-                %% the files before it starts a new store.
-                Error ->
-                    Error
-            end;
-        {error, not_found} ->
-            delete_storage(VHost);
-        Error ->
-            Error
-    end.
-
-with_vhost_lock(VHost, Fun) ->
-    global:trans({{?MODULE, VHost}, self()}, Fun, [node()]).
-
+%% Also matches files of other backends and the `.TMP` file of a DETS repair.
 delete_storage(VHost) ->
-    rabbit_file:recursive_delete(storage_paths(rabbit:data_dir(), VHost)).
-
-storage_paths(Dir, VHost) ->
-    [rabbit_mqtt_util:path_for(Dir, VHost),
-     rabbit_mqtt_util:path_for(Dir, VHost, ".dets")].
+    Dir = rabbit:data_dir(),
+    rabbit_file:recursive_delete(
+      [filename:join(Dir, F)
+       || F <- filelib:wildcard(rabbit_mqtt_util:vhost_name_to_dir_name(VHost, ".*"), Dir)]).
 
 %% Deletes the stores of vhosts that were deleted while this node was down.
 -spec delete_orphaned_storage() -> ok.
 delete_orphaned_storage() ->
     Dir = rabbit:data_dir(),
-    %% Excludes the `.TMP` file that DETS writes while it repairs a table.
-    Files = [filename:join(Dir, F)
-             || F <- filelib:wildcard("mqtt_retained_*.{ets,dets}", Dir)],
-    case rabbit_vhost:list_names() of
-        %% The metadata store may not be ready yet.
-        [] ->
-            ok;
-        VHosts ->
-            Expected = maps:from_keys(
-                         lists:append([storage_paths(Dir, V) || V <- VHosts]), true),
-            case [F || F <- Files, not maps:is_key(F, Expected)] of
+    Files = filelib:wildcard("mqtt_retained_*", Dir),
+    %% The projection can be out of sync while Khepri recovers.
+    %% rabbitmq/rabbitmq-server#16422.
+    case rabbit_db_vhost:list_uncached() of
+        {error, Reason} ->
+            ?LOG_WARNING("Not deleting MQTT retained message stores of deleted vhosts, "
+                         "vhosts cannot be listed: ~tp", [Reason]);
+        {ok, VHosts} ->
+            Live = maps:from_keys(
+                     [rabbit_mqtt_util:vhost_name_to_dir_name(V, "") || V <- VHosts], true),
+            case [filename:join(Dir, F) || F <- Files,
+                                           not maps:is_key(hd(string:split(F, ".")), Live)] of
                 [] ->
                     ok;
                 Orphaned ->
                     ?LOG_INFO("Deleting MQTT retained message stores of deleted vhosts: ~tp",
                               [Orphaned]),
-                    case rabbit_file:recursive_delete(Orphaned) of
-                        ok ->
-                            ok;
-                        {error, Reason} ->
-                            ?LOG_WARNING("Failed to delete MQTT retained message stores "
-                                         "of deleted vhosts: ~tp", [Reason])
-                    end
+                    lists:foreach(
+                      fun(Path) ->
+                              case rabbit_file:recursive_delete([Path]) of
+                                  ok ->
+                                      ok;
+                                  {error, Reason} ->
+                                      ?LOG_WARNING("Failed to delete MQTT retained message "
+                                                   "store of a deleted vhost: ~tp", [Reason])
+                              end
+                      end, Orphaned)
             end
     end.
 
