@@ -746,6 +746,15 @@ is_date_based_rotation_needed(#{last_rotation_ts:=PrevTimestamp,
 is_date_based_rotation_needed(Rotation) ->
     {false,Rotation#{last_rotation_ts=>rotation_timestamp()}}.
 
+is_date_based_rotation_needed(#{every:=hour,minute:=Minute},
+                              DateTime1,{Date2,{Hour2,Minute2,_}}=DateTime2) ->
+    Seconds2 = calendar:datetime_to_gregorian_seconds({Date2,{Hour2,Minute,0}}),
+    TargetSeconds = if
+                        Minute2<Minute -> Seconds2 - 3600;
+                        true -> Seconds2
+                    end,
+    TargetDateTime = calendar:gregorian_seconds_to_datetime(TargetSeconds),
+    DateTime1<TargetDateTime andalso DateTime2>=TargetDateTime;
 is_date_based_rotation_needed(#{every:=day,hour:=Hour},
                               {Date1,Time1},{Date2,Time2})
   when (Date1<Date2 orelse (Date1=:=Date2 andalso Time1<{Hour,0,0})) andalso
