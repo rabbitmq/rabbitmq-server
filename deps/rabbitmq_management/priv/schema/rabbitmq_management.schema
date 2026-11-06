@@ -620,8 +620,7 @@ end}.
 {mapping,
   "management.oauth_resource_servers.$name.disabled",
   "rabbitmq_management.oauth_resource_servers", [
-   {datatype, boolean},
-   {include_default, false}
+   {datatype, boolean}
 ]}.
 
 {mapping,
@@ -736,20 +735,17 @@ end}.
 %% Disables setting operator policies over API.
 
 {mapping, "management.restrictions.operator_policy_changes.disabled", "rabbitmq_management.restrictions.operator_policy_changes.disabled", [
-    {datatype, boolean},
-    {include_default, false}
+    {datatype, boolean}
 ]}.
 
 %% Disables add/remove/grow/shrink over API.
 
 {mapping, "management.restrictions.quorum_queue_replica_operations.disabled", "rabbitmq_management.restrictions.quorum_queue_replica_operations.disabled", [
-    {datatype, boolean},
-    {include_default, false}
+    {datatype, boolean}
 ]}.
 
 %% Require authentication for the HTTP API reference page.
 
 {mapping, "management.require_auth_for_api_reference", "rabbitmq_management.require_auth_for_api_reference", [
-    {datatype, boolean},
-    {include_default, false}
+    {datatype, boolean}
 ]}.
