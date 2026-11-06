@@ -16,6 +16,7 @@
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -define(DEFAULT_MAX_MESSAGES, 1000).
 -define(DEFAULT_MAX_PAYLOAD_BYTES, 67108864).
@@ -151,19 +152,19 @@ amqp_gets(Count, MaxPayloadBytes, Q, AckMode, Enc, Trunc, IcptCtx, QStates0, N,
             amqp_gets(Count, MaxPayloadBytes, Q, AckMode, Enc, Trunc, IcptCtx,
                       QStates1, N + 1, Total + Size, Acc1);
         {empty, QStates1} ->
-            amqp_settle(Acc, AckMode, QStates1);
+            amqp_settle(Q, Acc, AckMode, QStates1);
         {error, Reason} ->
-            _ = amqp_settle(Acc, AckMode, QStates0),
+            _ = amqp_settle(Q, Acc, AckMode, QStates0),
             throw({error, iolist_to_binary(io_lib:format("~tp", [Reason]))});
         {protocol_error, _Type, Reason, Args} ->
-            _ = amqp_settle(Acc, AckMode, QStates0),
+            _ = amqp_settle(Q, Acc, AckMode, QStates0),
             throw({error, iolist_to_binary(io_lib:format(Reason, Args))})
     end;
-amqp_gets(_Count, _MaxPayloadBytes, _Q, AckMode, _Enc, _Trunc, _IcptCtx, QStates,
+amqp_gets(_Count, _MaxPayloadBytes, Q, AckMode, _Enc, _Trunc, _IcptCtx, QStates,
           _N, _Total, Acc) ->
-    amqp_settle(Acc, AckMode, QStates).
+    amqp_settle(Q, Acc, AckMode, QStates).
 
-amqp_settle(RevAcc, AckMode, QStates) ->
+amqp_settle(Q, RevAcc, AckMode, QStates) ->
     Acc = lists:reverse(RevAcc),
     Op = case AckMode of
              ack_requeue_true -> requeue;
@@ -176,14 +177,24 @@ amqp_settle(RevAcc, AckMode, QStates) ->
             none ->
                 ok;
             _ ->
-                lists:foldl(
-                  fun({_Msg, QName, CTag, MsgId}, QStates0) ->
-                          {ok, QStates1, _} = rabbit_queue_type:settle(
-                                                QName, Op, CTag, [MsgId], QStates0),
-                          QStates1
-                  end, QStates, Acc)
+                _ = lists:foldl(
+                      fun({_Msg, QName, CTag, MsgId}, QStates0) ->
+                              {ok, QStates1, _} = rabbit_queue_type:settle(
+                                                    QName, Op, CTag, [MsgId], QStates0),
+                              QStates1
+                      end, QStates, Acc),
+                await_settled(Q)
         end,
     [Msg || {Msg, _, _, _} <- Acc].
+
+%% A classic queue receives the settlement via a delegate but the `DOWN` of
+%% this process directly. A round trip via the same delegate, which a
+%% `gen_server2` MFA would bypass, keeps the queue from requeueing the messages.
+await_settled(Q) when ?amqqueue_is_classic(Q) ->
+    _ = delegate:invoke([amqqueue:get_pid(Q)], {erlang, is_process_alive, []}),
+    ok;
+await_settled(_) ->
+    ok.
 
 amqp_no_ack({modify, _}) -> false;
 amqp_no_ack(AckMode) -> ackmode_no_ack(AckMode).
