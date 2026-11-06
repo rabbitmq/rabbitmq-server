@@ -2775,6 +2775,16 @@ end}.
     {validators, ["non_zero_positive_integer"]}
 ]}.
 
+{mapping, "policies.max_name_length", "rabbit.policies.max_name_length", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "policies.max_definition_size", "rabbit.policies.max_definition_size", [
+    {datatype, bytesize},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
 %%
 %% Channel interceptors
 %%

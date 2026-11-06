@@ -1435,6 +1435,17 @@ credential_validator.regexp = ^abc\\d+",
      ]}]}]}],
    []},
 
+  {policies_limits,
+  "
+   policies.max_name_length = 512
+   policies.max_definition_size = 32KB
+  ",
+   [{rabbit, [{policies, [
+       {max_name_length, 512},
+       {max_definition_size, 32768}
+     ]}]}],
+   []},
+
   {runtime_parameters_limits,
   "
    runtime_parameters.limits.federation = 2
