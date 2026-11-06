@@ -5660,7 +5660,6 @@ leader_health_check(Config) ->
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
                                       [<<"Q.*">>, across_all_vhosts])),
 
-    %% clear leaderboard
     Qs = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
 
     [{_Q1_ClusterName, _Q1Res},
@@ -5676,9 +5675,17 @@ leader_health_check(Config) ->
             end
                 || Q <- Qs, amqqueue:get_type(Q) == rabbit_quorum_queue]),
 
+    [rabbit_ct_broker_helpers:rpc(Config, 0, ra_leaderboard, clear, [Q_ClusterName])
+     || {Q_ClusterName, _} <- QQ_Clusters],
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<".*">>, across_all_vhosts])),
+
+    Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     [Q1Data, Q2Data, Q3Data, Q4Data, Q5Data, Q6Data] = QQ_Data =
         [begin
-            rabbit_ct_broker_helpers:rpc(Config, 0, ra_leaderboard, clear, [Q_ClusterName]),
+            [ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, stop_server,
+                                               [{Q_ClusterName, S}])
+             || S <- Servers],
             rabbit_ct_broker_helpers:rpc(Config, 0, amqqueue, to_printable, [Q_Res, rabbit_quorum_queue])
          end
             || {Q_ClusterName, Q_Res} <- QQ_Clusters],
@@ -5716,6 +5723,10 @@ leader_health_check(Config) ->
     ?assertEqual(QQ_Data,
         lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
                         [<<"Q.*">>, across_all_vhosts]))),
+
+    [ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, restart_server,
+                                       [{Q_ClusterName, S}])
+     || {Q_ClusterName, _} <- QQ_Clusters, S <- Servers],
 
     %% cleanup
     [?assertMatch(#'queue.delete_ok'{},
