@@ -33,7 +33,7 @@ groups() ->
 cluster_tests() ->
     [delete_vhost,
      late_cleanup_after_recreate,
-     recreate_vhost_after_failed_cleanup,
+     delete_vhost_while_node_down,
      delete_vhost_without_plugin].
 
 sub_groups() ->
@@ -52,6 +52,7 @@ tests() ->
      recover,
      delete_vhost_long_name,
      delete_orphaned_storage,
+     delete_orphaned_storage_with_stale_projection,
      recover_with_message_expiry_interval,
      limit_max_messages,
      limit_max_size_bytes,
@@ -295,8 +296,8 @@ delete_vhost(Config, VHost) ->
 delete_orphaned_storage(Config) ->
     Dir = rpc(Config, rabbit, data_dir, []),
     Orphaned = [rabbit_mqtt_util:path_for(Dir, <<"deleted vhost">>, Suffix)
-                || Suffix <- [".ets", ".dets"]],
-    RepairFile = rabbit_mqtt_util:path_for(Dir, <<"deleted vhost">>, ".dets.TMP"),
+                || Suffix <- [".ets", ".dets", ".dets.TMP"]],
+    RepairFile = rabbit_mqtt_util:path_for(Dir, <<"/">>, ".dets.TMP"),
     [ok = rpc(Config, file, write_file, [P, <<>>]) || P <- [RepairFile | Orphaned]],
     Kept = [P || P <- [RepairFile | [rabbit_mqtt_util:path_for(Dir, <<"/">>, Suffix)
                                      || Suffix <- [".ets", ".dets"]]],
@@ -305,6 +306,26 @@ delete_orphaned_storage(Config) ->
     ?assertEqual([], [P || P <- Orphaned, rpc(Config, filelib, is_file, [P])]),
     ?assertEqual(Kept, [P || P <- Kept, rpc(Config, filelib, is_file, [P])]),
     ok = rpc(Config, file, delete, [RepairFile]).
+
+delete_orphaned_storage_with_stale_projection(Config) ->
+    VHost = atom_to_binary(?FUNCTION_NAME),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    _ = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [VHost]),
+    ok = rpc(Config, supervisor, terminate_child, [rabbit_mqtt_retainer_sup, VHost]),
+    Dir = rpc(Config, rabbit, data_dir, []),
+    [Path] = [P || Suffix <- [".ets", ".dets"],
+                   P <- [rabbit_mqtt_util:path_for(Dir, VHost, Suffix)],
+                   rpc(Config, filelib, is_file, [P])],
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    ok = rpc(Config, meck, new, [rabbit_db_vhost, [no_link, passthrough]]),
+    try
+        ok = rpc(Config, meck, expect, [rabbit_db_vhost, list, 0, [<<"/">>]]),
+        ok = rpc(Config, rabbit_mqtt_retainer_sup, delete_orphaned_storage, []),
+        ?assert(rpc(Config, filelib, is_file, [Path]))
+    after
+        ok = rpc(Config, meck, unload, [rabbit_db_vhost])
+    end,
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
 
 delete_vhost_without_plugin(Config) ->
     VHost = Topic = Payload = ClientId = atom_to_binary(?FUNCTION_NAME),
@@ -360,42 +381,27 @@ late_cleanup_after_recreate(Config) ->
     ok = emqtt:disconnect(C2),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
 
-recreate_vhost_after_failed_cleanup(Config) ->
+delete_vhost_while_node_down(Config) ->
     VHost = Topic = Payload = ClientId = atom_to_binary(?FUNCTION_NAME),
     Creds = [{username, <<VHost/binary, ":guest">>}, {password, <<"guest">>}],
     ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VHost),
-    C1 = util:connect(ClientId, Config, 1, Creds),
-    {ok, _} = emqtt:publish(C1, Topic, Payload, [{retain, true}, {qos, 1}]),
-    ok = emqtt:disconnect(C1),
-    rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 1, meck, new, [rabbit_file, [no_link, passthrough]]),
-    try
-        ok = rabbit_ct_broker_helpers:rpc(Config, 1, meck, expect,
-                                          [rabbit_file, recursive_delete,
-                                           fun ?MODULE:fail_retained_msg_store_delete/1]),
-        ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
-        ?awaitMatch({VHost, undefined, _, _},
-                    lists:keyfind(VHost, 1, rabbit_ct_broker_helpers:rpc(
-                                              Config, 1, supervisor, which_children,
-                                              [rabbit_mqtt_retainer_sup])),
-                    30_000)
-    after
-        ok = rabbit_ct_broker_helpers:rpc(Config, 1, meck, unload, [rabbit_file])
-    end,
-    ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
-    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VHost),
-    C2 = util:connect(ClientId, Config, 1, Creds),
-    {ok, _, _} = emqtt:subscribe(C2, Topic, qos1),
-    ok = expect_nothing(),
-    ok = emqtt:disconnect(C2),
-    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost).
-
-fail_retained_msg_store_delete(Paths) ->
-    case lists:any(fun(P) -> string:find(P, "mqtt_retained_") =/= nomatch end, Paths) of
-        true -> {error, {"mqtt_retained", eacces}};
-        false -> meck:passthrough([Paths])
-    end.
+    C = util:connect(ClientId, Config, 2, Creds),
+    {ok, _} = emqtt:publish(C, Topic, Payload, [{retain, true}, {qos, 1}]),
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 2),
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 2),
+    Dir = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit, data_dir, []),
+    [Path] = [P || Suffix <- [".ets", ".dets"],
+                   P <- [rabbit_mqtt_util:path_for(Dir, VHost, Suffix)],
+                   rabbit_ct_broker_helpers:rpc(Config, 2, filelib, is_file, [P])],
+    ?assertNot(lists:keymember(VHost, 1, rabbit_ct_broker_helpers:rpc(
+                                           Config, 2, supervisor, which_children,
+                                           [rabbit_mqtt_retainer_sup]))),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 2, rabbit_mqtt_retainer_sup,
+                                      delete_orphaned_storage, []),
+    ?assertNot(rabbit_ct_broker_helpers:rpc(Config, 2, filelib, is_file, [Path])).
 
 recover_with_message_expiry_interval(Config) ->
     ClientId = atom_to_binary(?FUNCTION_NAME),
