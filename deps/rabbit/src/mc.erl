@@ -38,8 +38,7 @@
          prepare/2,
          record_death/3,
          is_death_cycle/2,
-         death_queue_names/1,
-         death_hops/1
+         death_queue_names/1
         ]).
 
 -include("mc.hrl").
@@ -481,29 +480,6 @@ death_queue_names(#?MODULE{}) ->
     [];
 death_queue_names(BasicMsg) ->
     mc_compat:death_queue_names(BasicMsg).
-
-%% Returns the number of deaths since the most recent `rejected` death.
--spec death_hops(state()) -> non_neg_integer().
-death_hops(#?MODULE{annotations = #{deaths := #deaths{records = Rs}}}) ->
-    LastRejected = maps:fold(fun({_Q, rejected}, #death{anns = #{last_time := T}}, Acc) ->
-                                     max(T, Acc);
-                                (_, _, Acc) ->
-                                     Acc
-                             end, 0, Rs),
-    maps:fold(fun({_Q, Reason}, #death{anns = #{last_time := T}}, N)
-                    when Reason =/= rejected andalso T >= LastRejected ->
-                      N + 1;
-                 (_, _, N) ->
-                      N
-              end, 0, Rs);
-death_hops(#?MODULE{annotations = #{deaths := Deaths}}) ->
-    length(lists:takewhile(fun({{_Q, Reason}, _Death}) ->
-                                   Reason =/= rejected
-                           end, Deaths));
-death_hops(#?MODULE{}) ->
-    0;
-death_hops(BasicMsg) ->
-    mc_compat:death_hops(BasicMsg).
 
 -spec prepare(read | store, state()) -> state().
 prepare(For, #?MODULE{protocol = Proto,
