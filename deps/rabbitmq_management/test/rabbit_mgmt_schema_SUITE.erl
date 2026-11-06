@@ -20,7 +20,8 @@ all() ->
         test_translate_endpoint_params,
         test_with_one_resource_server,
         test_with_many_resource_servers,
-        test_preserve_order_when_using_many_resource_servers
+        test_preserve_order_when_using_many_resource_servers,
+        test_generate_example_conf
     ].
 
 
@@ -103,6 +104,12 @@ test_preserve_order_when_using_many_resource_servers(_) ->
             {id, <<"keycloak">>}            
         ]}
      ] = lists:sort(SortByIndex, maps:to_list(translate_oauth_resource_servers(Conf))).
+
+test_generate_example_conf(_) ->
+    SchemaFiles = [filename:join([code:priv_dir(App), "schema", atom_to_list(App) ++ ".schema"])
+                   || App <- [rabbit, rabbitmq_management]],
+    {_Translations, Mappings, _Validators} = cuttlefish_schema:files(SchemaFiles),
+    [_ | _] = cuttlefish_conf:generate(Mappings).
 
 cert_filename(Conf) ->
     string:concat(?config(data_dir, Conf), "certs/cert.pem").
