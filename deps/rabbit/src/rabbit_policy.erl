@@ -31,6 +31,9 @@
 -include("amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
 
+-define(DEFAULT_MAX_NAME_LENGTH, 1024).
+-define(DEFAULT_MAX_DEFINITION_SIZE, 65536).
+
 -import(rabbit_misc, [pget/2, pget/3]).
 
 -export([register/0]).
@@ -370,11 +373,39 @@ keys_overlap(A, B) ->
 %%----------------------------------------------------------------------------
 
 validate(_VHost, <<"policy">>, Name, Term, _User) ->
-    rabbit_parameter_validation:proplist(
-      Name, policy_validation(), Term);
+    validate(Name, Term, policy_validation());
 validate(_VHost, <<"operator_policy">>, Name, Term, _User) ->
-    rabbit_parameter_validation:proplist(
-      Name, operator_policy_validation(), Term).
+    validate(Name, Term, operator_policy_validation()).
+
+validate(Name, Term, Validation) ->
+    case check_limits(Name, Term) of
+        ok    -> rabbit_parameter_validation:proplist(Name, Validation, Term);
+        Error -> Error
+    end.
+
+check_limits(Name, Term) ->
+    Limits = application:get_env(rabbit, policies, []),
+    MaxNameLength = proplists:get_value(max_name_length, Limits,
+                                        ?DEFAULT_MAX_NAME_LENGTH),
+    MaxDefinitionSize = proplists:get_value(max_definition_size, Limits,
+                                            ?DEFAULT_MAX_DEFINITION_SIZE),
+    Definition = case is_list(Term) of
+                     true  -> proplists:get_value(<<"definition">>, Term, []);
+                     false -> []
+                 end,
+    if
+        byte_size(Name) > MaxNameLength ->
+            {error, "policy name exceeds the maximum length of ~b bytes",
+             [MaxNameLength]};
+        true ->
+            case erlang:external_size(Definition) > MaxDefinitionSize of
+                true ->
+                    {error, "policy definition exceeds the maximum size of ~b bytes",
+                     [MaxDefinitionSize]};
+                false ->
+                    ok
+            end
+    end.
 
 notify(VHost, <<"policy">>, Name, Term0, ActingUser) ->
     Term = rabbit_data_coercion:atomize_keys(Term0),
