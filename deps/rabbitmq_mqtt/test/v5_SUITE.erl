@@ -90,6 +90,7 @@ cluster_size_1_tests() ->
      subscription_option_retain_handling,
      subscription_identifier,
      subscription_identifier_star_and_dot,
+     subscription_identifier_star_replaces_plus,
      subscription_identifier_retained_message,
      subscription_identifier_retained_message_sparkplug,
      subscription_identifier_amqp091,
@@ -1091,6 +1092,26 @@ subscription_identifier_star_and_dot(Config) ->
     end,
     ok = emqtt:disconnect(C),
     ok = emqtt:disconnect(Pub).
+
+subscription_identifier_star_replaces_plus(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{<<"t/+">>, []}]),
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 2}, [{<<"t/*">>, []}]),
+    {ok, _} = emqtt:publish(C, <<"t/1">>, <<"m1">>, qos1),
+    receive {publish, #{client_pid := C,
+                        payload := <<"m1">>,
+                        properties := Props}} ->
+                ?assertEqual(#{'Subscription-Identifier' => 2}, Props)
+    after ?TIMEOUT -> ct:fail("did not receive m1")
+    end,
+    ?assertMatch({ok, _, [?RC_SUCCESS, ?RC_NO_SUBSCRIPTION_EXISTED]},
+                 emqtt:unsubscribe(C, [<<"t/+">>, <<"t/*">>])),
+    {ok, _, [0]} = emqtt:subscribe(C, <<"u">>),
+    {ok, _} = emqtt:publish(C, <<"t/1">>, <<"m2">>, qos1),
+    {ok, _} = emqtt:publish(C, <<"u">>, <<"m3">>, qos1),
+    ok = expect_publishes(C, <<"u">>, [<<"m3">>]),
+    assert_nothing_received(),
+    ok = emqtt:disconnect(C).
 
 %% "If the Client specified a Subscription Identifier for any of the overlapping
 %% subscriptions the Server MUST send those Subscription Identifiers in the message
