@@ -394,11 +394,33 @@ var HELP = {
       <p>Furthermore, message payloads will be truncated to 50000 bytes.</p>',
 
     'message-publish-headers':
-      'Headers can have any name. Only long string headers can be set here. \
-      With AMQP 1.0 these are sent as application properties.',
+      'Headers can have any name. Only long string headers can be set here.',
+
+    'message-publish-priority':
+      '<p>The <code>priority</code> field of the message \
+      <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-header">header</a>, \
+      an integer between 0 and 255. Higher numbers mean higher priority. \
+      If empty, the priority is 4, as defined by the AMQP 1.0 specification.</p>\
+      <p>Quorum queues treat priorities above 31 as 31. Classic queues only \
+      take the priority into account if they are declared with \
+      <code>x-max-priority</code>.</p>',
+
+    'message-publish-ttl':
+      'The <code>ttl</code> field of the message \
+      <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-header">header</a>: \
+      the time in milliseconds for which the message is considered live. \
+      An expired message is discarded or dead lettered. If empty, the message \
+      does not expire unless the queue has a message TTL.',
 
     'message-publish-annotations':
-      'Message annotation names must start with "x-".',
+      '<a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-message-annotations">Message \
+      annotations</a> carry data for the broker rather than for the consuming \
+      application. Their names must start with "x-".',
+
+    'message-publish-application-properties':
+      '<a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-application-properties">Application \
+      properties</a> carry structured application data, for example to route \
+      the message with a headers exchange.',
 
     'message-publish-delivery-time':
       '<p>Sets the <code>x-opt-delivery-time</code> message annotation to the \
@@ -419,11 +441,44 @@ var HELP = {
       the message annotations.</p>',
 
     'message-modify-annotations':
-      'Message annotation names must start with "x-".',
+      'The <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-message-annotations">message \
+      annotations</a> to add to the message, or to update in it. Their names \
+      must start with "x-". Classic queues ignore them.',
+
+    'message-get-settlement':
+      '<p>The <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#section-delivery-state">outcome</a> \
+      with which each message is settled:</p>\
+      <dl>\
+        <dt><a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-released">Released</a></dt>\
+        <dd>The message is requeued unchanged.</dd>\
+        <dt><a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-accepted">Accepted</a></dt>\
+        <dd>The message is removed from the queue.</dd>\
+        <dt><a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-rejected">Rejected</a></dt>\
+        <dd>The message is dead lettered if the queue is configured for it, \
+        and dropped otherwise.</dd>\
+        <dt><a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-modified">Modified</a></dt>\
+        <dd>The message is requeued or dead lettered, depending on \
+        "Undeliverable here".</dd>\
+      </dl>',
+
+    'message-modify-delivery-failed':
+      'The <code>delivery-failed</code> field of the \
+      <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-modified">modified</a> outcome. \
+      If true, the <code>delivery-count</code> of the message is incremented.',
+
+    'message-modify-undeliverable-here':
+      'The <code>undeliverable-here</code> field of the \
+      <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-modified">modified</a> outcome. \
+      If true, the message is \
+      <a target="_blank" href="https://www.rabbitmq.com/docs/dlx">dead lettered</a>, \
+      or dropped if dead lettering is not configured. If false, the message is \
+      requeued. See \
+      <a target="_blank" href="https://www.rabbitmq.com/docs/amqp#modified-outcome">Modified \
+      Outcome</a> in the RabbitMQ documentation.',
 
     'message-publish-amqp-properties':
-      '<p>Properties of the AMQP 1.0 message. Invalid properties are rejected. \
-      Valid properties are:</p>\
+      '<p>The immutable <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-properties">properties</a> \
+      of the message. Invalid properties are rejected. Valid properties are:</p>\
       <ul>\
       <li>message_id</li>\
       <li>user_id</li>\

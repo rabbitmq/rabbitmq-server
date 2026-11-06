@@ -14,13 +14,18 @@
           <th><label>Protocol:</label></th>
           <td>
             <select name="protocol" class="protocol-select">
-              <option value="amqp091">AMQP 0-9-1</option>
               <option value="amqp" selected>AMQP 1.0</option>
+              <option value="amqp091">AMQP 0-9-1</option>
             </select>
           </td>
         </tr>
         <tr>
-          <th><label>Settlement:</label></th>
+          <th>
+            <label>
+              Settlement:
+              <span class="help amqp-only" id="message-get-settlement"></span>
+            </label>
+          </th>
           <td>
             <select name="ackmode" class="ackmode-select">
                 <option value="ack_requeue_true" selected>Released</option>
@@ -31,7 +36,12 @@
           </td>
         </tr>
         <tr class="modify-only" style="display: none">
-          <th><label>Delivery failed:</label></th>
+          <th>
+            <label>
+              Delivery failed:
+              <span class="help" id="message-modify-delivery-failed"></span>
+            </label>
+          </th>
           <td>
             <select name="delivery_failed">
               <option value="false" selected>false</option>
@@ -40,7 +50,12 @@
           </td>
         </tr>
         <tr class="modify-only" style="display: none">
-          <th><label>Undeliverable here:</label></th>
+          <th>
+            <label>
+              Undeliverable here:
+              <span class="help" id="message-modify-undeliverable-here"></span>
+            </label>
+          </th>
           <td>
             <select name="undeliverable_here">
               <option value="false" selected>false</option>
@@ -56,11 +71,11 @@
               <span class="help" id="message-modify-delivery-time"></span>
             </label>
           </th>
-          <td><input type="datetime-local" name="deliver_at" value=""/></td>
-        </tr>
-        <tr class="modify-only" style="display: none">
-          <th><label>Or delay (seconds):</label></th>
-          <td><input type="text" name="delay_seconds" value=""/></td>
+          <td>
+            <input type="datetime-local" name="deliver_at" value=""/>
+            <span>or delay (seconds):</span>
+            <input type="text" name="delay_seconds" value=""/>
+          </td>
         </tr>
         <% } %>
         <tr class="modify-only" style="display: none">

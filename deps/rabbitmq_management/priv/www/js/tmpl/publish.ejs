@@ -15,8 +15,8 @@
           <th><label>Protocol:</label></th>
           <td>
             <select name="protocol" class="protocol-select">
-              <option value="amqp091">AMQP 0-9-1</option>
               <option value="amqp" selected>AMQP 1.0</option>
+              <option value="amqp091">AMQP 0-9-1</option>
             </select>
           </td>
         </tr>
@@ -44,18 +44,53 @@
           <input type="hidden" name="delivery_mode" value="2">
         <% } %>
         <tr class="amqp-only">
-          <th><label>Priority:</label></th>
+          <th>
+            <label>
+              Priority:
+              <span class="help" id="message-publish-priority"></span>
+            </label>
+          </th>
           <td><input type="text" name="amqp_priority" value=""/></td>
         </tr>
         <tr class="amqp-only">
-          <th><label>TTL (ms):</label></th>
-          <td><input type="text" name="amqp_ttl" value=""/></td>
-        </tr>
-        <tr>
           <th>
             <label>
-              <span class="amqp091-only" style="display: none">Headers:</span>
-              <span class="amqp-only">Application properties:</span>
+              TTL (ms):
+              <span class="help" id="message-publish-ttl"></span>
+            </label>
+          </th>
+          <td><input type="text" name="amqp_ttl" value=""/></td>
+        </tr>
+        <% if (mode != 'queue' || is_quorum(queue)) { %>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Deliver at:
+              <span class="help" id="message-publish-delivery-time"></span>
+            </label>
+          </th>
+          <td>
+            <input type="datetime-local" name="deliver_at" value=""/>
+            <span>or delay (seconds):</span>
+            <input type="text" name="delay_seconds" value=""/>
+          </td>
+        </tr>
+        <% } %>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Message annotations:
+              <span class="help" id="message-publish-annotations"></span>
+            </label>
+          </th>
+          <td>
+            <div class="multifield" id="annotations"></div>
+          </td>
+        </tr>
+        <tr class="amqp091-only" style="display: none">
+          <th>
+            <label>
+              Headers:
               <span class="help" id="message-publish-headers"></span>
             </label>
           </th>
@@ -75,30 +110,15 @@
             <div class="multifield string-only" id="props"></div>
           </td>
         </tr>
-        <% if (mode != 'queue' || is_quorum(queue)) { %>
         <tr class="amqp-only">
           <th>
             <label>
-              Deliver at:
-              <span class="help" id="message-publish-delivery-time"></span>
-            </label>
-          </th>
-          <td><input type="datetime-local" name="deliver_at" value=""/></td>
-        </tr>
-        <tr class="amqp-only">
-          <th><label>Or delay (seconds):</label></th>
-          <td><input type="text" name="delay_seconds" value=""/></td>
-        </tr>
-        <% } %>
-        <tr class="amqp-only">
-          <th>
-            <label>
-              Message annotations:
-              <span class="help" id="message-publish-annotations"></span>
+              Application properties:
+              <span class="help" id="message-publish-application-properties"></span>
             </label>
           </th>
           <td>
-            <div class="multifield" id="annotations"></div>
+            <div class="multifield" id="appprops"></div>
           </td>
         </tr>
         <tr>

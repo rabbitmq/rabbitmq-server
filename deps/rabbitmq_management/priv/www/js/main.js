@@ -1486,10 +1486,11 @@ function publish_amqp_params(params) {
         header['ttl'] = parse_int_in_range('TTL', params['amqp_ttl'], 0, 4294967295);
     params['header'] = header;
     params['properties'] = props;
-    params['application_properties'] = params['headers'] == '' ? {} : params['headers'];
+    params['application_properties'] = params['appprops'] || {};
     params['message_annotations'] = apply_delivery_time(
         params, params['annotations'] == undefined ? {} : params['annotations']);
     delete params['headers'];
+    delete params['appprops'];
     delete params['annotations'];
     delete params['amqp_priority'];
     delete params['amqp_ttl'];
@@ -1502,6 +1503,7 @@ function publish_msg0(params) {
         publish_req(path, params);
         return;
     }
+    delete params['appprops'];
     params['properties'] = {};
     params['properties']['delivery_mode'] = parseInt(params['delivery_mode']);
     if (params['headers'] != '')
