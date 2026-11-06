@@ -685,13 +685,15 @@ clear_log_no_route_once(State) ->
 log_cycles(Cycles, RoutingKeys, State) ->
     lists:foldl(fun(Cycle, S) -> log_cycle_once(Cycle, RoutingKeys, S) end, State, Cycles).
 
-log_cycle_once(_Queues, _, #state{logged = #{cycle := true}} = State) ->
+log_cycle_once(Queues, _, #state{logged = Logged} = State)
+  when is_map_key({cycle, Queues}, Logged) ->
     State;
 log_cycle_once(Queues, RoutingKeys, #state{exchange_ref = DlxResource,
                                            queue_ref = QueueResource,
                                            logged = Logged} = State) ->
     ?LOG_WARNING("Dead-letter queues cycle detected for source ~ts "
-                       "with dead-letter exchange ~ts and routing keys ~tp: ~tp",
+                       "with dead-letter exchange ~ts and routing keys ~tp: ~tp "
+                       "This message will not be logged again.",
                        [rabbit_misc:rs(QueueResource), rabbit_misc:rs(DlxResource),
                         RoutingKeys, Queues]),
-    State#state{logged = maps:put(cycle, true, Logged)}.
+    State#state{logged = maps:put({cycle, Queues}, true, Logged)}.
