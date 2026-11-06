@@ -9,6 +9,7 @@
 
 -compile(export_all).
 
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -28,6 +29,9 @@ groups() ->
     [
       {tests, [parallel], [
           parse_amqp091,
+          parse_amqp091_forward_headers_depth,
+          parse_amqp091_forward_headers_depth_rejects_invalid_value,
+          forward_headers_count_header_resets_on_corruption,
           parse_amqp10_mixed,
           parse_local,
           parse_delete_after,
@@ -107,6 +111,73 @@ parse_amqp091(_Config) ->
     assert_uris_round_trip(Parsed,
                            ["ampq://myhost:5672/vhost"],
                            ["ampq://myhost:5672"]),
+    ok.
+
+parse_amqp091_forward_headers_depth(_Config) ->
+    Amqp091Src = {source, [{protocol, amqp091},
+                           {uris, ["ampq://myhost:5672/vhost"]},
+                           {declarations, []},
+                           {queue, <<"the-queue">>}]},
+    Amqp091Dst = {destination, [{protocol, amqp091},
+                                {uris, ["ampq://myhost:5672"]},
+                                {declarations, []},
+                                {publish_properties, []},
+                                {publish_fields, []},
+                                {add_forward_headers, true},
+                                {add_forward_headers_depth, 2}]},
+    In = [Amqp091Src,
+          Amqp091Dst,
+          {ack_mode, on_confirm},
+          {reconnect_delay, 2}],
+
+    {ok, #{dest := #{add_forward_headers_depth := 2,
+                     props_fun := {M, F, Args}}}} =
+        rabbit_shovel_config:parse(my_shovel, In),
+
+    PriorHeaders = [{<<"x-shovelled">>, array,
+                     [{table, [{<<"shovel-name">>, longstr, <<"hop1">>}]},
+                      {table, [{<<"shovel-name">>, longstr, <<"hop0">>}]}]},
+                    {<<"x-shovelled-count">>, long, 2}],
+    #'P_basic'{headers = Headers} =
+        apply(M, F, Args ++ ["amqp://src", "amqp://dest",
+                             #'P_basic'{headers = PriorHeaders}]),
+
+    ?assertMatch({_, array, [_, _]},
+                 lists:keyfind(<<"x-shovelled">>, 1, Headers)),
+    ?assertMatch({_, long, 3},
+                 lists:keyfind(<<"x-shovelled-count">>, 1, Headers)),
+    ok.
+
+parse_amqp091_forward_headers_depth_rejects_invalid_value(_Config) ->
+    Amqp091Src = {source, [{protocol, amqp091},
+                           {uris, ["ampq://myhost:5672/vhost"]},
+                           {declarations, []},
+                           {queue, <<"the-queue">>}]},
+    Amqp091Dst = {destination, [{protocol, amqp091},
+                                {uris, ["ampq://myhost:5672"]},
+                                {declarations, []},
+                                {publish_properties, []},
+                                {publish_fields, []},
+                                {add_forward_headers, true},
+                                {add_forward_headers_depth, -1}]},
+    In = [Amqp091Src,
+          Amqp091Dst,
+          {ack_mode, on_confirm},
+          {reconnect_delay, 2}],
+
+    ?assertMatch(
+       {error, {invalid_shovel_configuration, my_shovel,
+                {invalid_parameter_value, add_forward_headers_depth, _}}},
+       rabbit_shovel_config:parse(my_shovel, In)),
+    ok.
+
+forward_headers_count_header_resets_on_corruption(_Config) ->
+    Props = #'P_basic'{headers = [{<<"x-shovelled-count">>, longstr, <<"nope">>}]},
+    #'P_basic'{headers = Headers} =
+        rabbit_shovel_util:update_headers([], [], "amqp://src", "amqp://dest",
+                                          undefined, Props),
+    ?assertMatch({_, long, 1},
+                 lists:keyfind(<<"x-shovelled-count">>, 1, Headers)),
     ok.
 
 parse_amqp10_mixed(_Config) ->

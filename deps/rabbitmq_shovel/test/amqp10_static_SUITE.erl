@@ -189,6 +189,7 @@ amqp10_source(Config, AckMode) ->
                    props = #'P_basic'{%delivery_mode = 2,
                                       %content_type = ?SHOVELLED,
                                       headers = [{<<"x-shovelled">>, _, _},
+                                                 {<<"x-shovelled-count">>, long, _},
                                                  {<<"x-shovelled-timestamp">>,
                                                   long, _}]}}} ->
             case AckMode of
