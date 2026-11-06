@@ -9,6 +9,7 @@
       <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
       <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
       <input type="hidden" name="truncate" value="50000"/>
+      <p class="amqp-only">The broker takes the messages directly from the queue and returns them in the AMQP 1.0 message format, without opening an AMQP 1.0 connection.</p>
       <table class="form">
         <tr>
           <th><label>Protocol:</label></th>

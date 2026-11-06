@@ -10,6 +10,7 @@
       <input type="hidden" name="name" value="<%= fmt_exchange_url(exchange.name) %>"/>
 <% } %>
       <input type="hidden" name="properties" value=""/>
+      <p class="amqp-only">The broker builds an AMQP 1.0 message from the fields below and publishes it without opening an AMQP 1.0 connection.</p>
       <table class="form">
         <tr>
           <th><label>Protocol:</label></th>
