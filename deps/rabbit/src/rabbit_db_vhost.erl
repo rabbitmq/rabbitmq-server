@@ -24,6 +24,7 @@
          get_all/0,
          count_all/0,
          list/0,
+         list_uncached/0,
          update/2,
          enable_protection_from_deletion/1,
          disable_protection_from_deletion/1,
@@ -307,6 +308,30 @@ list() ->
     catch
         error:badarg ->
             []
+    end.
+
+%% -------------------------------------------------------------------
+%% list_uncached().
+%% -------------------------------------------------------------------
+
+-spec list_uncached() -> Ret when
+      Ret :: {ok, [VHostName]} | {error, any()},
+      VHostName :: vhost:name().
+%% @doc Lists the names of all virtual hosts by querying Khepri directly,
+%% bypassing the ETS-backed projection.
+%%
+%% @returns `{ok, Names}', or `{error, Reason}' if Khepri is unavailable.
+%%
+%% @private
+
+list_uncached() ->
+    Path = khepri_vhost_path(?KHEPRI_WILDCARD_STAR),
+    case rabbit_khepri:get_many(Path) of
+        {ok, VHosts} ->
+            {ok, [vhost:get_name(VHost) || VHost <- maps:values(VHosts),
+                                           VHost =/= undefined]};
+        {error, _} = Error ->
+            Error
     end.
 
 %% -------------------------------------------------------------------
