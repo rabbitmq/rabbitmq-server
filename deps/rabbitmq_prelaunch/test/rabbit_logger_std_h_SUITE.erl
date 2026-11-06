@@ -12,6 +12,7 @@ all() ->
 groups() ->
     [
      {parallel_tests, [parallel], [
+         every_hour_rotation_is_detected,
          every_day_rotation_is_detected,
          every_week_rotation_is_detected,
          every_month_rotation_is_detected,
@@ -33,6 +34,48 @@ end_per_group(_, Config) -> Config.
 
 init_per_testcase(_, Config) -> Config.
 end_per_testcase(_, Config) -> Config.
+
+every_hour_rotation_is_detected(_) ->
+    ?assertNot(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => hour, minute => 30},
+        {{2021, 01, 15}, {10, 00, 00}},
+        {{2021, 01, 15}, {10, 29, 59}})),
+    ?assert(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => hour, minute => 30},
+        {{2021, 01, 15}, {10, 00, 00}},
+        {{2021, 01, 15}, {10, 30, 00}})),
+    ?assertNot(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => hour, minute => 30},
+        {{2021, 01, 15}, {10, 30, 00}},
+        {{2021, 01, 15}, {11, 29, 59}})),
+    ?assert(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => hour, minute => 30},
+        {{2021, 01, 15}, {10, 30, 00}},
+        {{2021, 01, 15}, {11, 30, 00}})),
+    ?assert(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => hour, minute => 30},
+        {{2023, 03, 09}, {08, 28, 29}},
+        {{2023, 03, 09}, {09, 09, 42}})),
+    ?assert(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => hour, minute => 0},
+        {{2021, 01, 15}, {23, 59, 59}},
+        {{2021, 01, 16}, {00, 00, 01}})),
+    ?assert(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => hour, minute => 45},
+        {{2021, 01, 15}, {23, 50, 00}},
+        {{2021, 01, 16}, {00, 50, 00}})),
+    ?assertNot(
+      rabbit_logger_std_h:is_date_based_rotation_needed(
+        #{every => hour, minute => 45},
+        {{2021, 01, 15}, {23, 50, 00}},
+        {{2021, 01, 16}, {00, 44, 59}})).
 
 every_day_rotation_is_detected(_) ->
     ?assertNot(
