@@ -419,8 +419,8 @@ var HELP = {
 
     'message-publish-application-properties':
       '<a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-application-properties">Application \
-      properties</a> carry structured application data, for example to route \
-      the message with a headers exchange.',
+      properties</a> are immutable and carry structured application data, for \
+      example to route the message with a headers exchange.',
 
     'message-publish-delivery-time':
       '<p>Sets the <code>x-opt-delivery-time</code> message annotation to the \
