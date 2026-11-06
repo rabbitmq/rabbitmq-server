@@ -78,6 +78,7 @@ subscription_option_retain_as_published_star_and_dot(Config) -> v5_SUITE:?FUNCTI
 subscription_option_retain_handling(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier_star_and_dot(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+subscription_identifier_star_replaces_plus(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier_retained_message(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier_retained_message_sparkplug(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_identifier_amqp091(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
