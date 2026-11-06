@@ -30,6 +30,7 @@
          check_values_from_offline_remote_node/1,
          check_context_to_app_env_vars/1,
          check_context_to_code_path/1,
+         check_context_to_code_path_ignores_archives/1,
          check_RABBITMQ_ADVANCED_CONFIG_FILE/1,
          check_RABBITMQ_CONFIG_FILE/1,
          check_RABBITMQ_CONFIG_FILES/1,
@@ -98,6 +99,7 @@ all() ->
      check_values_from_offline_remote_node,
      check_context_to_app_env_vars,
      check_context_to_code_path,
+     check_context_to_code_path_ignores_archives,
      check_RABBITMQ_ADVANCED_CONFIG_FILE,
      check_RABBITMQ_CONFIG_FILE,
      check_RABBITMQ_CONFIG_FILES,
@@ -697,6 +699,41 @@ check_context_to_app_env_vars(_) ->
               ?assertEqual({ok, Value}, application:get_env(App, Param))
       end,
       Vars).
+
+check_context_to_code_path_ignores_archives(Config) ->
+    PluginsDir = filename:join(?config(priv_dir, Config), ?FUNCTION_NAME),
+    OldEbin = filename:join([PluginsDir, "archive_test_plugin-1.0", "ebin"]),
+    Ebin = filename:join([PluginsDir, "archive_test_plugin-2.0", "ebin"]),
+    ok = filelib:ensure_dir(filename:join(OldEbin, "unused")),
+    ok = filelib:ensure_dir(filename:join(Ebin, "unused")),
+    {ok, _} = zip:create(
+                filename:join(PluginsDir, "archive_test_plugin-3.0.ez"),
+                [{"archive_test_plugin-3.0/ebin/archive_test_plugin.app",
+                  <<"{application, archive_test_plugin, []}.">>}]),
+    ok = file:write_file(filename:join(PluginsDir, "archive_test_plugin-4.0"), <<>>),
+    OriginalPath = code:get_path(),
+    try
+        lists:foreach(
+          fun({OSType, Separator}) ->
+                  MissingDir = filename:join(PluginsDir, "missing"),
+                  Context = #{os_type => OSType,
+                              plugins_path => MissingDir ++ Separator ++ PluginsDir},
+                  rabbit_env:context_to_code_path(Context),
+                  Added = code:get_path() -- OriginalPath,
+                  ?assertEqual([Ebin], Added),
+                  true = code:set_path(OriginalPath),
+                  rabbit_env:context_to_code_path(
+                    Context#{plugins_path => filename:dirname(Ebin)}),
+                  ?assertEqual([Ebin], code:get_path() -- OriginalPath),
+                  true = code:set_path(OriginalPath)
+          end,
+          case os:type() of
+              {unix, _} -> [{{unix, undefined}, ":"}, {{win32, undefined}, ";"}];
+              _ -> [{{win32, undefined}, ";"}]
+          end)
+    after
+        code:set_path(OriginalPath)
+    end.
 
 check_context_to_code_path(Config) ->
     PrivDir = ?config(priv_dir, Config),
