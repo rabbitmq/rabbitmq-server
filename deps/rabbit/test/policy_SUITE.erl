@@ -38,7 +38,11 @@
          is_supported_operator_policy_max_in_memory_bytes/1,
          is_supported_operator_policy_delivery_limit/1,
          is_supported_operator_policy_target_group_size/1,
-         is_supported_operator_policy_overflow/1
+         is_supported_operator_policy_overflow/1,
+         policy_name_and_definition_limits/1,
+         policy_limits_do_not_apply_to_stored_policies/1,
+         policy_name_and_definition_limits1/0,
+         policy_limits_do_not_apply_to_stored_policies1/0
         ]).
 
 all() ->
@@ -67,7 +71,9 @@ all_tests() ->
      is_supported_operator_policy_max_in_memory_bytes,
      is_supported_operator_policy_delivery_limit,
      is_supported_operator_policy_target_group_size,
-     is_supported_operator_policy_overflow
+     is_supported_operator_policy_overflow,
+     policy_name_and_definition_limits,
+     policy_limits_do_not_apply_to_stored_policies
     ].
 
 %% -------------------------------------------------------------------
@@ -425,3 +431,82 @@ verify_policy([{HA, Expect} | Tail], Server, QName) ->
 
 
 %%----------------------------------------------------------------------------
+
+policy_name_and_definition_limits(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE, policy_name_and_definition_limits1, []).
+
+policy_name_and_definition_limits1() ->
+    VHost = <<"/">>,
+    User = <<"acting-user">>,
+    Small = [{<<"max-length">>, 10}],
+    Big = [{<<"max-length-bytes">>, 1},
+           {<<"dead-letter-routing-key">>, binary:copy(<<"a">>, 65536)}],
+    LongName = binary:copy(<<"n">>, 1025),
+    MaxName = binary:copy(<<"m">>, 1024),
+    Set = [fun(N, D) -> rabbit_policy:set(VHost, N, <<"^x$">>, D, 0, <<"queues">>, User) end,
+           fun(N, D) -> rabbit_policy:set_op(VHost, N, <<"^x$">>, D, 0, <<"queues">>, User) end],
+    Clear = [fun(N) -> rabbit_policy:delete(VHost, N, User) end,
+             fun(N) -> rabbit_policy:delete_op(VHost, N, User) end],
+    [begin
+         {error_string, Msg1} = SetFun(<<"limits">>, Big),
+         ?assertNotEqual(nomatch, string:find(Msg1, "maximum size")),
+         ?assertEqual(nomatch, string:find(Msg1, "aaaa")),
+         {error_string, Msg2} = SetFun(LongName, Small),
+         ?assertNotEqual(nomatch, string:find(Msg2, "maximum length")),
+         ?assertEqual(nomatch, string:find(Msg2, "nnnn")),
+         ok = SetFun(MaxName, Small),
+         ok = ClearFun(MaxName)
+     end || {SetFun, ClearFun} <- lists:zip(Set, Clear)],
+    ?assertEqual(not_found, rabbit_policy:lookup(VHost, <<"limits">>)),
+    ?assertEqual(not_found, rabbit_policy:lookup_op(VHost, <<"limits">>)),
+
+    BigJson = rabbit_json:encode(
+                #{<<"dead-letter-routing-key">> => binary:copy(<<"a">>, 65536)}),
+    ?assertMatch({error_string, _},
+                 rabbit_policy:parse_set(VHost, <<"limits">>, <<"^x$">>, BigJson,
+                                         <<"0">>, <<"queues">>, User)),
+    ?assertEqual(not_found, rabbit_policy:lookup(VHost, <<"limits">>)),
+
+    application:set_env(rabbit, policies,
+                        [{max_name_length, 4}, {max_definition_size, 64}]),
+    try
+        ?assertEqual(ok, rabbit_policy:set(VHost, <<"abcd">>, <<"^x$">>, Small, 0,
+                                           <<"queues">>, User)),
+        ?assertMatch({error_string, _},
+                     rabbit_policy:set(VHost, <<"abcde">>, <<"^x$">>, Small, 0,
+                                       <<"queues">>, User)),
+        ?assertMatch({error_string, _},
+                     rabbit_policy:set(VHost, <<"abcd">>, <<"^x$">>,
+                                       [{<<"dead-letter-routing-key">>,
+                                         binary:copy(<<"a">>, 128)}],
+                                       0, <<"queues">>, User))
+    after
+        application:unset_env(rabbit, policies),
+        rabbit_policy:delete(VHost, <<"abcd">>, User)
+    end,
+    ok.
+
+policy_limits_do_not_apply_to_stored_policies(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE, policy_limits_do_not_apply_to_stored_policies1, []).
+
+policy_limits_do_not_apply_to_stored_policies1() ->
+    VHost = <<"/">>,
+    User = <<"acting-user">>,
+    Definition = [{<<"dead-letter-routing-key">>, binary:copy(<<"a">>, 128)}],
+    application:set_env(rabbit, policies, [{max_definition_size, 64}]),
+    ok = rabbit_policy:set(VHost, <<"stored">>, <<"^x$">>, [{<<"max-length">>, 1}],
+                           0, <<"queues">>, User),
+    application:unset_env(rabbit, policies),
+    ok = rabbit_policy:set(VHost, <<"stored">>, <<"^x$">>, Definition,
+                           0, <<"queues">>, User),
+    application:set_env(rabbit, policies, [{max_definition_size, 64}]),
+    try
+        ?assertMatch(L when is_list(L), rabbit_policy:lookup(VHost, <<"stored">>)),
+        ?assertMatch([_ | _], rabbit_policy:list(VHost))
+    after
+        application:unset_env(rabbit, policies),
+        rabbit_policy:delete(VHost, <<"stored">>, User)
+    end,
+    ok.

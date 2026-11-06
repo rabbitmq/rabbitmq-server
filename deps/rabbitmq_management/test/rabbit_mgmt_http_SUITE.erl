@@ -86,6 +86,7 @@ some_tests() ->
         queues_test,
         bindings_test,
         policy_test,
+        policy_limits_test,
         policy_permissions_test,
         restricted_parameter_components_test
     ].
@@ -4585,6 +4586,22 @@ policy_test(Config) ->
     0 = length(http_get(Config, "/policies")),
     0 = length(http_get(Config, "/policies/%2F")),
     unregister_parameters_and_policy_validator(Config),
+    passed.
+
+policy_limits_test(Config) ->
+    Big = #{<<"dead-letter-routing-key">> => binary:copy(<<"a">>, 65536)},
+    Small = #{<<"max-length">> => 10},
+    [begin
+         Body = fun(Definition) ->
+                        #{vhost => <<"/">>, pattern => <<"^x$">>,
+                          definition => Definition, priority => 0}
+                end,
+         http_put(Config, Path ++ "/limits", Body(Big), ?BAD_REQUEST),
+         http_put(Config, Path ++ "/" ++ lists:duplicate(1025, $n), Body(Small), ?BAD_REQUEST),
+         http_get(Config, Path ++ "/limits", ?NOT_FOUND),
+         http_put(Config, Path ++ "/" ++ lists:duplicate(1024, $m), Body(Small), {group, '2xx'}),
+         http_delete(Config, Path ++ "/" ++ lists:duplicate(1024, $m), {group, '2xx'})
+     end || Path <- ["/policies/%2F", "/operator-policies/%2F"]],
     passed.
 
 policy_permissions_test(Config) ->
