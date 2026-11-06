@@ -130,10 +130,12 @@ publish_amqp091(VHost, X, RoutingKey, Props0, Payload0, Enc, ReqData, Context) -
 publish_amqp(VHost, XNameBin, RoutingKey, Props, Payload0, Enc, Json,
              ReqData, Context = #context{user = User}) ->
     XName = rabbit_misc:r(VHost, exchange, XNameBin),
-    try rabbit_access_control:check_resource_access(User, XName, write, #{}) of
-        ok ->
-            publish_amqp(XName, RoutingKey, Props, Payload0, Enc, Json,
-                         ReqData, Context)
+    try
+        {PeerAddress, _} = cowboy_req:peer(ReqData),
+        ok = rabbit_access_control:check_vhost_access(User, VHost, {ip, PeerAddress}, #{}),
+        ok = rabbit_access_control:check_resource_access(User, XName, write, #{}),
+        publish_amqp(XName, RoutingKey, Props, Payload0, Enc, Json,
+                     ReqData, Context)
     catch
         exit:#amqp_error{explanation = Expl} ->
             rabbit_mgmt_util:not_authorised(Expl, ReqData, Context)
@@ -146,8 +148,19 @@ publish_amqp(XName = #resource{virtual_host = VHost, name = XNameBin},
             {ok, X0} -> X0;
             {error, not_found} -> throw({error, exchange_not_found})
         end,
+    ok = check_publish_permissions(X, User, RoutingKey),
     Payload = decode(Payload0, Enc),
-    Mc0 = mc:init(mc_amqp, amqp_sections(Props, Json, Payload), #{}),
+    Sections = amqp_sections(Props, Json, Payload),
+    Size = byte_size(Sections),
+    MaxMessageSize = persistent_term:get(max_message_size),
+    case Size =< MaxMessageSize of
+        true -> ok;
+        false ->
+            throw({error, iolist_to_binary(io_lib:format(
+                            "message size (~b bytes) > maximum message size (~b bytes)",
+                            [Size, MaxMessageSize]))})
+    end,
+    Mc0 = mc:init(mc_amqp, Sections, #{}),
     case rabbit_access_control:check_user_id(Mc0, User) of
         ok -> ok;
         {refused, Reason, Args} ->
@@ -178,6 +191,18 @@ publish_amqp(XName = #resource{virtual_host = VHost, name = XNameBin},
                     bad(Err, ReqData, Context)
             end
     end.
+
+check_publish_permissions(#exchange{internal = true, name = XName}, _, _) ->
+    rabbit_misc:protocol_error(access_refused,
+                               "cannot publish to internal ~ts", [rabbit_misc:rs(XName)]);
+check_publish_permissions(#exchange{type = topic,
+                                    name = XName = #resource{virtual_host = VHost}},
+                          User = #user{username = Username}, RoutingKey) ->
+    Context = #{routing_key => RoutingKey,
+                variable_map => #{<<"vhost">> => VHost, <<"username">> => Username}},
+    rabbit_access_control:check_topic_access(User, XName#resource{kind = topic}, write, Context);
+check_publish_permissions(_, _, _) ->
+    ok.
 
 queues(Qs) ->
     [case Q of

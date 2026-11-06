@@ -9,6 +9,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_filter.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("amqp10_client/include/amqp10_client.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -217,6 +218,10 @@ all_tests() -> [
     get_fail_test,
     publish_test,
     publish_amqp_test,
+    publish_amqp_topic_permissions_test,
+    publish_amqp_internal_exchange_test,
+    publish_amqp_vhost_permissions_test,
+    publish_amqp_message_size_test,
     publish_large_message_test,
     publish_large_message_exceeding_http_request_body_size_test,
     publish_body_size_limit_single_chunk_test,
@@ -4067,6 +4072,89 @@ publish_amqp_test(Config) ->
     http_delete(Config, "/users/amqpuser", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/publish_amqp_test_perms", {group, '2xx'}),
     passed.
+
+publish_amqp_topic_permissions_test(Config) ->
+    User = "amqp_topic_user",
+    Queue = "/queues/%2F/publish_amqp_topic_permissions_test",
+    Publish = "/exchanges/%2F/amq.topic/publish",
+    Msg = #{protocol => <<"amqp">>, properties => #{},
+            payload => <<"test">>, payload_encoding => <<"string">>},
+    http_put(Config, "/users/" ++ User,
+             #{password => <<"password">>, tags => <<"management">>}, {group, '2xx'}),
+    try
+        http_put(Config, "/permissions/%2F/" ++ User,
+                 #{configure => <<".*">>, write => <<".*">>, read => <<".*">>},
+                 {group, '2xx'}),
+        http_put(Config, Queue, #{durable => true}, {group, '2xx'}),
+        http_post(Config, "/bindings/%2F/e/amq.topic/q/publish_amqp_topic_permissions_test",
+                  #{routing_key => <<"#">>, arguments => #{}}, {group, '2xx'}),
+        http_put(Config, "/topic-permissions/%2F/" ++ User,
+                 #{exchange => <<"amq.topic">>, write => <<"^{username}\\.allowed$">>,
+                   read => <<".*">>}, {group, '2xx'}),
+        http_post(Config, Publish, Msg#{routing_key => <<"amqp_topic_user.denied">>},
+                  User, "password", ?NOT_AUTHORISED),
+        ?assertEqual(#{routed => true},
+                     http_post(Config, Publish,
+                               Msg#{routing_key => <<"amqp_topic_user.allowed">>},
+                               User, "password", ?OK)),
+        [Got] = http_post(Config, Queue ++ "/get",
+                          #{ackmode => ack_requeue_false, count => 10, encoding => auto}, ?OK),
+        ?assertEqual(<<"amqp_topic_user.allowed">>, maps:get(routing_key, Got))
+    after
+        http_delete(Config, Queue, {group, '2xx'}),
+        http_delete(Config, "/users/" ++ User, {group, '2xx'})
+    end.
+
+publish_amqp_internal_exchange_test(Config) ->
+    Exchange = "/exchanges/%2F/publish_amqp_internal_exchange_test",
+    http_put(Config, Exchange, #{type => <<"topic">>, internal => true}, {group, '2xx'}),
+    try
+        http_post(Config, Exchange ++ "/publish",
+                  #{protocol => <<"amqp">>, routing_key => <<"test">>, properties => #{},
+                    payload => <<"test">>, payload_encoding => <<"string">>},
+                  ?NOT_AUTHORISED)
+    after
+        http_delete(Config, Exchange, {group, '2xx'})
+    end.
+
+publish_amqp_vhost_permissions_test(Config) ->
+    Publish = "/exchanges/%2F/amq.default/publish",
+    Msg = #{protocol => <<"amqp">>, routing_key => <<"publish_amqp_vhost_permissions_test">>,
+            properties => #{}, payload => <<"test">>, payload_encoding => <<"string">>},
+    ?assertEqual(#{routed => false}, http_post(Config, Publish, Msg, ?OK)),
+    ok = rpc(Config, meck, new, [rabbit_auth_backend_internal, [passthrough, no_link]]),
+    try
+        ok = rpc(Config, meck, expect,
+                 [rabbit_auth_backend_internal, check_vhost_access, 3, false]),
+        http_post(Config, Publish, Msg, ?NOT_AUTHORISED),
+        ?assertEqual(true, rpc(Config, meck, validate, [rabbit_auth_backend_internal]))
+    after
+        rpc(Config, meck, unload, [rabbit_auth_backend_internal])
+    end,
+    ?assertEqual(#{routed => false}, http_post(Config, Publish, Msg, ?OK)).
+
+publish_amqp_message_size_test(Config) ->
+    Publish = "/exchanges/%2F/amq.default/publish",
+    Payload = binary:copy(<<"x">>, 100),
+    Limit = iolist_size(amqp10_framing:encode_bin(#'v1_0.data'{content = Payload})),
+    DefaultLimit = rpc(Config, persistent_term, get, [max_message_size]),
+    Msg = #{protocol => <<"amqp">>, routing_key => <<"publish_amqp_message_size_test">>,
+            properties => #{}},
+    ok = rpc(Config, persistent_term, put, [max_message_size, Limit]),
+    try
+        lists:foreach(
+          fun({Encoding, Encode}) ->
+                  AtLimit = Msg#{payload => Encode(Payload), payload_encoding => Encoding},
+                  ?assertEqual(#{routed => false}, http_post(Config, Publish, AtLimit, ?OK)),
+                  http_post(Config, Publish,
+                            AtLimit#{payload => Encode(<<Payload/binary, "x">>)}, ?BAD_REQUEST),
+                  http_post(Config, Publish,
+                            AtLimit#{properties => #{content_type => <<"text/plain">>}},
+                            ?BAD_REQUEST)
+          end, [{<<"string">>, fun(P) -> P end}, {<<"base64">>, fun base64:encode/1}])
+    after
+        rpc(Config, persistent_term, put, [max_message_size, DefaultLimit])
+    end.
 
 publish_large_message_test(Config) ->
   Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
