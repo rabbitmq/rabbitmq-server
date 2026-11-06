@@ -1181,33 +1181,97 @@ var BINARY_STATISTICS = {
 };
 
 
-// Which postprocesor functions we need to call from postprocess() function call
-var current_postprocessors = new Map();
-function registerPostProcessor(name, postProcessorFun) {
-  if (current_postprocessors.has(name)) {
-    return false;
+// Generic Processor Registry for application lifecycle hooks
+class ProcessorRegistry {
+  constructor(name) {
+    this.name = name;
+    this.processors = new Map();
   }
-  current_postprocessors.set(name, postProcessorFun);
-}
-function clear_postprocessors() {
-  current_postprocessors.clear(); 
-}
-function is_postprocessor_registered(name) {
-  return current_postprocessors.has(name);
-}
-function unregisterPostProcessor(name) {
-  current_postprocessors.delete(name);
-} 
-function invokeRegisteredPostProcessors() {
-  for (const [name, processorFun] of current_postprocessors) {
-    console.debug(`Calling postprocessor ${name}`);
-    try {
-      processorFun();
-    } catch (err) {
-      console.error(`PostProcessor ${name} failed due to ${err}`);
+
+  register(name, processorFun) {
+    if (name == null || (typeof name === 'string' && name.trim() === '')) return false;
+    if (typeof processorFun !== 'function') return false;
+    if (this.processors.has(name)) return false;
+    this.processors.set(name, processorFun);
+    return true;
+  }
+
+  unregister(name) {
+    return this.processors.delete(name);
+  }
+
+  clear() {
+    this.processors.clear();
+  }
+
+  isRegistered(name) {
+    return this.processors.has(name);
+  }
+
+  // Non-blocking execution (for postprocessors, init, initFailed & logout):
+  // Runs all registered processors safely in try/catch without stopping on error.
+  invoke(data) {
+    for (const [name, processorFun] of this.processors) {
+      console.debug(`Calling ${this.name} ${name}`);
+      try {
+        processorFun(data);
+      } catch (err) {
+        console.error(`${this.name} ${name} failed due to ${err}`);
+      }
     }
   }
+
+  // Short-circuiting execution (for loginprocessors):
+  // Runs processors sequentially; stops immediately if any processor returns { ok: false } or throws.
+  invokeUntilFailure(data) {
+    for (const [name, processorFun] of this.processors) {
+      console.debug(`Calling ${this.name} ${name}`);
+      try {
+        var res = processorFun(data);
+        if (res && res.ok === false) {
+          return res;
+        }
+      } catch (err) {
+        console.error(`${this.name} ${name} failed due to ${err}`);
+        return { ok: false, error: `${this.name} ${name} failed due to exception` };
+      }
+    }
+    return { ok: true };
+  }
 }
+
+var postProcessorRegistry       = new ProcessorRegistry('PostProcessor');
+var loginProcessorRegistry      = new ProcessorRegistry('LoginProcessor');
+var initProcessorRegistry       = new ProcessorRegistry('InitProcessor');
+var initFailedProcessorRegistry = new ProcessorRegistry('InitFailedProcessor');
+var logoutProcessorRegistry     = new ProcessorRegistry('LogoutProcessor');
+
+// 1. PostProcessor API (Preserves backward compatibility)
+function registerPostProcessor(name, fn) { return postProcessorRegistry.register(name, fn); }
+function unregisterPostProcessor(name)   { return postProcessorRegistry.unregister(name); }
+function clear_postprocessors()           { postProcessorRegistry.clear(); }
+function is_postprocessor_registered(name){ return postProcessorRegistry.isRegistered(name); }
+function invokeRegisteredPostProcessors() { postProcessorRegistry.invoke(); }
+
+// 2. LoginProcessor API (Pre-init setup, short-circuiting on failure)
+function registerLoginProcessor(name, fn) { return loginProcessorRegistry.register(name, fn); }
+function unregisterLoginProcessor(name)   { return loginProcessorRegistry.unregister(name); }
+function invokeLoginProcessors(context)   { return loginProcessorRegistry.invokeUntilFailure(context); }
+
+// 3. InitProcessor API (Invoked when app initialization succeeds)
+function registerInitProcessor(name, fn)  { return initProcessorRegistry.register(name, fn); }
+function unregisterInitProcessor(name)    { return initProcessorRegistry.unregister(name); }
+function invokeInitProcessors(context)    { initProcessorRegistry.invoke(context); }
+
+// 4. InitFailedProcessor API (Invoked when login/init fails at any point)
+function registerInitFailedProcessor(name, fn) { return initFailedProcessorRegistry.register(name, fn); }
+function unregisterInitFailedProcessor(name)   { return initFailedProcessorRegistry.unregister(name); }
+function invokeInitFailedProcessors(error)     { initFailedProcessorRegistry.invoke(error); }
+
+// 5. LogoutProcessor API (Pre-logout cleanup)
+function registerLogoutProcessor(name, fn){ return logoutProcessorRegistry.register(name, fn); }
+function unregisterLogoutProcessor(name)  { return logoutProcessorRegistry.unregister(name); }
+function invokeLogoutProcessors(context)  { logoutProcessorRegistry.invoke(context); }
 
 class ApplicationListener {
   onRefresh() {    
