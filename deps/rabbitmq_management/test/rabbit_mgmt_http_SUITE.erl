@@ -217,6 +217,7 @@ all_tests() -> [
     get_encoding_test,
     get_fail_test,
     get_amqp_exclusive_queue_test,
+    get_amqp_requeue_order_test,
     publish_test,
     publish_amqp_test,
     publish_amqp_topic_permissions_test,
@@ -3955,6 +3956,35 @@ get_amqp_exclusive_queue_test(Config) ->
                  amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true})),
     amqp_channel:close(Ch),
     close_connection(Conn).
+
+get_amqp_requeue_order_test(Config) ->
+    Payloads = [<<"1">>, <<"2">>, <<"3">>],
+    [begin
+         QName = "get_amqp_requeue_order_test_" ++ Type,
+         Path = "/queues/%2F/" ++ QName,
+         http_put(Config, Path,
+                  #{durable => true, arguments => #{'x-queue-type' => list_to_binary(Type)}},
+                  {group, '2xx'}),
+         [?assertEqual(#{routed => true},
+                       http_post(Config, "/exchanges/%2F/amq.default/publish",
+                                 #{routing_key => list_to_binary(QName),
+                                   protocol => <<"amqp">>,
+                                   properties => #{},
+                                   payload => P,
+                                   payload_encoding => <<"string">>}, ?OK))
+          || P <- Payloads],
+         Get = fun(AckMode) ->
+                       Msgs = http_post(Config, Path ++ "/get",
+                                        #{ackmode => AckMode, count => 3,
+                                          encoding => auto, protocol => <<"amqp">>},
+                                        ?OK),
+                       [maps:get(payload, M) || M <- Msgs]
+               end,
+         ?assertEqual(Payloads, Get(ack_requeue_true)),
+         ?assertEqual(Payloads, Get(reject_requeue_true)),
+         ?assertEqual(Payloads, Get(ack_requeue_false)),
+         http_delete(Config, Path, {group, '2xx'})
+     end || Type <- ["classic", "quorum"]].
 
 
 -define(LARGE_BODY_BYTES, 5000000).

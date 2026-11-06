@@ -163,7 +163,8 @@ amqp_gets(_Count, _MaxPayloadBytes, _Q, AckMode, _Enc, _Trunc, _IcptCtx, QStates
           _N, _Total, Acc) ->
     amqp_settle(Acc, AckMode, QStates).
 
-amqp_settle(Acc, AckMode, QStates) ->
+amqp_settle(RevAcc, AckMode, QStates) ->
+    Acc = lists:reverse(RevAcc),
     Op = case AckMode of
              ack_requeue_true -> requeue;
              reject_requeue_true -> requeue;
@@ -182,7 +183,7 @@ amqp_settle(Acc, AckMode, QStates) ->
                           QStates1
                   end, QStates, Acc)
         end,
-    [Msg || {Msg, _, _, _} <- lists:reverse(Acc)].
+    [Msg || {Msg, _, _, _} <- Acc].
 
 amqp_no_ack({modify, _}) -> false;
 amqp_no_ack(AckMode) -> ackmode_no_ack(AckMode).
