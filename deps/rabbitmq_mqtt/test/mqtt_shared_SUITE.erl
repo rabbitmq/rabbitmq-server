@@ -103,6 +103,7 @@ cluster_size_1_tests() ->
      ,non_clean_sess_reconnect_qos0
      ,non_clean_sess_reconnect_qos0_and_qos1
      ,non_clean_sess_empty_client_id
+     ,non_clean_sess_unsubscribe_star_and_dot
      ,subscribe_same_topic_same_qos
      ,subscribe_same_topic_different_qos
      ,subscribe_multiple
@@ -1023,6 +1024,26 @@ non_clean_sess_reconnect(Config, SubscriptionQoS) ->
     ok = emqtt:disconnect(Pub),
     ok = emqtt:disconnect(C2),
     %% connect with clean sess true to clean up
+    C3 = connect(ClientId, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C3).
+
+%% RabbitMQ treats `*` like `+`, and `/` and `.` are converted to each other
+%% in binding keys, so these filters do not round-trip through a binding key.
+non_clean_sess_unsubscribe_star_and_dot(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C1 = connect(ClientId, Config, non_clean_sess_opts()),
+    {ok, _, [1, 1]} = emqtt:subscribe(C1, [{<<"t/*">>, qos1},
+                                           {<<"u.1">>, qos1}]),
+    ok = emqtt:disconnect(C1),
+    C2 = connect(ClientId, Config, non_clean_sess_opts()),
+    {ok, _, _} = emqtt:unsubscribe(C2, [<<"t/*">>, <<"u.1">>]),
+    {ok, _} = emqtt:publish(C2, <<"t/1">>, <<"m1">>, qos1),
+    {ok, _} = emqtt:publish(C2, <<"u.1">>, <<"m2">>, qos1),
+    receive {publish, #{client_pid := C2} = Publish} ->
+                ct:fail("Received unexpected PUBLISH: ~p", [Publish])
+    after 2000 -> ok
+    end,
+    ok = emqtt:disconnect(C2),
     C3 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C3).
 

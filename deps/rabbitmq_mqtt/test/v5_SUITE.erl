@@ -83,10 +83,16 @@ cluster_size_1_tests() ->
      unsubscribe_topic_not_found,
      subscription_option_no_local,
      subscription_option_no_local_wildcards,
+     subscription_option_no_local_star_and_dot,
      subscription_option_retain_as_published,
      subscription_option_retain_as_published_wildcards,
+     subscription_option_retain_as_published_star_and_dot,
      subscription_option_retain_handling,
      subscription_identifier,
+     subscription_identifier_star_and_dot,
+     subscription_identifier_star_replaces_plus,
+     subscription_identifier_retained_message,
+     subscription_identifier_retained_message_sparkplug,
      subscription_identifier_amqp091,
      subscription_identifier_at_most_once_dead_letter,
      at_most_once_dead_letter_detect_cycle,
@@ -870,6 +876,24 @@ subscription_option_no_local_wildcards(Config) ->
     assert_nothing_received(),
     ok = emqtt:disconnect(C).
 
+%% RabbitMQ treats `*` like `+`, and `/` and `.` are converted to each other
+%% in binding keys, so these filters do not round-trip through a binding key.
+subscription_option_no_local_star_and_dot(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    Other = connect(<<"other">>, Config),
+    {ok, _, [0, 0]} = emqtt:subscribe(C, [{<<"t/*">>, [{nl, true}]},
+                                          {<<"u.1">>, [{nl, true}]}]),
+    ok = emqtt:publish(C, <<"t/1">>, <<"m1">>),
+    ok = emqtt:publish(C, <<"u.1">>, <<"m2">>),
+    ok = emqtt:publish(Other, <<"t/1">>, <<"m3">>),
+    ok = emqtt:publish(Other, <<"u.1">>, <<"m4">>),
+    [receive {publish, #{client_pid := C, payload := Payload}} -> ok
+     after ?TIMEOUT -> ct:fail({missing_publish, Payload})
+     end || Payload <- [<<"m3">>, <<"m4">>]],
+    assert_nothing_received(),
+    ok = emqtt:disconnect(C),
+    ok = emqtt:disconnect(Other).
+
 subscription_option_retain_as_published(Config) ->
     C1 = connect(<<"c1">>, Config),
     C2 = connect(<<"c2">>, Config),
@@ -928,6 +952,28 @@ subscription_option_retain_as_published_wildcards(Config) ->
     {ok, _} = emqtt:publish(C, <<"t/1">>, <<>>, [{retain, true}, {qos, 1}]),
     {ok, _} = emqtt:publish(C, <<"t/2">>, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(C).
+
+subscription_option_retain_as_published_star_and_dot(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    Pub = connect(<<"publisher">>, Config),
+    {ok, _, [0, 0]} = emqtt:subscribe(C, [{<<"t/*">>, [{rap, true}]},
+                                          {<<"u.1">>, [{rap, true}]}]),
+    ok = emqtt:publish(Pub, <<"t/1">>, <<"m1">>, [{retain, true}]),
+    ok = emqtt:publish(Pub, <<"u.1">>, <<"m2">>, [{retain, true}]),
+    receive {publish, #{client_pid := C,
+                        payload := <<"m1">>,
+                        retain := Retain1}} -> ?assert(Retain1)
+    after ?TIMEOUT -> ct:fail("did not receive m1")
+    end,
+    receive {publish, #{client_pid := C,
+                        payload := <<"m2">>,
+                        retain := Retain2}} -> ?assert(Retain2)
+    after ?TIMEOUT -> ct:fail("did not receive m2")
+    end,
+    {ok, _} = emqtt:publish(Pub, <<"t/1">>, <<>>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(Pub, <<"u.1">>, <<>>, [{retain, true}, {qos, 1}]),
+    ok = emqtt:disconnect(C),
+    ok = emqtt:disconnect(Pub).
 
 subscription_option_retain_handling(Config) ->
     ClientId = ?FUNCTION_NAME,
@@ -1024,6 +1070,92 @@ subscription_identifier(Config) ->
     assert_nothing_received(),
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2).
+
+subscription_identifier_star_and_dot(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    Pub = connect(<<"publisher">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{<<"t/*">>, []}]),
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 2}, [{<<"u.1">>, []}]),
+    ok = emqtt:publish(Pub, <<"t/1">>, <<"m1">>),
+    ok = emqtt:publish(Pub, <<"u.1">>, <<"m2">>),
+    receive {publish, #{client_pid := C,
+                        payload := <<"m1">>,
+                        properties := Props1}} ->
+                ?assertEqual(#{'Subscription-Identifier' => 1}, Props1)
+    after ?TIMEOUT -> ct:fail("did not receive m1")
+    end,
+    receive {publish, #{client_pid := C,
+                        payload := <<"m2">>,
+                        properties := Props2}} ->
+                ?assertEqual(#{'Subscription-Identifier' => 2}, Props2)
+    after ?TIMEOUT -> ct:fail("did not receive m2")
+    end,
+    ok = emqtt:disconnect(C),
+    ok = emqtt:disconnect(Pub).
+
+subscription_identifier_star_replaces_plus(Config) ->
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{<<"t/+">>, []}]),
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 2}, [{<<"t/*">>, []}]),
+    {ok, _} = emqtt:publish(C, <<"t/1">>, <<"m1">>, qos1),
+    receive {publish, #{client_pid := C,
+                        payload := <<"m1">>,
+                        properties := Props}} ->
+                ?assertEqual(#{'Subscription-Identifier' => 2}, Props)
+    after ?TIMEOUT -> ct:fail("did not receive m1")
+    end,
+    ?assertMatch({ok, _, [?RC_SUCCESS, ?RC_NO_SUBSCRIPTION_EXISTED]},
+                 emqtt:unsubscribe(C, [<<"t/+">>, <<"t/*">>])),
+    {ok, _, [0]} = emqtt:subscribe(C, <<"u">>),
+    {ok, _} = emqtt:publish(C, <<"t/1">>, <<"m2">>, qos1),
+    {ok, _} = emqtt:publish(C, <<"u">>, <<"m3">>, qos1),
+    ok = expect_publishes(C, <<"u">>, [<<"m3">>]),
+    assert_nothing_received(),
+    ok = emqtt:disconnect(C).
+
+%% "If the Client specified a Subscription Identifier for any of the overlapping
+%% subscriptions the Server MUST send those Subscription Identifiers in the message
+%% which is published as the result of the subscriptions [MQTT-3.3.4-3]." [v5 3.3.4]
+subscription_identifier_retained_message(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    Pub = connect(<<"publisher">>, Config),
+    {ok, _} = emqtt:publish(Pub, Topic, <<"m1">>, [{retain, true}, {qos, 1}]),
+    C = connect(?FUNCTION_NAME, Config),
+    {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{Topic, []}]),
+    receive {publish, #{client_pid := C,
+                        payload := <<"m1">>,
+                        retain := true,
+                        properties := Props}} ->
+                ?assertEqual(#{'Subscription-Identifier' => 1}, Props)
+    after ?TIMEOUT -> ct:fail("did not receive m1")
+    end,
+    {ok, _} = emqtt:publish(Pub, Topic, <<>>, [{retain, true}, {qos, 1}]),
+    ok = emqtt:disconnect(C),
+    ok = emqtt:disconnect(Pub).
+
+subscription_identifier_retained_message_sparkplug(Config) ->
+    ok = rpc(Config, application, set_env, [?APP, sparkplug, true]),
+    ok = rpc(Config, rabbit_mqtt_util, init_sparkplug, []),
+    try
+        Topic = <<"spBv1.0/group/DDATA/node">>,
+        Pub = connect(<<"publisher">>, Config),
+        {ok, _} = emqtt:publish(Pub, Topic, <<"m1">>, [{retain, true}, {qos, 1}]),
+        C = connect(?FUNCTION_NAME, Config),
+        {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{Topic, []}]),
+        receive {publish, #{client_pid := C,
+                            payload := <<"m1">>,
+                            properties := Props}} ->
+                    ?assertEqual(#{'Subscription-Identifier' => 1}, Props)
+        after ?TIMEOUT -> ct:fail("did not receive m1")
+        end,
+        {ok, _} = emqtt:publish(Pub, Topic, <<>>, [{retain, true}, {qos, 1}]),
+        ok = emqtt:disconnect(C),
+        ok = emqtt:disconnect(Pub)
+    after
+        ok = rpc(Config, application, unset_env, [?APP, sparkplug]),
+        [true = rpc(Config, persistent_term, erase, [K])
+         || K <- [sparkplug_mp_mqtt_to_amqp, sparkplug_mp_amqp_to_mqtt]]
+    end.
 
 subscription_identifier_amqp091(Config) ->
     C1 = connect(<<"sub 1">>, Config),
