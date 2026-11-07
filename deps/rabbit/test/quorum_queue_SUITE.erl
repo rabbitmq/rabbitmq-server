@@ -86,6 +86,8 @@ groups() ->
                                             add_member_machine_version,
                                             recover_from_multiple_failures,
                                             leadership_takeover,
+                                            leader_health_check_node_without_replica,
+                                            leader_health_check_member_down,
                                             delete_declare,
                                             delete_member_during_node_down,
                                             delete_while_publishing,
@@ -450,6 +452,28 @@ end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase);
+<<<<<<< HEAD
+=======
+end_per_testcase(decorator_added_to_idle_queue_is_notified = Testcase,
+                 Config) ->
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_decorator,
+                                     unregister, [<<"dummy">>]),
+    _ = rabbit_ct_broker_helpers:rpc_all(Config, dummy_queue_decorator,
+                                         clear_target, []),
+    Config1 = rabbit_ct_helpers:run_steps(
+                Config,
+                rabbit_ct_client_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
+end_per_testcase(leader_health_check_member_down = Testcase, Config) ->
+    RaName = ra_name(?config(queue_name, Config)),
+    _ = [rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, restart_server,
+                                      [{RaName, S}], 30_000)
+         || S <- rabbit_ct_broker_helpers:get_node_configs(Config, nodename)],
+    Config1 = rabbit_ct_helpers:run_steps(
+                Config,
+                rabbit_ct_client_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
+>>>>>>> 2639825 (Add two more integration tests for #18269)
 end_per_testcase(Testcase, Config) ->
     % catch delete_queues(),
     Config1 = rabbit_ct_helpers:run_steps(
@@ -5795,6 +5819,49 @@ leader_health_check(Config) ->
     amqp_connection:close(Conn1),
     amqp_connection:close(Conn2).
 
+
+leader_health_check_node_without_replica(Config) ->
+    [Server0 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                 {<<"x-quorum-initial-group-size">>, long, 2}])),
+    {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+    [NodeWithoutReplica] = Servers -- rabbit_queue_type:get_nodes(Q0),
+    ?assertEqual(undefined,
+                 rpc:call(NodeWithoutReplica, ra_leaderboard, lookup_leader, [ra_name(Q)])),
+    ?awaitMatch([], leader_health_check(NodeWithoutReplica, Q), ?TIMEOUT).
+
+leader_health_check_member_down(Config) ->
+    [Server0 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Q = ?config(queue_name, Config),
+    RaName = ra_name(Q),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    {ok, _, {_, Leader}} = ra:members({RaName, Server0}),
+    [Follower | _] = Servers -- [Leader],
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, stop_server,
+                                      [{RaName, Follower}]),
+    ?awaitMatch([], leader_health_check(Server0, Q), ?TIMEOUT),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, restart_server,
+                                      [{RaName, Follower}]),
+    ?awaitMatch({ok, _, _}, ra:members({local, {RaName, Follower}}), ?TIMEOUT),
+
+    {ok, _, {_, CurrentLeader}} = ra:members({RaName, Server0}),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, stop_server,
+                                      [{RaName, CurrentLeader}]),
+    [Survivor | _] = Servers -- [CurrentLeader],
+    ?awaitMatch([], leader_health_check(Survivor, Q), ?TIMEOUT).
+
+leader_health_check(Node, Q) ->
+    try
+        rpc:call(Node, rabbit_quorum_queue, leader_health_check, [Q, <<"/">>], 90_000)
+    catch
+        _:Reason -> {error, Reason}
+    end.
 
 leader_locator_client_local(Config) ->
     [Server1 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
