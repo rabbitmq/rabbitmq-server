@@ -404,9 +404,16 @@ do_forward(IncomingTag, Mc0,
     Method1 = apply(Mf, Ff, Argsf ++ [SrcUri, DstUri, Method]),
     Mc = mc:convert(mc_amqpl, Mc0),
     {Props, Payload} = rabbit_basic_common:from_content(mc:protocol_state(Mc)),
-    Msg1 = #amqp_msg{props = apply(M, F, Args ++ [SrcUri, DstUri, Props]),
+    Msg1 = #amqp_msg{props = apply(M, F, Args ++ [SrcUri, DstUri, strip_routing_headers(Props)]),
                      payload = Payload},
     publish(IncomingTag, Method1, Msg1, State0).
+
+%% `CC` and `BCC` headers are kept cluster-local.
+strip_routing_headers(#'P_basic'{headers = Headers} = Props) when is_list(Headers) ->
+    Props#'P_basic'{headers = [H || {K, _, _} = H <- Headers,
+                                    K =/= <<"CC">>, K =/= <<"BCC">>]};
+strip_routing_headers(Props) ->
+    Props.
 
 handle_source(#'basic.consume_ok'{}, State) ->
     State;

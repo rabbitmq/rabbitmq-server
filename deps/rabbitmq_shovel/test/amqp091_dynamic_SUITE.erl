@@ -38,6 +38,7 @@ groups() ->
           set_empty_properties_using_proplist,
           set_empty_properties_using_map,
           headers,
+          cc_bcc_headers_are_not_forwarded,
           restart,
           validation,
           runtime_parse_failure,
@@ -197,6 +198,49 @@ set_empty_properties_using_proplist(Config) ->
               #amqp_msg{props = #'P_basic'{}} =
                   amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi">>)
       end).
+
+cc_bcc_headers_are_not_forwarded(Config) ->
+    with_amqp091_ch(Config,
+        fun(Ch) ->
+            Headers = [{<<"CC">>, array, [{longstr, <<"victim-cc">>}]},
+                       {<<"BCC">>, array, [{longstr, <<"victim-bcc">>}]},
+                       {<<"other">>, longstr, <<"kept">>}],
+            [#'queue.declare_ok'{} =
+                 amqp_channel:call(Ch, #'queue.declare'{queue = Q, durable = true})
+             || Q <- [<<"src">>, <<"dest">>]],
+            #'queue.bind_ok'{} =
+                amqp_channel:call(Ch, #'queue.bind'{queue = <<"dest">>,
+                                                    exchange = <<"amq.direct">>,
+                                                    routing_key = <<"dest">>}),
+            lists:foreach(
+              fun({Dest, Opts}) ->
+                      %% The queues are declared after publishing so that
+                      %% `CC` and `BCC` do not route on the source side.
+                      amqp091_publish(Ch, <<>>, <<"src">>,
+                                      #amqp_msg{props = #'P_basic'{headers = Headers},
+                                                payload = <<"hi">>}),
+                      [#'queue.declare_ok'{} =
+                           amqp_channel:call(Ch, #'queue.declare'{queue = Q, durable = true})
+                       || Q <- [<<"victim-cc">>, <<"victim-bcc">>]],
+                      shovel_test_utils:set_param(
+                        Config, <<"test">>,
+                        [{<<"src-queue">>, <<"src">>}] ++ Opts),
+                      #amqp_msg{props = #'P_basic'{headers = H}} =
+                          amqp091_expect(Ch, Dest, <<"hi">>),
+                      ?assertEqual({<<"other">>, longstr, <<"kept">>},
+                                   lists:keyfind(<<"other">>, 1, H)),
+                      ?assertEqual(false, lists:keyfind(<<"CC">>, 1, H)),
+                      ?assertEqual(false, lists:keyfind(<<"BCC">>, 1, H)),
+                      amqp091_expect_empty(Ch, <<"victim-cc">>),
+                      amqp091_expect_empty(Ch, <<"victim-bcc">>),
+                      shovel_test_utils:clear_param(Config, <<"test">>),
+                      [amqp_channel:call(Ch, #'queue.delete'{queue = Q})
+                       || Q <- [<<"victim-cc">>, <<"victim-bcc">>]]
+              end,
+              [{<<"dest">>, [{<<"dest-queue">>, <<"dest">>}]},
+               {<<"dest">>, [{<<"dest-exchange">>, <<"amq.direct">>},
+                             {<<"dest-exchange-key">>, <<"dest">>}]}])
+        end).
 
 headers(Config) ->
     with_amqp091_ch(Config,
