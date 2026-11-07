@@ -32,6 +32,7 @@
          handle_dest/2,
          ack/3,
          nack/2,
+         reject/2,
          forward/3,
          status/1,
          pending_count/1]).
@@ -92,6 +93,8 @@ handle_dest(_Msg, _State) -> not_handled.
 ack(_Tag, _Multi, State) -> State.
 
 nack(_Tags, State) -> State.
+
+reject(_Tag, State) -> State.
 
 forward(_Tag, _Msg, State) -> State.
 

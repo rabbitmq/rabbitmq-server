@@ -27,6 +27,7 @@
          forward/3,
          ack/3,
          nack/2,
+         reject/2,
          status/1,
          % common functions
          decr_remaining_unacked/1,
@@ -104,6 +105,7 @@
 -callback ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 %% Tags are in source delivery order so that requeued messages keep their order.
 -callback nack(Tags :: [tag(), ...], state()) -> state().
+-callback reject(Tag :: tag(), state()) -> state().
 -callback forward(Tag :: tag(), Msg :: mc:state(), state()) ->
     state() | {stop, any()}.
 -callback status(state()) -> rabbit_shovel_status:shovel_status().
@@ -183,6 +185,12 @@ ack(Tag, Multi, #{source := #{module := Mod}} = State) ->
 -spec nack([tag(), ...], state()) -> state().
 nack(Tags, #{source := #{module := Mod}} = State) ->
     Mod:nack(Tags, State).
+
+-spec reject(tag(), state()) -> state().
+reject(_Tag, #{ack_mode := no_ack} = State) ->
+    State;
+reject(Tag, #{source := #{module := Mod}} = State) ->
+    Mod:reject(Tag, State).
 
 -spec status(state()) -> {rabbit_shovel_status:shovel_status(), rabbit_shovel_status:metrics()}.
 status(#{dest := #{module := Mod}} = State) ->

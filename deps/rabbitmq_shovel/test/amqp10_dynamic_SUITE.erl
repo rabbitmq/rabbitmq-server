@@ -41,6 +41,10 @@ groups() ->
           dest_releases,
           src_message_too_large,
           src_message_too_large_no_ack,
+          dest_message_too_large,
+          dest_message_too_large_on_publish,
+          dest_message_too_large_no_ack,
+          dest_message_too_large_amqp091_source,
           test_amqp10_delete_after_queue_length,
           delete_after_duration_validation,
           security_validation,
@@ -218,6 +222,64 @@ src_message_too_large(Config, AckMode, DeadLettered) ->
                       ?assertEqual(DeadLettered, [amqp10_msg:body_bin(M) || M <- Msgs])
               end,
               amqp10_expect_empty(Sess, SrcAddress)
+      end).
+
+dest_message_too_large(Config) ->
+    dest_message_too_large(Config, <<"amqp10">>, <<"on-confirm">>, true).
+
+dest_message_too_large_on_publish(Config) ->
+    dest_message_too_large(Config, <<"amqp10">>, <<"on-publish">>, true).
+
+dest_message_too_large_no_ack(Config) ->
+    dest_message_too_large(Config, <<"amqp10">>, <<"no-ack">>, false).
+
+dest_message_too_large_amqp091_source(Config) ->
+    dest_message_too_large(Config, <<"amqp091">>, <<"on-confirm">>, true).
+
+dest_message_too_large(Config, SrcProtocol, AckMode, DeadLettered) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    DLQ = <<Src/binary, "_dlq">>,
+    SrcAddress = rabbitmq_amqp_address:queue(Src),
+    DefaultMaxMsgSize = rabbit_ct_broker_helpers:rpc(
+                          Config, 0, persistent_term, get, [max_message_size]),
+    with_amqp10_session(Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, DLQ, #{}),
+              amqp10_declare_queue(Sess, Src, #{<<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                <<"x-dead-letter-routing-key">> => {utf8, DLQ}}),
+              amqp10_declare_queue(Sess, Dest, #{}),
+              ok = rabbit_ct_broker_helpers:rpc(
+                     Config, 0, persistent_term, put, [max_message_size, 1000]),
+              try
+                  amqp10_publish(Sess, SrcAddress, binary:copy(<<"x">>, 870), 1),
+                  amqp10_publish(Sess, SrcAddress, <<"m">>, 1),
+                  shovel_test_utils:set_param(Config, ?PARAM,
+                                              [{<<"src-protocol">>, SrcProtocol},
+                                               case SrcProtocol of
+                                                   <<"amqp10">> -> {<<"src-address">>, SrcAddress};
+                                                   <<"amqp091">> -> {<<"src-queue">>, Src}
+                                               end,
+                                               {<<"dest-protocol">>, <<"amqp10">>},
+                                               {<<"dest-address">>, rabbitmq_amqp_address:queue(Dest)},
+                                               {<<"dest-add-forward-headers">>, true},
+                                               {<<"ack-mode">>, AckMode}]),
+                  [Msg] = amqp10_expect_count(Sess, rabbitmq_amqp_address:queue(Dest), 1),
+                  ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg)),
+                  DLQAddress = rabbitmq_amqp_address:queue(DLQ),
+                  case DeadLettered of
+                      false ->
+                          amqp10_expect_empty(Sess, DLQAddress);
+                      true ->
+                          [DL] = amqp10_expect_count(Sess, DLQAddress, 1),
+                          ?assertEqual(871, byte_size(amqp10_msg:body_bin(DL)))
+                  end,
+                  amqp10_expect_empty(Sess, SrcAddress)
+              after
+                  ok = rabbit_ct_broker_helpers:rpc(
+                         Config, 0, persistent_term, put,
+                         [max_message_size, DefaultMaxMsgSize])
+              end
       end).
 
 publish_with_large_header(Config, QName, Payload) ->
