@@ -265,7 +265,12 @@ all_tests() -> [
     amqpl_sessions,
     enable_plugin_amqp,
     cluster_and_node_tags_test,
-    version_test
+    version_test,
+    queue_arguments_do_not_reference_request_body_test,
+    policy_does_not_reference_request_body_test,
+    permissions_do_not_reference_request_body_test,
+    vhost_does_not_reference_request_body_test,
+    parameters_do_not_reference_request_body_test
 ].
 
 %% -------------------------------------------------------------------
@@ -3975,6 +3980,124 @@ publish_large_message_test(Config) ->
   assert_item(Msg, Msg3),
   http_delete(Config, "/queues/%2F/publish_accept_json_test", {group, '2xx'}),
   passed.
+
+-define(PADDING_BYTES, 1000000).
+
+with_padding(Body) ->
+    Body#{<<"padding_ignored_by_handler">> => binary:copy(<<"p">>, ?PADDING_BYTES)}.
+
+assert_not_referencing_body(Sizes) ->
+    ?assertNotEqual([], Sizes),
+    ?assertEqual([], [Size || Size <- Sizes, Size >= ?PADDING_BYTES]).
+
+long_binaries_referenced_byte_sizes(B) when is_binary(B), byte_size(B) > 64 ->
+    [binary:referenced_byte_size(B)];
+long_binaries_referenced_byte_sizes(T) when is_tuple(T) ->
+    long_binaries_referenced_byte_sizes(tuple_to_list(T));
+long_binaries_referenced_byte_sizes(M) when is_map(M) ->
+    long_binaries_referenced_byte_sizes(maps:to_list(M));
+long_binaries_referenced_byte_sizes(L) when is_list(L) ->
+    lists:flatmap(fun long_binaries_referenced_byte_sizes/1, L);
+long_binaries_referenced_byte_sizes(_) ->
+    [].
+
+queue_arguments_do_not_reference_request_body_test(Config) ->
+    QName = <<"queue_arguments_do_not_reference_request_body_test">>,
+    Long = binary:copy(<<"a">>, 100),
+    Args = #{Long => Long, <<"table">> => #{Long => Long}, <<"array">> => [Long]},
+    http_put(Config, "/queues/%2F/" ++ binary_to_list(QName),
+             with_padding(#{durable => true, arguments => Args}),
+             {group, '2xx'}),
+    assert_not_referencing_body(
+      rpc(Config, ?MODULE, queue_arguments_referenced_byte_sizes, [QName])),
+    http_delete(Config, "/queues/%2F/" ++ binary_to_list(QName), {group, '2xx'}),
+    passed.
+
+queue_arguments_referenced_byte_sizes(QName) ->
+    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName)),
+    long_binaries_referenced_byte_sizes(amqqueue:get_arguments(Q)).
+
+policy_does_not_reference_request_body_test(Config) ->
+    Name = <<"policy_does_not_reference_request_body_test">>,
+    Long = binary:copy(<<"a">>, 100),
+    http_put(Config, "/policies/%2F/" ++ binary_to_list(Name),
+             with_padding(#{pattern => Long,
+                            definition => #{'dead-letter-exchange' => Long}}),
+             {group, '2xx'}),
+    assert_not_referencing_body(
+      rpc(Config, ?MODULE, runtime_parameter_referenced_byte_sizes,
+          [<<"policy">>, Name])),
+    http_delete(Config, "/policies/%2F/" ++ binary_to_list(Name), {group, '2xx'}),
+    passed.
+
+permissions_do_not_reference_request_body_test(Config) ->
+    User = <<"permissions_do_not_reference_request_body_test">>,
+    UserPath = binary_to_list(User),
+    Long = binary:copy(<<"a">>, 100),
+    XPath = "/exchanges/%2F/" ++ binary_to_list(Long),
+    http_put(Config, XPath, #{type => <<"topic">>}, {group, '2xx'}),
+    http_put(Config, "/users/" ++ UserPath, #{password => <<"pass">>, tags => <<"">>},
+             {group, '2xx'}),
+    http_put(Config, "/permissions/%2F/" ++ UserPath,
+             with_padding(#{configure => Long, write => Long, read => Long}),
+             {group, '2xx'}),
+    http_put(Config, "/topic-permissions/%2F/" ++ UserPath,
+             with_padding(#{exchange => Long, write => Long, read => Long}),
+             {group, '2xx'}),
+    assert_not_referencing_body(
+      rpc(Config, ?MODULE, permissions_referenced_byte_sizes, [User, Long])),
+    http_delete(Config, "/users/" ++ UserPath, {group, '2xx'}),
+    http_delete(Config, XPath, {group, '2xx'}),
+    passed.
+
+permissions_referenced_byte_sizes(User, Exchange) ->
+    #user_permission{} = UserPerm = rabbit_db_user:get_user_permissions(User, <<"/">>),
+    #topic_permission{} = TopicPerm =
+        rabbit_db_user:get_topic_permissions(User, <<"/">>, Exchange),
+    long_binaries_referenced_byte_sizes([UserPerm, TopicPerm]).
+
+vhost_does_not_reference_request_body_test(Config) ->
+    VHost = <<"vhost_does_not_reference_request_body_test">>,
+    Long = binary:copy(<<"a">>, 100),
+    http_put(Config, "/vhosts/" ++ binary_to_list(VHost),
+             with_padding(#{description => Long, tags => [Long]}),
+             {group, '2xx'}),
+    assert_not_referencing_body(
+      rpc(Config, ?MODULE, vhost_referenced_byte_sizes, [VHost])),
+    http_delete(Config, "/vhosts/" ++ binary_to_list(VHost), {group, '2xx'}),
+    passed.
+
+vhost_referenced_byte_sizes(VHost) ->
+    long_binaries_referenced_byte_sizes(rabbit_db_vhost:get(VHost)).
+
+parameters_do_not_reference_request_body_test(Config) ->
+    Long = binary:copy(<<"a">>, 100),
+    GlobalName = <<"parameters_do_not_reference_request_body_test">>,
+    GlobalPath = "/global-parameters/" ++ binary_to_list(GlobalName),
+    register_parameters_and_policy_validator(Config),
+    http_put(Config, GlobalPath, with_padding(#{value => #{Long => Long}}), {group, '2xx'}),
+    http_put(Config, "/parameters/test/%2F/good", with_padding(#{value => #{Long => Long}}),
+             {group, '2xx'}),
+    #{name := ClusterName} = http_get(Config, "/cluster-name"),
+    http_put(Config, "/cluster-name", with_padding(#{name => Long}), {group, '2xx'}),
+    Sizes = rpc(Config, ?MODULE, parameters_referenced_byte_sizes, [GlobalName]),
+    http_put(Config, "/cluster-name", #{name => ClusterName}, {group, '2xx'}),
+    http_delete(Config, "/parameters/test/%2F/good", {group, '2xx'}),
+    http_delete(Config, GlobalPath, {group, '2xx'}),
+    unregister_parameters_and_policy_validator(Config),
+    assert_not_referencing_body(Sizes),
+    passed.
+
+parameters_referenced_byte_sizes(GlobalName) ->
+    Params = [rabbit_runtime_parameters:lookup_global(GlobalName),
+              rabbit_runtime_parameters:lookup(<<"/">>, <<"test">>, <<"good">>),
+              rabbit_runtime_parameters:lookup_global(<<"cluster_name">>)],
+    false = lists:member(not_found, Params),
+    long_binaries_referenced_byte_sizes(Params).
+
+runtime_parameter_referenced_byte_sizes(Component, Name) ->
+    long_binaries_referenced_byte_sizes(
+      rabbit_runtime_parameters:lookup(<<"/">>, Component, Name)).
 
 -define(EXCESSIVELY_LARGE_BODY_BYTES, 35000000).
 

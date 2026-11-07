@@ -64,8 +64,9 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
       [], ReqData0, Context,
       fun(_, BodyMap, ReqData) ->
               Trace = rabbit_mgmt_util:parse_bool(maps:get(tracing, BodyMap, undefined)),
-              Description = maps:get(description, BodyMap, <<"">>),
-              Tags = maps:get(tags, BodyMap, <<"">>),
+              Description = rabbit_mgmt_format:copy_binaries(
+                              maps:get(description, BodyMap, <<"">>)),
+              Tags = rabbit_mgmt_format:copy_binaries(maps:get(tags, BodyMap, <<"">>)),
               %% defaultqueuetype was an unfortunate name picked originally for 3.11.0,
               %% so fall back to it. See rabbitmq/rabbitmq-server#7734.
               FallbackQT = maps:get(defaultqueuetype, BodyMap, undefined),
