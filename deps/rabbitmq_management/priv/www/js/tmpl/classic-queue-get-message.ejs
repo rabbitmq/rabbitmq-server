@@ -9,20 +9,93 @@
       <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
       <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
       <input type="hidden" name="truncate" value="50000"/>
+      <p class="amqp-only">The broker takes the messages directly from the queue and returns them in the AMQP 1.0 message format, without opening an AMQP 1.0 connection.</p>
       <table class="form">
         <tr>
-          <th><label>Ack Mode:</label></th>
+          <th><label>Protocol:</label></th>
           <td>
-            <select name="ackmode">
-                <option value="ack_requeue_true" selected>Nack message requeue true</option>
-                <option value="ack_requeue_false">Automatic ack</option>
-                <option value="reject_requeue_true">Reject requeue true</option>
-                <option value="reject_requeue_false">Reject requeue false</option>
+            <select name="protocol" class="protocol-select">
+              <option value="amqp" selected>AMQP 1.0</option>
+              <option value="amqp091">AMQP 0-9-1</option>
             </select>
           </td>
         </tr>
         <tr>
-          <th><label>Encoding:</label></th>
+          <th>
+            <label>
+              Settlement:
+              <span class="help amqp-only" id="message-get-settlement"></span>
+            </label>
+          </th>
+          <td>
+            <select name="ackmode" class="ackmode-select">
+                <option value="ack_requeue_true" selected>Released</option>
+                <option value="ack_requeue_false">Accepted</option>
+                <option value="reject_requeue_false">Rejected</option>
+                <option value="modify">Modified</option>
+            </select>
+          </td>
+        </tr>
+        <tr class="modify-only" style="display: none">
+          <th>
+            <label>
+              Delivery failed:
+              <span class="help" id="message-modify-delivery-failed"></span>
+            </label>
+          </th>
+          <td>
+            <select name="delivery_failed">
+              <option value="false" selected>false</option>
+              <option value="true">true</option>
+            </select>
+          </td>
+        </tr>
+        <tr class="modify-only" style="display: none">
+          <th>
+            <label>
+              Undeliverable here:
+              <span class="help" id="message-modify-undeliverable-here"></span>
+            </label>
+          </th>
+          <td>
+            <select name="undeliverable_here">
+              <option value="false" selected>false</option>
+              <option value="true">true</option>
+            </select>
+          </td>
+        </tr>
+        <% if (is_quorum(queue)) { %>
+        <tr class="modify-only" style="display: none">
+          <th>
+            <label>
+              Deliver at:
+              <span class="help" id="message-modify-delivery-time"></span>
+            </label>
+          </th>
+          <td>
+            <input type="datetime-local" name="deliver_at" value=""/>
+            <span>or delay (seconds):</span>
+            <input type="text" name="delay_seconds" value=""/>
+          </td>
+        </tr>
+        <% } %>
+        <tr class="modify-only" style="display: none">
+          <th>
+            <label>
+              Message annotations:
+              <span class="help" id="message-modify-annotations"></span>
+            </label>
+          </th>
+          <td>
+            <div class="multifield" id="modannotations"></div>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Messages:</label></th>
+          <td><input type="text" name="count" value="1"/></td>
+        </tr>
+        <tr>
+          <th><label>Payload encoding:</label></th>
           <td>
             <select name="encoding">
               <option value="auto">Auto string / base64</option>
@@ -30,10 +103,6 @@
             </select>
             <span class="help" id="string-base64"></span>
           </td>
-        </tr>
-        <tr>
-          <th><label>Messages:</label></th>
-          <td><input type="text" name="count" value="1"/></td>
         </tr>
       </table>
       <input type="submit" value="Get Message(s)" />
