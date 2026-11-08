@@ -17,6 +17,7 @@
 
 all() ->
     [
+      direct_channel_flush,
       amqp_uri_parsing,
       amqp_uri_accepts_string_and_binaries,
       amqp_uri_remove_credentials,
@@ -36,6 +37,29 @@ all() ->
       connection_closed_on_frame_above_negotiated_frame_max,
       negotiated_frame_max_below_minimum_is_rejected
     ].
+
+%% -------------------------------------------------------------------
+%% Direct channel.
+%% -------------------------------------------------------------------
+
+direct_channel_flush(_Config) ->
+    {ok, Channel} = amqp_channel:start_link(
+                      direct, self(), 1, none, {?MODULE, direct_channel_flush}),
+    {Caller, Ref} = spawn_monitor(
+                      fun() -> ok = rabbit_writer:flush(Channel) end),
+    try
+        receive
+            {'DOWN', Ref, process, Caller, Reason} ->
+                ?assertEqual(normal, Reason)
+        after 5000 ->
+            ct:fail(flush_did_not_reply)
+        end,
+        ?assert(is_process_alive(Channel))
+    after
+        exit(Caller, kill),
+        erlang:demonitor(Ref, [flush]),
+        gen_server:stop(Channel)
+    end.
 
 %% -------------------------------------------------------------------
 %% AMQP URI parsing.

@@ -89,6 +89,7 @@ groups() ->
       {direct_connection_tests, [], [
           {parallel_tests, [parallel], [
               basic_get_direct,
+              direct_channel_shutdown,
               no_user,
               no_password
               | ?COMMON_PARALLEL_TEST_CASES]},
@@ -830,6 +831,36 @@ basic_ack_call(Config) ->
         = amqp_channel:call(Channel, #'basic.get'{queue = Q, no_ack = false}),
     amqp_channel:call(Channel, #'basic.ack'{delivery_tag = Tag}),
     teardown(Connection, Channel).
+
+%% -------------------------------------------------------------------
+
+direct_channel_shutdown(Config) ->
+    {ok, Connection} = new_connection(Config),
+    try
+        {ok, Channel} = amqp_connection:open_channel(Connection),
+        Channels = rabbit_ct_broker_helpers:rpc(
+                     Config, 0, rabbit_channel, list_local, []),
+        [ServerChannel] =
+            [Pid || Pid <- Channels,
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, 0, rabbit_channel, info, [Pid, [connection]])
+                    =:= [{connection, Connection}]],
+        Ref = erlang:monitor(process, ServerChannel),
+        try
+            ok = rabbit_channel:shutdown(ServerChannel),
+            receive
+                {'DOWN', Ref, process, ServerChannel, Reason} ->
+                    ?assertEqual(normal, Reason)
+            after 5000 ->
+                ct:fail(direct_channel_shutdown_timed_out)
+            end,
+            ?assert(is_process_alive(Channel))
+        after
+            erlang:demonitor(Ref, [flush])
+        end
+    after
+        amqp_connection:close(Connection)
+    end.
 
 %% -------------------------------------------------------------------
 
