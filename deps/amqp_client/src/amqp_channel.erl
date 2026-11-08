@@ -394,7 +394,7 @@ handle_call(open, From, State) ->
 %% @private
 handle_call(flush, _From, State) ->
     flush_writer(State),
-    {noreply, State};
+    {reply, ok, State};
 %% @private
 handle_call({close, Code, Text}, From, State) ->
     handle_close(Code, Text, From, State);
