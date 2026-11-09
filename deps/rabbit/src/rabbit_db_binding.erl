@@ -201,7 +201,8 @@ create_if_absent(#binding{source = SrcName,
 
 is_in_projection(Binding) ->
     try
-        ets:member(?KHEPRI_BINDINGS_PROJECTION, Binding)
+        ok =:= rabbit_khepri:fence(30_000) andalso
+            ets:member(?KHEPRI_BINDINGS_PROJECTION, Binding)
     catch
         error:badarg ->
             false
