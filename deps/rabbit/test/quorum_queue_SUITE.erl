@@ -5751,13 +5751,13 @@ leader_health_check(Config) ->
 
 
 leader_health_check_node_without_replica(Config) ->
-    [Server0 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    [_Server0, Server1 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                  {<<"x-quorum-initial-group-size">>, long, 2}])),
-    {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+    {ok, Q0} = rpc:call(Server1, rabbit_amqqueue, lookup, [Q, <<"/">>]),
     [NodeWithoutReplica] = Servers -- rabbit_queue_type:get_nodes(Q0),
     ?assertEqual(undefined,
                  rpc:call(NodeWithoutReplica, ra_leaderboard, lookup_leader, [ra_name(Q)])),
