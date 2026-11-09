@@ -9,6 +9,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_filter.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("amqp10_client/include/amqp10_client.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -220,7 +221,14 @@ all_tests() -> [
     get_payload_limit_test,
     get_encoding_test,
     get_fail_test,
+    get_amqp_exclusive_queue_test,
+    get_amqp_requeue_order_test,
     publish_test,
+    publish_amqp_test,
+    publish_amqp_topic_permissions_test,
+    publish_amqp_internal_exchange_test,
+    publish_amqp_vhost_permissions_test,
+    publish_amqp_message_size_test,
     publish_large_message_test,
     publish_large_message_exceeding_http_request_body_size_test,
     publish_body_size_limit_single_chunk_test,
@@ -4072,6 +4080,52 @@ get_fail_test(Config) ->
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
 
+get_amqp_exclusive_queue_test(Config) ->
+    {Conn, Ch} = open_connection_and_channel(Config),
+    #'queue.declare_ok'{queue = QName} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = QName},
+                      #amqp_msg{payload = <<"m">>}),
+    amqp_channel:wait_for_confirms_or_die(Ch, 5),
+    Path = "/queues/%2F/" ++ rabbit_http_util:quote_plus(QName) ++ "/get",
+    Body = #{ackmode => ack_requeue_false, count => 1, encoding => auto},
+    http_post(Config, Path, Body, ?BAD_REQUEST),
+    http_post(Config, Path, Body#{protocol => <<"amqp">>}, ?BAD_REQUEST),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true})),
+    amqp_channel:close(Ch),
+    close_connection(Conn).
+
+get_amqp_requeue_order_test(Config) ->
+    Payloads = [<<"1">>, <<"2">>, <<"3">>],
+    [begin
+         QName = "get_amqp_requeue_order_test_" ++ Type,
+         Path = "/queues/%2F/" ++ QName,
+         http_put(Config, Path,
+                  #{durable => true, arguments => #{'x-queue-type' => list_to_binary(Type)}},
+                  {group, '2xx'}),
+         [?assertEqual(#{routed => true},
+                       http_post(Config, "/exchanges/%2F/amq.default/publish",
+                                 #{routing_key => list_to_binary(QName),
+                                   protocol => <<"amqp">>,
+                                   properties => #{},
+                                   payload => P,
+                                   payload_encoding => <<"string">>}, ?OK))
+          || P <- Payloads],
+         Get = fun(AckMode) ->
+                       Msgs = http_post(Config, Path ++ "/get",
+                                        #{ackmode => AckMode, count => 3,
+                                          encoding => auto, protocol => <<"amqp">>},
+                                        ?OK),
+                       [maps:get(payload, M) || M <- Msgs]
+               end,
+         ?assertEqual(Payloads, Get(ack_requeue_true)),
+         ?assertEqual(Payloads, Get(reject_requeue_true)),
+         ?assertEqual(Payloads, Get(ack_requeue_false)),
+         http_delete(Config, Path, {group, '2xx'})
+     end || Type <- ["classic", "quorum"]].
+
 
 -define(LARGE_BODY_BYTES, 5000000).
 
@@ -4092,6 +4146,203 @@ publish_test(Config) ->
     assert_item(Msg, Msg3),
     http_delete(Config, "/queues/%2F/publish_test", {group, '2xx'}),
     passed.
+
+publish_amqp_test(Config) ->
+    Msg = #{routing_key => <<"publish_amqp_test">>,
+            protocol => <<"amqp">>,
+            header => #{durable => true, priority => 3},
+            properties => #{message_id => <<"id-1">>,
+                            content_type => <<"text/plain">>},
+            application_properties => #{<<"k">> => <<"v">>, <<"n">> => 5},
+            message_annotations => #{<<"x-a">> => <<"b">>},
+            payload => <<"Hello world">>,
+            payload_encoding => <<"string">>},
+    [begin
+         Q = "publish_amqp_test_" ++ Type,
+         http_put(Config, "/queues/%2F/" ++ Q,
+                  #{durable => true, arguments => #{'x-queue-type' => list_to_binary(Type)}},
+                  {group, '2xx'}),
+         ?assertEqual(#{routed => true},
+                      http_post(Config, "/exchanges/%2F/amq.default/publish",
+                                Msg#{routing_key => list_to_binary(Q)}, ?OK)),
+         [Got] = http_post(Config, "/queues/%2F/" ++ Q ++ "/get",
+                           [{ackmode, ack_requeue_false},
+                            {count, 1},
+                            {encoding, auto}], ?OK),
+         ?assertEqual(<<"Hello world">>, maps:get(payload, Got)),
+         ?assertEqual(#{routed => true},
+                      http_post(Config, "/exchanges/%2F/amq.default/publish",
+                                Msg#{routing_key => list_to_binary(Q)}, ?OK)),
+         [GotAmqp] = http_post(Config, "/queues/%2F/" ++ Q ++ "/get",
+                               [{ackmode, ack_requeue_false},
+                                {count, 1},
+                                {encoding, auto},
+                                {protocol, <<"amqp">>}], ?OK),
+         ?assertEqual(<<"Hello world">>, maps:get(payload, GotAmqp)),
+         ?assertEqual(<<"id-1">>, maps:get(message_id, maps:get(properties, GotAmqp))),
+         ?assertEqual(#{k => <<"v">>, n => 5}, maps:get(application_properties, GotAmqp)),
+         ?assertMatch(#{durable := true, priority := 3}, maps:get(header, GotAmqp)),
+         ?assertMatch(#{'x-a' := <<"b">>}, maps:get(message_annotations, GotAmqp)),
+         http_delete(Config, "/queues/%2F/" ++ Q, {group, '2xx'})
+     end || Type <- ["classic", "quorum"]],
+    ModifyQ = "publish_amqp_test_modify",
+    http_put(Config, "/queues/%2F/" ++ ModifyQ,
+             #{durable => true, arguments => #{'x-queue-type' => <<"quorum">>}},
+             {group, '2xx'}),
+    http_post(Config, "/exchanges/%2F/amq.default/publish",
+              Msg#{routing_key => list_to_binary(ModifyQ)}, ?OK),
+    GetBody = #{count => 1, encoding => auto, protocol => <<"amqp">>},
+    [_] = http_post(Config, "/queues/%2F/" ++ ModifyQ ++ "/get",
+                    GetBody#{ackmode => modify,
+                             delivery_failed => true,
+                             annotations => #{<<"x-foo">> => <<"bar">>}}, ?OK),
+    [Modified] = http_post(Config, "/queues/%2F/" ++ ModifyQ ++ "/get",
+                           GetBody#{ackmode => ack_requeue_false}, ?OK),
+    ?assertMatch(#{'x-foo' := <<"bar">>}, maps:get(message_annotations, Modified)),
+    http_post(Config, "/exchanges/%2F/amq.default/publish",
+              Msg#{routing_key => list_to_binary(ModifyQ)}, ?OK),
+    DeliveryTime = os:system_time(millisecond) + 60_000,
+    [_] = http_post(Config, "/queues/%2F/" ++ ModifyQ ++ "/get",
+                    GetBody#{ackmode => modify,
+                             annotations => #{<<"x-opt-delivery-time">> => DeliveryTime}},
+                    ?OK),
+    ?assertEqual([], http_post(Config, "/queues/%2F/" ++ ModifyQ ++ "/get",
+                               GetBody#{ackmode => ack_requeue_false}, ?OK)),
+    http_post(Config, "/queues/%2F/" ++ ModifyQ ++ "/get",
+              GetBody#{ackmode => modify, annotations => #{<<"foo">> => <<"bar">>}},
+              ?BAD_REQUEST),
+    http_post(Config, "/queues/%2F/" ++ ModifyQ ++ "/get",
+              GetBody#{ackmode => modify,
+                       annotations => #{<<"x-big">> => 9223372036854775808}},
+              ?BAD_REQUEST),
+    http_post(Config, "/queues/%2F/" ++ ModifyQ ++ "/get",
+              #{count => 1, encoding => auto, ackmode => modify}, ?BAD_REQUEST),
+    http_delete(Config, "/queues/%2F/" ++ ModifyQ, {group, '2xx'}),
+    ?assertEqual(#{routed => false},
+                 http_post(Config, "/exchanges/%2F/amq.default/publish",
+                           Msg#{routing_key => <<"publish_amqp_unrouted">>}, ?OK)),
+    http_post(Config, "/exchanges/%2F/amq.default/publish",
+              Msg#{header => #{priority => 300}}, ?BAD_REQUEST),
+    http_post(Config, "/exchanges/%2F/amq.default/publish",
+              Msg#{properties => #{no_such_property => <<"x">>}}, ?BAD_REQUEST),
+    http_post(Config, "/exchanges/%2F/amq.default/publish",
+              Msg#{message_annotations => #{<<"no-prefix">> => <<"x">>}}, ?BAD_REQUEST),
+    TooBig = 9223372036854775808,
+    http_post(Config, "/exchanges/%2F/amq.default/publish",
+              Msg#{application_properties => #{<<"n">> => TooBig}}, ?BAD_REQUEST),
+    http_post(Config, "/exchanges/%2F/amq.default/publish",
+              Msg#{properties => #{creation_time => TooBig}}, ?BAD_REQUEST),
+    http_put(Config, "/queues/%2F/publish_amqp_test_minimal", #{durable => true}, {group, '2xx'}),
+    http_post(Config, "/exchanges/%2F/amq.default/publish",
+              #{routing_key => <<"publish_amqp_test_minimal">>,
+                protocol => <<"amqp">>,
+                properties => #{},
+                payload => <<"x">>,
+                payload_encoding => <<"string">>}, ?OK),
+    [Minimal] = http_post(Config, "/queues/%2F/publish_amqp_test_minimal/get",
+                          [{ackmode, ack_requeue_false}, {count, 1},
+                           {encoding, auto}, {protocol, <<"amqp">>}], ?OK),
+    ?assertNot(maps:is_key(application_properties, Minimal)),
+    http_delete(Config, "/queues/%2F/publish_amqp_test_minimal", {group, '2xx'}),
+    http_post(Config, "/exchanges/%2F/nonexistent/publish", Msg, ?NOT_FOUND),
+    http_put(Config, "/queues/%2F/publish_amqp_test_perms", #{durable => true}, {group, '2xx'}),
+    http_put(Config, "/users/amqpuser", [{password, <<"password">>},
+                                         {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/permissions/%2F/amqpuser",
+             #{configure => <<"">>, write => <<"">>, read => <<"">>}, {group, '2xx'}),
+    http_post(Config, "/exchanges/%2F/amq.default/publish",
+              Msg#{routing_key => <<"publish_amqp_test_perms">>},
+              "amqpuser", "password", ?NOT_AUTHORISED),
+    http_post(Config, "/queues/%2F/publish_amqp_test_perms/get",
+              [{ackmode, ack_requeue_true}, {count, 1}, {encoding, auto},
+               {protocol, <<"amqp">>}],
+              "amqpuser", "password", ?NOT_AUTHORISED),
+    http_delete(Config, "/users/amqpuser", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/publish_amqp_test_perms", {group, '2xx'}),
+    passed.
+
+publish_amqp_topic_permissions_test(Config) ->
+    User = "amqp_topic_user",
+    Queue = "/queues/%2F/publish_amqp_topic_permissions_test",
+    Publish = "/exchanges/%2F/amq.topic/publish",
+    Msg = #{protocol => <<"amqp">>, properties => #{},
+            payload => <<"test">>, payload_encoding => <<"string">>},
+    http_put(Config, "/users/" ++ User,
+             #{password => <<"password">>, tags => <<"management">>}, {group, '2xx'}),
+    try
+        http_put(Config, "/permissions/%2F/" ++ User,
+                 #{configure => <<".*">>, write => <<".*">>, read => <<".*">>},
+                 {group, '2xx'}),
+        http_put(Config, Queue, #{durable => true}, {group, '2xx'}),
+        http_post(Config, "/bindings/%2F/e/amq.topic/q/publish_amqp_topic_permissions_test",
+                  #{routing_key => <<"#">>, arguments => #{}}, {group, '2xx'}),
+        http_put(Config, "/topic-permissions/%2F/" ++ User,
+                 #{exchange => <<"amq.topic">>, write => <<"^{username}\\.allowed$">>,
+                   read => <<".*">>}, {group, '2xx'}),
+        http_post(Config, Publish, Msg#{routing_key => <<"amqp_topic_user.denied">>},
+                  User, "password", ?NOT_AUTHORISED),
+        ?assertEqual(#{routed => true},
+                     http_post(Config, Publish,
+                               Msg#{routing_key => <<"amqp_topic_user.allowed">>},
+                               User, "password", ?OK)),
+        [Got] = http_post(Config, Queue ++ "/get",
+                          #{ackmode => ack_requeue_false, count => 10, encoding => auto}, ?OK),
+        ?assertEqual(<<"amqp_topic_user.allowed">>, maps:get(routing_key, Got))
+    after
+        http_delete(Config, Queue, {group, '2xx'}),
+        http_delete(Config, "/users/" ++ User, {group, '2xx'})
+    end.
+
+publish_amqp_internal_exchange_test(Config) ->
+    Exchange = "/exchanges/%2F/publish_amqp_internal_exchange_test",
+    http_put(Config, Exchange, #{type => <<"topic">>, internal => true}, {group, '2xx'}),
+    try
+        http_post(Config, Exchange ++ "/publish",
+                  #{protocol => <<"amqp">>, routing_key => <<"test">>, properties => #{},
+                    payload => <<"test">>, payload_encoding => <<"string">>},
+                  ?NOT_AUTHORISED)
+    after
+        http_delete(Config, Exchange, {group, '2xx'})
+    end.
+
+publish_amqp_vhost_permissions_test(Config) ->
+    Publish = "/exchanges/%2F/amq.default/publish",
+    Msg = #{protocol => <<"amqp">>, routing_key => <<"publish_amqp_vhost_permissions_test">>,
+            properties => #{}, payload => <<"test">>, payload_encoding => <<"string">>},
+    ?assertEqual(#{routed => false}, http_post(Config, Publish, Msg, ?OK)),
+    ok = rpc(Config, meck, new, [rabbit_auth_backend_internal, [passthrough, no_link]]),
+    try
+        ok = rpc(Config, meck, expect,
+                 [rabbit_auth_backend_internal, check_vhost_access, 3, false]),
+        http_post(Config, Publish, Msg, ?NOT_AUTHORISED),
+        ?assertEqual(true, rpc(Config, meck, validate, [rabbit_auth_backend_internal]))
+    after
+        rpc(Config, meck, unload, [rabbit_auth_backend_internal])
+    end,
+    ?assertEqual(#{routed => false}, http_post(Config, Publish, Msg, ?OK)).
+
+publish_amqp_message_size_test(Config) ->
+    Publish = "/exchanges/%2F/amq.default/publish",
+    Payload = binary:copy(<<"x">>, 100),
+    Limit = iolist_size(amqp10_framing:encode_bin(#'v1_0.data'{content = Payload})),
+    DefaultLimit = rpc(Config, persistent_term, get, [max_message_size]),
+    Msg = #{protocol => <<"amqp">>, routing_key => <<"publish_amqp_message_size_test">>,
+            properties => #{}},
+    ok = rpc(Config, persistent_term, put, [max_message_size, Limit]),
+    try
+        lists:foreach(
+          fun({Encoding, Encode}) ->
+                  AtLimit = Msg#{payload => Encode(Payload), payload_encoding => Encoding},
+                  ?assertEqual(#{routed => false}, http_post(Config, Publish, AtLimit, ?OK)),
+                  http_post(Config, Publish,
+                            AtLimit#{payload => Encode(<<Payload/binary, "x">>)}, ?BAD_REQUEST),
+                  http_post(Config, Publish,
+                            AtLimit#{properties => #{content_type => <<"text/plain">>}},
+                            ?BAD_REQUEST)
+          end, [{<<"string">>, fun(P) -> P end}, {<<"base64">>, fun base64:encode/1}])
+    after
+        rpc(Config, persistent_term, put, [max_message_size, DefaultLimit])
+    end.
 
 publish_large_message_test(Config) ->
   Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},

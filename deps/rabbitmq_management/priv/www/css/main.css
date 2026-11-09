@@ -309,6 +309,7 @@ table.form .multifield td { margin: 0; padding: 0; vertical-align: top; }
 table.form .multifield td.equals { padding: 3px; }
 table.form .multifield td input { float: left; }
 table.form .multifield td select { width: auto; display: block; float: left; margin-left: 5px; }
+table.form .multifield td select.mf-key { width: 206px; margin-left: 0; }
 table.form label { margin-top: 5px; display: block; }
 
 table.form table.subform { margin-bottom: 5px; }

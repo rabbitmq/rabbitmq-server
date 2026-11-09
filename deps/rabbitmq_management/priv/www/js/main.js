@@ -963,6 +963,24 @@ function postprocess() {
             update_multifields();
         });
 
+    $(document).on('change', '.ackmode-select', function() {
+            $(this).closest('form').find('.modify-only').toggle($(this).val() == 'modify');
+        });
+    $(document).on('change', '.protocol-select', function() {
+            var amqp = $(this).val() == 'amqp';
+            var form = $(this).closest('form');
+            form.find('.amqp-only').toggle(amqp);
+            form.find('.amqp091-only').toggle(!amqp);
+            var ackmode = form.find('select[name="ackmode"]');
+            if (ackmode.length > 0) {
+                var options = amqp ? ACKMODES_AMQP : ACKMODES_AMQP091;
+                ackmode.empty();
+                for (var i = 0; i < options.length; i++) {
+                    ackmode.append($('<option>').val(options[i][0]).text(options[i][1]));
+                }
+                ackmode.trigger('change');
+            }
+        });
     $(document).on('change', '.multifield select', function() {
             update_multifields();
         });
@@ -1248,6 +1266,7 @@ function update_multifield(multifield, dict) {
     var largest_id = 0;
     var empty_found = false;
     var name = multifield.attr('id');
+    var keys = multifield.attr('data-keys');
     var type_inputs = $('#' + name + ' *[name$="_mftype"]');
     type_inputs.each(function(index) {
         var re = new RegExp(name + '_([0-9]*)_mftype');
@@ -1291,8 +1310,10 @@ function update_multifield(multifield, dict) {
             multifield_input(prefix, 'type', t);
 
         if (dict) {
+            var key_input = keys ? multifield_input(prefix, 'key', 'keys', keys.split(','))
+                                 : multifield_input(prefix, 'key', 'text');
             multifield.append('<table class="mf"><tr><td>' +
-                              multifield_input(prefix, 'key', 'text') +
+                              key_input +
                               '</td><td class="equals"> = </td><td>' +
                               val_type + '</td></tr></table>');
         }
@@ -1300,9 +1321,32 @@ function update_multifield(multifield, dict) {
             multifield.append('<div class="mf">' + val_type + '</div>');
         }
     }
+    if (keys) {
+        update_multifield_keys(multifield);
+    }
 }
 
-function multifield_input(prefix, suffix, type) {
+function update_multifield_keys(multifield) {
+    var selects = multifield.find('select[name$="_mfkey"]');
+    var used = selects.map(function() { return $(this).val(); }).get();
+    selects.each(function() {
+        var selected = $(this).val();
+        $(this).find('option').each(function() {
+            $(this).prop('disabled', $(this).val() != '' && $(this).val() != selected &&
+                         used.indexOf($(this).val()) != -1);
+        });
+        var hint = AMQP_PROPERTY_HINTS[selected] || '';
+        $(this).closest('tr').find('input[name$="_mfvalue"]').attr('placeholder', hint);
+    });
+}
+
+var AMQP_PROPERTY_HINTS = {
+    'absolute_expiry_time': 'milliseconds since the epoch',
+    'creation_time': 'milliseconds since the epoch',
+    'group_sequence': 'integer'
+};
+
+function multifield_input(prefix, suffix, type, keys) {
     if (type == 'hidden' ) {
         return '<input type="hidden" id="' + prefix + '_mf' + suffix +
             '" name="' + prefix + '_mf' + suffix + '" value="string"/>';
@@ -1310,6 +1354,14 @@ function multifield_input(prefix, suffix, type) {
     else if (type == 'text' ) {
         return '<input type="text" id="' + prefix + '_mf' + suffix +
             '" name="' + prefix + '_mf' + suffix + '" value=""/>';
+    }
+    else if (type == 'keys' ) {
+        var options = '<option value=""></option>';
+        for (var i = 0; i < keys.length; i++) {
+            options += '<option value="' + keys[i] + '">' + keys[i] + '</option>';
+        }
+        return '<select class="mf-key" id="' + prefix + '_mf' + suffix + '" name="' + prefix +
+            '_mf' + suffix + '">' + options + '</select>';
     }
     else if (type == 'select' ) {
         return '<select id="' + prefix + '_mf' + suffix + '" name="' + prefix +
@@ -1428,8 +1480,89 @@ function publish_msg(params0) {
     }
 }
 
+function apply_delivery_time(params, annotations) {
+    var deliver_at = params['deliver_at'];
+    var delay = params['delay_seconds'];
+    delete params['deliver_at'];
+    delete params['delay_seconds'];
+    var has_at = deliver_at != undefined && deliver_at != '';
+    var has_delay = delay != undefined && delay != '';
+    if (!has_at && !has_delay) return annotations;
+    if (has_at && has_delay)
+        throw('Set either "Deliver at" or a delay, not both');
+    if (annotations['x-opt-delivery-time'] != undefined)
+        throw('x-opt-delivery-time is set both here and in the annotations');
+    var time;
+    if (has_at) {
+        time = new Date(deliver_at).getTime();
+    } else {
+        time = Date.now() + Math.round(parseFloat(delay) * 1000);
+    }
+    if (isNaN(time))
+        throw('Invalid delivery time');
+    annotations['x-opt-delivery-time'] = time;
+    return annotations;
+}
+
+var ACKMODES_AMQP091 = [['ack_requeue_true', 'Nack message requeue true'],
+                        ['ack_requeue_false', 'Automatic ack'],
+                        ['reject_requeue_true', 'Reject requeue true'],
+                        ['reject_requeue_false', 'Reject requeue false']];
+
+var ACKMODES_AMQP = [['ack_requeue_true', 'Released'],
+                     ['ack_requeue_false', 'Accepted'],
+                     ['reject_requeue_false', 'Rejected'],
+                     ['modify', 'Modified']];
+
+function parse_int_in_range(name, value, min, max) {
+    var n = Number(value);
+    if (!Number.isInteger(n) || n < min || n > max)
+        throw(name + ' must be an integer between ' + min + ' and ' + max);
+    return n;
+}
+
+function publish_amqp_params(params) {
+    var int_props = ['group_sequence', 'absolute_expiry_time', 'creation_time'];
+    var props = {};
+    var amqp_props = params['amqpprops'] || {};
+    for (var name in amqp_props) {
+        var value = amqp_props[name];
+        if (value == '') continue;
+        if (int_props.indexOf(name) != -1) {
+            value = parseInt(value, 10);
+            if (isNaN(value))
+                throw(name + ' must be an integer');
+        }
+        props[name] = value;
+    }
+    var header = {durable: true};
+    if (params['amqp_priority'] != '')
+        header['priority'] = parse_int_in_range('Priority', params['amqp_priority'], 0, 255);
+    if (params['amqp_ttl'] != '')
+        header['ttl'] = parse_int_in_range('TTL', params['amqp_ttl'], 0, 4294967295);
+    params['header'] = header;
+    params['properties'] = props;
+    params['application_properties'] = params['appprops'] || {};
+    params['message_annotations'] = apply_delivery_time(
+        params, params['annotations'] == undefined ? {} : params['annotations']);
+    delete params['headers'];
+    delete params['props'];
+    delete params['amqpprops'];
+    delete params['appprops'];
+    delete params['annotations'];
+    delete params['amqp_priority'];
+    delete params['amqp_ttl'];
+}
+
 function publish_msg0(params) {
     var path = fill_path_template('/exchanges/:vhost/:name/publish', params);
+    if (params['protocol'] == 'amqp') {
+        publish_amqp_params(params);
+        publish_req(path, params);
+        return;
+    }
+    delete params['amqpprops'];
+    delete params['appprops'];
     params['properties'] = {};
     params['properties']['delivery_mode'] = parseInt(params['delivery_mode']);
     if (params['headers'] != '')
@@ -1455,6 +1588,10 @@ function publish_msg0(params) {
             params['properties'][name] = value;
         }
     }
+    publish_req(path, params);
+}
+
+function publish_req(path, params) {
     with_req('POST', path, JSON.stringify(params), function(resp) {
             var result = JSON.parse(resp.responseText);
             if (result.routed) {
@@ -1465,7 +1602,24 @@ function publish_msg0(params) {
         });
 }
 
-function get_msgs(params) {
+function get_msgs(params0) {
+    var params;
+    try {
+        params = params_magic(params0);
+    } catch (e) {
+        show_popup('warn', fmt_escape_html(e));
+        return false;
+    }
+    try {
+        params['annotations'] = apply_delivery_time(
+            params, params['modannotations'] == undefined ? {} : params['modannotations']);
+    } catch (e) {
+        show_popup('warn', fmt_escape_html(e));
+        return false;
+    }
+    delete params['modannotations'];
+    params['delivery_failed'] = params['delivery_failed'] == 'true';
+    params['undeliverable_here'] = params['undeliverable_here'] == 'true';
     var path = fill_path_template('/queues/:vhost/:name/get', params);
     with_req('POST', path, JSON.stringify(params), function(resp) {
             var msgs = JSON.parse(resp.responseText);

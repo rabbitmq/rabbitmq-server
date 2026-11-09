@@ -21,7 +21,7 @@
 -export([bad_request/3, bad_request/4, service_unavailable/3, bad_request_exception/4,
          internal_server_error/3, internal_server_error/4, precondition_failed/3,
          id/2, parse_bool/1, parse_int/1, redirect_to_home/3, timeout/2]).
--export([with_decode/4, with_ids/4, not_found/3]).
+-export([with_decode/4, with_ids/4, not_found/3, not_authorised/3]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, reply/3, responder_map/1,

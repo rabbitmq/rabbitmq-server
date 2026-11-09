@@ -10,7 +10,17 @@
       <input type="hidden" name="name" value="<%= fmt_exchange_url(exchange.name) %>"/>
 <% } %>
       <input type="hidden" name="properties" value=""/>
+      <p class="amqp-only">The broker builds an AMQP 1.0 message from the fields below and publishes it without opening an AMQP 1.0 connection.</p>
       <table class="form">
+        <tr>
+          <th><label>Protocol:</label></th>
+          <td>
+            <select name="protocol" class="protocol-select">
+              <option value="amqp" selected>AMQP 1.0</option>
+              <option value="amqp091">AMQP 0-9-1</option>
+            </select>
+          </td>
+        </tr>
 <% if (mode == 'queue') { %>
         <tr>
           <td colspan="2"><input type="hidden" name="routing_key" value="<%= fmt_string(queue.name) %>"/> Message will be published to the default exchange with routing key <strong><%= fmt_string(queue.name) %></strong>, routing it to this queue.</td>
@@ -22,7 +32,7 @@
         </tr>
 <% } %>
         <% if (mode == 'queue' && is_classic(queue)) { %>
-        <tr>
+        <tr class="amqp091-only" style="display: none">
           <th><label>Delivery mode:</label></th>
           <td>
             <select name="delivery_mode">
@@ -34,7 +44,51 @@
         <% } else { %>
           <input type="hidden" name="delivery_mode" value="2">
         <% } %>
-        <tr>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Priority:
+              <span class="help" id="message-publish-priority"></span>
+            </label>
+          </th>
+          <td><input type="text" name="amqp_priority" value=""/></td>
+        </tr>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              TTL (ms):
+              <span class="help" id="message-publish-ttl"></span>
+            </label>
+          </th>
+          <td><input type="text" name="amqp_ttl" value=""/></td>
+        </tr>
+        <% if (mode != 'queue' || is_quorum(queue)) { %>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Deliver at:
+              <span class="help" id="message-publish-delivery-time"></span>
+            </label>
+          </th>
+          <td>
+            <input type="datetime-local" name="deliver_at" value=""/>
+            <span>or delay (seconds):</span>
+            <input type="text" name="delay_seconds" value=""/>
+          </td>
+        </tr>
+        <% } %>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Message annotations:
+              <span class="help" id="message-publish-annotations"></span>
+            </label>
+          </th>
+          <td>
+            <div class="multifield" id="annotations"></div>
+          </td>
+        </tr>
+        <tr class="amqp091-only" style="display: none">
           <th>
             <label>
               Headers:
@@ -45,7 +99,7 @@
             <div class="multifield" id="headers"></div>
           </td>
         </tr>
-        <tr>
+        <tr class="amqp091-only" style="display: none">
           <th>
             <label>
               Properties:
@@ -54,6 +108,28 @@
           </th>
           <td>
             <div class="multifield string-only" id="props"></div>
+          </td>
+        </tr>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Properties:
+              <span class="help" id="message-publish-amqp-properties"></span>
+            </label>
+          </th>
+          <td>
+            <div class="multifield string-only" id="amqpprops" data-keys="message_id,user_id,to,subject,reply_to,correlation_id,content_type,content_encoding,absolute_expiry_time,creation_time,group_id,group_sequence,reply_to_group_id"></div>
+          </td>
+        </tr>
+        <tr class="amqp-only">
+          <th>
+            <label>
+              Application properties:
+              <span class="help" id="message-publish-application-properties"></span>
+            </label>
+          </th>
+          <td>
+            <div class="multifield" id="appprops"></div>
           </td>
         </tr>
         <tr>
