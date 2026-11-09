@@ -32,7 +32,9 @@
          first_timestamp
         ]).
 
--record(state, {timeout :: non_neg_integer()}).
+-record(state, {timeout :: non_neg_integer(),
+                writers :: ets:table(),
+                generation = 0 :: non_neg_integer()}).
 
 %%----------------------------------------------------------------------------
 %% Starts the raw metrics storage and owns the ETS tables.
@@ -47,7 +49,9 @@ init([]) ->
     Timeout = application:get_env(rabbit, stream_tick_interval,
                                   ?TICK_TIMEOUT),
     erlang:send_after(Timeout, self(), tick),
-    {ok, #state{timeout = Timeout}}.
+    Writers = ets:new(?MODULE, [set, private]),
+    {ok, #state{timeout = Timeout,
+                writers = Writers}}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -55,11 +59,15 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
-handle_info(tick, #state{timeout = Timeout} = State) ->
+handle_info(tick, #state{timeout = Timeout,
+                         writers = Writers,
+                         generation = Gen0} = State0) ->
+    Gen = Gen0 + 1,
     Data = osiris_counters:overview(),
     _ = maps:map(
       fun ({osiris_writer, QName}, #{offset := Offs,
                                      first_offset := FstOffs}) ->
+              true = ets:insert(Writers, {QName, Gen}),
               COffs = Offs + 1 - FstOffs,
               rabbit_core_metrics:queue_stats(QName, COffs, 0, COffs, 0),
               Infos = try
@@ -86,11 +94,19 @@ handle_info(tick, #state{timeout = Timeout} = State) ->
           (_, _V) ->
               ok
       end, Data),
+    delete_stale_metrics(Writers, Gen),
     erlang:send_after(Timeout, self(), tick),
-    {noreply, State}.
+    {noreply, State0#state{generation = Gen}}.
 
 terminate(_Reason, _State) ->
     ok.
+
+delete_stale_metrics(Writers, Gen) ->
+    Stale = ets:select(Writers, [{{'$1', '$2'}, [{'=/=', '$2', Gen}], ['$1']}]),
+    lists:foreach(fun(QName) ->
+                          true = ets:delete(Writers, QName),
+                          rabbit_core_metrics:queue_stats_deleted(QName)
+                  end, Stale).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
