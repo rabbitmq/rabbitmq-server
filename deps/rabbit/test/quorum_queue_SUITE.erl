@@ -452,18 +452,6 @@ end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase);
-<<<<<<< HEAD
-=======
-end_per_testcase(decorator_added_to_idle_queue_is_notified = Testcase,
-                 Config) ->
-    _ = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_decorator,
-                                     unregister, [<<"dummy">>]),
-    _ = rabbit_ct_broker_helpers:rpc_all(Config, dummy_queue_decorator,
-                                         clear_target, []),
-    Config1 = rabbit_ct_helpers:run_steps(
-                Config,
-                rabbit_ct_client_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(leader_health_check_member_down = Testcase, Config) ->
     RaName = ra_name(?config(queue_name, Config)),
     _ = [rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, restart_server,
@@ -473,7 +461,6 @@ end_per_testcase(leader_health_check_member_down = Testcase, Config) ->
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase);
->>>>>>> 2639825 (Add two more integration tests for #18269)
 end_per_testcase(Testcase, Config) ->
     % catch delete_queues(),
     Config1 = rabbit_ct_helpers:run_steps(
