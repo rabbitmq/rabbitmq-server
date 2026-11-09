@@ -2731,8 +2731,9 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
                 {resource, _VHostN, queue, QueueName} = QResource = amqqueue:get_name(Q),
                 case rabbit_re:run(QueueName, QueueNameOrRegEx) of
                     match ->
-                        {ClusterName, _} = rabbit_amqqueue:pid_of(Q),
-                        _Pid = spawn(fun() -> run_leader_health_check(ClusterName, QResource, HealthCheckRef, ParentPID) end);
+                        {ClusterName, LeaderNode} = amqqueue:get_pid(Q),
+                        Members = [{ClusterName, N} || N <- [LeaderNode | lists:delete(LeaderNode, get_nodes(Q))]],
+                        _Pid = spawn(fun() -> run_leader_health_check(Members, QResource, HealthCheckRef, ParentPID) end);
                     _ ->
                         []
                 end
@@ -2741,13 +2742,11 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
     _ = spawn(fun() -> maybe_log_leader_health_check_result(Result) end),
     Result.
 
-run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
-    Leader = ra_leaderboard:lookup_leader(ClusterName),
-
-    %% Ignoring result here is required to clear a diayzer warning.
+run_leader_health_check(Members, QResource, HealthCheckRef, From) ->
+    %% Followers redirect the query to their known leader, so only a leader replies.
     _ =
-        case ra_server_proc:ping(Leader, ?LEADER_HEALTH_CHECK_TIMEOUT) of
-            {pong,leader} ->
+        case ra:members(Members, ?LEADER_HEALTH_CHECK_TIMEOUT) of
+            {ok, _, _} ->
                 From ! {ok, HealthCheckRef, QResource};
             _ ->
                 From ! {error, HealthCheckRef, QResource}
