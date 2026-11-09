@@ -55,13 +55,8 @@ dep_khepri_mnesia_migration = hex 0.8.1
 dep_meck = hex 1.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris v1.14.1
 dep_prometheus = hex 6.1.1
-<<<<<<< HEAD
 dep_ra = hex 3.1.10
-dep_ranch = hex 2.3.0
-=======
-dep_ra = hex 3.2.0
 dep_ranch = hex 2.4.0
->>>>>>> fe96700 (Update Cowboy, Cowlib, Gun, Ranch)
 dep_recon = hex 2.5.6
 dep_redbug = hex 2.1.0
 dep_systemd = hex 0.6.1
