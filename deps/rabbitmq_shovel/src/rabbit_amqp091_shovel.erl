@@ -38,6 +38,7 @@
          close_dest/1,
          ack/3,
          nack/2,
+         reject/2,
          status/1,
          forward/3,
          pending_count/1
@@ -334,6 +335,11 @@ nack(Tags, State = #{source := #{current := {_, Chan, _}}}) ->
                           ok = amqp_channel:cast(Chan, #'basic.reject'{delivery_tag = Tag,
                                                                        requeue = true})
                   end, Tags),
+    State.
+
+reject(Tag, State = #{source := #{current := {_, Chan, _}}}) ->
+    ok = amqp_channel:cast(Chan, #'basic.reject'{delivery_tag = Tag,
+                                                 requeue = false}),
     State.
 
 source_uri(#{source := #{current := {_, _, Uri}}}) -> Uri.
