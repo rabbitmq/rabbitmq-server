@@ -177,13 +177,9 @@
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
-%% Applied per member, and members are force deleted one at a time, so this
-%% bounds a fraction of the total and not the whole operation.
 -define(FORCE_DELETE_TIMEOUT, ?DELETE_TIMEOUT).
-%% Bounds the call that carries out the UID check and the force delete on the
-%% member's node, so it has to outlive the force delete it wraps.
-%% `ra:force_delete_server/3' spends the timeout twice, once to stop the member
-%% and once to delete its data, hence the multiplier.
+%% `ra:force_delete_server/3` spends its timeout twice, once to stop the member
+%% and once to delete its data.
 -define(FORCE_DELETE_RPC_TIMEOUT, (2 * ?FORCE_DELETE_TIMEOUT) + 5_000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
@@ -1198,14 +1194,8 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             end
     end.
 
-%% Force delete of every member. `ra:force_delete_server/3' is an RPC to each
-%% member's node, so a member on a down or unreachable node is left behind and
-%% the Ra name stays poisoned for the next declare.
-%%
-%% Retrying those leaked members requires the per-member UIDs recorded under the
-%% `track_qq_members_uids' feature flag: without them a retry cannot tell a
-%% leaked member apart from a newer incarnation of the same queue name, so the
-%% force delete stays best-effort until the flag is enabled.
+%% Without the member UIDs tracked under `track_qq_members_uids`, a retry
+%% cannot tell a leaked member apart from a newer incarnation of the queue.
 force_delete_queue(Q, Servers) ->
     case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
         true ->
@@ -1227,15 +1217,6 @@ force_delete_members(Servers) ->
          end || S <- Servers],
     ok.
 
-%% The members whose force delete did not complete are recorded for retry by
-%% `rabbit_quorum_queue_periodic_membership_reconciliation', which keeps retrying
-%% until they are gone.
-%%
-%% That record is written and synced to disk before this function returns: it is
-%% the only trace of the leaked members left once the queue record is gone, so
-%% losing it to a node crash would leave them behind for good. The
-%% `queue_force_deleted' event is emitted for observers only and carries no part
-%% of the retry mechanism.
 force_delete_members_with_retry(Q, Servers) ->
     QName = amqqueue:get_name(Q),
     UIdMap = case amqqueue:get_type_state(Q) of
@@ -1250,9 +1231,6 @@ force_delete_members_with_retry(Q, Servers) ->
                            ok ->
                                false;
                            Err ->
-                               %% Whether this member can be retried, and hence
-                               %% whether it needs manual clean up, is reported
-                               %% by the module that records it.
                                ?LOG_WARNING("Force delete of ~w failed with: ~w",
                                             [S, Err]),
                                {true, {S, maps:get(Node, UIdMap, undefined)}}
@@ -1269,28 +1247,21 @@ force_delete_members_with_retry(Q, Servers) ->
             ok
     end.
 
-%% Each pending member is described as a proplist with atom keys so that the
-%% event props stay serializable for consumers such as the event exchange plugin.
+%% Members are proplists so that the event exchange plugin can serialize the event.
 pending_member_props(PendingMembers) ->
     [[{ra_name, RaName}, {node, Node}, {uid, UId}]
      || {{RaName, Node}, UId} <- PendingMembers].
 
-%% The timeout is bounded on purpose: callers run this inline, to avoid the `infinity'
-%% default which could block them for as long as the member's node stays unreachable.
+%% Not `infinity`: callers run this inline and the node may be unreachable.
 -spec force_delete_member(ra:server_id()) -> ok | {error, term()}.
 force_delete_member(ServerId) ->
     try ra:force_delete_server(?RA_SYSTEM, ServerId, ?FORCE_DELETE_TIMEOUT)
     catch _:E -> {error, E}
     end.
 
-%% Force delete a member only when the UID registered for its Ra name still
-%% matches the incarnation the caller means to delete.
-%%
-%% `ra:force_delete_server/3' resolves the Ra name to a UID on the member's own
-%% node, so the guard has to be evaluated there too: performing it in the caller
-%% would leave a window in which the member is replaced by a newer incarnation
-%% of the same queue name, which the delete would then remove. Both steps are
-%% therefore carried out in a single call on the member's node.
+%% `ra:force_delete_server/3` resolves the Ra name on the member's node, so the
+%% UID check runs there in the same call. A check in the caller would leave a
+%% window for a newer incarnation of the queue to take the name.
 -spec force_delete_member(ra:server_id(), binary()) ->
     ok | {skipped, gone | superseded} | {error, term()}.
 force_delete_member({RaName, Node}, ExpectedUId) when is_binary(ExpectedUId) ->
@@ -1299,7 +1270,6 @@ force_delete_member({RaName, Node}, ExpectedUId) when is_binary(ExpectedUId) ->
     catch _:E -> {error, E}
     end.
 
-%% Runs on the member's own node, called by force_delete_member/2.
 -spec force_delete_local_member(atom(), binary()) ->
     ok | {skipped, gone | superseded} | {error, term()}.
 force_delete_local_member(RaName, ExpectedUId) ->

@@ -46,8 +46,6 @@ groups() ->
        %% see also `auto_grow_drained_node`
        {quorum_queue_3, [], [auto_grow, auto_shrink]}
       ]},
-     %% Unlike the groups above, these need a formed cluster: a member is leaked
-     %% by taking one of its nodes down during a force delete.
      {clustered_force_delete, [],
       [
        {quorum_queue_3, [], [leaked_member_is_eventually_force_deleted,
@@ -140,9 +138,7 @@ init_per_testcase0(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
-    %% The reconciliation groups start unclustered and join nodes as they go, so
-    %% they have to be put back. The force delete group runs against a cluster
-    %% that must stay formed for the next case.
+    %% The force delete group keeps the cluster formed between cases.
     case is_force_delete_group(Config) of
         true ->
             ok;
@@ -271,8 +267,6 @@ auto_shrink(Config) ->
                        2 =:= length(M)
                end).
 
-%% A quorum queue member left behind on a node that was down during a force
-%% delete is eventually force-deleted once the node returns.
 leaked_member_is_eventually_force_deleted(Config) ->
     [Server0, _Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -286,25 +280,18 @@ leaked_member_is_eventually_force_deleted(Config) ->
                        3 =:= length(element(2, ra:members({RaName, Server0})))
                end),
 
-    %% Server2's member is present before we take the node down.
     UId = uid_of(Config, Server2, RaName),
     ?assert(is_binary(UId)),
 
-    %% Take Server2 down, then delete the queue from Server0. The delete still
-    %% reaches quorum (2 of 3), so the record is removed, but the force delete of
-    %% Server2's member fails because the node is unreachable.
+    %% The delete reaches a quorum without Server2, so only its member leaks.
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
 
-    %% The leaked member is on disk on Server0 by the time the delete returns:
-    %% the queue record is already gone, so a crash from here on must not lose
-    %% the only record of the member left behind.
+    %% The entry is persisted before `queue.delete` returns.
     QName = rabbit_misc:r(<<"/">>, queue, QQ),
     ?assertEqual([{{RaName, Server2}, {QName, UId}}],
                  pending_lookup(Config, Server0, RaName, Server2)),
 
-    %% Bring Server2 back and the retry loop must eventually remove the member
-    %% and drop the pending entry.
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
     wait_until(fun() ->
                        undefined =:= uid_of(Config, Server2, RaName)
@@ -313,8 +300,6 @@ leaked_member_is_eventually_force_deleted(Config) ->
                        [] =:= pending_lookup(Config, Server0, RaName, Server2)
                end).
 
-%% A retry must never delete a member that belongs to a newer incarnation of the
-%% same queue name: the UID guard drops the stale entry instead.
 stale_incarnation_is_not_deleted(Config) ->
     [Server0, _Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -332,8 +317,6 @@ stale_incarnation_is_not_deleted(Config) ->
     CurrentUId = uid_of(Config, Server2, RaName),
     ?assert(is_binary(CurrentUId)),
 
-    %% Record a retry for Server2's member but tagged with a UID that does not
-    %% match the live incarnation.
     StaleUId = <<"stale-incarnation-uid">>,
     ?assertNotEqual(StaleUId, CurrentUId),
     ok = record_pending_force_deletes(Config, Server0, QName,
@@ -341,15 +324,12 @@ stale_incarnation_is_not_deleted(Config) ->
     ?assertEqual([{{RaName, Server2}, {QName, StaleUId}}],
                  pending_lookup(Config, Server0, RaName, Server2)),
 
-    %% The stale entry is dropped without touching the live member.
     wait_until(fun() ->
                        [] =:= pending_lookup(Config, Server0, RaName, Server2)
                end),
     ?assertEqual(CurrentUId, uid_of(Config, Server2, RaName)),
     ?assertEqual(3, length(element(2, ra:members({RaName, Server0})))).
 
-%% A member with no recorded UID cannot be told apart from a newer incarnation,
-%% so it is never recorded for retry.
 unverifiable_member_is_not_recorded(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -367,11 +347,8 @@ unverifiable_member_is_not_recorded(Config) ->
     CurrentUId = uid_of(Config, Server2, RaName),
     ?assert(is_binary(CurrentUId)),
 
-    %% Record a retry for Server2's member with no UID, as a queue record
-    %% predating the feature flag would produce, alongside one that does carry a
-    %% UID. Only the latter is persisted: an entry that no retry could ever act
-    %% on must not enter the table in the first place. The second entry also
-    %% shows that the write happened at all.
+    %% A queue record that predates `track_qq_members_uids` has no UID for a
+    %% member. The second entry shows that the write happened.
     OtherUId = <<"other-incarnation-uid">>,
     ok = record_pending_force_deletes(Config, Server0, QName,
                                       [{{RaName, Server2}, undefined},
@@ -380,12 +357,9 @@ unverifiable_member_is_not_recorded(Config) ->
     ?assertEqual([{{RaName, Server1}, {QName, OtherUId}}],
                  pending_lookup(Config, Server0, RaName, Server1)),
 
-    %% The live member on Server2 is left alone.
     ?assertEqual(CurrentUId, uid_of(Config, Server2, RaName)),
     ?assertEqual(3, length(element(2, ra:members({RaName, Server0})))).
 
-%% The UID guard that protects a retry from deleting a newer incarnation is
-%% evaluated on the member's own node, in the same call as the delete.
 force_delete_member_uid_guard(Config) ->
     [Server0, _Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -403,17 +377,14 @@ force_delete_member_uid_guard(Config) ->
     CurrentUId = uid_of(Config, Server2, RaName),
     ?assert(is_binary(CurrentUId)),
 
-    %% A UID that does not match the live incarnation leaves the member alone.
     ?assertEqual({skipped, superseded},
                  force_delete_member(Config, Server0, ServerId,
                                      <<"stale-incarnation-uid">>)),
     ?assertEqual(CurrentUId, uid_of(Config, Server2, RaName)),
 
-    %% The matching UID deletes it.
     ?assertEqual(ok, force_delete_member(Config, Server0, ServerId, CurrentUId)),
     ?assertEqual(undefined, uid_of(Config, Server2, RaName)),
 
-    %% A member that is already gone is reported as such rather than deleted again.
     ?assertEqual({skipped, gone},
                  force_delete_member(Config, Server0, ServerId, CurrentUId)).
 
