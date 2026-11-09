@@ -34,6 +34,7 @@ groups() ->
     [{non_parallel_tests, [], [
                                list_cluster_nodes_test,
                                queue_on_other_node,
+                               get_amqp_classic_queue_on_other_node,
                                queue_with_multiple_consumers,
                                queue_consumer_cancelled,
                                queue_consumer_channel_closed,
@@ -255,6 +256,40 @@ qq_replicas_post_requires_json(Config) ->
     amqp_channel:close(Chan),
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
+
+get_amqp_classic_queue_on_other_node(Config) ->
+    QName = <<"get_amqp_classic_queue_on_other_node">>,
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{
+                                 queue = QName,
+                                 durable = true,
+                                 arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = QName},
+                      #amqp_msg{payload = <<"m">>}),
+    amqp_channel:wait_for_confirms_or_die(Ch, 5),
+    Delegates = [Pid || {_, Pid, _, _} <- rabbit_ct_broker_helpers:rpc(
+                                            Config, 1, supervisor, which_children,
+                                            [delegate_sup])],
+    Path = "/queues/%2F/" ++ binary_to_list(QName) ++ "/get",
+    Body = #{ackmode => reject_requeue_false, count => 1,
+             encoding => auto, protocol => <<"amqp">>},
+    [ok = sys:suspend(Pid) || Pid <- Delegates],
+    {_, Ref} = spawn_monitor(fun() -> exit({result, http_post(Config, Path, Body, ?OK)}) end),
+    Blocked = receive {'DOWN', Ref, _, _, Reason} -> Reason
+              after 2000 -> blocked
+              end,
+    [ok = sys:resume(Pid) || Pid <- Delegates],
+    ?assertEqual(blocked, Blocked),
+    receive {'DOWN', Ref, _, _, Result} -> ?assertMatch({result, [_]}, Result)
+    after 30000 -> ct:fail(http_request_timeout)
+    end,
+    ?assertEqual(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true})),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_connection(Conn).
 
 queue_on_other_node(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
