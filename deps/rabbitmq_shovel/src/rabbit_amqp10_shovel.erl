@@ -37,6 +37,7 @@
          close_dest/1,
          ack/3,
          nack/2,
+         reject/2,
          status/1,
          forward/3,
          pending_count/1
@@ -476,18 +477,19 @@ nack(Tags, State = #{source := #{current := #{link := LinkRef}}}) ->
                   end, serial_number:ranges(Tags)),
     State.
 
-reject_source_msg(Tag, Reason, State = #{name := Name,
-                                         ack_mode := AckMode,
-                                         source := #{current := #{link := LinkRef}}}) ->
+reject_source_msg(Tag, Reason, State = #{name := Name}) ->
     ?LOG_WARNING("Shovel ~ts could not parse a source message: ~tp",
                  [Name, Reason]),
-    case AckMode of
-        no_ack ->
-            ok;
-        _ ->
-            ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, rejected)
-    end,
-    rabbit_shovel_behaviour:decr_remaining(1, State).
+    reject_source_msg(Tag, State).
+
+reject_source_msg(Tag, State) ->
+    rabbit_shovel_behaviour:decr_remaining(
+      1, rabbit_shovel_behaviour:reject(Tag, State)).
+
+-spec reject(tag(), state()) -> state().
+reject(Tag, State = #{source := #{current := #{link := LinkRef}}}) ->
+    ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, rejected),
+    State.
 
 status(#{dest := #{current := #{link_state := attached}}}) ->
     flow;
@@ -522,7 +524,8 @@ forward(Tag, Msg0,
     OutTag = rabbit_data_coercion:to_binary(Tag),
     Msg1 = add_timestamp_header(State, add_forward_headers(State, Msg0)),
     Msg2 = mc:protocol_state(mc:convert(mc_amqp, Msg1)),
-    Msg3 = amqp10_raw_msg:new(AckMode =/= on_confirm, Tag, iolist_to_binary(Msg2)),
+    Payload = iolist_to_binary(Msg2),
+    Msg3 = amqp10_raw_msg:new(AckMode =/= on_confirm, Tag, Payload),
     case send_msg(Link, Msg3) of
         ok ->
             #{dest := Dst1} = State1 = rabbit_shovel_behaviour:incr_forwarded(State),
@@ -536,6 +539,11 @@ forward(Tag, Msg0,
                       State2 = rabbit_shovel_behaviour:ack(Tag, false, State1),
                       rabbit_shovel_behaviour:decr_remaining(1, State2)
               end);
+        {error, message_size_exceeded} ->
+            ?LOG_WARNING("Shovel ~ts cannot forward a ~b byte message: "
+                         "it exceeds the destination's maximum message size",
+                         [maps:get(name, State), byte_size(Payload)]),
+            reject_source_msg(Tag, State);
         Stop ->
             Stop
     end.
@@ -544,6 +552,8 @@ send_msg(Link, Msg) ->
     case amqp10_client:send_msg(Link, Msg) of
         ok ->
             ok;
+        {error, message_size_exceeded} = Err ->
+            Err;
         {error, insufficient_credit} ->
             receive {amqp10_event, {link, Link, credited}} ->
                     send_msg(Link, Msg)

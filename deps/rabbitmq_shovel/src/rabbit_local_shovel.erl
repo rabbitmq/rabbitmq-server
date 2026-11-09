@@ -63,6 +63,7 @@
          handle_dest/2,
          ack/3,
          nack/2,
+         reject/2,
          forward/3,
          status/1,
          pending_count/1
@@ -564,6 +565,11 @@ nack(DeliveryTags,
                                {Ids ++ Acc, Q}
                        end, {[], UAMQ0}, DeliveryTags),
     maybe_grant_credit(settle({modify, true, false, #{}}, MsgIds, UAMQ, State)).
+
+reject(DeliveryTag,
+       #{source := #{current := #{unacked_message_q := UAMQ0}}} = State) ->
+    {MsgIds, UAMQ} = collect_acks(UAMQ0, DeliveryTag, false),
+    maybe_grant_credit(settle(discard, MsgIds, UAMQ, State)).
 
 forward(Tag, Msg, State) ->
     case is_blocked(State) of
