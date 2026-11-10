@@ -1753,6 +1753,29 @@ purge_nodes_test(_) ->
     stop_node(N1Pid),
     ok.
 
+purge_nodes_v9_removes_connections_in_order_test(_) ->
+    {N1Pid, N1} = start_node(?FUNCTION_NAME),
+    N1Pids = [new_process(N1) || _ <- lists:seq(1, 40)],
+    %% A map with more than 32 keys visits C before A, although A sorts first.
+    Iterated = maps:keys(maps:from_keys(N1Pids, true)),
+    [{C, A} | _] = [{Before, After}
+                    || {Before, After} <- lists:zip(lists:droplast(Iterated),
+                                                    tl(Iterated)),
+                       After < Before],
+    B = new_process(),
+    GId = group_id(),
+    State0 = state(#{GId => grp(1, [csr(A, {connected, waiting}),
+                                    csr(B, {connected, active}),
+                                    csr(C, {connected, waiting})]),
+                     group_id(<<"other">>) =>
+                     grp([csr(P) || P <- N1Pids -- [A, C]])}),
+    {#?STATE{groups = Groups1}, ok, _} =
+        ?MOD:apply(#{machine_version => 9}, purge_nodes_command([N1]), State0),
+    assertHasGroup(GId, grp(1, [csr(B, {connected, deactivating})]), Groups1),
+
+    stop_node(N1Pid),
+    ok.
+
 node_disconnected_and_reconnected_test(_) ->
     N0 = node(),
     {N1Pid, N1} = start_node(?FUNCTION_NAME),
