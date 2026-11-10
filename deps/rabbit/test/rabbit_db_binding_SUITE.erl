@@ -22,6 +22,7 @@
 
          create/1, create1/1,
          create_if_absent/1, create_if_absent1/1,
+         create_if_absent_existing/1, create_if_absent_existing1/1,
          exists/1, exists1/1,
          delete_v1/1, delete_v2/1, delete1/2,
          auto_delete_v1/1, auto_delete_v2/1, auto_delete1/2,
@@ -96,6 +97,7 @@ all_tests() ->
     [
      create,
      create_if_absent,
+     create_if_absent_existing,
      exists,
      get_all,
      get_all_by_vhost,
@@ -203,6 +205,34 @@ create_if_absent1(_Config) ->
     ?assertEqual({existing, Binding},
                  rabbit_db_binding:create_if_absent(Binding, fun(_, _) -> ok end)),
     passed.
+
+create_if_absent_existing(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, create_if_absent_existing1, [Config]).
+
+create_if_absent_existing1(_Config) ->
+    XName1 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange1">>),
+    XName2 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange2">>),
+    Exchange1 = #exchange{name = XName1, durable = true, decorators = {[], []}},
+    Exchange2 = #exchange{name = XName2, durable = true, decorators = {[], []}},
+    Binding = #binding{source = XName1, key = <<"">>, destination = XName2, args = #{}},
+    ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(Exchange1)),
+    ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(Exchange2)),
+    ?assertEqual({added, Binding},
+                 rabbit_db_binding:create_if_absent(Binding, fun(_, _) -> ok end)),
+    %% Wait for the `#dedup_ack{}` of the transaction above to be applied.
+    ok = rabbit_khepri:fence(30_000),
+    CommitIndex = metadata_store_commit_index(),
+    ?assertEqual({existing, Binding},
+                 rabbit_db_binding:create_if_absent(Binding, fun(_, _) -> ok end)),
+    ?assertEqual({error, too_bad},
+                 rabbit_db_binding:create_if_absent(Binding, fun(_, _) -> {error, too_bad} end)),
+    ?assertEqual(CommitIndex, metadata_store_commit_index()),
+    passed.
+
+metadata_store_commit_index() ->
+    {ok, #{commit_index := CommitIndex}, _} =
+        ra:member_overview({rabbit_khepri:get_store_id(), node()}),
+    CommitIndex.
 
 exists(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, exists1, [Config]).
