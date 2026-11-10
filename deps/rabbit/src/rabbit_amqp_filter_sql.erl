@@ -210,19 +210,29 @@ compare(_, _, _) ->
     %% the value of the operation is false."
     false.
 
-arithmetic(_Op, Left, Right) when Left =:= undefined orelse Right =:= undefined ->
+arithmetic(Op, Left, Right) ->
+    try
+        arithmetic0(Op, Left, Right)
+    catch
+        error:badarith ->
+            undefined;
+        error:system_limit ->
+            undefined
+    end.
+
+arithmetic0(_Op, Left, Right) when Left =:= undefined orelse Right =:= undefined ->
     undefined;
-arithmetic('+', Left, Right) when is_number(Left) andalso is_number(Right) ->
+arithmetic0('+', Left, Right) when is_number(Left) andalso is_number(Right) ->
     Left + Right;
-arithmetic('-', Left, Right) when is_number(Left) andalso is_number(Right) ->
+arithmetic0('-', Left, Right) when is_number(Left) andalso is_number(Right) ->
     Left - Right;
-arithmetic('*', Left, Right) when is_number(Left) andalso is_number(Right) ->
+arithmetic0('*', Left, Right) when is_number(Left) andalso is_number(Right) ->
     Left * Right;
-arithmetic('/', Left, Right) when is_number(Left) andalso is_number(Right) andalso Right /= 0 ->
+arithmetic0('/', Left, Right) when is_number(Left) andalso is_number(Right) andalso Right /= 0 ->
     Left / Right;
-arithmetic('%', Left, Right) when is_integer(Left) andalso is_integer(Right) andalso Right =/= 0 ->
+arithmetic0('%', Left, Right) when is_integer(Left) andalso is_integer(Right) andalso Right =/= 0 ->
     Left rem Right;
-arithmetic(_, _, _) ->
+arithmetic0(_, _, _) ->
     undefined.
 
 is_in(undefined, _, _) ->
