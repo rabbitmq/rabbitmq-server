@@ -580,6 +580,59 @@ handle_connection_down_consumers_from_dead_connection_should_be_filtered_out_tes
 
     ok.
 
+convert_v8_to_v9_test(_) ->
+    Pid = self(),
+    GId = group_id(),
+    Consumers = [#consumer{pid = Pid, subscription_id = Id,
+                            owner = <<"owner">>, status = Status, ts = 1000 + Id}
+                 || {Id, Status} <-
+                        [{0, {connected, active}},
+                         {1, {connected, waiting}},
+                         {2, {connected, deactivating}},
+                         {3, {presumed_down, active}},
+                         {4, {presumed_down, waiting}},
+                         {5, {disconnected, active}},
+                         {6, {disconnected, waiting}},
+                         {7, {disconnected, deactivating}}]],
+    State0 = (state(#{GId => grp(Consumers), group_id(<<"empty">>) => grp([])}))
+                 #?STATE{conf = #{disconnected_timeout => 42_000}},
+    Expected = [C#consumer{ts = Ts}
+                || {C, Ts} <- lists:zip(Consumers, [0, 0, 0, 0, 0, 1005, 1006, 1007])],
+    State1 = State0#?STATE{groups = #{GId => grp(Expected),
+                                     group_id(<<"empty">>) => grp([])}},
+    ?assertEqual(State1, ?MOD:convert_v8_to_v9(State0)),
+    ?assertEqual(State1, ?MOD:convert_v8_to_v9(State1)),
+    ?assertEqual(state(), ?MOD:convert_v8_to_v9(state())),
+    ok.
+
+machine_version_upgrade_to_9_test(_) ->
+    GId = group_id(),
+    lists:foreach(
+      fun({From, Mod}) ->
+              Meta = #{index => 1, machine_version => From, system_time => 1000},
+              State0 = Mod:init(#{machine_version => From}),
+              Cmd = register_consumer_command(stream(), -1, name(), self(), 0),
+              {State1, {ok, true}, _} = Mod:apply(Meta, {sac, Cmd}, State0),
+              Sac1 = rabbit_stream_coordinator:sac_state(State1),
+              case From of
+                  7 ->
+                      {State8, ok, []} = rabbit_stream_coordinator:apply(
+                                          Meta#{machine_version := 8},
+                                          {machine_version, 7, 8}, State1),
+                      ?assertEqual(Sac1, rabbit_stream_coordinator:sac_state(State8));
+                  _ -> ok
+              end,
+              {State2, ok, []} = rabbit_stream_coordinator:apply(
+                                  Meta#{machine_version := 9},
+                                  {machine_version, From, 9}, State1),
+              #?STATE{groups = Groups} = rabbit_stream_coordinator:sac_state(State2),
+              #{GId := #group{consumers = [Consumer]}} = Groups,
+              ?assertEqual((csr(self(), 0, active))#consumer{ts = 0}, Consumer)
+      end, [{4, rabbit_stream_coordinator_v7},
+            {7, rabbit_stream_coordinator_v7},
+            {8, rabbit_stream_coordinator}]),
+    ok.
+
 import_state_v4_empty_test(_) ->
     OldMod = rabbit_stream_sac_coordinator_v4,
     OldState = OldMod:init_state(),
