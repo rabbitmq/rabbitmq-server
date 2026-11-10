@@ -55,6 +55,7 @@
          group_consumers/5,
          overview/1,
          import_state/2,
+         convert_v8_to_v9/1,
          check_conf_change/1,
          list_nodes/1,
          state_enter/2,
@@ -1172,6 +1173,20 @@ import_state(4, #{<<"groups">> := Groups, <<"pids_groups">> := PidsGroups}) ->
     #?MODULE{groups = map_to_groups(Groups),
              pids_groups = map_to_pids_groups(PidsGroups),
              conf = #{disconnected_timeout => ?DISCONNECTED_TIMEOUT_MS}}.
+
+-spec convert_v8_to_v9(state()) -> state().
+convert_v8_to_v9(#?MODULE{groups = Groups0} = State) ->
+    Groups = maps:map(
+               fun(_, #group{consumers = Consumers0} = Group) ->
+                       Consumers =
+                           [case C of
+                                %% Disconnected timestamps determine the remaining timeout.
+                                #consumer{status = {?DISCONNECTED, _}} -> C;
+                                _ -> C#consumer{ts = 0}
+                            end || C <- Consumers0],
+                       Group#group{consumers = Consumers}
+               end, Groups0),
+    State#?MODULE{groups = Groups}.
 
 -spec check_conf_change(state() | term()) -> {new, conf()} | unchanged.
 check_conf_change(State) when ?IS_STATE_REC(State) ->

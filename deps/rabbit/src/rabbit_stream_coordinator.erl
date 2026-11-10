@@ -2682,6 +2682,9 @@ machine_version(6, 7, #?MODULE{monitors = Monitors0} = State) ->
     {State#?MODULE{monitors = Monitors}, []};
 machine_version(7, 8, State) ->
     {State#?MODULE{parked = gb_trees:empty()}, []};
+machine_version(8, 9, #?MODULE{single_active_consumer = Sac0} = State) ->
+    Sac = rabbit_stream_sac_coordinator:convert_v8_to_v9(Sac0),
+    {State#?MODULE{single_active_consumer = Sac}, []};
 machine_version(From, To, State) ->
     ?LOG_INFO("Stream coordinator machine version changes from ~tp to ~tp, no state changes required.",
                     [From, To]),
