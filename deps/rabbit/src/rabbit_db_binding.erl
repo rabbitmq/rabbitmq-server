@@ -145,8 +145,12 @@ create_if_absent(#binding{source = SrcName,
                           destination = DstName} = Binding, ChecksFun) ->
     case {lookup_resource(SrcName), lookup_resource(DstName)} of
         {[Src], [Dst]} ->
-            case ChecksFun(Src, Dst) of
-                ok ->
+            case {ChecksFun(Src, Dst), is_in_projection(Binding)} of
+                {ok, true} ->
+                    {existing, Binding};
+                {ok, {error, _} = Err} ->
+                    Err;
+                {ok, false} ->
                     RoutePath = khepri_route_path(Binding),
                     FeatureFlag = rabbit_feature_flags:is_enabled(
                                     tie_binding_to_dest_with_keep_while_cond),
@@ -190,11 +194,24 @@ create_if_absent(#binding{source = SrcName,
                             ok = rabbit_exchange:callback(Src, add_binding, Serial, [Src, Binding]),
                             {added, Binding}
                     end;
-                {error, _} = Err ->
+                {{error, _} = Err, _} ->
                     Err
             end;
         Errs ->
             not_found_errs_in_khepri(not_found(Errs, SrcName, DstName))
+    end.
+
+is_in_projection(Binding) ->
+    case rabbit_khepri:fence(30_000) of
+        ok ->
+            try
+                ets:member(?KHEPRI_BINDINGS_PROJECTION, Binding)
+            catch
+                error:badarg ->
+                    false
+            end;
+        {error, _} = Err ->
+            Err
     end.
 
 %% An auto-delete exchange skipped by the feature flag migration for
