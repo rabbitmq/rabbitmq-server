@@ -1776,6 +1776,42 @@ purge_nodes_v9_removes_connections_in_order_test(_) ->
     stop_node(N1Pid),
     ok.
 
+consumer_timestamps_from_command_metadata_test(_) ->
+    P0 = new_process(),
+    P1 = new_process(),
+    GId = group_id(),
+    Meta = #{machine_version => 9, system_time => 1000},
+    Active = state(#{GId => grp([csr(P0, {connected, active}),
+                                 csr(P1, {connected, waiting})])}),
+    Disconnected = state(#{GId => grp([csr(P0, {disconnected, active}),
+                                       csr(P1, {connected, waiting})])}),
+
+    {#?STATE{groups = Groups1}, {ok, true}, _} =
+        ?MOD:apply(Meta, register_consumer_command(stream(), -1, name(), P0, 0),
+                   state()),
+    ?assertEqual([1000], consumer_timestamps(GId, Groups1)),
+
+    {#?STATE{groups = Groups2}, ok, _} =
+        ?MOD:apply(Meta, activate_consumer_command(stream(), name()), Active),
+    ?assertEqual([1000, 1000], consumer_timestamps(GId, Groups2)),
+
+    {#?STATE{groups = Groups3}, ok, _} =
+        ?MOD:apply(Meta, connection_reconnected_command(P0), Disconnected),
+    ?assertMatch([1000, _], consumer_timestamps(GId, Groups3)),
+
+    {#?STATE{groups = Groups4}, _} =
+        ?MOD:handle_connection_down(Meta, P0, normal, Active),
+    ?assertEqual([1000], consumer_timestamps(GId, Groups4)),
+
+    {#?STATE{groups = Groups5}, _} =
+        ?MOD:presume_connection_down(Meta, P0, Disconnected),
+    ?assertEqual([1000, 1000], consumer_timestamps(GId, Groups5)),
+    ok.
+
+consumer_timestamps(GId, Groups) ->
+    #{GId := #group{consumers = Consumers}} = Groups,
+    [Ts || #consumer{ts = Ts} <- Consumers].
+
 node_disconnected_and_reconnected_test(_) ->
     N0 = node(),
     {N1Pid, N1} = start_node(?FUNCTION_NAME),
