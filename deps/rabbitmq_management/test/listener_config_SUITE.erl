@@ -21,6 +21,7 @@ groups() ->
         no_config_defaults,
         tcp_config_only,
         ssl_config_only,
+        ssl_config_with_ip,
 
         multiple_listeners,
         tls_listener_ip_is_bound_and_reported,
@@ -98,6 +99,28 @@ ssl_config_only(_Config) ->
         {ssl_opts, [
             {port, 999},
             {idle_timeout, 10000}
+        ]}
+    ],
+    ?assertEqual(sort_nested(Expected), sort_nested(get_single_listener_config())).
+
+ssl_config_with_ip(_Config) ->
+    application:set_env(rabbitmq_management, ssl_config, [
+        {port, 999},
+        {ip, "192.0.2.10"},
+        {cowboy_opts, [{idle_timeout, 10000}]}
+    ]),
+
+    Expected = [
+        {cowboy_opts,[
+            {idle_timeout, 10000},
+            {sendfile,false}
+        ]},
+        {ip, "192.0.2.10"},
+        {port, 999},
+        {ssl, true},
+        {ssl_opts, [
+            {port, 999},
+            {ip, "192.0.2.10"}
         ]}
     ],
     ?assertEqual(sort_nested(Expected), sort_nested(get_single_listener_config())).
