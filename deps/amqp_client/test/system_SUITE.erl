@@ -838,13 +838,10 @@ direct_channel_shutdown(Config) ->
     {ok, Connection} = new_connection(Config),
     try
         {ok, Channel} = amqp_connection:open_channel(Connection),
-        Channels = rabbit_ct_broker_helpers:rpc(
-                     Config, 0, rabbit_channel, list_local, []),
-        [ServerChannel] =
-            [Pid || Pid <- Channels,
-                    rabbit_ct_broker_helpers:rpc(
-                      Config, 0, rabbit_channel, info, [Pid, [connection]])
-                    =:= [{connection, Connection}]],
+        Infos = rabbit_ct_broker_helpers:rpc(
+                  Config, 0, rabbit_channel, info_local, [[pid, connection]]),
+        [ServerChannel] = [Pid || [{pid, Pid}, {connection, Conn}] <- Infos,
+                                  Conn =:= Connection],
         Ref = erlang:monitor(process, ServerChannel),
         try
             ok = rabbit_channel:shutdown(ServerChannel),
