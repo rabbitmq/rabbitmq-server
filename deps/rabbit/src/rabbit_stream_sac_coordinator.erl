@@ -96,6 +96,7 @@
          C1#consumer.subscription_id =:= C2#consumer.subscription_id)).
 -define(V6_OR_MORE(Vsn), (Vsn >= 6)).
 -define(V8_OR_MORE(Vsn), (Vsn >= 8)).
+-define(V9_OR_MORE(Vsn), (Vsn >= 9)).
 
 %% Single Active Consumer API
 -spec register_consumer(binary(),
@@ -447,21 +448,15 @@ apply(#command_evaluate_group{vhost = VH, stream = S,
             {State0#?MODULE{groups = Groups1}, ok, Effects}
     end;
 apply(#command_purge_nodes{nodes = Nodes}, State0) ->
-    {State1, Eff} = lists:foldl(fun(N, {S0, Eff0}) ->
-                                        {S1, Eff1} = purge_node(N, S0),
-                                        {S1, Eff1 ++ Eff0}
-                                end, {State0, []}, Nodes),
-    {State1, ok, Eff};
+    purge_nodes(Nodes, false, State0);
 apply(#command_update_conf{conf = NewConf}, State) ->
     {State#?MODULE{conf = NewConf}, ok, []};
 apply(UnkCmd, State) ->
     ?LOG_DEBUG("~ts: unknown SAC command ~W", [?MODULE, UnkCmd, 10]),
     {State, {error, unknown_command}, []}.
 
-%% Version-aware entry point used by the coordinator. Only the
-%% connection_reconnected command has a machine-version-dependent (v8+) fast
-%% path; every other command, and every command below v8, is handled exactly
-%% as apply/2.
+%% Version-aware entry point used by the coordinator. Commands without a
+%% clause for their machine version are handled exactly as apply/2.
 -spec apply(ra_machine:command_meta_data(), command(), state()) ->
     {state(), term(), ra_machine:effects()}.
 apply(#{machine_version := Vsn},
@@ -483,15 +478,32 @@ apply(#{machine_version := Vsn},
                           handle_group_connection_reconnected(Pid, St, E, G)
                   end, {State0, []}, Scan),
     {State1, ok, Eff};
+apply(#{machine_version := Vsn}, #command_purge_nodes{nodes = Nodes}, State0)
+  when ?V9_OR_MORE(Vsn) ->
+    purge_nodes(Nodes, true, State0);
 apply(_Meta, Cmd, State) ->
     ?MODULE:apply(Cmd, State).
 
-purge_node(Node, #?MODULE{groups = Groups0} = State0) ->
+purge_nodes(Nodes, Ordered, State0) ->
+    {State1, Eff} =
+        lists:foldl(fun(N, {S0, Eff0}) ->
+                            {S1, Eff1} = purge_node(N, Ordered, S0),
+                            {S1, Eff1 ++ Eff0}
+                    end, {State0, []}, Nodes),
+    {State1, ok, Eff}.
+
+%% Removing the connections in a different order can select a different
+%% active consumer, so members must use the same order.
+purge_node(Node, Ordered, #?MODULE{groups = Groups0} = State0) ->
     PidsGroups = compute_node_pid_group_dependencies(Node, Groups0),
+    Iter = case Ordered of
+               true -> maps:iterator(PidsGroups, ordered);
+               false -> PidsGroups
+           end,
     maps:fold(fun(Pid, Groups, {S0, Eff0}) ->
                       {S1, Eff1} = handle_connection_down0(Pid, S0, Groups),
                       {S1, Eff1 ++ Eff0}
-              end, {State0, []}, PidsGroups).
+              end, {State0, []}, Iter).
 
 handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
                                     Eff0, {VH, S, Name} = K) ->
