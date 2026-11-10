@@ -95,6 +95,7 @@
 
 -define(REPLICA_FRESHNESS_LIMIT_MS, (10 * 1000)). %% 10s
 -define(SAC_CURRENT, rabbit_stream_sac_coordinator).
+-define(V9_OR_MORE(Vsn), (Vsn >= 9)).
 %% Upper bound on the number of action worker processes the leader runs
 %% concurrently. Excess actions are queued in the aux state and started as
 %% running ones complete, so a mass stream event cannot spawn an unbounded
@@ -567,7 +568,7 @@ reachable_coord_members() ->
     Nodes = rabbit_nodes:list_reachable(),
     [{?MODULE, Node} || Node <- Nodes].
 
-version() -> 8.
+version() -> 9.
 
 %% Machine versions up to 7 are served by the frozen rabbit_stream_coordinator_v7
 %% module (a verbatim copy of the v7 implementation), so old-version log entries
@@ -684,7 +685,7 @@ apply(#{machine_version := Vsn} = Meta, {down, Pid, Reason} = Cmd,
         _ ->
             return(Meta, State1, ok, Effects1)
     end;
-apply(Meta,
+apply(#{machine_version := MachineVersion} = Meta,
       {register_listener, #{pid := Pid,
                             stream_id := StreamId} = Args},
       #?MODULE{streams = Streams,
@@ -701,7 +702,8 @@ apply(Meta,
                     local_member ->
                         {{Pid, member}, {Node, undefined}}
                 end,
-            {Listeners, Effects} = eval_listener(LKey, LValue, {Listeners0, []}, Stream0),
+            {Listeners, Effects} = eval_listener(MachineVersion, LKey, LValue,
+                                                 {Listeners0, []}, Stream0),
             Stream = Stream0#stream{listeners = Listeners},
             {PidStreams, listener} = maps:get(Pid, Monitors0, {#{}, listener}),
             Monitors = maps:put(Pid, {PidStreams#{StreamId => ok}, listener}, Monitors0),
@@ -1887,17 +1889,18 @@ eval_listeners(_MachineVersion,
     %% if the Members have not changed don't evaluate as this is an
     %% expensive operation when there are many listeners
     {Stream, Effects0};
-eval_listeners(_MachineVersion, #stream{listeners = Listeners0} = Stream0,
+eval_listeners(MachineVersion, #stream{listeners = Listeners0} = Stream0,
                _OldStream, Effects0) ->
     %% Iterating over stream listeners.
     %% Returning the new map of listeners and the effects (notification of changes)
     {Listeners1, Effects1} =
         maps:fold(fun(ListenerSpec, ListLPid0, {Lsts0, Effs0}) ->
-                          eval_listener(ListenerSpec, ListLPid0, {Lsts0, Effs0}, Stream0)
+                          eval_listener(MachineVersion, ListenerSpec, ListLPid0,
+                                        {Lsts0, Effs0}, Stream0)
                   end, {Listeners0, Effects0}, Listeners0),
     {Stream0#stream{listeners = Listeners1}, Effects1}.
 
-eval_listener({P, leader}, ListLPid0, {Lsts0, Effs0},
+eval_listener(_MachineVersion, {P, leader}, ListLPid0, {Lsts0, Effs0},
               #stream{queue_ref = QRef,
                       members = Members}) ->
     %% iterating over member to find the leader
@@ -1922,8 +1925,8 @@ eval_listener({P, leader}, ListLPid0, {Lsts0, Effs0},
                           Acc
                   end, {ListLPid0, Effs0}, Members),
     {Lsts0#{{P, leader} => ListLPid1}, Effs1};
-eval_listener({P, member}, {ListNode, ListMPid0}, {Lsts0, Effs0},
-              #stream{queue_ref = QRef, members = Members}) ->
+eval_listener(MachineVersion, {P, member}, {ListNode, ListMPid0},
+              {Lsts0, Effs0}, #stream{queue_ref = QRef, members = Members}) ->
     %% listening to a member on a given node
     %% iterating over the members to find the member on this node
     {ListMPid1, Effs1} =
@@ -1945,9 +1948,13 @@ eval_listener({P, member}, {ListNode, ListMPid0}, {Lsts0, Effs0},
                                         {queue_event, QRef,
                                          {stream_local_member_change, MemberPid}},
                                         cast} | Efs]};
-                     (_MNode, #member{state = {running, _, MemberPid},
-                                      role = {replica, _},
-                                      target = deleted}, {_, Efs}) ->
+                     (MNode, #member{state = {running, _, MemberPid},
+                                     role = {replica, _},
+                                     target = deleted}, {_, Efs})
+                       when ListNode == MNode orelse
+                            not ?V9_OR_MORE(MachineVersion) ->
+                          %% Before machine version 9, this also matched
+                          %% replicas on other nodes.
                           {MemberPid, [{send_msg, P,
                                         {queue_event, QRef, deleted_replica},
                                         cast} | Efs]};
