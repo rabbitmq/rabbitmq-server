@@ -50,6 +50,7 @@ all_tests() ->
      topic_binding_hash_limit,
      topic_exchange_binding_hash_limit,
      topic_binding_hash_limit_allows_unbind,
+     rebind_on_lagging_node,
 
      %% Exchange bindings
      bind_and_unbind_direct_exchange,
@@ -872,6 +873,40 @@ topic_binding_hash_limit_allows_unbind(Config) ->
     ?assertMatch(#'queue.unbind_ok'{},
                  amqp_channel:call(Ch, #'queue.unbind'{exchange = X, queue = Q,
                                                        routing_key = Key})),
+    ok.
+
+rebind_on_lagging_node(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Leader = rabbit_ct_broker_helpers:rpc(Config, 0, ra_leaderboard,
+                                          lookup_leader, [rabbitmq_metadata]),
+    {_, A} = Leader,
+    [B | _] = Nodes -- [A],
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0}, declare(Ch, Q, [])),
+    Binding = binding_record(rabbit_misc:r(<<"/">>, exchange, <<"amq.direct">>),
+                             rabbit_misc:r(<<"/">>, queue, Q), Q, []),
+    ok = rpc:call(A, rabbit_binding, add, [Binding, <<"acting-user">>]),
+    ok = rpc:call(B, rabbit_khepri, fence, [30_000]),
+    ?assert(rpc:call(B, rabbit_binding, exists, [Binding])),
+
+    ok = rpc:call(B, sys, suspend, [rabbitmq_metadata]),
+    ok = rpc:call(A, rabbit_binding, remove, [Binding, <<"acting-user">>]),
+    Self = self(),
+    spawn(fun() ->
+                  Self ! {bind, rpc:call(B, rabbit_binding, add,
+                                         [Binding, <<"acting-user">>])}
+          end),
+    timer:sleep(1000),
+    ok = rpc:call(B, sys, resume, [rabbitmq_metadata]),
+    receive {bind, BindRet} -> ?assertEqual(ok, BindRet)
+    after 30_000 -> ct:fail(bind_timeout)
+    end,
+
+    [begin
+         ok = rpc:call(N, rabbit_khepri, fence, [30_000]),
+         ?assertEqual({N, true}, {N, rpc:call(N, rabbit_binding, exists, [Binding])})
+     end || N <- Nodes],
     ok.
 
 bind_and_unbind_direct_exchange(Config) ->
