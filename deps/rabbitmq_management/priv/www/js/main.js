@@ -1082,7 +1082,7 @@ function is_valid_token(value) {
 function url_pagination_template_context(template, context, defaultPage, defaultPageSize){
     var page_number_request = fmt_page_number_request(context, defaultPage);
     var page_size = fmt_page_size_request(context, defaultPageSize);
-    var name_request = fmt_filter_name_request(context, "");
+    var name_request = stored_value_or_default(context + '_current_filter_name', "");
     var use_regex = fmt_regex_request(context, "") == "checked";
     if (use_regex) {
         // rabbitmq/rabbitmq-server#8008: if the expression cannot be compiled to a reg exp,
@@ -1092,14 +1092,11 @@ function url_pagination_template_context(template, context, defaultPage, default
             show_popup('warn', fmt_escape_html(`Filter expression '${name_request}' is not a valid regular expression, will perform a regular text query`));
             use_regex = false;
         }
-        if (use_regex && valid_regexp) {
-            name_request = esc(name_request);
-        }
     }
     var url = '/' + template +
         '?page=' +  page_number_request +
         '&page_size=' + page_size +
-        '&name=' + name_request +
+        '&name=' + esc(name_request) +
         '&use_regex=' + use_regex;
     var filter_field = stored_value_or_default(context + '_current_filter_field', "");
     if (filter_field.length > 0) {
