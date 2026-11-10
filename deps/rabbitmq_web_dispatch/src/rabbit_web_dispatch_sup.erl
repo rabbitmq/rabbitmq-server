@@ -21,7 +21,8 @@
 -export([start_link/0, ensure_listener/1, stop_listener/1]).
 
 -ifdef(TEST).
--export([build_ranch_transport_opts/1, combine_ensure_results/1]).
+-export([build_ranch_transport_opts/1, combine_ensure_results/1,
+         transport_config/1]).
 -endif.
 
 %% supervisor callbacks

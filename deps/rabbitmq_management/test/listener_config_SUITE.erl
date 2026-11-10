@@ -21,8 +21,10 @@ groups() ->
         no_config_defaults,
         tcp_config_only,
         ssl_config_only,
+        ssl_config_with_ip,
 
-        multiple_listeners
+        multiple_listeners,
+        tls_listener_ip_is_bound_and_reported
         ]}].
 
 init_per_suite(Config) ->
@@ -94,6 +96,28 @@ ssl_config_only(_Config) ->
     ],
     ?assertEqual(sort_nested(Expected), sort_nested(get_single_listener_config())).
 
+ssl_config_with_ip(_Config) ->
+    application:set_env(rabbitmq_management, ssl_config, [
+        {port, 999},
+        {ip, "192.0.2.10"},
+        {cowboy_opts, [{idle_timeout, 10000}]}
+    ]),
+
+    Expected = [
+        {cowboy_opts,[
+            {idle_timeout, 10000},
+            {sendfile,false}
+        ]},
+        {ip, "192.0.2.10"},
+        {port, 999},
+        {ssl, true},
+        {ssl_opts, [
+            {port, 999},
+            {ip, "192.0.2.10"}
+        ]}
+    ],
+    ?assertEqual(sort_nested(Expected), sort_nested(get_single_listener_config())).
+
 multiple_listeners(_Config) ->
     application:set_env(rabbitmq_management, tcp_config, [
         {port, 998},
@@ -128,6 +152,14 @@ multiple_listeners(_Config) ->
     ],
     ?assertEqual(sort_nested(Expected), sort_nested(rabbit_mgmt_app:get_listeners_config())).
 
+tls_listener_ip_is_bound_and_reported(_Config) ->
+    application:set_env(rabbitmq_management, ssl_config, [
+        {port, 999},
+        {ip, "127.0.0.1"}
+    ]),
+    [Listener] = rabbit_mgmt_app:get_listeners_config(),
+    ?assertEqual("127.0.0.1", proplists:get_value(ip, Listener)),
+    ?assertEqual([{127, 0, 0, 1}], rabbit_networking:listener_ip_addresses(Listener)).
 
 get_single_listener_config() ->
     [Config] = rabbit_mgmt_app:get_listeners_config(),
