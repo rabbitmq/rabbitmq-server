@@ -90,7 +90,6 @@ table.legend td { padding: 4px 0 4px 10px; width: 130px; }
 .filter table { float: left; }
 .filter label { margin-top: 4px;}
 .filter input#filter-regex-mode { vertical-align: middle; }
-.filter input.filter-field { width: 24em; }
 .filter p#filter-truncate { float: right; padding: 4px; margin: 0; }
 .filter p.filter-warning { border-radius: 5px; background: var(--filter-p-warning-background-color); }
 .filter-active { background: var(--filter-active-background-color); border-radius: 5px; }

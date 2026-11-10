@@ -199,7 +199,7 @@ var COLUMNS;
 
 var RENDER_CALLBACKS = {};
 
-// Pagination contexts that offer a filter field input, with suggested fields.
+// Pagination contexts that offer a filter field dropdown, with its values.
 const FILTER_FIELD_SUGGESTIONS = {
     'connections': ['name', 'user_provided_name', 'container_id', 'user',
                     'vhost', 'node', 'peer_host', 'protocol',

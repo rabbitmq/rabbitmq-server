@@ -1218,14 +1218,6 @@ function postprocess_partial() {
         update_pages_from_ui(this);
     });
 
-    // Picking a suggested filter field applies it straight away, typing does not.
-    $('.filter-field').on('input', function(e) {
-        var inputType = e.originalEvent ? e.originalEvent.inputType : undefined;
-        if (inputType === undefined || inputType === 'insertReplacementText') {
-            update_pages_from_ui(this);
-        }
-    });
-
     setup_visibility();
 
     $('#main').off('click', 'div.section h2, div.section-hidden h2');
