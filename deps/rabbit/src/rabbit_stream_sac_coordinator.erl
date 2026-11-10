@@ -307,14 +307,17 @@ init_state() ->
 
 -spec apply(command(), state()) ->
                {state(), term(), ra_machine:effects()}.
-apply(#command_register_consumer{vhost = VirtualHost,
-                                 stream = Stream,
-                                 partition_index = PartitionIndex,
-                                 consumer_name = ConsumerName,
-                                 connection_pid = ConnectionPid,
-                                 owner = Owner,
-                                 subscription_id = SubscriptionId},
-      #?MODULE{groups = StreamGroups0} = State) ->
+apply(Cmd, State) ->
+    apply0(Cmd, #{}, State).
+
+apply0(#command_register_consumer{vhost = VirtualHost,
+                                  stream = Stream,
+                                  partition_index = PartitionIndex,
+                                  consumer_name = ConsumerName,
+                                  connection_pid = ConnectionPid,
+                                  owner = Owner,
+                                  subscription_id = SubscriptionId},
+       Meta, #?MODULE{groups = StreamGroups0} = State) ->
     case maybe_create_group(VirtualHost,
                             Stream,
                             PartitionIndex,
@@ -328,16 +331,17 @@ apply(#command_register_consumer{vhost = VirtualHost,
                                  ConnectionPid,
                                  Owner,
                                  SubscriptionId,
+                                 Meta,
                                  State#?MODULE{groups = StreamGroups1});
         {error, Error} ->
             {State, {error, Error}, []}
     end;
-apply(#command_unregister_consumer{vhost = VirtualHost,
-                                   stream = Stream,
-                                   consumer_name = ConsumerName,
-                                   connection_pid = ConnectionPid,
-                                   subscription_id = SubscriptionId},
-      #?MODULE{groups = StreamGroups0} = State0) ->
+apply0(#command_unregister_consumer{vhost = VirtualHost,
+                                    stream = Stream,
+                                    consumer_name = ConsumerName,
+                                    connection_pid = ConnectionPid,
+                                    subscription_id = SubscriptionId},
+       Meta, #?MODULE{groups = StreamGroups0} = State0) ->
     {State1, Effects1} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             undefined ->
@@ -349,7 +353,7 @@ apply(#command_unregister_consumer{vhost = VirtualHost,
                             G1 = remove_from_group(Consumer, Group0),
                             handle_consumer_removal(
                               G1, Stream, ConsumerName,
-                              is_active(Consumer#consumer.status));
+                              is_active(Consumer#consumer.status), Meta);
                         false ->
                             {Group0, []}
                     end,
@@ -361,8 +365,8 @@ apply(#command_unregister_consumer{vhost = VirtualHost,
                 {State0#?MODULE{groups = SGS}, Effects}
         end,
     {State1, ok, Effects1};
-apply(#command_activate_consumer{vhost = VH, stream = S, consumer_name = Name},
-      #?MODULE{groups = StreamGroups0} = State0) ->
+apply0(#command_activate_consumer{vhost = VH, stream = S, consumer_name = Name},
+       Meta, #?MODULE{groups = StreamGroups0} = State0) ->
     {G, Eff} =
         case lookup_group(VH, S, Name, StreamGroups0) of
             undefined ->
@@ -379,7 +383,7 @@ apply(#command_activate_consumer{vhost = VH, stream = S, consumer_name = Name},
                                  undefined
                          end,
                 %% connected consumers are set to waiting status
-                G1 = update_connected_consumers(G0, ?CONN_WAIT),
+                G1 = update_connected_consumers(G0, ?CONN_WAIT, Meta),
                 case evaluate_active_consumer(G1) of
                     undefined ->
                         {G1, []};
@@ -387,7 +391,8 @@ apply(#command_activate_consumer{vhost = VH, stream = S, consumer_name = Name},
                         %% we keep it this way, the consumer may come back
                         {G1, []};
                     Csr ->
-                        G2 = update_consumer_state_in_group(G1, Csr, ?CONN_ACT),
+                        G2 = update_consumer_state_in_group(G1, Csr, ?CONN_ACT,
+                                                            Meta),
                         %% do we need effects or not?
                         Effects =
                             case Csr of
@@ -415,18 +420,18 @@ apply(#command_activate_consumer{vhost = VH, stream = S, consumer_name = Name},
                 ok
         end,
     {State0#?MODULE{groups = StreamGroups1}, R, Eff};
-apply(#command_connection_reconnected{pid = Pid},
-      #?MODULE{groups = Groups0} = State0) ->
+apply0(#command_connection_reconnected{pid = Pid},
+       Meta, #?MODULE{groups = Groups0} = State0) ->
     {State1, Eff} =
     maps:fold(fun(G, _, {St, Eff}) ->
-                      handle_group_connection_reconnected(Pid, St, Eff, G)
+                      handle_group_connection_reconnected(Pid, St, Eff, G, Meta)
               end, {State0, []}, Groups0),
 
     {State1, ok, Eff};
-apply(#command_evaluate_group{vhost = VH, stream = S,
-                              consumer_name = Name,
-                              dead_pids = DeadPids},
-      #?MODULE{groups = Groups0} = State0) ->
+apply0(#command_evaluate_group{vhost = VH, stream = S,
+                               consumer_name = Name,
+                               dead_pids = DeadPids},
+       Meta, #?MODULE{groups = Groups0} = State0) ->
     case lookup_group(VH, S, Name, Groups0) of
         undefined ->
             {State0, {error, not_found}, []};
@@ -443,23 +448,24 @@ apply(#command_evaluate_group{vhost = VH, stream = S,
                           true
                   end, Consumers0),
             G1 = G0#group{consumers = Consumers1},
-            {G2, Effects} = maybe_rebalance_group(G1, {VH, S, Name}),
+            {G2, Effects} = maybe_rebalance_group(G1, {VH, S, Name}, Meta),
             Groups1 = update_groups(VH, S, Name, G2, Groups0),
             {State0#?MODULE{groups = Groups1}, ok, Effects}
     end;
-apply(#command_purge_nodes{nodes = Nodes}, State0) ->
-    purge_nodes(Nodes, false, State0);
-apply(#command_update_conf{conf = NewConf}, State) ->
+apply0(#command_purge_nodes{nodes = Nodes}, Meta, State0) ->
+    purge_nodes(Nodes, false, Meta, State0);
+apply0(#command_update_conf{conf = NewConf}, _Meta, State) ->
     {State#?MODULE{conf = NewConf}, ok, []};
-apply(UnkCmd, State) ->
+apply0(UnkCmd, _Meta, State) ->
     ?LOG_DEBUG("~ts: unknown SAC command ~W", [?MODULE, UnkCmd, 10]),
     {State, {error, unknown_command}, []}.
 
 %% Version-aware entry point used by the coordinator. Commands without a
-%% clause for their machine version are handled exactly as apply/2.
+%% clause for their machine version are handled as in apply/2, except that
+%% consumer timestamps come from the command metadata from v9.
 -spec apply(ra_machine:command_meta_data(), command(), state()) ->
     {state(), term(), ra_machine:effects()}.
-apply(#{machine_version := Vsn},
+apply(#{machine_version := Vsn} = Meta,
       #command_connection_reconnected{pid = Pid},
       #?MODULE{groups = Groups0,
                pids_groups = PidsGroups} = State0)
@@ -475,38 +481,41 @@ apply(#{machine_version := Vsn},
            end,
     {State1, Eff} =
         maps:fold(fun(G, _, {St, E}) ->
-                          handle_group_connection_reconnected(Pid, St, E, G)
+                          handle_group_connection_reconnected(Pid, St, E, G,
+                                                              Meta)
                   end, {State0, []}, Scan),
     {State1, ok, Eff};
-apply(#{machine_version := Vsn}, #command_purge_nodes{nodes = Nodes}, State0)
+apply(#{machine_version := Vsn} = Meta, #command_purge_nodes{nodes = Nodes},
+      State0)
   when ?V9_OR_MORE(Vsn) ->
-    purge_nodes(Nodes, true, State0);
-apply(_Meta, Cmd, State) ->
-    ?MODULE:apply(Cmd, State).
+    purge_nodes(Nodes, true, Meta, State0);
+apply(Meta, Cmd, State) ->
+    apply0(Cmd, Meta, State).
 
-purge_nodes(Nodes, Ordered, State0) ->
+purge_nodes(Nodes, Ordered, Meta, State0) ->
     {State1, Eff} =
         lists:foldl(fun(N, {S0, Eff0}) ->
-                            {S1, Eff1} = purge_node(N, Ordered, S0),
+                            {S1, Eff1} = purge_node(N, Ordered, Meta, S0),
                             {S1, Eff1 ++ Eff0}
                     end, {State0, []}, Nodes),
     {State1, ok, Eff}.
 
 %% Removing the connections in a different order can select a different
 %% active consumer, so members must use the same order.
-purge_node(Node, Ordered, #?MODULE{groups = Groups0} = State0) ->
+purge_node(Node, Ordered, Meta, #?MODULE{groups = Groups0} = State0) ->
     PidsGroups = compute_node_pid_group_dependencies(Node, Groups0),
     Iter = case Ordered of
                true -> maps:iterator(PidsGroups, ordered);
                false -> PidsGroups
            end,
     maps:fold(fun(Pid, Groups, {S0, Eff0}) ->
-                      {S1, Eff1} = handle_connection_down0(Pid, S0, Groups),
+                      {S1, Eff1} = handle_connection_down0(Pid, S0, Groups,
+                                                           Meta),
                       {S1, Eff1 ++ Eff0}
               end, {State0, []}, Iter).
 
 handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
-                                    Eff0, {VH, S, Name} = K) ->
+                                    Eff0, {VH, S, Name} = K, Meta) ->
     case lookup_group(VH, S, Name, Groups0) of
         undefined ->
             {S0, Eff0};
@@ -516,14 +525,15 @@ handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
                     %% a presumed-down active is coming back in the connection
                     %% we need to reconcile the group,
                     %% as there may have been 2 active consumers at a time
-                    handle_pdown_active_reconnected(Pid, S0, Eff0, K);
+                    handle_pdown_active_reconnected(Pid, S0, Eff0, K, Meta);
                 false ->
-                    do_handle_group_connection_reconnected(Pid, S0, Eff0, K)
+                    do_handle_group_connection_reconnected(Pid, S0, Eff0, K,
+                                                           Meta)
             end
     end.
 
 do_handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
-                                       Eff0, {VH, S, Name} = K)
+                                       Eff0, {VH, S, Name} = K, Meta)
   when is_map_key(K, Groups0) ->
     G0 = #group{consumers = Consumers0} = lookup_group(VH, S, Name, Groups0),
     %% update the status of the consumers from the connection
@@ -531,7 +541,7 @@ do_handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
         lists:foldr(
           fun(#consumer{pid = P, status = {_, St}} = C, {L, _})
                 when P == Pid ->
-                  {[csr_status(C, {?CONNECTED, St}) | L], true};
+                  {[csr_status(C, {?CONNECTED, St}, ts(Meta)) | L], true};
              (C, {L, UpdatedFlag}) ->
                   {[C | L], UpdatedFlag or false}
           end, {[], false}, Consumers0),
@@ -539,18 +549,18 @@ do_handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
     case Updated of
         true ->
             G1 = G0#group{consumers = Consumers1},
-            {G2, Eff} = maybe_rebalance_group(G1, K),
+            {G2, Eff} = maybe_rebalance_group(G1, K, Meta),
             Groups1 = update_groups(VH, S, Name, G2, Groups0),
             {S0#?MODULE{groups = Groups1}, Eff ++ Eff0};
         false ->
             {S0, Eff0}
     end;
-do_handle_group_connection_reconnected(_, S0, Eff0, _) ->
+do_handle_group_connection_reconnected(_, S0, Eff0, _, _) ->
     {S0, Eff0}.
 
 handle_pdown_active_reconnected(Pid,
                                 #?MODULE{groups = Groups0} = S0,
-                                Eff0, {VH, S, Name} = K)
+                                Eff0, {VH, S, Name} = K, Meta)
   when is_map_key(K, Groups0) ->
     G0 = #group{consumers = Consumers0} = lookup_group(VH, S, Name, Groups0),
     {Consumers1, Eff1} =
@@ -561,7 +571,7 @@ handle_pdown_active_reconnected(Pid,
             %% and tell them to step down
             lists:foldr(fun(#consumer{status = St, pid = P} = C, {Cs, Eff})
                               when P =:= Pid andalso St =:= ?PDOWN_ACT ->
-                                {[csr_status(C, ?CONN_WAIT) | Cs],
+                                {[csr_status(C, ?CONN_WAIT, ts(Meta)) | Cs],
                                  [notify_csr_effect(C, S,
                                                     Name, false, true) | Eff]};
                            (C, {Cs, Eff}) ->
@@ -572,18 +582,19 @@ handle_pdown_active_reconnected(Pid,
                               when P =:= Pid andalso St =:= ?PDOWN_ACT ->
                                 %% update presumed-down active
                                 %% tell it to step down
-                                {[csr_status(C, ?CONN_WAIT) | Cs],
+                                {[csr_status(C, ?CONN_WAIT, ts(Meta)) | Cs],
                                  [notify_csr_effect(C, S,
                                                     Name, false, true) | Eff]};
                            (#consumer{status = {?PDOWN, _},
                                       pid = P} = C, {Cs, Eff})
                               when P =:= Pid ->
                                 %% update presumed-down
-                                {[csr_status(C, ?CONN_WAIT) | Cs], Eff};
+                                {[csr_status(C, ?CONN_WAIT, ts(Meta)) | Cs],
+                                 Eff};
                            (#consumer{status = ?CONN_ACT} = C, {Cs, Eff}) ->
                                 %% update connected active
                                 %% tell it to step down
-                                {[csr_status(C, ?CONN_WAIT) | Cs],
+                                {[csr_status(C, ?CONN_WAIT, ts(Meta)) | Cs],
                                  [notify_csr_effect(C, S,
                                                     Name, false, true) | Eff]};
                            (C, {Cs, Eff}) ->
@@ -593,7 +604,7 @@ handle_pdown_active_reconnected(Pid,
     G1 = G0#group{consumers = Consumers1},
     Groups1 = update_groups(VH, S, Name, G1, Groups0),
     {S0#?MODULE{groups = Groups1}, Eff1};
-handle_pdown_active_reconnected(_, S0, Eff0, _) ->
+handle_pdown_active_reconnected(_, S0, Eff0, _, _) ->
     {S0, Eff0}.
 
 has_pdown_active(#group{consumers = Consumers}, Pid) ->
@@ -622,13 +633,13 @@ has_consumer_with_status(#group{consumers = Consumers}, Status) ->
             true
     end.
 
-maybe_rebalance_group(#group{partition_index = PI} = G0, _) when PI < -1 ->
+maybe_rebalance_group(#group{partition_index = PI} = G0, _, _) when PI < -1 ->
     %% should not happen
     {G0, []};
-maybe_rebalance_group(#group{consumers = CS} = G0, _) when length(CS) == 0 ->
+maybe_rebalance_group(#group{consumers = CS} = G0, _, _) when length(CS) == 0 ->
     {G0, []};
 maybe_rebalance_group(#group{partition_index = -1, consumers = Consumers0} = G0,
-                      {_VH, S, Name}) ->
+                      {_VH, S, Name}, Meta) ->
     case lookup_active_consumer(G0) of
         {value, ActiveCsr} ->
             %% there is already an active consumer, we just re-arrange
@@ -644,7 +655,7 @@ maybe_rebalance_group(#group{partition_index = -1, consumers = Consumers0} = G0,
             {G1, []};
         _ ->
             %% no active consumer
-            G1 = compute_active_consumer(G0),
+            G1 = compute_active_consumer(G0, Meta),
             case lookup_active_consumer(G1) of
                 {value, Csr} ->
                     %% creating the side effect to notify the new active consumer
@@ -655,7 +666,7 @@ maybe_rebalance_group(#group{partition_index = -1, consumers = Consumers0} = G0,
             end
     end;
 maybe_rebalance_group(#group{partition_index = _, consumers = Consumers} = G,
-                      {_VH, S, Name}) ->
+                      {_VH, S, Name}, Meta) ->
     case lookup_active_consumer(G) of
         {value, CurrentActive} ->
             case evaluate_active_consumer(G) of
@@ -668,7 +679,8 @@ maybe_rebalance_group(#group{partition_index = _, consumers = Consumers} = G,
                 _ ->
                     %% there's a change, telling the active it's not longer active
                     {update_consumer_state_in_group(G, CurrentActive,
-                                                    {?CONNECTED, ?DEACTIVATING}),
+                                                    {?CONNECTED, ?DEACTIVATING},
+                                                    Meta),
                      [notify_csr_effect(CurrentActive, S, Name, false, true)]}
             end;
         false ->
@@ -690,7 +702,8 @@ maybe_rebalance_group(#group{partition_index = _, consumers = Consumers} = G,
                             {G, []};
                         Csr ->
                             {update_consumer_state_in_group(G, Csr,
-                                                            {?CONNECTED, ?ACTIVE}),
+                                                            {?CONNECTED, ?ACTIVE},
+                                                            Meta),
                              [notify_csr_effect(Csr, S, Name, true)]}
                     end
             end
@@ -902,19 +915,19 @@ ensure_monitors(_Meta, Cmd, State, Monitors, Effects) ->
     {state(), ra_machine:effects()}.
 handle_connection_down(Meta, Pid, noconnection, State) ->
     handle_connection_node_disconnected(Meta, Pid, State);
-handle_connection_down(_, Pid, _Reason,
+handle_connection_down(Meta, Pid, _Reason,
                        #?MODULE{pids_groups = PidsGroups0} = State0) ->
     case maps:take(Pid, PidsGroups0) of
         error ->
             {State0, []};
         {Groups, PidsGroups1} ->
             State1 = State0#?MODULE{pids_groups = PidsGroups1},
-            handle_connection_down0(Pid, State1, Groups)
+            handle_connection_down0(Pid, State1, Groups, Meta)
     end.
 
-handle_connection_down0(Pid, State, Groups) ->
+handle_connection_down0(Pid, State, Groups, Meta) ->
     maps:fold(fun(G, _, Acc) ->
-                      handle_group_after_connection_down(Pid, Acc, G)
+                      handle_group_after_connection_down(Pid, Acc, G, Meta)
               end, {State, []}, Groups).
 
 -spec handle_connection_node_disconnected(ra_machine:command_meta_data(),
@@ -1015,7 +1028,7 @@ presume_connection_down(Meta, Pid, #?MODULE{groups = Groups0} = State0) ->
                                                             Eff, G)
               end, {State0, []}, Groups0).
 
-handle_group_connection_presumed_down(#{machine_version := Vsn}, Pid,
+handle_group_connection_presumed_down(#{machine_version := Vsn} = Meta, Pid,
                                       #?MODULE{groups = Groups0} = S0,
                                       Eff0, {VH, S, Name} = K)
   when is_map_key(K, Groups0) andalso ?V6_OR_MORE(Vsn) ->
@@ -1027,10 +1040,10 @@ handle_group_connection_presumed_down(#{machine_version := Vsn}, Pid,
                 when P == Pid ->
                   %% Deactivating consumer presumed down, handshake cannot
                   %% complete. Treat as waiting.
-                  {[csr_status(C, {?PDOWN, ?WAITING}) | L], true};
+                  {[csr_status(C, {?PDOWN, ?WAITING}, ts(Meta)) | L], true};
              (#consumer{pid = P, status = {?DISCONNECTED, St}} = C, {L, _})
                 when P == Pid ->
-                  {[csr_status(C, {?PDOWN, St}) | L], true};
+                  {[csr_status(C, {?PDOWN, St}, ts(Meta)) | L], true};
              (C, {L, UpdatedFlag}) ->
                   {[C | L], UpdatedFlag or false}
           end, {[], false}, Consumers0),
@@ -1038,13 +1051,14 @@ handle_group_connection_presumed_down(#{machine_version := Vsn}, Pid,
     case Updated of
         true ->
             G1 = G0#group{consumers = Consumers1},
-            {G2, Eff} = maybe_rebalance_group(G1, K),
+            {G2, Eff} = maybe_rebalance_group(G1, K, Meta),
             Groups1 = update_groups(VH, S, Name, G2, Groups0),
             {S0#?MODULE{groups = Groups1}, Eff ++ Eff0};
         false ->
             {S0, Eff0}
     end;
-handle_group_connection_presumed_down(_, Pid, #?MODULE{groups = Groups0} = S0,
+handle_group_connection_presumed_down(Meta, Pid,
+                                      #?MODULE{groups = Groups0} = S0,
                                       Eff0, {VH, S, Name} = K)
   when is_map_key(K, Groups0) ->
     %% V5 behavior
@@ -1053,7 +1067,7 @@ handle_group_connection_presumed_down(_, Pid, #?MODULE{groups = Groups0} = S0,
         lists:foldr(
           fun(#consumer{pid = P, status = {?DISCONNECTED, St}} = C, {L, _})
                 when P == Pid ->
-                  {[csr_status(C, {?PDOWN, St}) | L], true};
+                  {[csr_status(C, {?PDOWN, St}, ts(Meta)) | L], true};
              (C, {L, UpdatedFlag}) ->
                   {[C | L], UpdatedFlag or false}
           end, {[], false}, Consumers0),
@@ -1061,7 +1075,7 @@ handle_group_connection_presumed_down(_, Pid, #?MODULE{groups = Groups0} = S0,
     case Updated of
         true ->
             G1 = G0#group{consumers = Consumers1},
-            {G2, Eff} = maybe_rebalance_group(G1, K),
+            {G2, Eff} = maybe_rebalance_group(G1, K, Meta),
             Groups1 = update_groups(VH, S, Name, G2, Groups0),
             {S0#?MODULE{groups = Groups1}, Eff ++ Eff0};
         false ->
@@ -1072,7 +1086,7 @@ handle_group_connection_presumed_down(_, _, S0, Eff0, _) ->
 
 handle_group_after_connection_down(Pid,
                                    {#?MODULE{groups = Groups0} = S0, Eff0},
-                                   {VH, St, Name} = K)
+                                   {VH, St, Name} = K, Meta)
   when is_map_key(K, Groups0) ->
     #group{consumers = Consumers0} = G0 = lookup_group(VH, St, Name, Groups0),
     %% remove the connection consumers from the group state, keeping the
@@ -1090,13 +1104,13 @@ handle_group_after_connection_down(Pid,
             G1 = G0#group{consumers = Consumers1},
             {G2, Effects} = handle_consumer_removal(G1, St,
                                                     Name,
-                                                    ActiveRemoved),
+                                                    ActiveRemoved, Meta),
             Groups1 = update_groups(VH, St, Name, G2, Groups0),
             {S0#?MODULE{groups = Groups1}, Effects ++ Eff0};
         false ->
             {S0, Eff0}
     end;
-handle_group_after_connection_down(_, {S0, Eff0}, _) ->
+handle_group_after_connection_down(_, {S0, Eff0}, _, _) ->
     {S0, Eff0}.
 
 handle_group_after_connection_node_disconnected(#{machine_version := Vsn} = Meta,
@@ -1126,12 +1140,12 @@ handle_group_after_connection_node_disconnected(#{machine_version := Vsn} = Meta
                     end, {[], false}, Cs0),
     G1 = G0#group{consumers = Cs1},
     {G2, Eff1} = case NeedsRebalance of
-                     true -> maybe_rebalance_group(G1, K);
+                     true -> maybe_rebalance_group(G1, K, Meta);
                      false -> {G1, []}
                  end,
     Groups1 = update_groups(VH, S, Name, G2, Groups0),
     {S0#?MODULE{groups = Groups1}, Eff1 ++ Eff0};
-handle_group_after_connection_node_disconnected(_Meta, ConnPid,
+handle_group_after_connection_node_disconnected(Meta, ConnPid,
                                                 {#?MODULE{groups = Groups0} = S0,
                                                  Eff0},
                                                 {VH, S, Name} = K)
@@ -1141,7 +1155,8 @@ handle_group_after_connection_node_disconnected(_Meta, ConnPid,
     Cs1 = lists:foldr(fun(#consumer{status = {_, St},
                                     pid = Pid} = C0,
                           Acc) when Pid =:= ConnPid ->
-                              C1 = csr_status(C0, {?DISCONNECTED, St}),
+                              C1 = csr_status(C0, {?DISCONNECTED, St},
+                                              ts(Meta)),
                               [C1 | Acc];
                          (C, Acc) ->
                               [C | Acc]
@@ -1283,7 +1298,7 @@ map_to_group(_) ->
 
 map_to_consumer(#{<<"pid">> := Pid, <<"subscription_id">> := SubId,
                   <<"owner">> := Owner, <<"active">> := Active}) ->
-    csr(Pid, SubId, Owner, active_to_status(Active));
+    csr(Pid, SubId, Owner, active_to_status(Active), ts());
 map_to_consumer(_) ->
     undefined.
 
@@ -1301,16 +1316,16 @@ is_active({_, ?DEACTIVATING}) ->
 is_active(_) ->
     false.
 
-do_register_consumer(VH, S, -1 = _PI, Name, Pid, Owner, SubId,
+do_register_consumer(VH, S, -1 = _PI, Name, Pid, Owner, SubId, Meta,
                      #?MODULE{groups = StreamGroups0} = State)
   when is_map_key({VH, S, Name}, StreamGroups0) ->
     Group0 = lookup_group(VH, S, Name, StreamGroups0),
 
     Consumer = case lookup_active_consumer(Group0) of
                    {value, _} ->
-                       csr(Pid, SubId, Owner, ?CONN_WAIT);
+                       csr(Pid, SubId, Owner, ?CONN_WAIT, ts(Meta));
                    false ->
-                       csr(Pid, SubId, Owner, ?CONN_ACT)
+                       csr(Pid, SubId, Owner, ?CONN_ACT, ts(Meta))
                end,
     Group1 = add_to_group(Consumer, Group0),
     StreamGroups1 = update_groups(VH, S, Name,
@@ -1326,7 +1341,7 @@ do_register_consumer(VH, S, -1 = _PI, Name, Pid, Owner, SubId,
               end,
 
     {State#?MODULE{groups = StreamGroups1}, {ok, is_active(Status)}, Effects};
-do_register_consumer(VH, S, _PI, Name, Pid, Owner, SubId,
+do_register_consumer(VH, S, _PI, Name, Pid, Owner, SubId, Meta,
                      #?MODULE{groups = StreamGroups0} = State)
   when is_map_key({VH, S, Name}, StreamGroups0) ->
     Group0 = lookup_group(VH, S, Name, StreamGroups0),
@@ -1335,31 +1350,31 @@ do_register_consumer(VH, S, _PI, Name, Pid, Owner, SubId,
         case Group0 of
             #group{consumers = []} ->
                 %% first consumer in the group, it's the active one
-                Consumer0 = csr(Pid, SubId, Owner, ?CONN_ACT),
+                Consumer0 = csr(Pid, SubId, Owner, ?CONN_ACT, ts(Meta)),
                 G1 = add_to_group(Consumer0, Group0),
                 {G1,
                  [notify_csr_effect(Consumer0, S, Name, true)]};
             _G ->
-                Consumer0 = csr(Pid, SubId, Owner, ?CONN_WAIT),
+                Consumer0 = csr(Pid, SubId, Owner, ?CONN_WAIT, ts(Meta)),
                 G1 = add_to_group(Consumer0, Group0),
-                maybe_rebalance_group(G1, {VH, S, Name})
+                maybe_rebalance_group(G1, {VH, S, Name}, Meta)
         end,
         StreamGroups1 = update_groups(VH, S, Name,
                                       Group1,
                                       StreamGroups0),
     {value, #consumer{status = Status}} = lookup_consumer(Pid, SubId, Group1),
     {State#?MODULE{groups = StreamGroups1}, {ok, is_active(Status)}, Effects};
-do_register_consumer(_, _, _, _, _, _, _, State) ->
+do_register_consumer(_, _, _, _, _, _, _, _, State) ->
     {State, {ok, false}, []}.
 
-handle_consumer_removal(#group{consumers = []} = G, _, _, _) ->
+handle_consumer_removal(#group{consumers = []} = G, _, _, _, _) ->
     {G, []};
 handle_consumer_removal(#group{partition_index = -1} = Group0,
-                        S, Name, ActiveRemoved) ->
+                        S, Name, ActiveRemoved, Meta) ->
     case ActiveRemoved of
         true ->
             %% this is the active consumer we remove, computing the new one
-            Group1 = compute_active_consumer(Group0),
+            Group1 = compute_active_consumer(Group0, Meta),
             case lookup_active_consumer(Group1) of
                 {value, Csr} ->
                     %% creating the side effect to notify the new active consumer
@@ -1372,7 +1387,7 @@ handle_consumer_removal(#group{partition_index = -1} = Group0,
             %% not the active consumer, nothing to do.
             {Group0, []}
     end;
-handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved) ->
+handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved, Meta) ->
     case lookup_active_consumer(Group0) of
         {value, CurrentActive} ->
             case evaluate_active_consumer(Group0) of
@@ -1384,7 +1399,8 @@ handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved) ->
                 _ ->
                     %% there's a change, telling the active it's not longer active
                     {update_consumer_state_in_group(Group0, CurrentActive,
-                                                    {?CONNECTED, ?DEACTIVATING}),
+                                                    {?CONNECTED, ?DEACTIVATING},
+                                                    Meta),
                      [notify_csr_effect(CurrentActive,
                                         Stream, ConsumerName, false, true)]}
             end;
@@ -1397,7 +1413,8 @@ handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved) ->
                             {Group0, []};
                         Csr ->
                             {update_consumer_state_in_group(Group0, Csr,
-                                                            {?CONNECTED, ?ACTIVE}),
+                                                            {?CONNECTED, ?ACTIVE},
+                                                            Meta),
                              [notify_csr_effect(Csr, Stream, ConsumerName, true)]}
                     end;
                 false ->
@@ -1476,11 +1493,11 @@ has_consumers_from_pid(#group{consumers = Consumers}, Pid) ->
               Consumers).
 
 compute_active_consumer(#group{partition_index = -1,
-                               consumers = Crs} = Group)
+                               consumers = Crs} = Group, _)
   when length(Crs) == 0 ->
     Group;
 compute_active_consumer(#group{partition_index = -1,
-                               consumers = Consumers} = G) ->
+                               consumers = Consumers} = G, Meta) ->
     case lists:search(fun(#consumer{status = S}) ->
                               S =:= ?DISCONN_ACT
                       end, Consumers) of
@@ -1496,10 +1513,10 @@ compute_active_consumer(#group{partition_index = -1,
                         lists:foldr(
                           fun(C, L) when ?SAME_CSR(AC, C) ->
                                   %% change status of new active
-                                  [csr_status(C, ?CONN_ACT) | L];
+                                  [csr_status(C, ?CONN_ACT, ts(Meta)) | L];
                              (#consumer{status = {?CONNECTED, _}} = C, L) ->
                                   %% other connected consumers are set to "waiting"
-                                  [csr_status(C, ?CONN_WAIT) | L];
+                                  [csr_status(C, ?CONN_WAIT, ts(Meta)) | L];
                              (C, L) ->
                                   %% other consumers stay the same
                                   [C | L]
@@ -1572,18 +1589,19 @@ update_groups(VH, S, Name, G, Groups) ->
     Groups#{{VH, S, Name} => G}.
 
 update_consumer_state_in_group(#group{consumers = Consumers0} = G, Csr,
-                               NewStatus) ->
+                               NewStatus, Meta) ->
     CS1 = lists:map(fun(C0) when ?SAME_CSR(C0, Csr) ->
-                               csr_status(C0, NewStatus);
+                               csr_status(C0, NewStatus, ts(Meta));
                        (C) ->
                             C
                     end,
                     Consumers0),
     G#group{consumers = CS1}.
 
-update_connected_consumers(#group{consumers = Consumers0} = G, NewStatus) ->
+update_connected_consumers(#group{consumers = Consumers0} = G, NewStatus,
+                           Meta) ->
     Consumers1 = lists:map(fun(#consumer{status = {?CONNECTED, _}} = C) ->
-                                   csr_status(C, NewStatus);
+                                   csr_status(C, NewStatus, ts(Meta));
                               (C) ->
                                    C
                            end, Consumers0),
@@ -1620,18 +1638,14 @@ compute_node_pid_group_dependencies(Node, Groups) ->
                                   end, Acc, Consumers)
               end, #{}, Groups).
 
--spec csr(pid(), subscription_id(), owner(), consumer_status()) ->
+-spec csr(pid(), subscription_id(), owner(), consumer_status(), timestamp()) ->
     consumer().
-csr(Pid, Id, Owner, Status) ->
+csr(Pid, Id, Owner, Status, Ts) ->
     #consumer{pid = Pid,
               subscription_id = Id,
               owner = Owner,
               status = Status,
-              ts = ts()}.
-
--spec csr_status(consumer(), consumer_status()) -> consumer().
-csr_status(C, Status) ->
-    csr_status(C, Status, ts()).
+              ts = Ts}.
 
 -spec csr_status(consumer(), consumer_status(), timestamp()) -> consumer().
 csr_status(C, Status, Ts) ->
@@ -1646,6 +1660,12 @@ disconnect_ts(#{system_time := Ts, machine_version := Vsn})
   when ?V8_OR_MORE(Vsn) ->
     Ts;
 disconnect_ts(_) ->
+    ts().
+
+ts(#{system_time := Ts, machine_version := Vsn})
+  when ?V9_OR_MORE(Vsn) ->
+    Ts;
+ts(_) ->
     ts().
 
 node_disconnected_timer_effect(Pid, T) ->
