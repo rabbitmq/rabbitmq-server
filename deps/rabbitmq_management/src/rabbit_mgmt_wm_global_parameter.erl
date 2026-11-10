@@ -15,6 +15,22 @@
 
 -import(rabbit_misc, [pget/2]).
 
+<<<<<<< HEAD
+=======
+-define(CLUSTER_NAME, <<"cluster_name">>).
+-define(INTERNAL_CLUSTER_ID, <<"internal_cluster_id">>).
+-define(IMPORTED_DEFINITION_HASH_VALUE, <<"imported_definition_hash_value">>).
+-define(MQTT_PORT_TO_VHOST_MAPPING, <<"mqtt_port_to_vhost_mapping">>).
+-define(MQTT_DEFAULT_VHOSTS, <<"mqtt_default_vhosts">>).
+-define(CLUSTER_TAGS, <<"cluster_tags">>).
+-define(ADMINISTRATOR_ONLY_PARAMETERS, [?CLUSTER_NAME,
+                                        ?INTERNAL_CLUSTER_ID,
+                                        ?IMPORTED_DEFINITION_HASH_VALUE,
+                                        ?MQTT_PORT_TO_VHOST_MAPPING,
+                                        ?MQTT_DEFAULT_VHOSTS,
+                                        ?CLUSTER_TAGS]).
+
+>>>>>>> 58d130f (HTTP API: refactor global parameter endpoints, take 2)
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
@@ -73,4 +89,11 @@ name(ReqData) ->
     catch error:badarg -> undefined
     end.
 
+<<<<<<< HEAD
 raw_name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).
+=======
+requires_administrator(Method, Name) when Method =:= <<"PUT">>; Method =:= <<"DELETE">> ->
+    lists:member(Name, ?ADMINISTRATOR_ONLY_PARAMETERS);
+requires_administrator(_, _) ->
+    false.
+>>>>>>> 58d130f (HTTP API: refactor global parameter endpoints, take 2)

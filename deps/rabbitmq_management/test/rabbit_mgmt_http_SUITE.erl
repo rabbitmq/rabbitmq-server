@@ -229,6 +229,11 @@ all_tests() -> [
     if_empty_unused_test,
     parameters_test,
     global_parameters_test,
+<<<<<<< HEAD
+=======
+    global_parameters_cluster_identity_test,
+    global_parameters_names_test,
+>>>>>>> 58d130f (HTTP API: refactor global parameter endpoints, take 2)
     disabled_operator_policy_test,
     operator_policy_test,
     issue67_test,
@@ -4259,6 +4264,75 @@ global_parameters_test(Config) ->
     InitialCount = length(http_get(Config, "/global-parameters")),
     passed.
 
+<<<<<<< HEAD
+=======
+global_parameters_cluster_identity_test(Config) ->
+    http_put(Config, "/users/policy-admin", [{password, <<"secret">>},
+                                             {tags, <<"policymaker">>}], {group, '2xx'}),
+    OriginalName = http_get(Config, "/global-parameters/cluster_name", ?OK),
+    OriginalId = http_get(Config, "/global-parameters/internal_cluster_id", ?OK),
+
+    http_put(Config, "/global-parameters/cluster_name",
+             [{value, <<"rabbit@evil">>}], "policy-admin", "secret", ?NOT_AUTHORISED),
+    http_put(Config, "/global-parameters/internal_cluster_id",
+             [{value, <<"rabbitmq-cluster-id-0000">>}], "policy-admin", "secret", ?NOT_AUTHORISED),
+    http_delete(Config, "/global-parameters/cluster_name",
+                "policy-admin", "secret", ?NOT_AUTHORISED),
+    http_delete(Config, "/global-parameters/internal_cluster_id",
+                "policy-admin", "secret", ?NOT_AUTHORISED),
+    ?assertEqual(OriginalName, http_get(Config, "/global-parameters/cluster_name", ?OK)),
+    ?assertEqual(OriginalId, http_get(Config, "/global-parameters/internal_cluster_id", ?OK)),
+
+    http_put(Config, "/global-parameters/ops_notes",
+             [{value, [{owner, <<"platform-team">>}]}], "policy-admin", "secret", {group, '2xx'}),
+    http_delete(Config, "/global-parameters/ops_notes",
+                "policy-admin", "secret", {group, '2xx'}),
+
+    http_put(Config, "/global-parameters/cluster_name",
+             [{value, <<"rabbit@prod-east">>}], {group, '2xx'}),
+    #{value := <<"rabbit@prod-east">>} = http_get(Config, "/global-parameters/cluster_name", ?OK),
+    http_put(Config, "/cluster-name", [{name, <<"rabbit@prod-west">>}], {group, '2xx'}),
+    #{value := <<"rabbit@prod-west">>} = http_get(Config, "/global-parameters/cluster_name", ?OK),
+
+    http_delete(Config, "/global-parameters/internal_cluster_id", ?BAD_REQUEST),
+    ?assertEqual(OriginalId, http_get(Config, "/global-parameters/internal_cluster_id", ?OK)),
+
+    http_put(Config, "/global-parameters/cluster_name",
+             [{value, maps:get(value, OriginalName)}], {group, '2xx'}),
+    http_delete(Config, "/users/policy-admin", {group, '2xx'}),
+    passed.
+
+global_parameters_names_test(Config) ->
+    http_put(Config, "/users/policy-admin", [{password, <<"secret">>},
+                                             {tags, <<"policymaker">>}], {group, '2xx'}),
+    OriginalTags = http_get(Config, "/global-parameters/cluster_tags", ?OK),
+    Params = [{"imported_definition_hash_value", <<"0123456789abcdef">>},
+              {"mqtt_port_to_vhost_mapping", [{<<"1883">>, <<"/">>}]},
+              {"mqtt_default_vhosts", [{<<"CN=client">>, <<"/">>}]},
+              {"cluster_tags", [{<<"region">>, <<"eu">>}]}],
+    lists:foreach(
+      fun({Name, Value}) ->
+              Path = "/global-parameters/" ++ Name,
+              http_put(Config, Path, [{value, Value}], "policy-admin", "secret", ?NOT_AUTHORISED),
+              http_delete(Config, Path, "policy-admin", "secret", ?NOT_AUTHORISED),
+              http_put(Config, Path, [{value, Value}], {group, '2xx'}),
+              http_delete(Config, Path, "policy-admin", "secret", ?NOT_AUTHORISED),
+              #{value := _} = http_get(Config, Path, ?OK),
+              http_delete(Config, Path, {group, '2xx'}),
+              http_get(Config, Path, ?NOT_FOUND)
+      end, Params),
+    http_put(Config, "/global-parameters/cluster_tags",
+             [{value, maps:get(value, OriginalTags)}], {group, '2xx'}),
+
+    http_put(Config, "/global-parameters/ops_notes",
+             [{value, [{owner, <<"platform-team">>}]}], "policy-admin", "secret", {group, '2xx'}),
+    http_delete(Config, "/global-parameters/ops_notes",
+                "policy-admin", "secret", {group, '2xx'}),
+
+    http_delete(Config, "/users/policy-admin", {group, '2xx'}),
+    passed.
+
+>>>>>>> 58d130f (HTTP API: refactor global parameter endpoints, take 2)
 operator_policy_test(Config) ->
     register_parameters_and_policy_validator(Config),
     PolicyPos  = #{vhost      => <<"/">>,
