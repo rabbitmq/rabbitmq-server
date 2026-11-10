@@ -161,7 +161,21 @@ filter_by_field_test(_) ->
     ?assertEqual(false, F("missing.deeper", "x", "false")),
     ?assertEqual(false, F("client_properties.capabilities", "x", "false")),
     ?assertEqual(false, F("client_properties.array", "a", "false")),
-    ?assertEqual(false, F("name.nested", "x", "false")).
+    ?assertEqual(false, F("name.nested", "x", "false")),
+
+    MqttItem = [{name, <<"[::1]:59091 -> [::1]:1883">>},
+                {client_properties, #{client_id => <<"mqtt-sensor-gateway">>,
+                                      user_property => #{<<"region">> => <<"eu">>}}}],
+    M = fun(Field, Value) ->
+                Path = [list_to_binary(K) || K <- string:lexemes(Field, ".")],
+                rabbit_mgmt_util:maybe_filter_by_keyword(Path, Value, MqttItem, "false")
+        end,
+    ?assertEqual(true, M("client_properties.client_id", "SENSOR")),
+    ?assertEqual(false, M("client_properties.client_id", "orders")),
+    ?assertEqual(true, M("client_properties.user_property.region", "eu")),
+    UnknownKey = "no_such_key_" ++ integer_to_list(erlang:unique_integer([positive])),
+    ?assertEqual(false, M("client_properties." ++ UnknownKey, "x")),
+    ?assertError(badarg, list_to_existing_atom(UnknownKey)).
 
 has_json_extension_test(_Config) ->
     %% Standard .json extension

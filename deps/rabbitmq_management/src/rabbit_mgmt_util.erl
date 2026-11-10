@@ -702,7 +702,16 @@ get_dotted_value0([Key | Keys], Item) ->
     get_dotted_value0(Keys, pget_bin(list_to_binary(Key), Item, [])).
 
 pget_bin(Key, Map, Default) when is_map(Map) ->
-    maps:get(Key, Map, Default);
+    case Map of
+        #{Key := V} ->
+            V;
+        _ ->
+            try
+                maps:get(binary_to_existing_atom(Key), Map, Default)
+            catch
+                error:badarg -> Default
+            end
+    end;
 pget_bin(Key, List, Default) when is_list(List) ->
     case lists:search(fun ({K, _V}) -> a2b(K) =:= Key;
                           (_)       -> false
