@@ -27,6 +27,7 @@ groups() ->
        logical_operators,
        comparison_operators,
        arithmetic_operators,
+       arithmetic_overflow,
        single_quoted_strings,
        double_quoted_strings,
        binary_constants,
@@ -242,6 +243,22 @@ arithmetic_operators(_Config) ->
     %% "Comparison or arithmetic with an unknown value always yields an unknown value."
     false = match("absent + 4 = 5", app_props()),
     false = match("2 * absent = 0", app_props()).
+
+arithmetic_overflow(_Config) ->
+    Props = [{{utf8, <<"big">>}, {double, 1.7976931348623157e308}},
+             {{utf8, <<"tiny">>}, {double, 5.0e-324}},
+             {{utf8, <<"one">>}, {double, 1.0}}],
+    HugeInt = lists:duplicate(400, $9),
+    false = match("big * 2 > 100", Props),
+    false = match("big + big > 100", Props),
+    false = match("-big - big < 100", Props),
+    false = match("one / tiny > 100", Props),
+    false = match(HugeInt ++ " * 1.0 > 100", Props),
+    false = match("one * " ++ HugeInt ++ " > 100", Props),
+    %% The result is undefined, so the negation does not match either.
+    false = match("NOT (big * 2 > 100)", Props),
+    true = match("big * 0.5 > 100", Props),
+    true = match("one / 4 = 0.25", Props).
 
 single_quoted_strings(_Config) ->
     %% "Two strings are equal if and only if they contain the same sequence of characters."
