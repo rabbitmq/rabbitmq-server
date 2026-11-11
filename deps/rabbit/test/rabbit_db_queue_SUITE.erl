@@ -36,6 +36,7 @@
          set/1, set1/1,
          delete/1, delete1/1,
          delete_exclusive_queue/1, delete_exclusive_queue1/1,
+         delete_if_type_state/1, delete_if_type_state1/1,
          update/1, update1/1,
          update_decorators/1, update_decorators1/1,
          exists/1, exists1/1,
@@ -87,6 +88,7 @@ all_tests() ->
      set,
      delete,
      delete_exclusive_queue,
+     delete_if_type_state,
      update,
      update_decorators,
      exists,
@@ -403,6 +405,37 @@ delete_exclusive_queue1(_Config) ->
     unlink(NotOwner),
     Owner ! stop,
     NotOwner ! stop,
+    passed.
+
+delete_if_type_state(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, delete_if_type_state1, [Config]).
+
+delete_if_type_state1(_Config) ->
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-type-state-queue">>),
+    Node = node(),
+    OldNodes = #{Node => <<"old-uid">>},
+    NewNodes = #{Node => <<"new-uid">>},
+    Conditions = fun(Nodes) ->
+                         Pattern = amqqueue:set_type_state(
+                                     amqqueue:pattern_match_all(),
+                                     #{nodes => Nodes}),
+                         [#if_data_matches{pattern = Pattern}]
+                 end,
+    Q = new_queue(QName, rabbit_quorum_queue),
+    OldQ = amqqueue:set_type_state(Q, #{nodes => OldNodes}),
+    NewQ = amqqueue:set_type_state(Q, #{nodes => NewNodes}),
+    ?assertEqual(ok, rabbit_db_queue:set(NewQ)),
+    %% a delete that read the old incarnation does not remove the new one
+    ?assertEqual(ok, rabbit_db_queue:delete_if(QName, Conditions(OldNodes), false)),
+    ?assertEqual({ok, NewQ}, rabbit_db_queue:get(QName)),
+    ?assertEqual(ok, rabbit_db_queue:set(OldQ)),
+    ?assertEqual({ok, OldQ}, rabbit_db_queue:get(QName)),
+    ?assertEqual(ok, rabbit_db_queue:delete_if(QName, Conditions(NewNodes), false)),
+    ?assertEqual({ok, OldQ}, rabbit_db_queue:get(QName)),
+    Deletions = rabbit_db_queue:delete_if(QName, Conditions(OldNodes), false),
+    ?assertEqual(rabbit_binding:new_deletions(), Deletions),
+    ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
     passed.
 
 update(Config) ->
