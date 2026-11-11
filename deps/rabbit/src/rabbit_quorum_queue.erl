@@ -112,6 +112,7 @@
 -include("amqqueue.hrl").
 -include("mc.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("khepri/include/khepri.hrl").
 
 -rabbit_boot_step(
    {rabbit_quorum_queue_type,
@@ -429,6 +430,9 @@ start_cluster(Q) ->
                 error:Error ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             end;
+        {existing, ExistingQ} when ?amqqueue_state_is(ExistingQ, deleting) ->
+            {protocol_error, not_found, "~ts is being deleted",
+             [rabbit_misc:rs(QName)]};
         {existing, _} = Ex ->
             Ex;
         {error, timeout} ->
@@ -610,7 +614,9 @@ become_leader(_QName, _Name) ->
     ok.
 
 become_leader0(QName, Name) ->
-    Fun = fun (Q1) ->
+    Fun = fun (Q1) when ?amqqueue_state_is(Q1, deleting) ->
+                  amqqueue:set_pid(Q1, {Name, node()});
+              (Q1) ->
                   amqqueue:set_state(
                     amqqueue:set_pid(Q1, {Name, node()}),
                     live)
@@ -1201,6 +1207,7 @@ restart_server({_, _} = Ref) ->
              boolean(), boolean(),
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()} |
+    {error, timeout} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, true, _IfEmpty, _ActingUser) when ?amqqueue_is_quorum(Q) ->
     {protocol_error, not_implemented,
@@ -1211,6 +1218,98 @@ delete(Q, _IfUnused, true, _ActingUser) when ?amqqueue_is_quorum(Q) ->
      "cannot delete ~ts. queue.delete operations with if-empty flag set are not supported by quorum queues",
      [rabbit_misc:rs(amqqueue:get_name(Q))]};
 delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+    case rabbit_feature_flags:is_enabled(quorum_queue_deleting_state) of
+        true ->
+            delete_as_owner(amqqueue:get_name(Q), ActingUser);
+        false ->
+            delete_cluster_and_record(Q, ActingUser)
+    end.
+
+%% The owner is a process of its own, because a caller such as a channel
+%% outlives a delete attempt that fails, and would block later deletes.
+delete_as_owner(QName, ActingUser) ->
+    Caller = self(),
+    {Pid, MRef} = spawn_monitor(
+                    fun() ->
+                            Caller ! {self(), delete_owned(QName, ActingUser)}
+                    end),
+    receive
+        {Pid, Result} ->
+            erlang:demonitor(MRef, [flush]),
+            Result;
+        {'DOWN', MRef, process, Pid, Reason} ->
+            {protocol_error, internal_error, "Cannot delete ~ts: ~255p",
+             [rabbit_misc:rs(QName), Reason]}
+    end.
+
+delete_owned(QName, ActingUser) ->
+    case claim_delete(QName) of
+        {ok, Q} ->
+            delete_cluster_and_record(Q, ActingUser);
+        {error, being_deleted} ->
+            {protocol_error, resource_locked, "~ts is being deleted",
+             [rabbit_misc:rs(QName)]};
+        {error, timeout} = Err ->
+            Err;
+        {error, not_quorum} ->
+            {ok, 0};
+        not_found ->
+            {ok, 0};
+        {error, Reason} ->
+            {protocol_error, internal_error, "Cannot delete ~ts: ~255p",
+             [rabbit_misc:rs(QName), Reason]}
+    end.
+
+claim_delete(QName) ->
+    Owner = self(),
+    rabbit_db_queue:try_update(
+      QName,
+      fun(Q) when not ?amqqueue_is_quorum(Q) ->
+              {error, not_quorum};
+         (Q) when ?amqqueue_state_is(Q, deleting) ->
+              case is_delete_owner_alive(Q) of
+                  false ->
+                      {ok, set_deleting(Q, Owner)};
+                  _ ->
+                      {error, being_deleted}
+              end;
+         (Q) ->
+              {ok, set_deleting(Q, Owner)}
+      end, #{}).
+
+set_deleting(Q, Owner) ->
+    amqqueue:set_state(
+      amqqueue:update_type_state(
+        Q, fun(TS) -> TS#{deleting_owner => Owner} end),
+      deleting).
+
+%% `erlang:is_process_alive/1' returns `false' for a pid from before its
+%% node restarted.
+is_delete_owner_alive(Q) ->
+    case amqqueue:get_type_state(Q) of
+        #{deleting_owner := Pid} ->
+            Node = node(Pid),
+            case rabbit_nodes:list_members() of
+                [] ->
+                    unknown;
+                Members ->
+                    case lists:member(Node, Members) of
+                        true ->
+                            try
+                                erpc:call(Node, erlang, is_process_alive,
+                                          [Pid], ?RPC_TIMEOUT)
+                            catch
+                                _:_ -> unknown
+                            end;
+                        false ->
+                            false
+                    end
+            end;
+        _ ->
+            false
+    end.
+
+delete_cluster_and_record(Q, ActingUser) ->
     {Name, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     QNodes = get_nodes(Q),
@@ -1327,7 +1426,15 @@ force_delete_member(ServerId, UId) ->
       Ret :: ok | {error, timeout}.
 
 delete_queue_data(Queue, ActingUser) ->
-    rabbit_amqqueue:internal_delete(Queue, ActingUser).
+    case amqqueue:get_type_state(Queue) of
+        #{deleting_owner := Owner} ->
+            Pattern = amqqueue:pattern_match_on_type_state(
+                        #{deleting_owner => Owner}),
+            rabbit_amqqueue:internal_delete_if(
+              Queue, [#if_data_matches{pattern = Pattern}], false, ActingUser);
+        _ ->
+            rabbit_amqqueue:internal_delete(Queue, ActingUser)
+    end.
 
 
 delete_immediately(Queue) ->
@@ -1829,6 +1936,9 @@ add_member(Q, Node, Membership) ->
     do_add_member(Q, Node, Membership, ?MEMBER_CHANGE_TIMEOUT).
 
 
+do_add_member(Q, _Node, _Membership, _Timeout)
+  when ?amqqueue_state_is(Q, deleting) ->
+    {error, queue_being_deleted};
 do_add_member(Q0, Node, Membership, Timeout)
   when ?is_amqqueue(Q0) andalso
        ?amqqueue_is_quorum(Q0) andalso
@@ -2391,6 +2501,8 @@ i(memory, Q) when ?is_amqqueue(Q) ->
         error:badarg ->
             0
     end;
+i(state, Q) when ?amqqueue_state_is(Q, deleting) ->
+    deleting;
 i(state, Q) when ?is_amqqueue(Q) ->
     {Name, Node} = case find_leader(Q) of
                        undefined ->

@@ -38,6 +38,7 @@
          delete_exclusive_queue/1, delete_exclusive_queue1/1,
          delete_if_type_state/1, delete_if_type_state1/1,
          update/1, update1/1,
+         try_update/1, try_update1/1,
          update_decorators/1, update_decorators1/1,
          exists/1, exists1/1,
          get_all_durable/1, get_all_durable1/1,
@@ -90,6 +91,7 @@ all_tests() ->
      delete_exclusive_queue,
      delete_if_type_state,
      update,
+     try_update,
      update_decorators,
      exists,
      get_all_durable,
@@ -417,8 +419,7 @@ delete_if_type_state1(_Config) ->
     OldNodes = #{Node => <<"old-uid">>},
     NewNodes = #{Node => <<"new-uid">>},
     Conditions = fun(Nodes) ->
-                         Pattern = amqqueue:set_type_state(
-                                     amqqueue:pattern_match_all(),
+                         Pattern = amqqueue:pattern_match_on_type_state(
                                      #{nodes => Nodes}),
                          [#if_data_matches{pattern = Pattern}]
                  end,
@@ -452,6 +453,39 @@ update1(_Config) ->
     ?assertEqual(Q2, rabbit_db_queue:update(QName, fun(_) -> Q2 end)),
     ?assertEqual({ok, Q2}, rabbit_db_queue:get(QName)),
     ?assertEqual(not_found, rabbit_db_queue:update(QName2, fun(_) -> Q2 end)),
+    passed.
+
+try_update(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, try_update1, [Config]).
+
+try_update1(_Config) ->
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
+    QName2 = rabbit_misc:r(?VHOST, queue, <<"test-queue2">>),
+    Q = new_queue(QName, rabbit_classic_queue),
+    Q1 = amqqueue:set_state(Q, stopped),
+    Q2 = amqqueue:set_state(Q, crashed),
+    ?assertEqual(ok, rabbit_db_queue:set(Q)),
+    ?assertEqual({error, nope},
+                 rabbit_db_queue:try_update(QName, fun(_) -> {error, nope} end, #{})),
+    ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
+    %% A write between the read and the update makes it read again.
+    Self = self(),
+    Fun = fun(Current) ->
+                  Self ! {read, Current},
+                  case Current of
+                      Q ->
+                          Q1 = rabbit_db_queue:update(QName, fun(_) -> Q1 end),
+                          {ok, Q2};
+                      Q1 ->
+                          {ok, Q2}
+                  end
+          end,
+    ?assertEqual({ok, Q2}, rabbit_db_queue:try_update(QName, Fun, #{})),
+    ?assertEqual({ok, Q2}, rabbit_db_queue:get(QName)),
+    ?assertEqual([Q, Q1], [receive {read, R} -> R after 0 -> none end
+                           || _ <- [1, 2]]),
+    ?assertEqual(not_found,
+                 rabbit_db_queue:try_update(QName2, fun(Q0) -> {ok, Q0} end, #{})),
     passed.
 
 update_decorators(Config) ->

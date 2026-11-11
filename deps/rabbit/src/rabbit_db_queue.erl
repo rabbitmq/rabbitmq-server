@@ -35,6 +35,7 @@
          delete_if/3,
          update/2,
          update/3,
+         try_update/3,
          update_decorators/2,
          exists/1,
          foreach/2
@@ -515,6 +516,47 @@ update(QName, Fun, Options) ->
                 Err -> Err
             end;
         _  ->
+            not_found
+    end.
+
+-spec try_update(QName, UpdateFun, Options) -> Ret when
+      QName :: rabbit_amqqueue:name(),
+      Queue :: amqqueue:amqqueue(),
+      UpdateFun :: fun((Queue) -> {ok, NewQueue} | {error, Reason}),
+      NewQueue :: amqqueue:amqqueue(),
+      Reason :: term(),
+      Options :: #{timeout => timeout()},
+      Ret :: {ok, NewQueue} | {error, Reason} | not_found |
+             rabbit_khepri:timeout_error().
+%% @doc Updates an existing queue record using `UpdateFun', unless
+%% `UpdateFun' returns an error.
+%%
+%% `UpdateFun' is called again if the record changed after it was read.
+%%
+%% @private
+
+try_update(QName, Fun, Options) ->
+    Path = khepri_queue_path(QName),
+    case rabbit_khepri:adv_get(Path, Options) of
+        {ok, #{Path := #{data := Q, payload_version := Vsn}}} ->
+            case Fun(Q) of
+                {ok, Q1} ->
+                    UpdatePath = khepri_path:combine_with_conditions(
+                                   Path, [#if_payload_version{version = Vsn}]),
+                    case rabbit_khepri:put(UpdatePath, Q1, Options) of
+                        ok ->
+                            {ok, Q1};
+                        {error, {khepri, mismatching_node, _}} ->
+                            try_update(QName, Fun, Options);
+                        {error, _} = Err ->
+                            Err
+                    end;
+                {error, _} = Err ->
+                    Err
+            end;
+        {error, timeout} = Err ->
+            Err;
+        _ ->
             not_found
     end.
 

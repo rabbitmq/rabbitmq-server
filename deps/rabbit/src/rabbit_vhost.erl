@@ -652,6 +652,8 @@ assert_benign(ok, _)                 -> ok;
 assert_benign({ok, _}, _)            -> ok;
 assert_benign({ok, _, _}, _)         -> ok;
 assert_benign({error, not_found}, _) -> ok;
+%% Another delete of the quorum queue is in progress.
+assert_benign({protocol_error, resource_locked, _, _}, _) -> ok;
 assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the database entries here is safe. If/when the down node
     %% restarts, it will clear out the on-disk storage of the queue.
