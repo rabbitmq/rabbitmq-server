@@ -77,6 +77,8 @@ groups() ->
                                             cleanup_data_dir,
                                             declare_with_leftover_members,
                                             add_member_with_leftover_member,
+                                            boot_deletes_leftover_members,
+                                            cleanup_data_dir_needs_metadata_store,
                                             channel_handles_ra_event,
                                             declare_during_node_down,
                                             projection_timeout_cleanup,
@@ -4039,6 +4041,77 @@ add_member_with_leftover_member(Config) ->
     #{nodes := #{Other := UId}} = amqqueue:get_type_state(Q1),
     ?assertNotEqual(LeftoverUId, UId),
     ?assertEqual(UId, rpc:call(Other, ra_directory, uid_of, [quorum_queues, RaName])),
+    ok.
+
+boot_deletes_leftover_members(Config) ->
+    [Server1, Server2, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    Unlisted = <<QQ/binary, "-unlisted">>,
+    Kept = <<QQ/binary, "-kept">>,
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    [begin
+         ?assertEqual({'queue.declare_ok', Q, 0, 0}, declare(Ch, Q, Args)),
+         ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, Q), ?DEFAULT_AWAIT)
+     end || Q <- [QQ, Unlisted, Kept]],
+    UIdOn2 = fun(Q) ->
+                     rpc:call(Server2, ra_directory, uid_of,
+                              [quorum_queues, ra_name(Q)])
+             end,
+    DataDir = fun(UId) ->
+                      rpc:call(Server2, ra_env, server_data_dir,
+                               [quorum_queues, UId])
+              end,
+    KeptUId = UIdOn2(Kept),
+    [DeletedDir, UnlistedDir, KeptDir] =
+        [DataDir(UIdOn2(Q)) || Q <- [QQ, Unlisted, Kept]],
+    StrayDir = filename:join(filename:dirname(KeptDir), "STRAYUID"),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    ok = rpc:call(Server1, rabbit_quorum_queue, delete_member,
+                  [<<"/">>, Unlisted, Server2]),
+    ok = filelib:ensure_dir(filename:join(StrayDir, "config")),
+    {ok, _} = file:copy(filename:join(KeptDir, "config"),
+                        filename:join(StrayDir, "config")),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+
+    ?assertEqual(undefined, UIdOn2(QQ)),
+    ?assertEqual(undefined, UIdOn2(Unlisted)),
+    ?assertEqual(KeptUId, UIdOn2(Kept)),
+    [?assertNot(filelib:is_dir(Dir))
+     || Dir <- [DeletedDir, UnlistedDir, StrayDir]],
+    ?assert(filelib:is_dir(KeptDir)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, Kept), ?DEFAULT_AWAIT),
+    [amqp_channel:call(Ch, #'queue.delete'{queue = Q}) || Q <- [Unlisted, Kept]],
+    ok.
+
+cleanup_data_dir_needs_metadata_store(Config) ->
+    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    RaName = ra_name(QQ),
+    UId = rpc:call(Server1, ra_directory, uid_of, [quorum_queues, RaName]),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup,
+                       [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    ok = rpc:call(Server1, rabbit_amqqueue, internal_delete, [Q, <<"tests">>]),
+
+    ok = rabbit_ct_broker_helpers:setup_meck(Config),
+    ok = rpc:call(Server1, meck, new, [rabbit_khepri, [passthrough, no_link]]),
+    ok = rpc:call(Server1, meck, expect,
+                  [rabbit_khepri, fence, fun(_) -> {error, timeout} end]),
+    try
+        ?assertEqual(ok, rpc:call(Server1, rabbit_quorum_queue, cleanup_data_dir, [])),
+        ?assertEqual(UId, rpc:call(Server1, ra_directory, uid_of, [quorum_queues, RaName]))
+    after
+        ok = rpc:call(Server1, meck, unload, [rabbit_khepri])
+    end,
+    ?assertEqual(ok, rpc:call(Server1, rabbit_quorum_queue, cleanup_data_dir, [])),
+    ?assertEqual(undefined, rpc:call(Server1, ra_directory, uid_of, [quorum_queues, RaName])),
     ok.
 
 cleanup_data_dir(Config) ->

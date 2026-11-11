@@ -131,6 +131,15 @@
      {requires, rabbit_event},
      {enables, recovery}]}).
 
+%% Runs before peers are notified that this node is up, so that no member can
+%% be added to this node while it runs.
+-rabbit_boot_step(
+   {rabbit_quorum_queue_cleanup_data_dir,
+    [{description, "Quorum queue: delete leftover members"},
+     {mfa, {?MODULE, cleanup_data_dir, []}},
+     {requires, recovery},
+     {enables, pre_flight}]}).
+
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
                  mc:state()}.
@@ -1523,18 +1532,91 @@ retry_delayed(Q, Mode) when ?is_amqqueue(Q) ->
 assign_deferred(_QName, CTag, Tokens, QState) ->
     rabbit_fifo_client:assign_deferred(quorum_ctag(CTag), Tokens, QState).
 
+-spec cleanup_data_dir() -> ok.
 cleanup_data_dir() ->
-    Names = [begin
-                 {Name, _} = amqqueue:get_pid(Q),
-                 Name
-             end
-             || Q <- rabbit_amqqueue:list_by_type(?MODULE),
-                lists:member(node(), get_nodes(Q))],
-    Registered = ra_directory:list_registered(?RA_SYSTEM),
-    Running = Names,
-    _ = [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
-                                       not lists:member(Name, Running)],
+    try
+        ok = rabbit_khepri:fence(?RA_MEMBERS_TIMEOUT),
+        Expected = expected_local_members(),
+        Registered = ra_directory:list_registered(?RA_SYSTEM),
+        _ = [delete_leftover_member(Name, UId)
+             || {Name, UId} <- Registered,
+                is_leftover_member(Name, UId, Expected)],
+        delete_unregistered_data_dirs(Registered, Expected)
+    catch
+        Class:Reason ->
+            ?LOG_WARNING("Skipped the deletion of leftover quorum queue "
+                         "members: ~0p", [{Class, Reason}]),
+            ok
+    end.
+
+%% Records without UIds map to `any`.
+expected_local_members() ->
+    Node = node(),
+    lists:foldl(
+      fun(Q, Acc) ->
+              {Name, _} = amqqueue:get_pid(Q),
+              case amqqueue:get_type_state(Q) of
+                  #{nodes := #{Node := UId}} ->
+                      Acc#{Name => UId};
+                  #{nodes := Nodes} when is_list(Nodes) ->
+                      case lists:member(Node, Nodes) of
+                          true -> Acc#{Name => any};
+                          false -> Acc
+                      end;
+                  _ ->
+                      Acc
+              end
+      end, #{}, rabbit_amqqueue:list_by_type(?MODULE)).
+
+is_leftover_member(Name, UId, Expected) ->
+    case Expected of
+        #{Name := any} -> false;
+        #{Name := UId} -> false;
+        _ -> true
+    end.
+
+delete_leftover_member(Name, UId) ->
+    case is_rabbit_fifo_data_dir(UId) of
+        true ->
+            case force_delete_member({Name, node()}, UId) of
+                ok ->
+                    ?LOG_INFO("Deleted leftover quorum queue member ~ts "
+                              "with UId ~ts", [Name, UId]);
+                Err ->
+                    ?LOG_WARNING("Could not delete leftover quorum queue "
+                                 "member ~ts with UId ~ts: ~0p",
+                                 [Name, UId, Err])
+            end;
+        false ->
+            ok
+    end.
+
+%% A partly completed force delete can leave a data directory behind after
+%% its UId has been unregistered.
+delete_unregistered_data_dirs(Registered, Expected) ->
+    #{data_dir := DataDir} = ra_system:fetch(?RA_SYSTEM),
+    Known = maps:from_keys([UId || {_, UId} <- Registered] ++
+                           [UId || UId <- maps:values(Expected),
+                                   is_binary(UId)], ok),
+    {ok, Entries} = file:list_dir(DataDir),
+    _ = [begin
+             Dir = filename:join(DataDir, Entry),
+             ?LOG_INFO("Deleting unregistered quorum queue data directory "
+                       "~ts", [Dir]),
+             ra_lib:recursive_delete(Dir)
+         end
+         || Entry <- Entries,
+            UId <- [list_to_binary(Entry)],
+            not is_map_key(UId, Known),
+            ra_directory:name_of(?RA_SYSTEM, UId) =:= undefined,
+            is_rabbit_fifo_data_dir(UId)],
     ok.
+
+is_rabbit_fifo_data_dir(UId) ->
+    case ra_log:read_config(ra_env:server_data_dir(?RA_SYSTEM, UId)) of
+        {ok, #{machine := {module, rabbit_fifo, _}}} -> true;
+        _ -> false
+    end.
 
 maybe_delete_data_dir(UId) ->
     _ = ra_directory:unregister_name(?RA_SYSTEM, UId),
