@@ -91,32 +91,36 @@ A delete marks the queue before it touches Ra, and only the process that marked 
 cluster and then the record:
 
  1. Set the record's `state` to `deleting` and store the owner pid in `type_state`, with a
-    compare-and-swap (`rabbit_db_queue:update/3` already writes conditional on the version it read)
+    compare-and-swap on the record version (`rabbit_db_queue:try_update/3`)
  2. If the record is already `deleting`, check whether the owner is alive. If it is, or it cannot be
-    checked, return. If it is dead, take over with the same compare-and-swap
- 3. Delete the Ra cluster, with a timeout on every step
- 4. Remove the record if this process is still the owner. If some members could not be deleted, clear
-    the owner and leave the record in `deleting` for the next delete
+    checked, return a `resource_locked` error. If it is dead, take over with the same compare-and-swap
+ 3. Delete the Ra cluster, as today
+ 4. Remove the record if this process is still the owner
 
 This closes the race. No new incarnation can be declared while the record exists, so the owner's Ra
-deletes by name can only reach this incarnation. No Ra change is needed. A delete that cannot reach
-every member leaves a replicated record of the unfinished delete instead of an orphan, which also covers
-#17137.
+deletes by name can only reach this incarnation. No Ra change is needed.
+
+A delete that cannot reach every member still removes the record, as today, rather than leaving it in
+`deleting`. Otherwise a queue could not be deleted while one of its nodes is down, for example during a
+rolling restart. The boot sweep in change 3 removes those members when their node comes back.
 
 Details:
 
- * The queue stays visible. A declare of a `deleting` queue returns an error such as "queue is being
-   deleted", not `existing`
+ * The queue stays listed, with `deleting` as its state. Declares and other operations that go
+   through `rabbit_amqqueue:with/4` fail with `not_found`, "queue is being deleted", like the other
+   absent states, so a client that polls with a passive declare until the queue is gone still works
  * The owner is a short-lived worker, not the caller. A channel or HTTP handler can outlive its delete
    attempt and would block every later delete
- * The owner check is `erpc:call(Node, erlang, is_process_alive, [Pid], Timeout)`. `false` means dead.
-   So do `badarg`, which is expected for a pid from before its node restarted (to be confirmed), and a
-   node that has left the cluster. An `erpc` error means the owner may be alive. A monitor is not used
-   because confirming a live owner would mean waiting for a timeout
- * `become_leader0/2` sets the state to `live` on every leader repair. It and the other
-   `amqqueue:set_state/2` callers must keep `deleting`. `i(state, Q)` must report it
- * `force_delete_queue/1` waits `infinity` today and needs a timeout, since a stuck owner blocks the name
- * It needs a feature flag, since older nodes would ignore the marker
+ * The owner check is `erpc:call(Node, erlang, is_process_alive, [Pid], Timeout)`. `false` means dead,
+   and that is also what it returns for a pid from before its node restarted (checked on OTP 29). An
+   owner on a node that is no longer a cluster member is dead. An `erpc` error means the owner may be
+   alive. A monitor is not used because confirming a live owner would mean waiting for a timeout
+ * `become_leader0/2` keeps `deleting` on leader repair, `i(state, Q)` reports it, and `add_member`
+   refuses a `deleting` queue, so that reconciliation does not grow it while it is deleted
+ * A vhost delete treats a `resource_locked` delete as done, since the vhost delete removes the record
+ * It needs a feature flag, `quorum_queue_deleting_state`, since older nodes would ignore the marker
+
+Status: implemented on a separate branch, on top of changes 1 to 3.
 
 Rejected alternatives: a UID condition on the record delete alone (a stale delete can still kill the new
 Ra cluster by name, and the condition then keeps a record with no cluster behind it), and a UID-guarded
@@ -125,6 +129,8 @@ Ra cluster by name, and the condition then keeps a record with no cluster behind
 ## Known gaps
 
  * Without change 4, the delete race stays, and changes 2 and 3 clean up after it
+ * A `deleting` queue whose owner died stays until it is deleted again. `recover/2` starts its local
+   member at boot
  * A stale member on a node that was unreachable while its queue was redeclared has the wrong UID and
    is only removed when that node restarts
  * An orphan whose name is never reused, on a node that never restarts, keeps its disk and memory
@@ -148,13 +154,13 @@ Ra cluster by name, and the condition then keeps a record with no cluster behind
  * Boot sweep: removes a member with no record, one left by `delete_member` while its node was down,
    and an unregistered data directory, and keeps members the record lists (done). Deletes nothing if the
    fence fails (done). A member with a different UID is handled by `recover/2` and not tested separately
- * Change 4: the #17457 reproduction leaves a consistent state. A delete while the owner is alive returns.
-   One after the owner died takes over, but two cannot both take over. No takeover when the owner's node
-   is unreachable, but a takeover after it restarted. `deleting` survives a leader change. A declare of a
-   `deleting` queue fails
+ * Change 4: a second delete while the first one runs fails, and a redeclare after the first one
+   succeeds (done). A delete while the owner is alive fails, as do a declare and `add_member`, and a
+   delete after the owner died takes over (done). No takeover while the owner's node is down, and a
+   takeover after it restarted (done). `deleting` survives a leader change (done). The compare-and-swap
+   reads the record again after a concurrent write (done, in `rabbit_db_queue_SUITE`)
 
 ## Open questions
 
  * Keep anything from #17214, such as the `queue_force_deleted` event?
- * Is change 4 part of this work or a follow-up?
  * Should declare failures (ra#668) also mark `deleting` instead of removing the record?
