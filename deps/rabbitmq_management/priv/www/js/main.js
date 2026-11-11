@@ -1082,7 +1082,7 @@ function is_valid_token(value) {
 function url_pagination_template_context(template, context, defaultPage, defaultPageSize){
     var page_number_request = fmt_page_number_request(context, defaultPage);
     var page_size = fmt_page_size_request(context, defaultPageSize);
-    var name_request = fmt_filter_name_request(context, "");
+    var name_request = stored_value_or_default(context + '_current_filter_name', "");
     var use_regex = fmt_regex_request(context, "") == "checked";
     if (use_regex) {
         // rabbitmq/rabbitmq-server#8008: if the expression cannot be compiled to a reg exp,
@@ -1092,15 +1092,17 @@ function url_pagination_template_context(template, context, defaultPage, default
             show_popup('warn', fmt_escape_html(`Filter expression '${name_request}' is not a valid regular expression, will perform a regular text query`));
             use_regex = false;
         }
-        if (use_regex && valid_regexp) {
-            name_request = esc(name_request);
-        }
     }
-    return  '/' + template +
+    var url = '/' + template +
         '?page=' +  page_number_request +
         '&page_size=' + page_size +
-        '&name=' + name_request +
+        '&name=' + esc(name_request) +
         '&use_regex=' + use_regex;
+    var filter_field = stored_value_or_default(context + '_current_filter_field', "");
+    if (filter_field.length > 0) {
+        url += '&filter_field=' + esc(filter_field);
+    }
+    return url;
 }
 
 function url_pagination_template(template, defaultPage, defaultPageSize){
@@ -1110,10 +1112,14 @@ function url_pagination_template(template, defaultPage, defaultPageSize){
 function stored_page_info(template, page_start){
     var pageSize = fmt_strip_tags($('#' + template+'-pagesize').val());
     var filterName = fmt_strip_tags($('#' + template+'-name').val());
+    var filterField = fmt_strip_tags($('#' + template+'-filter-field').val());
 
     store_pref(template + '_current_page_number', page_start);
     if (filterName != null && filterName != undefined) {
         store_pref(template + '_current_filter_name', filterName);
+    }
+    if (filterField != null && filterField != undefined) {
+        store_pref(template + '_current_filter_field', filterField.trim());
     }
     var regex_on =  $("#" + template + "-filter-regex-mode").is(':checked');
 
@@ -1128,6 +1134,10 @@ function stored_page_info(template, page_start){
 
 function update_pages(template, page_start){
      stored_page_info(template, page_start);
+     render_paginated(template);
+}
+
+function render_paginated(template) {
      switch (template) {
          case 'queues' : renderQueues(); break;
          case 'exchanges' : renderExchanges(); break;
@@ -1871,6 +1881,16 @@ function check_bad_response(req, full_page_404, on404fun) {
 
                  last_page_out_of_range_error = new Date();
             }
+        } else if (error == 'invalid_pagination_parameters') {
+            // Pagination settings are stored before they are sent, so reset
+            // them, otherwise every later visit to the page would fail the
+            // same way.
+            show_popup('warn', fmt_escape_html('The pagination settings of this page were reset: ' + reason));
+            ['_current_page_number', '_current_page_size', '_current_filter_name',
+             '_current_filter_field', '_current_regex'].forEach(function(suffix) {
+                clear_pref(current_template + suffix);
+            });
+            render_paginated(current_template);
         }
     }
     else if (req.status == 408) {

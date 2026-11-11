@@ -26,6 +26,7 @@ groups() ->
                                    default_restrictions,
                                    path_prefix_test,
                                    regex_dos_test,
+                                   filter_by_field_test,
                                    has_json_extension_test,
                                    sort_list_test,
                                    list_range_test
@@ -123,6 +124,58 @@ regex_dos_test(_) ->
     TargetString = <<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac">>,
     ?assertEqual(false, rabbit_mgmt_util:maybe_filter_by_keyword(
         name, EvilRegex, [{name, TargetString}], "true")).
+
+filter_by_field_test(_) ->
+    Item = [{name, <<"127.0.0.1:50000 -> 127.0.0.1:5672">>},
+            {channels, 3},
+            {node, 'rabbit@host-1'},
+            {state, undefined},
+            {peer_cert_subject, ''},
+            {recv_oct_details, [{rate, 0.5}]},
+            {client_properties,
+             #{<<"some_custom_property">> => <<"(zone-a) orchard-1:5672">>,
+               <<"product">> => <<"apples">>,
+               <<"ratio">> => 1.25,
+               <<"capabilities">> => #{<<"publisher_confirms">> => true},
+               <<"array">> => [<<"a">>, <<"b">>]}}],
+    F = fun(Field, Value, UseRegex) ->
+                Path = [list_to_binary(K) || K <- string:lexemes(Field, ".")],
+                rabbit_mgmt_util:maybe_filter_by_keyword(Path, Value, Item, UseRegex)
+        end,
+    ?assertEqual(true, F("name", "50000", "false")),
+    ?assertEqual(true, rabbit_mgmt_util:maybe_filter_by_keyword(
+                         name, "50000", Item, "false")),
+    ?assertEqual(true, F("client_properties.some_custom_property", "ORCHARD", "false")),
+    ?assertEqual(false, F("client_properties.some_custom_property", "greenhouse", "false")),
+    ?assertEqual(true, F("client_properties.some_custom_property", "^\\(zone-a\\) orchard", "true")),
+    ?assertEqual(true, F("client_properties.product", "^apples$", "true")),
+    ?assertEqual(false, F("client_properties.product", "^apple$", "true")),
+    ?assertEqual(true, F("client_properties.capabilities.publisher_confirms", "true", "false")),
+    ?assertEqual(true, F("channels", "^3$", "true")),
+    ?assertEqual(true, F("node", "rabbit@host-1", "false")),
+    ?assertEqual(true, F("recv_oct_details.rate", "^0\\.5$", "true")),
+    ?assertEqual(true, F("client_properties.ratio", "1.25", "false")),
+    ?assertEqual(false, F("state", "undefined", "false")),
+    ?assertEqual(false, F("peer_cert_subject", "^$", "true")),
+    ?assertEqual(false, F("client_properties.missing", "x", "false")),
+    ?assertEqual(false, F("missing.deeper", "x", "false")),
+    ?assertEqual(false, F("client_properties.capabilities", "x", "false")),
+    ?assertEqual(false, F("client_properties.array", "a", "false")),
+    ?assertEqual(false, F("name.nested", "x", "false")),
+
+    MqttItem = [{name, <<"[::1]:59091 -> [::1]:1883">>},
+                {client_properties, #{client_id => <<"mqtt-sensor-gateway">>,
+                                      user_property => #{<<"region">> => <<"eu">>}}}],
+    M = fun(Field, Value) ->
+                Path = [list_to_binary(K) || K <- string:lexemes(Field, ".")],
+                rabbit_mgmt_util:maybe_filter_by_keyword(Path, Value, MqttItem, "false")
+        end,
+    ?assertEqual(true, M("client_properties.client_id", "SENSOR")),
+    ?assertEqual(false, M("client_properties.client_id", "orders")),
+    ?assertEqual(true, M("client_properties.user_property.region", "eu")),
+    UnknownKey = "no_such_key_" ++ integer_to_list(erlang:unique_integer([positive])),
+    ?assertEqual(false, M("client_properties." ++ UnknownKey, "x")),
+    ?assertError(badarg, list_to_existing_atom(UnknownKey)).
 
 has_json_extension_test(_Config) ->
     %% Standard .json extension

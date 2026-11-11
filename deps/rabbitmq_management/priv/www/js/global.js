@@ -199,6 +199,17 @@ var COLUMNS;
 
 var RENDER_CALLBACKS = {};
 
+// Pagination contexts that offer a filter field dropdown, with its values.
+const FILTER_FIELD_SUGGESTIONS = {
+    'connections': ['name', 'user_provided_name', 'container_id', 'user',
+                    'vhost', 'node', 'peer_host', 'protocol',
+                    'client_properties.connection_name',
+                    'client_properties.client_id',
+                    'client_properties.product',
+                    'client_properties.platform',
+                    'client_properties.version']
+};
+
 const QUEUE_EXTRA_CONTENT = [];
 const QUEUE_EXTRA_CONTENT_REQUESTS = [];
 
@@ -606,6 +617,11 @@ var HELP = {
     'filter-regex' :
     'Whether to enable regular expression matching. Both string literals \
     and regular expressions are matched in a case-insensitive manner.<br/><br/>',
+
+    'filter-field' :
+    'The field the filter is matched against. Nested fields are separated by dots, \
+    for example <code>client_properties.connection_name</code>. Fields that hold \
+    tables or arrays never match.<br/><br/>',
 
     'consumer-active' :
     'Whether the consumer is active or not, i.e. whether the consumer can get messages from the queue. \

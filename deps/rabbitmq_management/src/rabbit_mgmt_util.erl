@@ -76,7 +76,8 @@
 -define(MAX_HTTP_TIMEOUT, 4294967295).
 
 -record(pagination, {page = undefined, page_size = undefined,
-                     name = undefined, use_regex = undefined}).
+                     name = undefined, use_regex = undefined,
+                     filter_field = [<<"name">>] :: [binary()]}).
 
 -record(aug_ctx, {req_data :: cowboy_req:req(),
                   pagination :: #pagination{},
@@ -320,7 +321,7 @@ get_sorts_param(ReqData, Def) ->
 reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
     SortList =
         sort_list_and_paginate(
-              extract_columns_list(Facts, ReqData),
+              Facts,
               DefaultSorts,
               get_sorts_param(ReqData, undefined),
               get_sort_reverse(ReqData), Pagination),
@@ -333,13 +334,6 @@ get_sort_reverse(ReqData) ->
         "true" -> true;
         _      -> false
     end.
-
--spec is_pagination_requested(#pagination{} | undefined) -> boolean().
-is_pagination_requested(undefined) ->
-    false;
-is_pagination_requested(#pagination{}) ->
-    true.
-
 
 with_valid_pagination(ReqData, Context, Fun) ->
     try
@@ -379,6 +373,12 @@ column_strategy(Cols, BasicColumns) ->
         _ -> extended
     end.
 
+filter_columns(#pagination{name = Name, filter_field = [Key | _]})
+  when is_list(Name), Name =/= "" ->
+    [binary_to_list(Key)];
+filter_columns(_) ->
+    [].
+
 % columns are [[binary()]] - this takes the first item
 columns_as_strings(all) -> all;
 columns_as_strings(Columns0) ->
@@ -402,9 +402,10 @@ augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
     Sort = get_sorts_param(ReqData, DefaultSort),
     Columns = columns(ReqData),
     ColumnsAsStrings = columns_as_strings(Columns),
+    SortAndFilter = Sort ++ filter_columns(Pagination),
     Pipeline =
         case {Pagination =/= undefined,
-              column_strategy(Sort, BasicColumns),
+              column_strategy(SortAndFilter, BasicColumns),
               column_strategy(ColumnsAsStrings, BasicColumns)} of
             {false, basic, basic} -> % no pagination, no extended fields
                 [SortFun];
@@ -415,9 +416,9 @@ augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
                 [SortFun, PageFun];
             {true, extended, _} ->
                 Path = cowboy_req:path(ReqData),
-                ?LOG_DEBUG("HTTP API: ~s slow query mode requested - extended sort on ~0p",
-                                 [Path, Sort]),
-                % pagination with extended sort columns - SLOW!
+                ?LOG_DEBUG("HTTP API: ~s slow query mode requested - extended sort or filter on ~0p",
+                                 [Path, SortAndFilter]),
+                % pagination with extended sort or filter columns - SLOW!
                 [AugFun, SortFun, PageFun];
             {true, basic, extended} ->
                 % pagination with extended columns and sorting on basic
@@ -518,10 +519,11 @@ filter_and_paginate(Sorted, Pagination) ->
 %%
 %% Filtering functions
 %%
-maybe_filter_context(List, #pagination{name = Name, use_regex = UseRegex}) when
+maybe_filter_context(List, #pagination{name = Name, use_regex = UseRegex,
+                                       filter_field = FilterField}) when
       is_list(Name) ->
     lists:filter(fun(ListF) ->
-			 maybe_filter_by_keyword(name, Name, ListF, UseRegex)
+			 maybe_filter_by_keyword(FilterField, Name, ListF, UseRegex)
 		 end,
 		 List);
 %% Here it is backward with the other API(s), that don't filter the data
@@ -529,13 +531,15 @@ maybe_filter_context(List, _) ->
     List.
 
 
-match_value({_, Value}, ValueTag, UseRegex) when UseRegex =:= "true" ->
+match_value(undefined, _ValueTag, _) ->
+    false;
+match_value(Value, ValueTag, UseRegex) when UseRegex =:= "true" ->
     case rabbit_re:run(Value, ValueTag, [caseless]) of
         {match, _} -> true;
         {error, _} -> false;
         nomatch -> false
     end;
-match_value({_, Value}, ValueTag, _) ->
+match_value(Value, ValueTag, _) ->
     Pos = string:str(string:lowercase(binary_to_list(Value)),
         string:lowercase(ValueTag)),
     case Pos of
@@ -543,11 +547,32 @@ match_value({_, Value}, ValueTag, _) ->
         _ -> false
     end.
 
-maybe_filter_by_keyword(KeyTag, ValueTag, List, UseRegex) when
+maybe_filter_by_keyword(Field, ValueTag, Item, UseRegex) when
       is_list(ValueTag), length(ValueTag) > 0 ->
-    match_value(lists:keyfind(KeyTag, 1, List), ValueTag, UseRegex);
+    match_value(filter_value(Field, Item), ValueTag, UseRegex);
 maybe_filter_by_keyword(_, _, _, _) ->
     true.
+
+%% Returns the value at a field path, such as [<<"client_properties">>,
+%% <<"product">>], as the text the filter is matched against.
+filter_value(Field, Item) when is_atom(Field) ->
+    filter_value([a2b(Field)], Item);
+filter_value(Path, Item) ->
+    filter_text(lists:foldl(fun (Key, Acc) -> pget_bin(Key, Acc, undefined) end,
+                            Item, Path)).
+
+%% Returns undefined for values that cannot be matched, such as
+%% missing values, tables and arrays.
+filter_text(V) when is_binary(V)  -> V;
+filter_text(V) when is_integer(V) -> integer_to_binary(V);
+filter_text(V) when is_float(V)   -> float_to_binary(V, [short]);
+filter_text(undefined)            -> undefined;
+%% Encoded as JSON null.
+filter_text('')                   -> undefined;
+%% Omitted from the reply by rabbit_mgmt_format:strip_pids/1.
+filter_text(unknown)              -> undefined;
+filter_text(V) when is_atom(V)    -> atom_to_binary(V, utf8);
+filter_text(_)                    -> undefined.
 
 validate_name_filter(undefined, _) ->
     undefined;
@@ -556,6 +581,25 @@ validate_name_filter(Name, "true") when length(Name) > ?MAX_FILTER_LENGTH ->
            "name filter regex is too long"});
 validate_name_filter(Name, _) ->
     Name.
+
+validate_filter_field(undefined) ->
+    [<<"name">>];
+validate_filter_field("") ->
+    [<<"name">>];
+validate_filter_field(Field) when length(Field) > ?MAX_FILTER_LENGTH ->
+    throw({error, invalid_pagination_parameters,
+           "filter field is too long"});
+validate_filter_field(Field) ->
+    case [list_to_binary(K) || K <- string:lexemes(Field, ".")] of
+        [] ->
+            throw({error, invalid_pagination_parameters,
+                   "filter field is invalid"});
+        Path ->
+            Path
+    end.
+
+filter_field_param(ReqData) ->
+    validate_filter_field(get_value_param(<<"filter_field">>, ReqData)).
 
 check_request_param(V, ReqData) ->
     case qs_val(V, ReqData) of
@@ -576,14 +620,16 @@ pagination_params(ReqData) ->
             undefined;
     {PageNum, undefined} when is_integer(PageNum) andalso PageNum > 0 ->
             #pagination{page = PageNum, page_size = ?DEFAULT_PAGE_SIZE,
-                name =  Name, use_regex = UseRegex};
+                name =  Name, use_regex = UseRegex,
+                filter_field = filter_field_param(ReqData)};
         {PageNum, PageSize}  when is_integer(PageNum)
                                   andalso is_integer(PageSize)
                                   andalso (PageNum > 0)
                                   andalso (PageSize > 0)
                                   andalso (PageSize =< ?MAX_PAGE_SIZE) ->
             #pagination{page = PageNum, page_size = PageSize,
-                name =  Name, use_regex = UseRegex};
+                name =  Name, use_regex = UseRegex,
+                filter_field = filter_field_param(ReqData)};
         _ -> throw({error, invalid_pagination_parameters,
                     io_lib:format("Invalid pagination parameters: page number ~tp, page size ~tp",
                                   [PageNum, PageSize])})
@@ -656,7 +702,16 @@ get_dotted_value0([Key | Keys], Item) ->
     get_dotted_value0(Keys, pget_bin(list_to_binary(Key), Item, [])).
 
 pget_bin(Key, Map, Default) when is_map(Map) ->
-    maps:get(Key, Map, Default);
+    case Map of
+        #{Key := V} ->
+            V;
+        _ ->
+            try
+                maps:get(binary_to_existing_atom(Key), Map, Default)
+            catch
+                error:badarg -> Default
+            end
+    end;
 pget_bin(Key, List, Default) when is_list(List) ->
     case lists:search(fun ({K, _V}) -> a2b(K) =:= Key;
                           (_)       -> false
@@ -677,12 +732,15 @@ maybe_pagination(Item, true, ReqData) ->
     [maybe_pagination(X, true, ReqData) || X <- Item].
 
 extract_columns(Item, ReqData) ->
-    maybe_pagination(Item, is_pagination_requested(pagination_params(ReqData)),
-		     ReqData).
+    maybe_pagination(Item, is_range_response(Item), ReqData).
 
-extract_columns_list(Items, ReqData) ->
-    Cols = columns(ReqData),
-    [extract_column_items(Item, Cols) || Item <- Items].
+%% Endpoints that do not paginate ignore the pagination parameters,
+%% so the shape of the reply decides how columns are extracted. The
+%% keys may be in any order, see rabbit_mgmt_format:strip_pids/1.
+is_range_response([{_, _} | _] = Reply) ->
+    lists:keymember(total_count, 1, Reply) andalso lists:keymember(items, 1, Reply);
+is_range_response(_) ->
+    false.
 
 columns(ReqData) ->
     case qs_val(<<"columns">>, ReqData) of

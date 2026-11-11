@@ -201,6 +201,10 @@ all_tests() -> [
     exclusive_consumer_test,
     exclusive_queue_test,
     connections_channels_pagination_test,
+    columns_applied_after_sort_and_filter_test,
+    connections_filter_by_client_property_test,
+    channels_filter_by_field_test,
+    queues_filter_by_extended_field_test,
     exchanges_pagination_test,
     exchanges_pagination_permissions_test,
     queues_detailed_test,
@@ -3211,6 +3215,141 @@ connections_channels_pagination_test(Config) ->
     amqp_channel:close(Ch2),
     amqp_connection:close(Conn2),
 
+    passed.
+
+open_connection_with_client_properties(Config, Props) ->
+    {ok, Conn} = amqp_connection:start(
+                   #amqp_params_network{
+                      port = amqp_port(Config),
+                      client_properties = [{K, longstr, V} || {K, V} <- Props]}),
+    Conn.
+
+await_connection_count(Config, Count) ->
+    await_condition(
+      fun () ->
+              Count =:= maps:get(total_count,
+                                 http_get(Config, "/connections?page=1&page_size=100", ?OK))
+      end).
+
+columns_applied_after_sort_and_filter_test(Config) ->
+    Pears = open_connection_with_client_properties(Config, [{<<"product">>, <<"pears">>}]),
+    Apples = open_connection_with_client_properties(Config, [{<<"product">>, <<"apples">>}]),
+    Page = "/connections?page=1&page_size=100",
+    try
+        await_connection_count(Config, 2),
+        Names = fun(Path) -> [N || #{name := N} <- maps:get(items, http_get(Config, Path, ?OK))] end,
+        [PearsName] = [N || #{name := N, client_properties := #{product := <<"pears">>}}
+                                <- maps:get(items, http_get(Config, Page, ?OK))],
+
+        %% Sorting may use a field that is not among the requested columns.
+        SortPath = Page ++ "&columns=name&sort=client_properties.product",
+        [_, PearsName] = Names(SortPath),
+        [PearsName, _] = Names(SortPath ++ "&sort_reverse=true"),
+        [Item | _] = maps:get(items, http_get(Config, SortPath, ?OK)),
+        ?assertEqual([name], maps:keys(Item)),
+
+        %% So may the name filter.
+        ByName = http_get(Config, Page ++ "&columns=vhost&name=127.0.0.1", ?OK),
+        ?assertEqual(2, maps:get(filtered_count, ByName)),
+
+        %% Endpoints that do not paginate still apply columns.
+        [VHostItem | _] = http_get(Config, "/vhosts/%2F/connections?page=1&columns=name", ?OK),
+        ?assertEqual([name], maps:keys(VHostItem))
+    after
+        amqp_connection:close(Pears),
+        amqp_connection:close(Apples)
+    end,
+    passed.
+
+connections_filter_by_client_property_test(Config) ->
+    Conn1 = open_connection_with_client_properties(
+              Config, [{<<"some_custom_property">>, <<"orchard">>},
+                       {<<"product">>, <<"apples">>}]),
+    Conn2 = open_connection_with_client_properties(
+              Config, [{<<"some_custom_property">>, <<"greenhouse">>},
+                       {<<"product">>, <<"pears">>}]),
+    Node = atom_to_list(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
+    Page = "/connections?page=1&page_size=100",
+    Count = fun(Query) -> maps:get(filtered_count, http_get(Config, Page ++ Query, ?OK)) end,
+    try
+        await_connection_count(Config, 2),
+
+        ByCustom = http_get(Config,
+                            Page ++ "&filter_field=client_properties.some_custom_property"
+                            "&name=ORCHARD",
+                            ?OK),
+        [#{client_properties := #{some_custom_property := <<"orchard">>}}] =
+            maps:get(items, ByCustom),
+
+        ByProduct = http_get(Config,
+                             Page ++ "&filter_field=client_properties.product"
+                             "&name=%5Epears%24&use_regex=true",
+                             ?OK),
+        [#{client_properties := #{product := <<"pears">>}}] = maps:get(items, ByProduct),
+
+        %% The filter field does not have to be among the requested columns.
+        WithColumns = http_get(Config,
+                               Page ++ "&columns=name,vhost"
+                               "&filter_field=client_properties.product&name=apples",
+                               ?OK),
+        [Item] = maps:get(items, WithColumns),
+        ?assertEqual([name, vhost], lists:sort(maps:keys(Item))),
+
+        %% Atoms, such as node names, are matched as strings.
+        ?assertEqual(2, Count("&filter_field=node&name=" ++ Node)),
+        ?assertEqual(0, Count("&filter_field=client_properties.missing&name=orchard")),
+        ?assertEqual(2, Count("&filter_field=&name=127.0.0.1")),
+
+        TooLong = lists:duplicate(1025, $a),
+        http_get(Config, Page ++ "&name=x&filter_field=" ++ TooLong, ?BAD_REQUEST),
+        http_get(Config, Page ++ "&name=x&filter_field=.", ?BAD_REQUEST),
+        %% Endpoints that do not paginate ignore the pagination parameters.
+        http_get(Config, "/vhosts/%2F/connections?page=1&filter_field=.", ?OK)
+    after
+        amqp_connection:close(Conn1),
+        amqp_connection:close(Conn2)
+    end,
+    passed.
+
+channels_filter_by_field_test(Config) ->
+    {Conn, Ch} = open_connection_and_channel(Config),
+    try
+        Page = "/channels?page=1&page_size=100&filter_field=connection_details.peer_host",
+        await_condition(
+          fun () ->
+                  1 =:= maps:get(filtered_count, http_get(Config, Page ++ "&name=127.0.0.1", ?OK))
+          end),
+        ?assertEqual(0, maps:get(filtered_count,
+                                 http_get(Config, Page ++ "&name=192.0.2.1", ?OK)))
+    after
+        amqp_channel:close(Ch),
+        close_connection(Conn)
+    end,
+    passed.
+
+queues_filter_by_extended_field_test(Config) ->
+    QArgs = #{durable => true},
+    http_put(Config, "/queues/%2F/filter-test-empty", QArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/filter-test-full", QArgs, {group, '2xx'}),
+    {Conn, Ch} = open_connection_and_channel(Config),
+    try
+        amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"filter-test-full">>},
+                          #amqp_msg{payload = <<"hello">>}),
+        Path = "/queues/%2F?page=1&page_size=100&filter_field=messages&name=%5E1%24&use_regex=true",
+        Names = fun(P) -> [N || #{name := N} <- maps:get(items, http_get(Config, P, ?OK))] end,
+        await_condition(
+          fun () -> lists:member(<<"filter-test-full">>, Names(Path ++ "&sort=messages")) end),
+        %% "messages" is only added by augmentation, so the result must not
+        %% depend on the sort column.
+        Unsorted = Names(Path),
+        ?assert(lists:member(<<"filter-test-full">>, Unsorted)),
+        ?assertNot(lists:member(<<"filter-test-empty">>, Unsorted))
+    after
+        amqp_channel:close(Ch),
+        close_connection(Conn),
+        http_delete(Config, "/queues/%2F/filter-test-empty", {group, '2xx'}),
+        http_delete(Config, "/queues/%2F/filter-test-full", {group, '2xx'})
+    end,
     passed.
 
 exchanges_pagination_test(Config) ->
