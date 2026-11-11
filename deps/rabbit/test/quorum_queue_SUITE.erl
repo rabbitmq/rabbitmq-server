@@ -75,6 +75,8 @@ groups() ->
                        ++ memory_tests()},
                       {cluster_size_3, [], [
                                             cleanup_data_dir,
+                                            declare_with_leftover_members,
+                                            add_member_with_leftover_member,
                                             channel_handles_ra_event,
                                             declare_during_node_down,
                                             projection_timeout_cleanup,
@@ -3979,6 +3981,65 @@ node_removal_is_not_quorum_critical(Config) ->
     Qs = rpc:call(Server, rabbit_quorum_queue, list_with_minimum_quorum, []),
     ?assertEqual([], Qs).
 
+
+declare_with_leftover_members(Config) ->
+    [Server1, Server2, _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    RaName = ra_name(QQ),
+    OldUIds = [rpc:call(S, ra_directory, uid_of, [quorum_queues, RaName])
+               || S <- Servers],
+
+    %% remove the record only, and stop one of the members
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    ok = rpc:call(Server1, rabbit_amqqueue, internal_delete, [Q, <<"tests">>]),
+    ok = rpc:call(Server2, ra, stop_server, [quorum_queues, {RaName, Server2}]),
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    NewUIds = [rpc:call(S, ra_directory, uid_of, [quorum_queues, RaName])
+               || S <- Servers],
+    [?assertNotEqual(Old, New) || {Old, New} <- lists:zip(OldUIds, NewUIds)],
+    [?assertNot(filelib:is_dir(
+                  rpc:call(S, ra_env, server_data_dir, [quorum_queues, UId])))
+     || {S, UId} <- lists:zip(Servers, OldUIds)],
+    ok.
+
+add_member_with_leftover_member(Config) ->
+    [Server1 | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 2}])),
+    ?awaitMatch(2, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    QNodes = rpc:call(Server1, rabbit_amqqueue, get_quorum_nodes, [Q]),
+    [Other] = Servers -- QNodes,
+    RaName = ra_name(QQ),
+
+    %% a running server with the queue's name and a different UId
+    LeftoverId = {RaName, Other},
+    ok = rpc:call(Other, ra, start_server,
+                  [quorum_queues, RaName, LeftoverId,
+                   {simple, fun erlang:max/2, 0}, [LeftoverId]]),
+    LeftoverUId = rpc:call(Other, ra_directory, uid_of, [quorum_queues, RaName]),
+
+    ?assertEqual(ok, rpc:call(Server1, rabbit_quorum_queue, add_member,
+                              [<<"/">>, QQ, Other, 30000])),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    {ok, Q1} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    #{nodes := #{Other := UId}} = amqqueue:get_type_state(Q1),
+    ?assertNotEqual(LeftoverUId, UId),
+    ?assertEqual(UId, rpc:call(Other, ra_directory, uid_of, [quorum_queues, RaName])),
+    ok.
 
 cleanup_data_dir(Config) ->
     %% With Khepri this test needs to run in a 3-node cluster, otherwise the queue can't
