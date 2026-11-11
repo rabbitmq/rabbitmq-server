@@ -47,12 +47,12 @@ describe('Filter AMQP 0-9-1 connections by field', function () {
   })
 
   it('does not match client properties on the default field', async function () {
-    await connectionsPage.filterConnections('', 'selenium-veg')
+    await connectionsPage.filterConnections('name', 'selenium-veg')
     await waitForHeader(header => header.includes('filtered down to 0'))
   })
 
   it('matches a client property on the chosen field', async function () {
-    await connectionsPage.filterConnections('client_properties.custom', 'veg')
+    await connectionsPage.filterConnections('client_properties.connection_name', 'veg')
     await waitForHeader(header => header.includes('filtered down to 1'))
     let table = await connectionsPage.getConnectionsTable()
     assert.equal(table.length, 1)
@@ -60,7 +60,8 @@ describe('Filter AMQP 0-9-1 connections by field', function () {
   })
 
   it('resets a filter field the server rejects', async function () {
-    await connectionsPage.filterConnections('.', 'veg')
+    await connectionsPage.storeFilterField('.')
+    await connectionsPage.refresh()
     await doUntil(async function() {
       return connectionsPage.isPopupWarningDisplayed()
     }, displayed => displayed, 500)
