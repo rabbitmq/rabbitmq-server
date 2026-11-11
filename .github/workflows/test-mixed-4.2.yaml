@@ -1,0 +1,21 @@
+name: Test mixed clusters with 4.2.x
+on:
+  schedule:
+    # at 3:20am on Sundays
+    - cron: 20 3 * * 0
+  workflow_dispatch:
+    inputs:
+      previous_version:
+        description: 'Previous version to test against'
+        type: string
+        default: 'tags/v4.2.0'
+jobs:
+  test-mixed-clusters:
+    name: Test mixed clusters
+    uses: ./.github/workflows/test-make-tests.yaml
+    with:
+      erlang_version: '29'
+      elixir_version: '1.20'
+      mixed_clusters: true
+      previous_version: ${{ inputs.previous_version || 'tags/v4.2.0' }}
+      secondary_erlang_version: '27'
