@@ -627,6 +627,15 @@ handle_down(Pid, QName, Info, State0) ->
 -spec handle_event(queue_name(), term(), state()) ->
     {ok, state(), actions()} | {eol, actions()} | {error, term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+%% An event for one queue type is dropped if the queue's context now has
+%% another type, for example after the queue was deleted and declared again.
+handle_event(QRef, {'$queue_type', Mod, Evt}, Ctxs) ->
+    case get_ctx(QRef, Ctxs, undefined) of
+        #ctx{module = Mod} ->
+            handle_event(QRef, Evt, Ctxs);
+        _ ->
+            {ok, Ctxs, []}
+    end;
 handle_event(QRef, Evt, Ctxs) ->
     %% We are defensive here and do not want to crash because
     %% 1. Events can arrive after a queue state has been cleared up, and

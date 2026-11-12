@@ -3,14 +3,17 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 -compile(export_all).
 
 -define(TIMEOUT, 30_000).
 
 all() ->
     [
-      {group, parallel_tests}
+      {group, parallel_tests},
+      {group, queue_deletion}
     ].
 
 groups() ->
@@ -24,6 +27,16 @@ groups() ->
         {overflow_reject_publish, [parallel], OverflowTests},
         dead_queue_rejects,
         mixed_dead_alive_queues_reject
+      ]},
+      {queue_deletion, [], [
+        deleted_exclusive_classic_queue_confirms,
+        deleted_remote_exclusive_classic_queue_confirms,
+        deleted_classic_queue_confirms,
+        crashed_exclusive_classic_queue_rejects,
+        crashed_remote_exclusive_classic_queue_rejects,
+        replaced_remote_exclusive_classic_queue_rejects,
+        classic_queue_event_ignored_by_quorum_queue,
+        restarted_classic_queue_rejects
       ]}
     ].
 
@@ -75,7 +88,9 @@ init_per_testcase(Testcase, Config)
 
     rabbit_ct_helpers:testcase_started(
         rabbit_ct_helpers:set_config(Config, [{conn, Conn}, {conn1, Conn1}]),
-        Testcase).
+        Testcase);
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(policy_resets_to_default = Testcase, Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
@@ -104,7 +119,9 @@ end_per_testcase(mixed_dead_alive_queues_reject = Testcase, Config) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_reject_dead">>}),
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"mixed_dead_alive_queues_reject_alive">>}),
     amqp_channel:call(Ch, #'exchange.delete'{exchange = <<"mixed_dead_alive_queues_reject">>}),
-    end_per_testcase0(Testcase, Config).
+    end_per_testcase0(Testcase, Config);
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 end_per_testcase0(Testcase, Config) ->
     rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
@@ -395,6 +412,338 @@ clean_acks_mailbox() ->
     after
         1000 -> done
     end.
+
+deleted_exclusive_classic_queue_confirms(Config) ->
+    ?assertEqual({noproc, eol},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, deliver_to_deleted_exclusive_queue,
+                   [<<"deleted_exclusive_classic_queue_confirms">>])).
+
+deleted_remote_exclusive_classic_queue_confirms(Config) ->
+    QName = <<"deleted_remote_exclusive_classic_queue_confirms">>,
+    {Owner, Q} = rabbit_ct_broker_helpers:rpc(
+                   Config, 1, ?MODULE, declare_exclusive_queue, [QName]),
+    Blockers = rabbit_ct_broker_helpers:rpc(Config, 1, ?MODULE,
+                                            block_worker_pool, []),
+    try
+        Owner ! stop,
+        await_exit(amqqueue:get_pid(Q)),
+        ?assertMatch({ok, _}, rabbit_ct_broker_helpers:rpc(
+                                Config, 0, rabbit_amqqueue, lookup,
+                                [amqqueue:get_name(Q)])),
+        ?assertEqual({noproc, eol},
+                     rabbit_ct_broker_helpers:rpc(
+                       Config, 0, ?MODULE, deliver_to_stale_record,
+                       [Q, #{correlation => 1}]))
+    after
+        [Blocker ! release || Blocker <- Blockers]
+    end.
+
+crashed_remote_exclusive_classic_queue_rejects(Config) ->
+    QName = <<"crashed_remote_exclusive_classic_queue_rejects">>,
+    {Owner, Q} = rabbit_ct_broker_helpers:rpc(
+                   Config, 1, ?MODULE, declare_exclusive_queue, [QName]),
+    QPid = amqqueue:get_pid(Q),
+    Sup = rabbit_ct_broker_helpers:rpc(Config, 1, ?MODULE, queue_sup, [QPid]),
+    ok = sys:suspend(Sup),
+    try
+        exit(QPid, kill),
+        await_exit(QPid),
+        {[{rejected, _, down, SeqNos} | _], none} =
+            rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
+                                         deliver_twice_to_stale_record, [Q]),
+        ?assertEqual([1, 2], lists:sort(SeqNos))
+    after
+        ok = sys:resume(Sup),
+        Owner ! stop
+    end.
+
+replaced_remote_exclusive_classic_queue_rejects(Config) ->
+    QName = <<"replaced_remote_exclusive_classic_queue_rejects">>,
+    {Owner, Q} = rabbit_ct_broker_helpers:rpc(
+                   Config, 1, ?MODULE, declare_exclusive_queue, [QName]),
+    QRes = amqqueue:get_name(Q),
+    Blockers = rabbit_ct_broker_helpers:rpc(Config, 1, ?MODULE,
+                                            block_worker_pool, []),
+    Owner ! stop,
+    await_exit(amqqueue:get_pid(Q)),
+    {QStates, OwnerResult} =
+        try
+            rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
+                                         hold_owner_result, [Q])
+        after
+            [Blocker ! release || Blocker <- Blockers]
+        end,
+    {Owner2, Q2} = rabbit_ct_broker_helpers:rpc(
+                     Config, 1, ?MODULE, declare_exclusive_queue_when_deleted,
+                     [QName]),
+    try
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, await_pid,
+                                          [QRes, amqqueue:get_pid(Q2), 100]),
+        ?assertMatch({ok, _, [{rejected, _, down, [1]} | _]},
+                     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_type,
+                                                  handle_event,
+                                                  [QRes, OwnerResult, QStates]))
+    after
+        Owner2 ! stop
+    end.
+
+classic_queue_event_ignored_by_quorum_queue(Config) ->
+    QName = <<"classic_queue_event_ignored_by_quorum_queue">>,
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(
+                Config, 0, ?MODULE, declare_queue, [QName, <<"quorum">>, none]),
+    QRes = amqqueue:get_name(Q),
+    Evt = {'$queue_type', rabbit_classic_queue,
+           {owner_alive, make_ref(), self(), false}},
+    try
+        ?assertMatch({ok, _, []},
+                     rabbit_ct_broker_helpers:rpc(
+                       Config, 0, ?MODULE, handle_event_with_new_ctx,
+                       [Q, QRes, Evt]))
+    after
+        {ok, _} = rabbit_ct_broker_helpers:rpc(
+                    Config, 0, rabbit_amqqueue, delete,
+                    [Q, false, false, <<"acting-user">>])
+    end.
+
+deleted_classic_queue_confirms(Config) ->
+    ?assertEqual({noproc, eol},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, deliver_to_deleted_queue,
+                   [<<"deleted_classic_queue_confirms">>, <<"classic">>,
+                    #{correlation => 1}])).
+
+crashed_exclusive_classic_queue_rejects(Config) ->
+    ?assertMatch({noproc, [{rejected, _, down, [1]} | _]},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, deliver_to_crashed_exclusive_queue,
+                   [<<"crashed_exclusive_classic_queue_rejects">>])).
+
+restarted_classic_queue_rejects(Config) ->
+    ?assertMatch({noproc, [{rejected, _, down, [1]} | _]},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, deliver_to_restarted_queue,
+                   [<<"restarted_classic_queue_rejects">>])).
+
+declare_queue(QName, Type, Owner) ->
+    case rabbit_amqqueue:declare(rabbit_misc:r(<<"/">>, queue, QName), true,
+                                 false, [{<<"x-queue-type">>, longstr, Type}],
+                                 Owner, <<"acting-user">>) of
+        {new, Q} -> {ok, Q}
+    end.
+
+%% The record of an exclusive queue deleted with its owner is deleted through
+%% `worker_pool' after the queue process exits, so blocking the pool keeps the
+%% record in place.
+declare_exclusive_queue(QName) ->
+    Owner = spawn(fun() -> receive stop -> ok end end),
+    {ok, Q} = declare_queue(QName, <<"classic">>, Owner),
+    {Owner, Q}.
+
+declare_exclusive_queue_when_deleted(QName) ->
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    await_deleted(QRes, 100),
+    declare_exclusive_queue(QName).
+
+await_deleted(_QRes, 0) ->
+    error(queue_not_deleted);
+await_deleted(QRes, N) ->
+    case rabbit_amqqueue:lookup(QRes) of
+        {error, not_found} ->
+            ok;
+        {ok, _} ->
+            timer:sleep(50),
+            await_deleted(QRes, N - 1)
+    end.
+
+await_pid(_QRes, _Pid, 0) ->
+    error(pid_not_visible);
+await_pid(QRes, Pid, N) ->
+    case rabbit_amqqueue:lookup(QRes) of
+        {ok, Q} when ?amqqueue_pid_equals(Q, Pid) ->
+            ok;
+        _ ->
+            timer:sleep(50),
+            await_pid(QRes, Pid, N - 1)
+    end.
+
+%% Returns the owner check result without handling it.
+hold_owner_result(Q) ->
+    QRes = amqqueue:get_name(Q),
+    {ok, QStates0, []} = rabbit_queue_type:deliver([Q], message(QRes),
+                                                   #{correlation => 1},
+                                                   rabbit_queue_type:init()),
+    QStates = handle_noproc_down(QRes, QStates0),
+    receive
+        {'$gen_cast', {queue_event, QRes, Evt}} -> {QStates, Evt}
+    after ?TIMEOUT ->
+              error(no_owner_result)
+    end.
+
+handle_event_with_new_ctx(Q, QRes, Evt) ->
+    QStates = rabbit_queue_type:new(Q, rabbit_queue_type:init()),
+    rabbit_queue_type:handle_event(QRes, Evt, QStates).
+
+queue_sup(QPid) ->
+    {dictionary, Dict} = process_info(QPid, dictionary),
+    hd(proplists:get_value('$ancestors', Dict)).
+
+deliver_to_deleted_exclusive_queue(QName) ->
+    {Owner, Q} = declare_exclusive_queue(QName),
+    Blockers = block_worker_pool(),
+    try
+        Owner ! stop,
+        await_exit(amqqueue:get_pid(Q)),
+        {ok, Q} = rabbit_amqqueue:lookup(amqqueue:get_name(Q)),
+        deliver_to_stale_record(Q, #{correlation => 1})
+    after
+        [Blocker ! release || Blocker <- Blockers]
+    end.
+
+deliver_to_crashed_exclusive_queue(QName) ->
+    {Owner, Q} = declare_exclusive_queue(QName),
+    QPid = amqqueue:get_pid(Q),
+    Sup = queue_sup(QPid),
+    %% Keep the record pointing to the dead process.
+    ok = sys:suspend(Sup),
+    try
+        exit(QPid, kill),
+        await_exit(QPid),
+        {ok, Q} = rabbit_amqqueue:lookup(amqqueue:get_name(Q)),
+        deliver_to_stale_record(Q, #{correlation => 1})
+    after
+        ok = sys:resume(Sup),
+        Owner ! stop
+    end.
+
+deliver_to_deleted_queue(QName, Type, Options) ->
+    {ok, Q} = declare_queue(QName, Type, none),
+    {ok, 0} = rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
+    _ = [await_exit(amqqueue:get_pid(Q)) || Type =:= <<"classic">>],
+    deliver_to_stale_record(Q, Options).
+
+deliver_to_restarted_queue(QName) ->
+    {ok, Q} = declare_queue(QName, <<"classic">>, none),
+    QRes = amqqueue:get_name(Q),
+    QPid = amqqueue:get_pid(Q),
+    try
+        exit(QPid, kill),
+        await_restart(QRes, QPid, 100),
+        deliver_to_stale_record(Q, #{correlation => 1})
+    after
+        {ok, Q2} = rabbit_amqqueue:lookup(QRes),
+        {ok, _} = rabbit_amqqueue:delete(Q2, false, false, <<"acting-user">>)
+    end.
+
+block_worker_pool() ->
+    Self = self(),
+    Size = worker_pool_sup:default_pool_size(),
+    [worker_pool:submit_async(fun() ->
+                                      Self ! {blocked, self()},
+                                      receive release -> ok
+                                      after ?TIMEOUT -> ok
+                                      end
+                              end)
+     || _ <- lists:seq(1, Size)],
+    [receive {blocked, Worker} -> Worker end || _ <- lists:seq(1, Size)].
+
+await_exit(Pid) ->
+    MRef = monitor(process, Pid),
+    receive {'DOWN', MRef, process, Pid, _} -> ok end.
+
+await_restart(_QRes, _OldPid, 0) ->
+    error(queue_not_restarted);
+await_restart(QRes, OldPid, N) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QRes),
+    case amqqueue:get_pid(Q) of
+        OldPid ->
+            timer:sleep(50),
+            await_restart(QRes, OldPid, N - 1);
+        _ ->
+            ok
+    end.
+
+message(#resource{name = RoutingKey}) ->
+    {ok, Msg} = mc_amqpl:message(rabbit_misc:r(<<"/">>, exchange, <<>>),
+                                 RoutingKey,
+                                 #content{class_id = 60,
+                                          properties = #'P_basic'{delivery_mode = 2},
+                                          payload_fragments_rev = [<<"msg">>]}),
+    Msg.
+
+%% The second delivery reaches the exited process while the owner of the
+%% queue is being checked, so both publishes depend on that one check.
+deliver_twice_to_stale_record(Q) ->
+    QRes = amqqueue:get_name(Q),
+    {ok, QS1, []} = rabbit_queue_type:deliver([Q], message(QRes),
+                                              #{correlation => 1},
+                                              rabbit_queue_type:init()),
+    QS2 = handle_noproc_down(QRes, QS1),
+    {ok, QS3, []} = rabbit_queue_type:deliver([Q], message(QRes),
+                                              #{correlation => 2}, QS2),
+    QS4 = handle_noproc_down(QRes, QS3),
+    Actions = receive
+                  {'$gen_cast', {queue_event, QRes, Evt}} ->
+                      {ok, _, As} = rabbit_queue_type:handle_event(QRes, Evt, QS4),
+                      As
+              after ?TIMEOUT ->
+                        timeout
+              end,
+    Extra = receive
+                {'$gen_cast', {queue_event, QRes, Evt2}} -> Evt2
+            after 1000 ->
+                      none
+            end,
+    {Actions, Extra}.
+
+handle_noproc_down(QRes, QStates0) ->
+    receive
+        {{'DOWN', QRes}, _, process, Pid, noproc} ->
+            {ok, QStates, []} = rabbit_queue_type:handle_down(Pid, QRes, noproc,
+                                                              QStates0),
+            QStates
+    after ?TIMEOUT ->
+              error(no_down)
+    end.
+
+%% Delivers using a queue record read before the queue process exited, so
+%% that a classic queue monitor reports `noproc'. With a `queue_target'
+%% instead, a deleted record would fail the lookup in `rabbit_queue_type'.
+deliver_to_stale_record(Q, Options) ->
+    QRes = amqqueue:get_name(Q),
+    {ok, QStates, Actions} = rabbit_queue_type:deliver(
+                               [Q], message(QRes), Options,
+                               rabbit_queue_type:init()),
+    case Actions of
+        [] -> await_outcome(QRes, QStates, undefined);
+        _ -> Actions
+    end.
+
+%% Returns the reason of the first DOWN and the outcome.
+await_outcome(QRes, QStates, DownInfo) ->
+    receive
+        {{'DOWN', QRes}, _, process, Pid, Info} ->
+            Info1 = case DownInfo of
+                        undefined -> Info;
+                        _ -> DownInfo
+                    end,
+            outcome(rabbit_queue_type:handle_down(Pid, QRes, Info, QStates),
+                    QRes, Info1);
+        {'$gen_cast', {queue_event, QRes, Evt}} ->
+            outcome(rabbit_queue_type:handle_event(QRes, Evt, QStates),
+                    QRes, DownInfo)
+    after ?TIMEOUT ->
+              timeout
+    end.
+
+outcome({ok, QStates, []}, QRes, DownInfo) ->
+    await_outcome(QRes, QStates, DownInfo);
+outcome({ok, _, Actions}, _QRes, DownInfo) ->
+    {DownInfo, Actions};
+outcome({eol, _, _}, _QRes, DownInfo) ->
+    {DownInfo, eol};
+outcome({eol, _}, _QRes, DownInfo) ->
+    {DownInfo, eol}.
 
 kill_the_queue(QueueName, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, kill_the_queue, [QueueName]).
