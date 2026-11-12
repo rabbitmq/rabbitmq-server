@@ -124,7 +124,11 @@ Details:
    alive. A monitor is not used because confirming a live owner would mean waiting for a timeout
  * `become_leader0/2` keeps `deleting` on leader repair, `i(state, Q)` reports it, and `add_member`
    refuses a `deleting` queue, so that reconciliation does not grow it while it is deleted
- * A vhost delete treats a `resource_locked` delete as done, since the vhost delete removes the record
+ * A vhost delete sends a `deleting` queue through the delete, so it waits for or takes over the
+   delete that is running. It treats a `resource_locked` delete as done, since the vhost delete
+   removes the record
+ * The by-name force delete, used for records without UIDs and for nodes with an older Ra, has the
+   same 30 second timeout as the UID-guarded one, so the owner cannot block forever on a member
  * It needs a feature flag, `quorum_queue_deleting_state`, since older nodes would ignore the marker
 
 Status: implemented on a separate branch, on top of changes 1 to 3.
