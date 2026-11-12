@@ -25,7 +25,6 @@
   get_metadata/1,
   get_description/1,
   get_tags/1,
-  tag_to_binary/1,
   get_default_queue_type/1,
 
   set_limits/2,
@@ -51,13 +50,13 @@
 -type(metadata_key() :: atom()).
 
 -type(metadata() :: #{description => description(),
-                      tags => [atom() | binary()],
+                      tags => [tag()],
                       metadata_key() => any()} | undefined).
 
 -type(description() :: binary()).
--type(tag() :: binary()).
+-type(tag() :: atom()).
 -type(tags() :: [tag()]).
--type(unparsed_tags() :: undefined | binary() | string() | [atom() | binary() | string()]).
+-type(unparsed_tags() :: binary() | string() | atom()).
 
 -type vhost() :: vhost_v2().
 
@@ -162,15 +161,7 @@ get_description(#vhost{} = VHost) ->
 
 -spec get_tags(vhost()) -> [tag()].
 get_tags(#vhost{} = VHost) ->
-    [tag_to_binary(Tag) || Tag <- maps:get(tags, get_metadata(VHost), [])].
-
--spec tag_to_binary(atom() | string() | binary()) -> tag().
-tag_to_binary(Tag) when is_atom(Tag) ->
-    atom_to_binary(Tag, utf8);
-tag_to_binary(Tag) when is_list(Tag) ->
-    rabbit_data_coercion:to_utf8_binary(Tag);
-tag_to_binary(Tag) when is_binary(Tag) ->
-    Tag.
+    maps:get(tags, get_metadata(VHost), []).
 
 -spec get_default_queue_type(vhost()) -> binary() | undefined.
 get_default_queue_type(#vhost{} = VHost) ->
@@ -245,9 +236,9 @@ new_metadata(Description, Tags, DefaultQueueType) ->
       tags => Tags,
       default_queue_type => DefaultQueueType}.
 
--spec is_tagged_with(vhost(), atom() | string() | binary()) -> boolean().
+-spec is_tagged_with(vhost(), tag()) -> boolean().
 is_tagged_with(VHost, Tag) ->
-    lists:member(tag_to_binary(Tag), get_tags(VHost)).
+    lists:member(Tag, get_tags(VHost)).
 
 -spec to_map(vhost()) -> map().
 to_map(VHost) ->
