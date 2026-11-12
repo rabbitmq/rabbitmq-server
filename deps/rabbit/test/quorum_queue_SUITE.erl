@@ -81,6 +81,7 @@ groups() ->
                                             cleanup_data_dir_needs_metadata_store,
                                             delete_while_being_deleted,
                                             concurrent_deletes,
+                                            stale_delete_after_redeclare,
                                             delete_after_owner_node_restart,
                                             deleting_survives_leader_change,
                                             channel_handles_ra_event,
@@ -4232,6 +4233,74 @@ concurrent_deletes1(Config) ->
     {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
     ?assertEqual(live, amqqueue:get_state(Q)),
     ?assertNot(maps:is_key(deleting_owner, amqqueue:get_type_state(Q))),
+    ok.
+
+stale_delete_after_redeclare(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"};
+        true ->
+            stale_delete_after_redeclare1(Config)
+    end.
+
+stale_delete_after_redeclare1(Config) ->
+    [Server1, Server2, _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = ?config(queue_name, Config),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch2, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    RaName = ra_name(QQ),
+    UIds = fun() ->
+                   [rpc:call(S, ra_directory, uid_of, [quorum_queues, RaName])
+                    || S <- Servers]
+           end,
+    OldUIds = UIds(),
+
+    Self = self(),
+    ok = rabbit_ct_broker_helpers:setup_meck(Config),
+    ok = rpc:call(Server1, meck, new, [rabbit_db_queue, [passthrough, no_link]]),
+    ok = rpc:call(Server1, meck, expect,
+                  [rabbit_db_queue, try_update,
+                   fun(Name, Fun, Options) ->
+                           Self ! {try_update, self()},
+                           receive continue -> ok end,
+                           meck:passthrough([Name, Fun, Options])
+                   end]),
+    try
+        Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+        spawn(fun() ->
+                      Self ! {stale_delete,
+                              amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})}
+              end),
+        StaleDelete = receive {try_update, Pid} -> Pid
+                      after 30000 -> ct:fail(no_try_update)
+                      end,
+
+        ?assertMatch(#'queue.delete_ok'{},
+                     amqp_channel:call(Ch2, #'queue.delete'{queue = QQ})),
+        ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch2, QQ, Args)),
+        ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+
+        StaleDelete ! continue,
+        receive
+            {stale_delete, Res} ->
+                ?assertMatch(#'queue.delete_ok'{}, Res)
+        after 30000 ->
+                  ct:fail(no_stale_delete)
+        end
+    after
+        ok = rpc:call(Server1, meck, unload, [rabbit_db_queue])
+    end,
+
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    ?assertEqual(live, amqqueue:get_state(Q)),
+    NewUIds = UIds(),
+    [?assertNotEqual(Old, New) || {Old, New} <- lists:zip(OldUIds, NewUIds)],
+    ?assertEqual(3, count_online_nodes(Server1, <<"/">>, QQ)),
     ok.
 
 delete_after_owner_node_restart(Config) ->

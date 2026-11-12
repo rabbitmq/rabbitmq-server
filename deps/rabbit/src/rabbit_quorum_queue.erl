@@ -1220,18 +1220,19 @@ delete(Q, _IfUnused, true, _ActingUser) when ?amqqueue_is_quorum(Q) ->
 delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     case rabbit_feature_flags:is_enabled(quorum_queue_deleting_state) of
         true ->
-            delete_as_owner(amqqueue:get_name(Q), ActingUser);
+            delete_as_owner(Q, ActingUser);
         false ->
             delete_cluster_and_record(Q, ActingUser)
     end.
 
 %% The owner is a process of its own, because a caller such as a channel
 %% outlives a delete attempt that fails, and would block later deletes.
-delete_as_owner(QName, ActingUser) ->
+delete_as_owner(Q, ActingUser) ->
+    QName = amqqueue:get_name(Q),
     Caller = self(),
     {Pid, MRef} = spawn_monitor(
                     fun() ->
-                            Caller ! {self(), delete_owned(QName, ActingUser)}
+                            Caller ! {self(), delete_owned(Q, ActingUser)}
                     end),
     receive
         {Pid, Result} ->
@@ -1242,10 +1243,15 @@ delete_as_owner(QName, ActingUser) ->
              [rabbit_misc:rs(QName), Reason]}
     end.
 
-delete_owned(QName, ActingUser) ->
-    case claim_delete(QName) of
+delete_owned(Q0, ActingUser) ->
+    QName = amqqueue:get_name(Q0),
+    case claim_delete(Q0) of
         {ok, Q} ->
             delete_cluster_and_record(Q, ActingUser);
+        {error, other_incarnation} ->
+            ?LOG_DEBUG("~ts was declared again before it could be deleted",
+                       [rabbit_misc:rs(QName)]),
+            {ok, 0};
         {error, being_deleted} ->
             {protocol_error, resource_locked, "~ts is being deleted",
              [rabbit_misc:rs(QName)]};
@@ -1260,22 +1266,43 @@ delete_owned(QName, ActingUser) ->
              [rabbit_misc:rs(QName), Reason]}
     end.
 
-claim_delete(QName) ->
+claim_delete(Q0) ->
     Owner = self(),
     rabbit_db_queue:try_update(
-      QName,
+      amqqueue:get_name(Q0),
       fun(Q) when not ?amqqueue_is_quorum(Q) ->
               {error, not_quorum};
-         (Q) when ?amqqueue_state_is(Q, deleting) ->
-              case is_delete_owner_alive(Q) of
-                  false ->
-                      {ok, set_deleting(Q, Owner)};
-                  _ ->
-                      {error, being_deleted}
-              end;
          (Q) ->
-              {ok, set_deleting(Q, Owner)}
+              case is_same_incarnation(Q, Q0) of
+                  true ->
+                      claim_delete_of(Q, Owner);
+                  false ->
+                      {error, other_incarnation}
+              end
       end, #{}).
+
+claim_delete_of(Q, Owner) when ?amqqueue_state_is(Q, deleting) ->
+    case is_delete_owner_alive(Q) of
+        false ->
+            {ok, set_deleting(Q, Owner)};
+        _ ->
+            {error, being_deleted}
+    end;
+claim_delete_of(Q, Owner) ->
+    {ok, set_deleting(Q, Owner)}.
+
+%% Member UIds are new for each incarnation of a queue. Records with a
+%% legacy list of nodes cannot be told apart.
+is_same_incarnation(Q1, Q2) ->
+    case {amqqueue:get_type_state(Q1), amqqueue:get_type_state(Q2)} of
+        {#{nodes := Nodes1}, #{nodes := Nodes2}}
+          when is_map(Nodes1) andalso is_map(Nodes2) ->
+            lists:any(fun({Node, UId}) ->
+                              maps:get(Node, Nodes2, undefined) =:= UId
+                      end, maps:to_list(Nodes1));
+        _ ->
+            true
+    end.
 
 set_deleting(Q, Owner) ->
     amqqueue:set_state(
