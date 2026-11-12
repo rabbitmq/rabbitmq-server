@@ -486,6 +486,12 @@ try_update1(_Config) ->
                            || _ <- [1, 2]]),
     ?assertEqual(not_found,
                  rabbit_db_queue:try_update(QName2, fun(Q0) -> {ok, Q0} end, #{})),
+    DeleteFirst = fun(Current) ->
+                          _ = rabbit_db_queue:delete(QName, false),
+                          {ok, Current}
+                  end,
+    ?assertEqual(not_found, rabbit_db_queue:try_update(QName, DeleteFirst, #{})),
+    ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
     passed.
 
 update_decorators(Config) ->

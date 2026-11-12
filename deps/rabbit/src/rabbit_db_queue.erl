@@ -527,7 +527,7 @@ update(QName, Fun, Options) ->
       Reason :: term(),
       Options :: #{timeout => timeout()},
       Ret :: {ok, NewQueue} | {error, Reason} | not_found |
-             rabbit_khepri:timeout_error().
+             {error, term()}.
 %% @doc Updates an existing queue record using `UpdateFun', unless
 %% `UpdateFun' returns an error.
 %%
@@ -548,16 +548,18 @@ try_update(QName, Fun, Options) ->
                             {ok, Q1};
                         {error, {khepri, mismatching_node, _}} ->
                             try_update(QName, Fun, Options);
+                        {error, {khepri, node_not_found, _}} ->
+                            not_found;
                         {error, _} = Err ->
                             Err
                     end;
                 {error, _} = Err ->
                     Err
             end;
-        {error, timeout} = Err ->
-            Err;
-        _ ->
-            not_found
+        {error, {khepri, node_not_found, _}} ->
+            not_found;
+        {error, _} = Err ->
+            Err
     end.
 
 %% -------------------------------------------------------------------
