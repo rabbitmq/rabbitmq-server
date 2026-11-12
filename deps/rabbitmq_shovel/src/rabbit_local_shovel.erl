@@ -511,8 +511,8 @@ handle_dest({queue_event, QRef, Evt},
             State = State0#{dest => Dest#{current => Current#{queue_states => QState1}}},
             send_confirms_and_nacks(handle_dest_queue_actions(Actions, State));
         {eol, Actions} ->
-            _ = send_confirms_and_nacks(handle_dest_queue_actions(Actions, State0)),
-            {stop, {outbound_link_or_channel_closure, queue_deleted}};
+            State = send_confirms_and_nacks(handle_dest_queue_actions(Actions, State0)),
+            dest_eol(QRef, QueueStates0, State);
         {protocol_error, _Type, Reason, ReasonArgs} ->
             {stop, list_to_binary(io_lib:format(Reason, ReasonArgs))}
     end;
@@ -529,8 +529,8 @@ handle_dest({{'DOWN', #resource{kind = queue,
         {ok, QState1, Actions} ->
             State1 = State0#{dest => Dest#{current => Current#{queue_states => QState1}}},
             handle_dest_queue_actions(Actions, State1);
-        {eol, QState1, _QRef} ->
-            State0#{dest => Dest#{current => Current#{queue_states => QState1}}}
+        {eol, QState1, QRef} ->
+            dest_eol(QRef, QState1, State0)
     end;
 handle_dest(clear_permission_cache, State) ->
     _TRef = erlang:send_after(?PERMISSION_CACHE_TTL, self(), clear_permission_cache),
@@ -551,6 +551,20 @@ handle_dest({conserve_resources, Alarm, Conserve}, #{dest := #{alarms := Alarms0
     end;
 handle_dest(_Msg, State) ->
     State.
+
+dest_eol(#resource{name = Queue, virtual_host = VHost}, _QStates,
+         #{dest := #{queue := Queue, current := #{vhost := VHost}}}) ->
+    {stop, {outbound_link_or_channel_closure, queue_deleted}};
+dest_eol(QRef, QStates,
+         #{dest := Dest = #{unconfirmed := UC0,
+                            current := Current}} = State) ->
+    {ConfirmMXs, UC} = rabbit_shovel_confirms:remove_queue(QRef, UC0),
+    QStates1 = rabbit_queue_type:remove(QRef, QStates),
+    send_confirms_and_nacks(
+      record_confirms(
+        ConfirmMXs,
+        State#{dest => Dest#{unconfirmed => UC,
+                             current => Current#{queue_states => QStates1}}})).
 
 ack(DeliveryTag, Multiple,
     #{source := #{current := #{unacked_message_q := UAMQ0}}} = State) ->
