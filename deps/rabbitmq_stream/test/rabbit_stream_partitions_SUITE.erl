@@ -66,7 +66,7 @@ init_per_testcase(TestCase, Config) ->
                           {rmq_nodes_count, 3},
                           {tcp_ports_base}
                          ]),
-    rabbit_ct_helpers:run_setup_steps(
+    Ret = rabbit_ct_helpers:run_setup_steps(
       Config2,
       [fun(StepConfig) ->
                rabbit_ct_helpers:merge_app_env(StepConfig,
@@ -81,7 +81,24 @@ init_per_testcase(TestCase, Config) ->
                                                  {stream_sac_disconnected_timeout,
                                                   2000}]})
        end]
-      ++ rabbit_ct_broker_helpers:setup_steps()).
+      ++ rabbit_ct_broker_helpers:setup_steps()),
+    case Ret of
+        {skip, _} ->
+            Ret;
+        Config3 ->
+            %% Some 4.2.x releases collect stream metadata with a closure
+            %% that fails with `badfun` on other versions, see
+            %% rabbitmq/rabbitmq-server#17333.
+            case rabbit_ct_broker_helpers:is_feature_flag_supported(
+                   Config3, 'rabbitmq_4.3.0') of
+                true ->
+                    Config3;
+                false ->
+                    _ = end_per_testcase(TestCase, Config3),
+                    {skip, "4.2.x nodes leave nodes of other versions out "
+                     "of stream metadata"}
+            end
+    end.
 
 end_per_testcase(TestCase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_finished(Config, TestCase),

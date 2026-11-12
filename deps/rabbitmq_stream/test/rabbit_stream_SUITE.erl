@@ -300,6 +300,17 @@ init_per_testcase(sub_entry_batch_validation = TestCase, Config) ->
                                        ?SUB_ENTRY_BATCH_VALIDATION_MAX]),
     rabbit_ct_helpers:testcase_started(Config, TestCase);
 
+init_per_testcase(java = TestCase, Config) ->
+    %% Some 4.2.x releases collect stream metadata with a closure that fails
+    %% with `badfun` on other versions, see rabbitmq/rabbitmq-server#17333.
+    case rabbit_ct_broker_helpers:is_feature_flag_supported(
+           Config, 'rabbitmq_4.3.0') of
+        true ->
+            rabbit_ct_helpers:testcase_started(Config, TestCase);
+        false ->
+            {skip, "4.2.x nodes leave nodes of other versions out of stream metadata"}
+    end;
+
 init_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, TestCase).
 
