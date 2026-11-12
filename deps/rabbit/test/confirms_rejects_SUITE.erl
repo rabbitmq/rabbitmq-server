@@ -36,7 +36,10 @@ groups() ->
         crashed_remote_exclusive_classic_queue_rejects,
         replaced_remote_exclusive_classic_queue_rejects,
         classic_queue_event_ignored_by_quorum_queue,
-        restarted_classic_queue_rejects
+        restarted_classic_queue_rejects,
+        deleted_quorum_queue_confirms,
+        deleted_quorum_queue_with_unreachable_member_confirms,
+        stopped_quorum_queue_rejects
       ]}
     ].
 
@@ -525,6 +528,50 @@ restarted_classic_queue_rejects(Config) ->
                    Config, 0, ?MODULE, deliver_to_restarted_queue,
                    [<<"restarted_classic_queue_rejects">>])).
 
+deleted_quorum_queue_confirms(Config) ->
+    ?assertMatch([{settled, _, [1]}],
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, deliver_to_deleted_queue,
+                   [<<"deleted_quorum_queue_confirms">>, <<"quorum">>,
+                    #{correlation => 1}])),
+    ?assertMatch([{queue_deleted, _}],
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, deliver_to_deleted_queue,
+                   [<<"deleted_quorum_queue_confirms_amqp">>, <<"quorum">>,
+                    #{correlation => 1, report_deleted_queues => true}])).
+
+deleted_quorum_queue_with_unreachable_member_confirms(Config) ->
+    ?assertMatch([{settled, _, [1]}],
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE,
+                   deliver_to_deleted_queue_with_unreachable_member,
+                   [<<"deleted_quorum_queue_with_unreachable_member_confirms">>])).
+
+stopped_quorum_queue_rejects(Config) ->
+    QName = <<"stopped_quorum_queue_rejects">>,
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(
+                Config, 0, ?MODULE, declare_queue, [QName, <<"quorum">>, none]),
+    {RaName, _} = amqqueue:get_pid(Q),
+    Members = [{RaName, Node}
+               || Node <- rabbit_ct_broker_helpers:rpc(
+                            Config, 0, rabbit_amqqueue, get_quorum_nodes, [Q])],
+    [ok = rabbit_ct_broker_helpers:rpc(Config, 0, ra, stop_server,
+                                       [quorum_queues, Member])
+     || Member <- Members],
+    try
+        ?assertMatch([{rejected, _, maxlen, [1]}],
+                     rabbit_ct_broker_helpers:rpc(
+                       Config, 0, ?MODULE, deliver_to_stale_record,
+                       [Q, #{correlation => 1}]))
+    after
+        [ok = rabbit_ct_broker_helpers:rpc(Config, 0, ra, restart_server,
+                                           [quorum_queues, Member])
+         || Member <- Members],
+        {ok, _} = rabbit_ct_broker_helpers:rpc(
+                    Config, 0, rabbit_amqqueue, delete,
+                    [Q, false, false, <<"acting-user">>])
+    end.
+
 declare_queue(QName, Type, Owner) ->
     case rabbit_amqqueue:declare(rabbit_misc:r(<<"/">>, queue, QName), true,
                                  false, [{<<"x-queue-type">>, longstr, Type}],
@@ -621,6 +668,18 @@ deliver_to_deleted_queue(QName, Type, Options) ->
     {ok, 0} = rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
     _ = [await_exit(amqqueue:get_pid(Q)) || Type =:= <<"classic">>],
     deliver_to_stale_record(Q, Options).
+
+deliver_to_deleted_queue_with_unreachable_member(QName) ->
+    {ok, Q0} = declare_queue(QName, <<"quorum">>, none),
+    {ok, 0} = rabbit_amqqueue:delete(Q0, false, false, <<"acting-user">>),
+    #{nodes := Nodes} = TypeState = amqqueue:get_type_state(Q0),
+    Unreachable = 'unreachable@localhost',
+    Nodes1 = case Nodes of
+                 L when is_list(L) -> [Unreachable | L];
+                 M when is_map(M) -> M#{Unreachable => <<"uid">>}
+             end,
+    Q = amqqueue:set_type_state(Q0, TypeState#{nodes => Nodes1}),
+    deliver_to_stale_record(Q, #{correlation => 1}).
 
 deliver_to_restarted_queue(QName) ->
     {ok, Q} = declare_queue(QName, <<"classic">>, none),

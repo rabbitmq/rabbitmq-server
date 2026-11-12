@@ -72,7 +72,8 @@
          drain/1,
          revive/0,
          queue_vm_stats_sups/0,
-         queue_vm_ets/0
+         queue_vm_ets/0,
+         deleted_queue_actions/2
          ]).
 
 -export([
@@ -717,6 +718,7 @@ without_queue(QName, Qs) ->
                          amqqueue:get_name(Q) =/= QName
                  end, Qs).
 
+-spec deleted_queue_actions(queue_name(), delivery_options()) -> actions().
 deleted_queue_actions(QName, #{report_deleted_queues := true}) ->
     [{queue_deleted, QName}];
 deleted_queue_actions(QName, #{correlation := Corr}) ->

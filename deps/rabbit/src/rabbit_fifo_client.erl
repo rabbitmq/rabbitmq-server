@@ -121,7 +121,8 @@ init(Servers, SoftLimit) ->
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
 -spec enqueue(rabbit_amqqueue:name(), Correlation :: term(),
               Msg :: term(), State :: state()) ->
-    {ok, state(), rabbit_queue_type:actions()} | {reject_publish, state()}.
+    {ok, state(), rabbit_queue_type:actions()} | {reject_publish, state()} |
+    {deleted, state()}.
 enqueue(QName, Correlation, Msg,
         #state{queue_status = undefined,
                next_enqueue_seq = 1,
@@ -143,13 +144,13 @@ enqueue(QName, Correlation, Msg,
             %% if we are not able to process the register command
             %% it is safe to reject the message as we never attempted
             %% to send it
-            {reject_publish, State0};
+            reject_unless_deleted(QName, State0);
         {error, {shutdown, delete}} ->
             ?LOG_DEBUG("~ts: QQ ~ts tried to register enqueuer during delete shutdown",
                        [?MODULE, rabbit_misc:rs(QName)]),
-            {reject_publish, State0};
+            {deleted, State0};
         {timeout, _} ->
-            {reject_publish, State0};
+            reject_unless_deleted(QName, State0);
         Err ->
             ?LOG_DEBUG("~ts: QQ ~ts error when registering enqueuer ~p",
                        [?MODULE, rabbit_misc:rs(QName), Err]),
@@ -193,9 +194,18 @@ enqueue(_QName, Correlation, Msg,
 %% by the {@link handle_ra_event/2. handle_ra_event/2} function.
 %%
 -spec enqueue(rabbit_amqqueue:name(), Msg :: term(), State :: state()) ->
-    {ok, state(), rabbit_queue_type:actions()} | {reject_publish, state()}.
+    {ok, state(), rabbit_queue_type:actions()} | {reject_publish, state()} |
+    {deleted, state()}.
 enqueue(QName, Msg, State) ->
     enqueue(QName, undefined, Msg, State).
+
+reject_unless_deleted(QName, State) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {error, not_found} ->
+            {deleted, State};
+        {ok, _} ->
+            {reject_publish, State}
+    end.
 
 %% @doc Dequeue a message from the queue.
 %%
