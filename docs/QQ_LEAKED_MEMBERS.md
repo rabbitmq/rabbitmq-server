@@ -33,16 +33,22 @@ On the `members-exist-uids` branch of Ra, on top of the unreleased `start_cluste
  * `{error, {members_exist, [{ServerId, UId}]}}` reports the UID of each clashing member
  * `ra:force_delete_server/4` deletes a member only if it is registered with the given UID, and returns
    `{error, not_owner}` otherwise
- * The `start_cluster` pre-check also finds registered members that are stopped, not just running ones
 
-All three are pushed. `rabbitmq-components.mk` points `dep_ra` at that branch until Ra is released.
+Both are pushed. `rabbitmq-components.mk` points `dep_ra` at that branch until Ra is released.
+
+The pre-check still only finds running members. Making it also find stopped ones broke Ra callers that
+start a cluster over stopped members on purpose, such as `ra_system_SUITE:restart_system`, so that
+check is done by RabbitMQ instead (change 2).
 
 ### 2. Clean up in the declare and delete paths
 
 When `internal_declare/2` returns `created`, no record exists for the name, so any Ra member with that
-name is an orphan. On `members_exist`, the declare deletes the clashing members by UID and retries
-`ra:start_cluster/3` once. If the declare fails for another reason, it deletes the members it tried to
-start, by UID, before removing the record.
+name is an orphan. Before `ra:start_cluster/3`, the declare reads the UID registered for the name on
+each member node and deletes those members by UID. Otherwise `ra:start_cluster/3` would replace a
+stopped one and leave its data directory behind. On `members_exist`, which a member started in the
+meantime can still cause, the declare deletes the clashing members by UID and retries once. If the
+declare fails for another reason, it deletes the members it tried to start, by UID, before removing
+the record.
 
 `add_member` does the same when `ra:start_server/2` fails because the name is already registered on the
 target node. It reads the registered UID on that node and deletes the member by UID only if the record
@@ -133,7 +139,7 @@ Ra cluster by name, and the condition then keeps a record with no cluster behind
 
 ## Tests
 
- * Ra: UIDs in `members_exist`, `not_owner`, and stopped members found (done), the
+ * Ra: UIDs in `members_exist` and `not_owner` (done), the
    `force_delete_server/4` success path (to do)
  * Declare: succeeds against leftover members, running and stopped (done). Cleans up after a timeout,
    and handles the old `members_exist` shape (to do)
