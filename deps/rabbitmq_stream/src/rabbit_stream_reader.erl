@@ -1489,8 +1489,7 @@ handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S,
                                          proxy_socket = ProxySock,
                                          authentication_state = AuthState0,
-                                         host = Host,
-                                         peer_host = PeerHost} =
+                                         host = Host} =
                           Connection0,
                       State,
                       {request, CorrelationId,
@@ -1540,9 +1539,14 @@ handle_frame_pre_auth(Transport,
                               Challenge}};
                         {ok, User = #user{username = Username}} ->
                             rabbit_access_control:clear_max_heap_size(),
+                            LoopbackSock =
+                                case ProxySock of
+                                    undefined -> S;
+                                    _ -> ProxySock
+                                end,
                             case
                                 rabbit_access_control:check_user_loopback(Username,
-                                                                          PeerHost)
+                                                                          LoopbackSock)
                             of
                                 ok ->
                                     rabbit_core_metrics:auth_attempt_succeeded(Host,

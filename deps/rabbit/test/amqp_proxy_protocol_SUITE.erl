@@ -10,6 +10,7 @@
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -import(rabbit_ct_helpers, [eventually/3]).
 -import(rabbit_ct_broker_helpers, [rpc/4]).
@@ -17,7 +18,8 @@
 -define(TIMEOUT, 5000).
 
 all() ->
-    [{group, tests}].
+    [{group, tests},
+     {group, loopback_tests}].
 
 groups() ->
     [{tests, [shuffle],
@@ -26,6 +28,11 @@ groups() ->
        v1_tls,
        v2_local,
        v1_vhost_access_peeraddr
+      ]},
+     {loopback_tests, [],
+      [
+       loopback_user_via_proxy_from_loopback_with_rdns,
+       loopback_user_via_proxy_from_remote_with_rdns
       ]}
     ].
 
@@ -52,6 +59,18 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
         rabbit_ct_client_helpers:teardown_steps() ++
         rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(loopback_tests, Config) ->
+    ok = rpc(Config, application, set_env, [rabbit, reverse_dns_lookups, true]),
+    Config;
+init_per_group(_, Config) ->
+    Config.
+
+end_per_group(loopback_tests, Config) ->
+    ok = rpc(Config, application, unset_env, [rabbit, reverse_dns_lookups]),
+    Config;
+end_per_group(_, Config) ->
+    Config.
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -128,6 +147,40 @@ vhost_access_authz_data(Port) ->
         AuthzData
     after
         ok = application:set_env(rabbit, auth_backends, AuthBackends)
+    end.
+
+loopback_user_via_proxy_from_loopback_with_rdns(Config) ->
+    Socket = guest_login_via_proxy(Config, "127.0.0.1"),
+    _ = rpc(Config, ?MODULE, connection_name, []),
+    ok = gen_tcp:close(Socket).
+
+loopback_user_via_proxy_from_remote_with_rdns(Config) ->
+    ok = rpc(Config, rabbit_core_metrics, reset_auth_attempt_metrics, []),
+    Socket = guest_login_via_proxy(Config, "192.168.1.1"),
+    closed = recv_until_closed(Socket),
+    ?assertEqual(0, rpc(Config, ets, info, [connection_created, size])),
+    [Amqp10] = [A || A <- rpc(Config, rabbit_core_metrics, get_auth_attempts, []),
+                     proplists:get_value(protocol, A) =:= <<"amqp10">>],
+    ?assertEqual(1, proplists:get_value(auth_attempts_failed, Amqp10)).
+
+guest_login_via_proxy(Config, SrcAddr) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
+                                   [binary, {active, false}, {packet, raw}]),
+    ok = inet:send(Socket, ["PROXY TCP4 ", SrcAddr, " 127.0.0.1 50000 5672\r\n"]),
+    SaslInit = #'v1_0.sasl_init'{mechanism = {symbol, <<"PLAIN">>},
+                                 initial_response = {binary, <<0, "guest", 0, "guest">>}},
+    ok = inet:send(Socket, amqp_1_0_frame(header_sasl)),
+    ok = inet:send(Socket, amqp10_binary_generator:build_frame(
+                             0, 1, amqp10_framing:encode_bin(SaslInit))),
+    [ok = inet:send(Socket, amqp_1_0_frame(FrameType))
+     || FrameType <- [header_amqp, open]],
+    Socket.
+
+recv_until_closed(Socket) ->
+    case gen_tcp:recv(Socket, 0, ?TIMEOUT) of
+        {ok, _} -> recv_until_closed(Socket);
+        {error, closed} -> closed
     end.
 
 %% hex frames to send to have the connection recorded in RabbitMQ

@@ -42,7 +42,8 @@ groups() ->
           login_with_pbkdf2_sha256_hashed_password,
           login_with_legacy_4_byte_salt_hashed_password,
           auth_backend_internal_expand_topic_permission,
-          check_login_as
+          check_login_as,
+          loopback_user_login_with_reverse_dns_lookups
       ]}
     ].
 
@@ -318,6 +319,19 @@ login_of_passwordless_user1(_Config) ->
     ok = rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>),
 
     passed.
+
+loopback_user_login_with_reverse_dns_lookups(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, reverse_dns_lookups, true]),
+    try
+        Conn = rabbit_ct_client_helpers:open_unmanaged_connection(
+                 Config, 0, <<"guest">>, <<"guest">>),
+        ?assert(is_pid(Conn)),
+        ok = amqp_connection:close(Conn)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                          [rabbit, reverse_dns_lookups])
+    end.
 
 login_of_nonexistent_user(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,

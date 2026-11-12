@@ -1022,9 +1022,14 @@ khepri_fence(true) ->
 khepri_fence(false) ->
     ok.
 
-check_user_loopback(#v1{connection = #v1_connection{user = #user{username = Username},
-                                                    peer_host = PeerHost}} = State) ->
-    case rabbit_access_control:check_user_loopback(Username, PeerHost) of
+check_user_loopback(#v1{connection = #v1_connection{user = #user{username = Username}},
+                        sock = Sock,
+                        proxy_socket = ProxySock} = State) ->
+    LoopbackSock = case ProxySock of
+                       undefined -> Sock;
+                       _         -> ProxySock
+                   end,
+    case rabbit_access_control:check_user_loopback(Username, LoopbackSock) of
         ok ->
             ok;
         not_allowed ->

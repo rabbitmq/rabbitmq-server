@@ -20,7 +20,8 @@
 
 all() ->
     [
-        {group, sequential_tests}
+        {group, sequential_tests},
+        {group, loopback_tests}
     ].
 
 groups() -> [
@@ -32,6 +33,10 @@ groups() -> [
             proxy_protocol_v1_guest_from_remote_peer,
             proxy_protocol_v2_local,
             proxy_protocol_v1_vhost_access_peeraddr
+        ]},
+        {loopback_tests, [], [
+            loopback_user_via_proxy_from_loopback_with_rdns,
+            loopback_user_via_proxy_from_remote_with_rdns
         ]}
     ].
 
@@ -55,7 +60,16 @@ end_per_suite(Config) ->
         rabbit_ct_client_helpers:teardown_steps() ++
         rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_group(loopback_tests, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, reverse_dns_lookups, true]),
+    Config;
 init_per_group(_, Config) -> Config.
+
+end_per_group(loopback_tests, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                      [rabbit, reverse_dns_lookups]),
+    Config;
 end_per_group(_, Config) -> Config.
 
 init_per_testcase(Testcase, Config) ->
@@ -238,6 +252,33 @@ vhost_access_authz_data(Port) ->
     after
         ok = application:set_env(rabbit, auth_backends, AuthBackends)
     end.
+
+loopback_user_via_proxy_from_loopback_with_rdns(Config) ->
+    #'connection.tune'{} = guest_login_via_proxy(Config, "127.0.0.1"),
+    ok.
+
+loopback_user_via_proxy_from_remote_with_rdns(Config) ->
+    #'connection.close'{reply_code = 403} =
+        guest_login_via_proxy(Config, "192.168.1.1"),
+    ok.
+
+guest_login_via_proxy(Config, SrcAddr) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
+        [binary, {active, false}, {packet, raw}]),
+    ok = inet:send(Socket, ["PROXY TCP4 ", SrcAddr, " 127.0.0.1 50000 5672\r\n"]),
+    ok = inet:send(Socket, <<"AMQP", 0, 0, 9, 1>>),
+    #'connection.start'{} = recv_method(Socket),
+    ok = send_method(Socket, #'connection.start_ok'{
+        client_properties = [{<<"capabilities">>, table,
+                              [{<<"authentication_failure_close">>, bool, true}]}],
+        mechanism = <<"PLAIN">>,
+        response = <<0, "guest", 0, "guest">>,
+        locale = <<"en_US">>}),
+    Method = recv_method(Socket),
+    gen_tcp:close(Socket),
+    wait_for_connection_close(Config),
+    Method.
 
 send_method(Socket, Method) ->
     inet:send(Socket, rabbit_binary_generator:build_simple_method_frame(0, Method)).

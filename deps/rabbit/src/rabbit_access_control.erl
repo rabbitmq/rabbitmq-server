@@ -316,7 +316,8 @@ auth_user(#user{username = Username, tags = Tags}, Impl) ->
                impl     = Impl}.
 
 -spec check_user_loopback
-        (rabbit_types:username(), rabbit_net:socket() | inet:ip_address()) ->
+        (rabbit_types:username(),
+         rabbit_net:socket() | rabbit_net:proxy_socket() | inet:ip_address()) ->
             'ok' | 'not_allowed'.
 
 check_user_loopback(Username, SockOrAddr) ->
