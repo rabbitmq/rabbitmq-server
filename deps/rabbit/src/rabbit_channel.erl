@@ -2698,6 +2698,14 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 {protocol_error, ErrorType, Reason, ReasonArgs} ->
                     rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
             end;
+        {error, {absent, Q, deleting}} ->
+            case rabbit_amqqueue:finish_delete(Q, Username) of
+                ok ->
+                    handle_method(Declare, ConnPid, AuthzContext, CollectorPid,
+                                  VHostPath, User);
+                {error, being_deleted} ->
+                    rabbit_amqqueue:absent(Q, deleting)
+            end;
         {error, {absent, Q, Reason}} ->
             rabbit_amqqueue:absent(Q, Reason)
     end;

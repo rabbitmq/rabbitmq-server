@@ -94,8 +94,10 @@ cluster and then the record:
     compare-and-swap on the record version (`rabbit_db_queue:try_update/3`). This is done only if the
     record is the incarnation the caller looked up, that is it shares a member UID with it. A delete
     that finds a newer incarnation returns as if the queue was already deleted
- 2. If the record is already `deleting`, check whether the owner is alive. If it is, or it cannot be
-    checked, return a `resource_locked` error. If it is dead, take over with the same compare-and-swap
+ 2. If the record is already `deleting`, check whether the owner is alive. If it is dead, take over
+    with the same compare-and-swap. If it is alive, monitor it, wait for it to exit and try once more,
+    so that the delete returns once the queue is gone. If the owner cannot be checked, or its node
+    disconnects while waiting, return a `resource_locked` error
  3. Delete the Ra cluster, as today
  4. Remove the record if this process is still the owner
 
@@ -111,6 +113,9 @@ Details:
  * The queue stays listed, with `deleting` as its state. Declares and other operations that go
    through `rabbit_amqqueue:with/4` fail with `not_found`, "queue is being deleted", like the other
    absent states, so a client that polls with a passive declare until the queue is gone still works
+ * A declare, but not a passive one, of a `deleting` queue whose owner died finishes the delete and
+   then declares the queue, so that an application that declares its queues at startup recovers on
+   its own. This is done for AMQP 0-9-1 and for the AMQP 1.0 management API
  * The owner is a short-lived worker, not the caller. A channel or HTTP handler can outlive its delete
    attempt and would block every later delete
  * The owner check is `erpc:call(Node, erlang, is_process_alive, [Pid], Timeout)`. `false` means dead,
@@ -131,8 +136,8 @@ Ra cluster by name, and the condition then keeps a record with no cluster behind
 ## Known gaps
 
  * Without change 4, the delete race stays, and changes 2 and 3 clean up after it
- * A `deleting` queue whose owner died stays until it is deleted again. `recover/2` starts its local
-   member at boot
+ * A `deleting` queue whose owner died stays until it is deleted or declared again. `recover/2` starts
+   its local member at boot, so that the delete that takes over can reach it
  * A stale member on a node that was unreachable while its queue was redeclared has the wrong UID and
    is only removed when that node restarts
  * An orphan whose name is never reused, on a node that never restarts, keeps its disk and memory
@@ -157,7 +162,9 @@ Ra cluster by name, and the condition then keeps a record with no cluster behind
    and an unregistered data directory, and keeps members the record lists (done). Deletes nothing if the
    fence fails (done). A member with a different UID is handled by `recover/2` and not tested separately
  * Change 4: a second delete while the first one runs fails, and a redeclare after the first one
-   succeeds (done). A delete held between its lookup and its claim, while the queue is deleted and
+   succeeds (done). A second delete waits for a live owner and then succeeds (done). A declare of a
+   queue whose owner died finishes the delete, and a passive declare does not (done, AMQP 0-9-1
+   only). A delete held between its lookup and its claim, while the queue is deleted and
    declared again, leaves the new queue alone (done). A delete while the owner is alive fails, as do a declare and `add_member`, and a
    delete after the owner died takes over (done). No takeover while the owner's node is down, and a
    takeover after it restarted (done). `deleting` survives a leader change (done). The compare-and-swap
