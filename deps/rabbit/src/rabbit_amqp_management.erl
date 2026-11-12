@@ -209,6 +209,15 @@ handle_http_req(HttpMethod = <<"PUT">>,
                   exit:#amqp_error{explanation = Expl} ->
                       throw(<<"400">>, "~ts", [Expl])
             end;
+        {error, {absent, Q, deleting}} ->
+            case rabbit_amqqueue:finish_delete(Q, Username) of
+                ok ->
+                    handle_http_req(HttpMethod, PathSegments, Query, ReqPayload,
+                                    Vhost, User, ConnPid,
+                                    {PermCache1, TopicPermCache});
+                {error, being_deleted} ->
+                    absent(Q, deleting)
+            end;
         {error, {absent, Q, Reason}} ->
             absent(Q, Reason)
     end;

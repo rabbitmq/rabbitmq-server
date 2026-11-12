@@ -50,7 +50,7 @@
 -export([delete_crashed/1,
          delete_crashed/2,
          delete_crashed_internal/2]).
--export([delete_with/4, delete_with/6]).
+-export([delete_with/4, delete_with/6, finish_delete/2]).
 -export([pid_of/1, pid_of/2]).
 -export([pid_or_crashed/2]).
 -export([mark_local_durable_queues_stopped/1]).
@@ -1786,6 +1786,13 @@ delete_immediately_by_resource(Resources) ->
             {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     rabbit_queue_type:delete(Q, IfUnused, IfEmpty, ActingUser).
+
+-spec finish_delete(amqqueue:amqqueue(), rabbit_types:username()) ->
+    ok | {error, being_deleted}.
+finish_delete(Q, ActingUser) when ?amqqueue_is_quorum(Q) ->
+    rabbit_quorum_queue:finish_delete(Q, ActingUser);
+finish_delete(_Q, _ActingUser) ->
+    {error, being_deleted}.
 
 -spec delete_with(amqqueue:amqqueue() | name(), boolean(), boolean(), rabbit_types:username()) ->
     rabbit_types:ok(integer()) | rabbit_misc:channel_or_connection_exit().

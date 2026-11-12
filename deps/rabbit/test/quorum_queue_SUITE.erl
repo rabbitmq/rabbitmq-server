@@ -82,6 +82,7 @@ groups() ->
                                             delete_while_being_deleted,
                                             concurrent_deletes,
                                             stale_delete_after_redeclare,
+                                            declare_finishes_delete,
                                             delete_after_owner_node_restart,
                                             deleting_survives_leader_change,
                                             channel_handles_ra_event,
@@ -4148,21 +4149,30 @@ delete_while_being_deleted1(Config) ->
     {ok, DeletingQ} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
     ?assertEqual([{state, deleting}],
                  rpc:call(Server1, rabbit_amqqueue, info, [DeletingQ, [state]])),
-    ?assertExit({{shutdown, {server_initiated_close, 405, _}}, _},
-                amqp_channel:call(
-                  rabbit_ct_client_helpers:open_channel(Config, Server1),
-                  #'queue.delete'{queue = QQ})),
     ?assertExit({{shutdown, {server_initiated_close, 404, _}}, _},
                 declare(rabbit_ct_client_helpers:open_channel(Config, Server1),
                         QQ, Args)),
     ?assertEqual({error, queue_being_deleted},
                  rpc:call(Server1, rabbit_quorum_queue, add_member,
                           [<<"/">>, QQ, Other, 30000])),
+
+    Self = self(),
+    spawn(fun() ->
+                  Self ! {delete,
+                          amqp_channel:call(Ch, #'queue.delete'{queue = QQ})}
+          end),
+    receive {delete, Early} -> ct:fail({delete_did_not_wait, Early})
+    after 1000 -> ok
+    end,
     ?assertMatch({ok, _}, rpc:call(Server1, rabbit_amqqueue, lookup, [QName])),
 
     exit(Owner, kill),
-    ?assertMatch(#'queue.delete_ok'{},
-                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    receive
+        {delete, Res} ->
+            ?assertMatch(#'queue.delete_ok'{}, Res)
+    after 30000 ->
+              ct:fail(no_delete)
+    end,
     ?assertEqual({error, not_found},
                  rpc:call(Server1, rabbit_amqqueue, lookup, [QName])),
     RaName = ra_name(QQ),
@@ -4213,17 +4223,21 @@ concurrent_deletes1(Config) ->
         ?assertEqual(deleting, amqqueue:get_state(DeletingQ)),
         ?assertMatch(#{deleting_owner := Owner},
                      amqqueue:get_type_state(DeletingQ)),
-        ?assertExit({{shutdown, {server_initiated_close, 405, _}}, _},
-                    amqp_channel:call(
-                      rabbit_ct_client_helpers:open_channel(Config, Server1),
-                      #'queue.delete'{queue = QQ})),
+        ChB = rabbit_ct_client_helpers:open_channel(Config, Server1),
+        spawn(fun() ->
+                      Self ! {second_delete,
+                              amqp_channel:call(ChB, #'queue.delete'{queue = QQ})}
+              end),
+        receive {second_delete, Early} -> ct:fail({delete_did_not_wait, Early})
+        after 1000 -> ok
+        end,
         Owner ! continue,
-        receive
-            {first_delete, Res} ->
-                ?assertMatch(#'queue.delete_ok'{}, Res)
-        after 30000 ->
-                  ct:fail(no_first_delete)
-        end
+        [receive
+             {Tag, Res} ->
+                 ?assertMatch(#'queue.delete_ok'{}, Res)
+         after 30000 ->
+                   ct:fail({no_reply, Tag})
+         end || Tag <- [first_delete, second_delete]]
     after
         ok = rpc:call(Server1, meck, unload, [ra])
     end,
@@ -4301,6 +4315,46 @@ stale_delete_after_redeclare1(Config) ->
     NewUIds = UIds(),
     [?assertNotEqual(Old, New) || {Old, New} <- lists:zip(OldUIds, NewUIds)],
     ?assertEqual(3, count_online_nodes(Server1, <<"/">>, QQ)),
+    ok.
+
+declare_finishes_delete(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"};
+        true ->
+            declare_finishes_delete1(Config)
+    end.
+
+declare_finishes_delete1(Config) ->
+    [Server1, Server2, _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = ?config(queue_name, Config),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    RaName = ra_name(QQ),
+    UIds = fun() ->
+                   [rpc:call(S, ra_directory, uid_of, [quorum_queues, RaName])
+                    || S <- Servers]
+           end,
+    OldUIds = UIds(),
+    Owner = rpc:call(Server2, erlang, spawn, [fun() -> ok end]),
+    mark_deleting(Server1, QName, Owner),
+
+    ?assertExit({{shutdown, {server_initiated_close, 404, _}}, _},
+                amqp_channel:call(
+                  rabbit_ct_client_helpers:open_channel(Config, Server1),
+                  #'queue.declare'{queue = QQ, passive = true, durable = true,
+                                   arguments = Args})),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    ?assertEqual(live, amqqueue:get_state(Q)),
+    NewUIds = UIds(),
+    [?assertNotEqual(Old, New) || {Old, New} <- lists:zip(OldUIds, NewUIds)],
     ok.
 
 delete_after_owner_node_restart(Config) ->

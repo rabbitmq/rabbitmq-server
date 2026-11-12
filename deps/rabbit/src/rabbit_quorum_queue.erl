@@ -37,6 +37,7 @@
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
+-export([finish_delete/2]).
 -export([rpc_delete_metrics/1,
          key_metrics_rpc/1]).
 -export([format/2]).
@@ -1220,19 +1221,31 @@ delete(Q, _IfUnused, true, _ActingUser) when ?amqqueue_is_quorum(Q) ->
 delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     case rabbit_feature_flags:is_enabled(quorum_queue_deleting_state) of
         true ->
-            delete_as_owner(Q, ActingUser);
+            delete_as_owner(Q, ActingUser, true);
         false ->
             delete_cluster_and_record(Q, ActingUser)
     end.
 
+%% Finishes the delete of a queue whose delete owner has died.
+-spec finish_delete(amqqueue:amqqueue(), rabbit_types:username()) ->
+    ok | {error, being_deleted}.
+finish_delete(Q, ActingUser) ->
+    case delete_as_owner(Q, ActingUser, false) of
+        {ok, _} ->
+            ok;
+        _ ->
+            {error, being_deleted}
+    end.
+
 %% The owner is a process of its own, because a caller such as a channel
 %% outlives a delete attempt that fails, and would block later deletes.
-delete_as_owner(Q, ActingUser) ->
+delete_as_owner(Q, ActingUser, WaitForOwner) ->
     QName = amqqueue:get_name(Q),
     Caller = self(),
     {Pid, MRef} = spawn_monitor(
                     fun() ->
-                            Caller ! {self(), delete_owned(Q, ActingUser)}
+                            Caller ! {self(),
+                                      delete_owned(Q, ActingUser, WaitForOwner)}
                     end),
     receive
         {Pid, Result} ->
@@ -1243,18 +1256,27 @@ delete_as_owner(Q, ActingUser) ->
              [rabbit_misc:rs(QName), Reason]}
     end.
 
-delete_owned(Q0, ActingUser) ->
+delete_owned(Q0, ActingUser, WaitForOwner) ->
     QName = amqqueue:get_name(Q0),
     case claim_delete(Q0) of
         {ok, Q} ->
             delete_cluster_and_record(Q, ActingUser);
+        {error, {being_deleted, Owner}} when WaitForOwner ->
+            MRef = erlang:monitor(process, Owner),
+            receive
+                {'DOWN', MRef, process, _, noconnection} ->
+                    being_deleted_error(QName);
+                {'DOWN', MRef, process, _, _} ->
+                    delete_owned(Q0, ActingUser, false)
+            end;
+        {error, {being_deleted, _}} ->
+            being_deleted_error(QName);
         {error, other_incarnation} ->
             ?LOG_DEBUG("~ts was declared again before it could be deleted",
                        [rabbit_misc:rs(QName)]),
             {ok, 0};
         {error, being_deleted} ->
-            {protocol_error, resource_locked, "~ts is being deleted",
-             [rabbit_misc:rs(QName)]};
+            being_deleted_error(QName);
         {error, timeout} = Err ->
             Err;
         {error, not_quorum} ->
@@ -1265,6 +1287,10 @@ delete_owned(Q0, ActingUser) ->
             {protocol_error, internal_error, "Cannot delete ~ts: ~255p",
              [rabbit_misc:rs(QName), Reason]}
     end.
+
+being_deleted_error(QName) ->
+    {protocol_error, resource_locked, "~ts is being deleted",
+     [rabbit_misc:rs(QName)]}.
 
 claim_delete(Q0) ->
     Owner = self(),
@@ -1285,7 +1311,10 @@ claim_delete_of(Q, Owner) when ?amqqueue_state_is(Q, deleting) ->
     case is_delete_owner_alive(Q) of
         false ->
             {ok, set_deleting(Q, Owner)};
-        _ ->
+        true ->
+            #{deleting_owner := CurrentOwner} = amqqueue:get_type_state(Q),
+            {error, {being_deleted, CurrentOwner}};
+        unknown ->
             {error, being_deleted}
     end;
 claim_delete_of(Q, Owner) ->
