@@ -501,22 +501,11 @@ update(QName, Fun) ->
 %% @private
 
 update(QName, Fun, Options) ->
-    Path = khepri_queue_path(QName),
-    Ret1 = rabbit_khepri:adv_get(Path, Options),
-    case Ret1 of
-        {ok, #{Path := #{data := Q, payload_version := Vsn}}} ->
-            UpdatePath = khepri_path:combine_with_conditions(
-                           Path, [#if_payload_version{version = Vsn}]),
-            Q1 = Fun(Q),
-            Ret2 = rabbit_khepri:put(UpdatePath, Q1, Options),
-            case Ret2 of
-                ok -> Q1;
-                {error, {khepri, mismatching_node, _}} ->
-                    update(QName, Fun);
-                Err -> Err
-            end;
-        _  ->
-            not_found
+    %% Callers handle a record that cannot be read as one that does not exist.
+    case update_if_unchanged(QName, fun(Q) -> {ok, Fun(Q)} end, Options) of
+        {ok, Q1} -> Q1;
+        {read_error, _} -> not_found;
+        Ret -> Ret
     end.
 
 -spec try_update(QName, UpdateFun, Options) -> Ret when
@@ -536,6 +525,12 @@ update(QName, Fun, Options) ->
 %% @private
 
 try_update(QName, Fun, Options) ->
+    case update_if_unchanged(QName, Fun, Options) of
+        {read_error, Err} -> Err;
+        Ret -> Ret
+    end.
+
+update_if_unchanged(QName, Fun, Options) ->
     Path = khepri_queue_path(QName),
     case rabbit_khepri:adv_get(Path, Options) of
         {ok, #{Path := #{data := Q, payload_version := Vsn}}} ->
@@ -547,7 +542,7 @@ try_update(QName, Fun, Options) ->
                         ok ->
                             {ok, Q1};
                         {error, {khepri, mismatching_node, _}} ->
-                            try_update(QName, Fun, Options);
+                            update_if_unchanged(QName, Fun, Options);
                         {error, {khepri, node_not_found, _}} ->
                             not_found;
                         {error, _} = Err ->
@@ -556,10 +551,12 @@ try_update(QName, Fun, Options) ->
                 {error, _} = Err ->
                     Err
             end;
+        {ok, _} ->
+            not_found;
         {error, {khepri, node_not_found, _}} ->
             not_found;
         {error, _} = Err ->
-            Err
+            {read_error, Err}
     end.
 
 %% -------------------------------------------------------------------
