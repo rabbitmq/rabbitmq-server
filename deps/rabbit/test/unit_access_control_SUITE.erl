@@ -26,6 +26,8 @@ groups() ->
           password_hashing,
           put_user_hashing_algorithm,
           version_negotiation,
+          tune_ok_frame_max_below_minimum,
+          tune_ok_channel_max_above_maximum,
           expand_topic_permission_prop,
           is_loopback_prop,
           check_user_loopback_prop
@@ -662,6 +664,50 @@ version_negotiation2(Hostname, Port, Header) ->
     {ok, ServerVersion} = gen_tcp:recv(C, 8, 100),
     ok = gen_tcp:close(C),
     ServerVersion.
+
+tune_ok_frame_max_below_minimum(Config) ->
+    tune_ok_rejected(Config, fun(#'connection.tune'{channel_max = ChannelMax}) ->
+                                     #'connection.tune_ok'{channel_max = ChannelMax,
+                                                           frame_max = 4095,
+                                                           heartbeat = 0}
+                             end).
+
+tune_ok_channel_max_above_maximum(Config) ->
+    tune_ok_rejected(Config, fun(#'connection.tune'{channel_max = ChannelMax,
+                                                    frame_max = FrameMax})
+                                   when ChannelMax > 0, ChannelMax < 16#FFFF ->
+                                     #'connection.tune_ok'{channel_max = ChannelMax + 1,
+                                                           frame_max = FrameMax,
+                                                           heartbeat = 0}
+                             end).
+
+tune_ok_rejected(Config, TuneOkFun) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Sock} = gen_tcp:connect(Hostname, Port, [binary, {active, false}]),
+    ok = gen_tcp:send(Sock, <<"AMQP", 0, 0, 9, 1>>),
+    #'connection.start'{} = recv_method0(Sock),
+    ok = send_method0(Sock, #'connection.start_ok'{
+                               client_properties = [],
+                               mechanism = <<"PLAIN">>,
+                               response = <<0, "guest", 0, "guest">>,
+                               locale = <<"en_US">>}),
+    Tune = #'connection.tune'{} = recv_method0(Sock),
+    ok = send_method0(Sock, TuneOkFun(Tune)),
+    ?assertMatch(#'connection.close'{reply_code = 530,
+                                     class_id = 10,
+                                     method_id = 31},
+                 recv_method0(Sock)),
+    ok = gen_tcp:close(Sock).
+
+send_method0(Sock, Method) ->
+    gen_tcp:send(Sock, rabbit_binary_generator:build_simple_method_frame(0, Method)).
+
+recv_method0(Sock) ->
+    {ok, <<Type:8, 0:16, Size:32>>} = gen_tcp:recv(Sock, 7, 30_000),
+    {ok, <<Payload:Size/binary, ?FRAME_END>>} = gen_tcp:recv(Sock, Size + 1, 30_000),
+    {method, Name, Fields} = rabbit_command_assembler:analyze_frame(Type, Payload),
+    rabbit_framing_amqp_0_9_1:decode_method_fields(Name, Fields).
 
 check_login_as(Config) ->
     Check = fun(ActingUser, Username, PasswordChecked) ->
