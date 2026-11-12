@@ -373,7 +373,7 @@ start_cluster(Q) ->
                                             #{nodes => UIDs})
             end,
 
-    MinVersion = min_machine_version(FollowerNodes),
+    MinVersion = min_machine_version([LeaderNode | FollowerNodes]),
 
     ?LOG_DEBUG("Will start up to ~w replicas for quorum ~ts with "
                      "leader on node '~ts', initial machine version ~b",
@@ -974,10 +974,11 @@ system_recover(quorum_queues) ->
     end.
 
 maybe_apply_policies(Q, #{config := CurrentConfig}) ->
-    NewPolicyConfig = gather_policy_config(Q, false),
-
-    RelevantKeys = maps:keys(NewPolicyConfig),
-    CurrentPolicyConfig = maps:with(RelevantKeys, CurrentConfig),
+    %% Older machine versions do not report every key, e.g. version 7
+    %% has no `delayed_retry`, so only compare the keys both sides have.
+    NewPolicyConfig = maps:with(maps:keys(CurrentConfig),
+                                gather_policy_config(Q, false)),
+    CurrentPolicyConfig = maps:with(maps:keys(NewPolicyConfig), CurrentConfig),
 
     %% Canonicalize delivery_limit for comparison: map any negative value to undefined.
     %% rabbit_fifo normalizes negative delivery limits to undefined internally, but
