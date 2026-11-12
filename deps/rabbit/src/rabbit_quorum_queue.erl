@@ -438,10 +438,11 @@ start_cluster(Q) ->
              [rabbit_misc:rs(QName), node()]}
     end.
 
+%% With no record for this queue, any registered member is a leftover.
 start_ra_cluster(QName, LeaderNode, RaConfs) ->
+    ok = delete_registered_members(QName, RaConfs),
     case start_ra_cluster(LeaderNode, RaConfs) of
         {error, {members_exist, Existing}} = Err ->
-            %% With no record for this queue, existing members are leftovers.
             case delete_leftover_members(Existing) of
                 ok ->
                     ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
@@ -452,6 +453,34 @@ start_ra_cluster(QName, LeaderNode, RaConfs) ->
             end;
         Res ->
             Res
+    end.
+
+%% `ra:start_cluster/3' only reports running members, and replaces a stopped
+%% one without deleting its data directory.
+delete_registered_members(QName, RaConfs) ->
+    Registered = lists:append(
+                   rabbit_misc:upmap(
+                     fun(#{id := {Name, Node} = ServerId}) ->
+                             case erpc_call(Node, ra_directory, uid_of,
+                                            [?RA_SYSTEM, Name], ?RPC_TIMEOUT) of
+                                 UId when is_binary(UId) ->
+                                     [{ServerId, UId}];
+                                 _ ->
+                                     []
+                             end
+                     end, RaConfs)),
+    case Registered of
+        [] ->
+            ok;
+        _ ->
+            case delete_leftover_members(Registered) of
+                ok ->
+                    ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
+                              [Registered, rabbit_misc:rs(QName)]);
+                error ->
+                    ?LOG_WARNING("Could not delete all leftover members ~w of "
+                                 "quorum ~ts", [Registered, rabbit_misc:rs(QName)])
+            end
     end.
 
 start_ra_cluster(LeaderNode, RaConfs) ->
