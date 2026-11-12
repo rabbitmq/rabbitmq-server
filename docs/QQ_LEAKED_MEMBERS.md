@@ -119,7 +119,7 @@ Details:
  * The owner is a short-lived worker, not the caller. A channel or HTTP handler can outlive its delete
    attempt and would block every later delete
  * The owner check is `erpc:call(Node, erlang, is_process_alive, [Pid], Timeout)`. `false` means dead,
-   and that is also what it returns for a pid from before its node restarted (checked on OTP 29). An
+   and that is also what it returns for a pid from before its node restarted (checked on OTP `29`). An
    owner on a node that is no longer a cluster member is dead. An `erpc` error means the owner may be
    alive. A monitor is not used because confirming a live owner would mean waiting for a timeout
  * `become_leader0/2` keeps `deleting` on leader repair, `i(state, Q)` reports it, and `add_member`
@@ -131,7 +131,7 @@ Details:
    same 30 second timeout as the UID-guarded one, so the owner cannot block forever on a member
  * It needs a feature flag, `quorum_queue_deleting_state`, since older nodes would ignore the marker
 
-Status: implemented on a separate branch, on top of changes 1 to 3.
+Status: implemented on the `qq-deleting-state` branch, on top of changes 1 to 3.
 
 Rejected alternatives: a UID condition on the record delete alone (a stale delete can still kill the new
 Ra cluster by name, and the condition then keeps a record with no cluster behind it), and a UID-guarded
