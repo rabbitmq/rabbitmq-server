@@ -1806,17 +1806,18 @@ delete_with(AMQQueue, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) when
     QueueName = amqqueue:get_name(AMQQueue),
     delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive);
 delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) when is_record(QueueName, resource) ->
+    DeleteFun = fun (Q) ->
+                        ok = check_internal(Q, Username),
+                        if CheckExclusive ->
+                               check_exclusive_access(Q, ConnPid);
+                           true ->
+                               ok
+                        end,
+                        rabbit_queue_type:delete(Q, IfUnused, IfEmpty, Username)
+                end,
     case with(
            QueueName,
-           fun (Q) ->
-                ok = check_internal(Q, Username),
-                if CheckExclusive ->
-                    check_exclusive_access(Q, ConnPid);
-                true ->
-                    ok
-                end,
-                rabbit_queue_type:delete(Q, IfUnused, IfEmpty, Username)
-           end,
+           DeleteFun,
            fun (not_found) ->
                    {ok, 0};
                ({absent, Q, crashed}) ->
@@ -1826,8 +1827,7 @@ delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) whe
                    _ = delete_crashed(Q, Username),
                    {ok, 0};
                ({absent, Q, deleting}) ->
-                   ok = check_internal(Q, Username),
-                   rabbit_queue_type:delete(Q, IfUnused, IfEmpty, Username);
+                   DeleteFun(Q);
                ({absent, Q, Reason}) ->
                    absent(Q, Reason)
            end) of
