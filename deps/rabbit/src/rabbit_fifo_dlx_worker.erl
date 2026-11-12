@@ -161,7 +161,7 @@ handle_cast({queue_event, QRef, Evt},
             {noreply, State};
         {eol, Actions} ->
             State = handle_queue_actions(Actions, State0),
-            remove_queue(QRef, State);
+            {noreply, remove_queue(QRef, State)};
         {protocol_error, _Type, _Reason, _Args} ->
             {noreply, State0}
     end;
@@ -194,7 +194,7 @@ handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             State = State0#state{queue_type_state = QTypeState},
             {noreply, handle_queue_actions(Actions, State)};
         {eol, QTypeState, QRef} ->
-            remove_queue(QRef, State0#state{queue_type_state = QTypeState})
+            {noreply, remove_queue(QRef, State0#state{queue_type_state = QTypeState})}
     end;
 handle_info(Info, State) ->
     ?LOG_INFO("~ts received unhandled info ~tp", [?MODULE, Info]),
@@ -215,8 +215,8 @@ remove_queue(QRef, #state{pendings = Pendings0,
     %% stream queue and that queue gets re-created with the same name, these messages will
     %% be stuck in our 'pendings' state.)
     wait_for_queue_deleted(QRef, 20),
-    {noreply, State#state{pendings = Pendings,
-                          queue_type_state = QTypeState}}.
+    State#state{pendings = Pendings,
+                queue_type_state = QTypeState}.
 
 wait_for_queue_deleted(QRef, 0) ->
     ?LOG_DEBUG("Received deletion event for ~ts but queue still exists in ETS table.",
@@ -258,6 +258,8 @@ handle_queue_actions(Actions, State0) ->
           ({queue_down, _QRef}, S0) ->
               %% target classic queue is down, but not deleted
               S0;
+          ({queue_deleted, QRef}, S0) ->
+              remove_queue(QRef, S0);
           (_Action, S0) ->
               S0
       end, State0, Actions).
@@ -364,7 +366,8 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                                  unsettled = queue_names(TargetQs)},
             State = State3#state{next_out_seq = OutSeq + 1,
                                  pendings = maps:put(OutSeq, Pend, Pendings)},
-            Options = #{correlation => OutSeq},
+            Options = #{correlation => OutSeq,
+                        report_deleted_queues => true},
             deliver_to_queues(Msg, Options, TargetQs, State)
     end.
 
@@ -493,7 +496,7 @@ redeliver0(#pending{delivery = Msg0,
                    rabbit_amqqueue:prepend_extra_bcc(
                      rabbit_db_queue:get_targets(
                        rabbit_exchange:route(DLX, Msg, #{})))),
-    case {RouteToQs0, Settled} of
+    case {RouteToQs0 -- Settled, Settled} of
         {[], [_|_]} ->
             %% Routes changed dynamically so that we don't await any publisher confirms anymore.
             %% Since we also received at least one publisher confirm (mandatory flag semantics),
@@ -524,7 +527,8 @@ redeliver0(#pending{delivery = Msg0,
                                          %% to be routed to is moved back to 'unsettled'.
                                          rejected = []},
                     State = clear_log_no_route_once(State0#state{pendings = maps:update(OutSeq, Pend, Pendings)}),
-                    Options = #{correlation => OutSeq},
+                    Options = #{correlation => OutSeq,
+                                report_deleted_queues => true},
                     deliver_to_queues(Msg,
                                       Options,
                                       rabbit_db_queue:get_targets(RouteToQs),
