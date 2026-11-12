@@ -27,9 +27,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
   end
 
   def validate([_vhost], opts) do
-    with :ok <- VirtualHosts.validate_tags(opts[:tags]) do
-      VirtualHosts.validate_default_queue_type(opts)
-    end
+    VirtualHosts.validate_default_queue_type(opts)
   end
 
   def run([vhost], %{
