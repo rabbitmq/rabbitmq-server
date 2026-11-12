@@ -79,14 +79,6 @@ groups() ->
                                             add_member_with_leftover_member,
                                             boot_deletes_leftover_members,
                                             cleanup_data_dir_needs_metadata_store,
-                                            delete_while_being_deleted,
-                                            concurrent_deletes,
-                                            stale_delete_after_redeclare,
-                                            declare_finishes_delete,
-                                            vhost_delete_finishes_delete,
-                                            delete_with_hanging_member_node,
-                                            delete_after_owner_node_restart,
-                                            deleting_survives_leader_change,
                                             channel_handles_ra_event,
                                             declare_during_node_down,
                                             projection_timeout_cleanup,
@@ -144,6 +136,7 @@ groups() ->
                                             consumer_message_is_delevered_after_snapshot,
                                             mixed_version_local_queries
                                            ]
+                       ++ deleting_state_tests()
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent,
@@ -166,6 +159,16 @@ groups() ->
                        ]}
                      ]}
     ].
+
+deleting_state_tests() ->
+    [delete_while_being_deleted,
+     concurrent_deletes,
+     stale_delete_after_redeclare,
+     declare_finishes_delete,
+     vhost_delete_finishes_delete,
+     delete_with_hanging_member_node,
+     delete_after_owner_node_restart,
+     deleting_survives_leader_change].
 
 all_tests() ->
     [
@@ -402,10 +405,16 @@ init_per_testcase(Testcase, Config) ->
     SameKhepriMacVers = (
       rabbit_ct_broker_helpers:do_nodes_run_same_ra_machine_version(
         Config, khepri_machine)),
+    NoDeletingState = (
+      lists:member(Testcase, deleting_state_tests()) andalso
+      not rabbit_ct_broker_helpers:is_feature_flag_enabled(
+            Config, quorum_queue_deleting_state)),
     case Testcase of
         leadership_takeover when not SameKhepriMacVers ->
             {skip, "leadership_takeover will fail with a mix of Khepri state "
              "machine versions"};
+        _ when NoDeletingState ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -4125,15 +4134,6 @@ cleanup_data_dir_needs_metadata_store(Config) ->
     ok.
 
 delete_while_being_deleted(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-           Config, quorum_queue_deleting_state) of
-        false ->
-            {skip, "requires the quorum_queue_deleting_state feature flag"};
-        true ->
-            delete_while_being_deleted1(Config)
-    end.
-
-delete_while_being_deleted1(Config) ->
     [Server1, Server2, _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
@@ -4185,15 +4185,6 @@ delete_while_being_deleted1(Config) ->
     ok.
 
 concurrent_deletes(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-           Config, quorum_queue_deleting_state) of
-        false ->
-            {skip, "requires the quorum_queue_deleting_state feature flag"};
-        true ->
-            concurrent_deletes1(Config)
-    end.
-
-concurrent_deletes1(Config) ->
     [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
@@ -4252,15 +4243,6 @@ concurrent_deletes1(Config) ->
     ok.
 
 stale_delete_after_redeclare(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-           Config, quorum_queue_deleting_state) of
-        false ->
-            {skip, "requires the quorum_queue_deleting_state feature flag"};
-        true ->
-            stale_delete_after_redeclare1(Config)
-    end.
-
-stale_delete_after_redeclare1(Config) ->
     [Server1, Server2, _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
@@ -4320,15 +4302,6 @@ stale_delete_after_redeclare1(Config) ->
     ok.
 
 declare_finishes_delete(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-           Config, quorum_queue_deleting_state) of
-        false ->
-            {skip, "requires the quorum_queue_deleting_state feature flag"};
-        true ->
-            declare_finishes_delete1(Config)
-    end.
-
-declare_finishes_delete1(Config) ->
     [Server1, Server2, _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
@@ -4360,15 +4333,6 @@ declare_finishes_delete1(Config) ->
     ok.
 
 vhost_delete_finishes_delete(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-           Config, quorum_queue_deleting_state) of
-        false ->
-            {skip, "requires the quorum_queue_deleting_state feature flag"};
-        true ->
-            vhost_delete_finishes_delete1(Config)
-    end.
-
-vhost_delete_finishes_delete1(Config) ->
     [Server1, Server2, _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     VHost = <<"vhost_delete_finishes_delete">>,
@@ -4395,18 +4359,9 @@ vhost_delete_finishes_delete1(Config) ->
      || S <- Servers],
     ok.
 
-delete_with_hanging_member_node(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-           Config, quorum_queue_deleting_state) of
-        false ->
-            {skip, "requires the quorum_queue_deleting_state feature flag"};
-        true ->
-            delete_with_hanging_member_node1(Config)
-    end.
-
 %% A member node whose Ra does not have `ra:force_delete_server/4' is
 %% deleted by name. A delete must not wait for it forever.
-delete_with_hanging_member_node1(Config) ->
+delete_with_hanging_member_node(Config) ->
     [Server1 | _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
@@ -4451,15 +4406,6 @@ delete_with_hanging_member_node1(Config) ->
     ok.
 
 delete_after_owner_node_restart(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-           Config, quorum_queue_deleting_state) of
-        false ->
-            {skip, "requires the quorum_queue_deleting_state feature flag"};
-        true ->
-            delete_after_owner_node_restart1(Config)
-    end.
-
-delete_after_owner_node_restart1(Config) ->
     [Server1, Server2, _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
@@ -4491,15 +4437,6 @@ delete_after_owner_node_restart1(Config) ->
     ok.
 
 deleting_survives_leader_change(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-           Config, quorum_queue_deleting_state) of
-        false ->
-            {skip, "requires the quorum_queue_deleting_state feature flag"};
-        true ->
-            deleting_survives_leader_change1(Config)
-    end.
-
-deleting_survives_leader_change1(Config) ->
     [Server1 | _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
