@@ -1461,7 +1461,7 @@ force_delete_queue(Q, Servers) ->
     ok.
 
 force_delete_member(ServerId) ->
-    try ra:force_delete_server(?RA_SYSTEM, ServerId)
+    try ra:force_delete_server(?RA_SYSTEM, ServerId, ?FORCE_DELETE_TIMEOUT)
     catch _:E -> {error, E}
     end.
 

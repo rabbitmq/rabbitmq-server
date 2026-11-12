@@ -83,6 +83,8 @@ groups() ->
                                             concurrent_deletes,
                                             stale_delete_after_redeclare,
                                             declare_finishes_delete,
+                                            vhost_delete_finishes_delete,
+                                            delete_with_hanging_member_node,
                                             delete_after_owner_node_restart,
                                             deleting_survives_leader_change,
                                             channel_handles_ra_event,
@@ -4355,6 +4357,97 @@ declare_finishes_delete1(Config) ->
     ?assertEqual(live, amqqueue:get_state(Q)),
     NewUIds = UIds(),
     [?assertNotEqual(Old, New) || {Old, New} <- lists:zip(OldUIds, NewUIds)],
+    ok.
+
+vhost_delete_finishes_delete(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"};
+        true ->
+            vhost_delete_finishes_delete1(Config)
+    end.
+
+vhost_delete_finishes_delete1(Config) ->
+    [Server1, Server2, _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    VHost = <<"vhost_delete_finishes_delete">>,
+    User = ?config(rmq_username, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Server1, VHost, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    QQ = ?config(queue_name, Config),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server1, VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    amqp_connection:close(Conn),
+    ?awaitMatch(3, count_online_nodes(Server1, VHost, QQ), ?DEFAULT_AWAIT),
+    QName = rabbit_misc:r(VHost, queue, QQ),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    {RaName, _} = amqqueue:get_pid(Q),
+    Owner = rpc:call(Server2, erlang, spawn, [fun() -> ok end]),
+    mark_deleting(Server1, QName, Owner),
+
+    ?assertEqual(ok, rpc:call(Server1, rabbit_vhost, delete, [VHost, User])),
+    [?awaitMatch(undefined,
+                 rpc:call(S, ra_directory, uid_of, [quorum_queues, RaName]),
+                 ?DEFAULT_AWAIT)
+     || S <- Servers],
+    ok.
+
+delete_with_hanging_member_node(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"};
+        true ->
+            delete_with_hanging_member_node1(Config)
+    end.
+
+%% A member node whose Ra does not have `ra:force_delete_server/4' is
+%% deleted by name. A delete must not wait for it forever.
+delete_with_hanging_member_node1(Config) ->
+    [Server1 | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = ?config(queue_name, Config),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    {_, LeaderNode} = amqqueue:get_pid(Q),
+    [Hanging | _] = Servers -- [Server1, LeaderNode],
+
+    ok = rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
+    ok = rpc:call(Server1, meck, new, [ra, [passthrough, no_link]]),
+    ok = rpc:call(Server1, meck, expect,
+                  [ra, force_delete_server,
+                   fun(_System, _ServerId, _UId, _Timeout) ->
+                           {badrpc, {'EXIT', {undef, []}}}
+                   end]),
+    ok = rpc:call(Hanging, meck, new, [ra_server_sup_sup, [passthrough, no_link]]),
+    ok = rpc:call(Hanging, meck, expect,
+                  [ra_server_sup_sup, prepare_server_stop_rpc,
+                   fun(_System, _Name) -> timer:sleep(infinity) end]),
+    Self = self(),
+    try
+        spawn(fun() ->
+                      Self ! {delete,
+                              amqp_channel:call(Ch, #'queue.delete'{queue = QQ})}
+              end),
+        receive
+            {delete, Res} ->
+                ?assertMatch(#'queue.delete_ok'{}, Res)
+        after 90000 ->
+                  ct:fail(delete_did_not_return)
+        end
+    after
+        ok = rpc:call(Server1, meck, unload, [ra]),
+        ok = rpc:call(Hanging, meck, unload, [ra_server_sup_sup])
+    end,
+    ?assertEqual({error, not_found},
+                 rpc:call(Server1, rabbit_amqqueue, lookup, [QName])),
     ok.
 
 delete_after_owner_node_restart(Config) ->
