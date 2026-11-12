@@ -91,7 +91,9 @@ A delete marks the queue before it touches Ra, and only the process that marked 
 cluster and then the record:
 
  1. Set the record's `state` to `deleting` and store the owner pid in `type_state`, with a
-    compare-and-swap on the record version (`rabbit_db_queue:try_update/3`)
+    compare-and-swap on the record version (`rabbit_db_queue:try_update/3`). This is done only if the
+    record is the incarnation the caller looked up, that is it shares a member UID with it. A delete
+    that finds a newer incarnation returns as if the queue was already deleted
  2. If the record is already `deleting`, check whether the owner is alive. If it is, or it cannot be
     checked, return a `resource_locked` error. If it is dead, take over with the same compare-and-swap
  3. Delete the Ra cluster, as today
@@ -155,7 +157,8 @@ Ra cluster by name, and the condition then keeps a record with no cluster behind
    and an unregistered data directory, and keeps members the record lists (done). Deletes nothing if the
    fence fails (done). A member with a different UID is handled by `recover/2` and not tested separately
  * Change 4: a second delete while the first one runs fails, and a redeclare after the first one
-   succeeds (done). A delete while the owner is alive fails, as do a declare and `add_member`, and a
+   succeeds (done). A delete held between its lookup and its claim, while the queue is deleted and
+   declared again, leaves the new queue alone (done). A delete while the owner is alive fails, as do a declare and `add_member`, and a
    delete after the owner died takes over (done). No takeover while the owner's node is down, and a
    takeover after it restarted (done). `deleting` survives a leader change (done). The compare-and-swap
    reads the record again after a concurrent write (done, in `rabbit_db_queue_SUITE`)
