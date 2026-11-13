@@ -81,6 +81,7 @@ groups() ->
                                             delete_when_leader_exits,
                                             declare_when_cluster_deleted,
                                             delete_during_declare,
+                                            stale_declare_keeps_redeclared_queue,
                                             declare_cluster_not_formed,
                                             add_member_when_cluster_deleted,
                                             add_member_with_leftover_member,
@@ -4226,6 +4227,49 @@ delete_during_declare(Config) ->
                  rpc:call(S, ra_directory, uid_of, [quorum_queues, ra_name(QQ)]),
                  ?DEFAULT_AWAIT)
      || S <- Servers],
+    ok.
+
+stale_declare_keeps_redeclared_queue(Config) ->
+    [Server1, Server2 | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ok = rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
+    ok = rpc:call(Server1, meck, new,
+                  [rabbit_queue_type_util, [passthrough, no_link]]),
+    ok = rpc:call(Server1, meck, expect,
+                  [rabbit_queue_type_util, wait_for_projection,
+                   fun(Node, Name) ->
+                           timer:sleep(5000),
+                           meck:passthrough([Node, Name])
+                   end]),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    try
+        Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+        Self = self(),
+        spawn(fun() -> Self ! {declare, catch declare(Ch1, QQ, Args)} end),
+        ?awaitMatch({ok, _}, rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+                    ?DEFAULT_AWAIT),
+        ?assertMatch(#'queue.delete_ok'{},
+                     amqp_channel:call(Ch2, #'queue.delete'{queue = QQ})),
+        ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch2, QQ, Args)),
+        receive
+            {declare, Res} ->
+                ?assertMatch({'EXIT', {{shutdown, {server_initiated_close, 404, _}}, _}},
+                             Res)
+        after 30000 ->
+                  ct:fail(no_declare)
+        end
+    after
+        ok = rpc:call(Server1, meck, unload, [rabbit_queue_type_util])
+    end,
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    #{nodes := UIds} = amqqueue:get_type_state(Q),
+    [?assertEqual(maps:get(S, UIds),
+                  rpc:call(S, ra_directory, uid_of, [quorum_queues, ra_name(QQ)]))
+     || S <- Servers],
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
     ok.
 
 declare_cluster_not_formed(Config) ->
