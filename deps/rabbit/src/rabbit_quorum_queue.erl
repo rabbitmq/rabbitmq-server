@@ -579,9 +579,14 @@ delete_clashing_member({{Name, Node} = ServerId, undefined}) ->
 declare_queue_error(Error, Queue, Leader, ActingUser) ->
     _ = delete_declared_members(Queue),
     _ = delete_declared_record(Queue, ActingUser),
-    {protocol_error, internal_error,
+    {protocol_error, declare_error_type(Error),
      "Cannot declare quorum ~ts on node '~ts' with leader on node '~ts': ~255p",
      [rabbit_misc:rs(amqqueue:get_name(Queue)), node(), Leader, Error]}.
+
+%% Concurrent membership changes can stop a majority of the members from
+%% starting, and a later declare can succeed.
+declare_error_type(cluster_not_formed) -> resource_locked;
+declare_error_type(_) -> internal_error.
 
 %% A delete may have claimed the record in the meantime.
 delete_declared_record(Q, ActingUser) ->
