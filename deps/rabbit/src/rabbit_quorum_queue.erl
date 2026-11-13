@@ -404,7 +404,7 @@ start_cluster(Q) ->
                 %% This call is inside the try so that a timeout is cleaned up
                 %% like a failed Ra cluster start.
                 rabbit_queue_type_util:wait_for_projection(LeaderNode, QName),
-                start_ra_cluster(QName, LeaderNode, RaConfs)
+                start_ra_cluster(NewQ, LeaderNode, RaConfs)
             of
                 {ok, _, _} ->
                     case confirm_declared(NewQ) of
@@ -415,6 +415,8 @@ start_cluster(Q) ->
                         _ ->
                             declared_queue_deleted(NewQ)
                     end;
+                {error, not_declared} ->
+                    declared_queue_deleted(NewQ);
                 {error, Error} ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             catch
@@ -494,25 +496,32 @@ declared_queue_deleted(Q) ->
      [rabbit_misc:rs(amqqueue:get_name(Q))]}.
 
 %% With no record for this queue, any registered member is a leftover.
-start_ra_cluster(QName, LeaderNode, RaConfs) ->
-    ok = delete_registered_members(QName, RaConfs),
-    case start_ra_cluster(LeaderNode, RaConfs) of
-        {error, {members_exist, Existing}} = Err ->
-            case delete_leftover_members(Existing) of
-                ok ->
-                    ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
-                              [Existing, rabbit_misc:rs(QName)]),
-                    start_ra_cluster(LeaderNode, RaConfs);
-                error ->
-                    Err
-            end;
-        Res ->
-            Res
+start_ra_cluster(Q, LeaderNode, RaConfs) ->
+    case delete_registered_members(Q, RaConfs) of
+        not_declared ->
+            {error, not_declared};
+        _ ->
+            case start_ra_cluster(LeaderNode, RaConfs) of
+                {error, {members_exist, Existing}} = Err ->
+                    case delete_leftover_members(Q, Existing) of
+                        ok ->
+                            ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
+                                      [Existing, rabbit_misc:rs(amqqueue:get_name(Q))]),
+                            start_ra_cluster(LeaderNode, RaConfs);
+                        not_declared ->
+                            {error, not_declared};
+                        error ->
+                            Err
+                    end;
+                Res ->
+                    Res
+            end
     end.
 
 %% `ra:start_cluster/3' only reports running members, and replaces a stopped
 %% one without deleting its data directory.
-delete_registered_members(QName, RaConfs) ->
+delete_registered_members(Q, RaConfs) ->
+    QName = amqqueue:get_name(Q),
     Registered = lists:append(
                    rabbit_misc:upmap(
                      fun(#{id := {Name, Node} = ServerId}) ->
@@ -528,10 +537,12 @@ delete_registered_members(QName, RaConfs) ->
         [] ->
             ok;
         _ ->
-            case delete_leftover_members(Registered) of
+            case delete_leftover_members(Q, Registered) of
                 ok ->
                     ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
                               [Registered, rabbit_misc:rs(QName)]);
+                not_declared ->
+                    not_declared;
                 error ->
                     ?LOG_WARNING("Could not delete all leftover members ~w of "
                                  "quorum ~ts", [Registered, rabbit_misc:rs(QName)])
@@ -545,15 +556,32 @@ start_ra_cluster(LeaderNode, RaConfs) ->
 
 %% Ra versions that predate `ra:force_delete_server/4` report existing
 %% members without their UIds.
-delete_leftover_members(Existing) ->
+%%
+%% A delete and another declare can complete while this declare waits, and the
+%% members are then that declare's. The record is checked after the UIds are
+%% read, since a declare writes its record before it starts its members.
+delete_leftover_members(Q, Existing) ->
     case lists:all(fun({{_, _}, _}) -> true;
                       (_) -> false
                    end, Existing) of
         true ->
-            Results = rabbit_misc:upmap(fun delete_clashing_member/1, Existing),
-            case lists:all(fun(R) -> R =:= ok end, Results) of
-                true -> ok;
-                false -> error
+            Resolved = rabbit_misc:upmap(fun clashing_member_uid/1, Existing),
+            case confirm_declared(Q) of
+                {ok, _} ->
+                    Results = rabbit_misc:upmap(
+                                fun({ServerId, UId}) ->
+                                        force_delete_member(ServerId, UId);
+                                   (R) ->
+                                        R
+                                end, Resolved),
+                    case lists:all(fun(R) -> R =:= ok end, Results) of
+                        true -> ok;
+                        false -> error
+                    end;
+                {error, timeout} ->
+                    error;
+                _ ->
+                    not_declared
             end;
         false ->
             error
@@ -561,9 +589,9 @@ delete_leftover_members(Existing) ->
 
 %% A member that runs without a registered UId is starting, or is terminating
 %% after its UId was unregistered.
-delete_clashing_member({ServerId, UId}) when is_binary(UId) ->
-    force_delete_member(ServerId, UId);
-delete_clashing_member({{Name, Node} = ServerId, undefined}) ->
+clashing_member_uid({_ServerId, UId} = Member) when is_binary(UId) ->
+    Member;
+clashing_member_uid({{Name, Node} = ServerId, undefined}) ->
     MRef = erlang:monitor(process, ServerId),
     receive
         {'DOWN', MRef, process, _, _} ->
@@ -573,7 +601,7 @@ delete_clashing_member({{Name, Node} = ServerId, undefined}) ->
               case erpc_call(Node, ra_directory, uid_of, [?RA_SYSTEM, Name],
                              ?RPC_TIMEOUT) of
                   UId when is_binary(UId) ->
-                      force_delete_member(ServerId, UId);
+                      {ServerId, UId};
                   _ ->
                       error
               end
