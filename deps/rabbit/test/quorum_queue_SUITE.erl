@@ -4377,6 +4377,12 @@ cleanup_data_dir_needs_metadata_store(Config) ->
                   [rabbit_khepri, fence, fun(_) -> {error, timeout} end]),
     try
         ?assertEqual(ok, rpc:call(Server1, rabbit_quorum_queue, cleanup_data_dir, [])),
+        ?assertEqual(UId, rpc:call(Server1, ra_directory, uid_of, [quorum_queues, RaName])),
+        ok = rpc:call(Server1, meck, expect,
+                      [rabbit_khepri, fence, fun(_) -> ok end]),
+        ok = rpc:call(Server1, meck, expect,
+                      [rabbit_khepri, get_many, fun(_) -> {error, timeout} end]),
+        ?assertEqual(ok, rpc:call(Server1, rabbit_quorum_queue, cleanup_data_dir, [])),
         ?assertEqual(UId, rpc:call(Server1, ra_directory, uid_of, [quorum_queues, RaName]))
     after
         ok = rpc:call(Server1, meck, unload, [rabbit_khepri])
