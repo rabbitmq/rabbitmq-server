@@ -76,6 +76,7 @@
          pattern_match_on_type_and_vhost/2,
          pattern_match_on_exclusive_owner/1,
          pattern_match_on_type_state/1,
+         pattern_match_on_type_state/2,
          reset_decorators/1,
          set_immutable/1,
          qnode/1,
@@ -629,6 +630,11 @@ pattern_match_on_exclusive_owner(Owner) ->
 
 pattern_match_on_type_state(TypeState) ->
     #amqqueue{type_state = TypeState, _ = '_'}.
+
+-spec pattern_match_on_type_state(atom(), map()) -> amqqueue_pattern().
+
+pattern_match_on_type_state(State, TypeState) ->
+    #amqqueue{state = State, type_state = TypeState, _ = '_'}.
 
 -spec reset_decorators(amqqueue()) -> amqqueue().
 
