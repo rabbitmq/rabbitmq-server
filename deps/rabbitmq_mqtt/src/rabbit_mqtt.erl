@@ -14,6 +14,8 @@
 -include_lib("rabbit/include/rabbit_global_counters.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
+-define(ORPHANED_STORAGE_CLEANUP_DELAY, 60_000).
+
 -export([start/2, stop/1]).
 -export([emit_connection_info_all/4,
          emit_connection_info_local/3,
@@ -32,6 +34,8 @@ start(normal, []) ->
                 {error, {already_started, Pid}} -> Pid
             end,
     gen_event:add_handler(EMPid, rabbit_mqtt_internal_event_handler, []),
+    _ = timer:apply_after(?ORPHANED_STORAGE_CLEANUP_DELAY, rabbit_mqtt_retainer_sup,
+                          delete_orphaned_storage, []),
     Result.
 
 stop(_) ->
