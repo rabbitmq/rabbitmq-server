@@ -46,6 +46,7 @@
 -export([
          get_all_durable/0,
          get_all_durable_by_type/1,
+         try_get_all_durable_by_type/1,
          filter_all_durable/1,
          update_durable/2,
          get_durable/1,
@@ -190,6 +191,26 @@ get_all_durable_by_type(Type) ->
     catch
         error:badarg ->
             []
+    end.
+
+-spec try_get_all_durable_by_type(Type) -> Ret when
+      Type :: atom(),
+      Ret :: {ok, [amqqueue:amqqueue()]} | {error, any()}.
+
+%% @doc Gets all durable queues of the given type from the metadata store,
+%% unlike `get_all_durable_by_type/1', which returns `[]' if the read fails.
+%%
+%% @private
+
+try_get_all_durable_by_type(Type) ->
+    Path = khepri_queue_path(
+             ?KHEPRI_WILDCARD_STAR,
+             #if_data_matches{
+                pattern = amqqueue:pattern_match_on_type_and_durable(
+                            Type, true)}),
+    case rabbit_khepri:get_many(Path) of
+        {ok, Map} -> {ok, maps:values(Map)};
+        {error, _} = Err -> Err
     end.
 
 %% -------------------------------------------------------------------

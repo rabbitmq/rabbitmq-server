@@ -1827,7 +1827,8 @@ assign_deferred(_QName, CTag, Tokens, QState) ->
 cleanup_data_dir() ->
     try
         ok = rabbit_khepri:fence(?RA_MEMBERS_TIMEOUT),
-        Expected = expected_local_members(),
+        {ok, Qs} = rabbit_db_queue:try_get_all_durable_by_type(?MODULE),
+        Expected = expected_local_members(Qs),
         Registered = ra_directory:list_registered(?RA_SYSTEM),
         _ = [delete_leftover_member(Name, UId)
              || {Name, UId} <- Registered,
@@ -1841,7 +1842,7 @@ cleanup_data_dir() ->
     end.
 
 %% Records without UIds map to `any`.
-expected_local_members() ->
+expected_local_members(Qs) ->
     Node = node(),
     lists:foldl(
       fun(Q, Acc) ->
@@ -1857,7 +1858,7 @@ expected_local_members() ->
                   _ ->
                       Acc
               end
-      end, #{}, rabbit_amqqueue:list_by_type(?MODULE)).
+      end, #{}, Qs).
 
 is_leftover_member(Name, UId, Expected) ->
     case Expected of
