@@ -12,7 +12,19 @@
          are_stats_enabled/0,
          get_definitions_settings/0,
          get_settings/1,
-         get_product_info/0]).
+         get_product_info/0,
+         is_sessions_enabled/0,
+         get_sessions_settings/0]).
+
+is_sessions_enabled() ->
+    application:get_env(rabbitmq_management, sessions_enabled, false).
+
+get_sessions_settings() ->
+    [
+        {enabled, is_sessions_enabled()},
+        {max_concurrent, application:get_env(rabbitmq_management, sessions_max_concurrent, 1)},
+        {heartbeat_interval, application:get_env(rabbitmq_management, sessions_heartbeat_interval, 30)}
+    ].
 
 is_qq_replica_operations_disabled() ->
     get_restriction([quorum_queue_replica_operations, disabled]).
@@ -58,7 +70,8 @@ get_settings(ReqData) ->
         {default_queue_type,        rabbit_queue_type:default_alias()},
         {is_op_policy_updating_enabled, not is_op_policy_updating_disabled()},
         {enable_queue_totals,       rabbit_mgmt_util:enable_queue_totals(ReqData)},
-        {definitions,               get_definitions_settings()}
+        {definitions,               get_definitions_settings()},
+        {sessions,                  get_sessions_settings()}
     ].
 
 get_product_info() ->
