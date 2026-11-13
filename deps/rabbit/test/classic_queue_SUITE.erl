@@ -32,7 +32,9 @@ groups() ->
                            expires_counts_idle_time_before_shutdown,
                            expires_resumes_remaining_time_after_restart,
                            expires_not_counted_while_consumer_attached,
-                           expires_counts_node_downtime_priority_queue
+                           expires_counts_node_downtime_priority_queue,
+                           exclusive_queue_record_deleted_before_process_exits_on_close,
+                           exclusive_queue_record_deleted_before_process_exits_on_kill
                            ]
      },
      {cluster_size_3, [], [
@@ -205,6 +207,32 @@ restart_node_after(Config, Downtime) ->
 
 lookup_queue(Config, QName) ->
     rpc(Config, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, QName)]).
+
+exclusive_queue_record_deleted_before_process_exits_on_close(Config) ->
+    exclusive_queue_record_deleted_before_process_exits(
+      Config, fun rabbit_ct_client_helpers:close_connection/1).
+
+exclusive_queue_record_deleted_before_process_exits_on_kill(Config) ->
+    exclusive_queue_record_deleted_before_process_exits(
+      Config,
+      fun(Conn) ->
+              unlink(Conn),
+              exit(Conn, kill)
+      end).
+
+exclusive_queue_record_deleted_before_process_exits(Config, CloseFun) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    ?assertMatch(#'queue.declare_ok'{},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                                        exclusive = true})),
+    QPid = get_queue_pid(Config, QName),
+    MRef = erlang:monitor(process, QPid),
+    CloseFun(Conn),
+    receive {'DOWN', MRef, process, QPid, _} -> ok
+    after 10_000 -> ct:fail("queue process did not exit")
+    end,
+    ?assertEqual({error, not_found}, lookup_queue(Config, QName)).
 
 flow_control(Config, FlowEnabled, VerifyFun) ->
     OrigCredit = set_default_credit(Config, {2, 1}),

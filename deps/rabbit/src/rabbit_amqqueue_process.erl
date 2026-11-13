@@ -15,6 +15,7 @@
 
 -define(SYNC_INTERVAL,         200). %% milliseconds
 -define(UPDATE_RATES_INTERVAL, 5000).
+-define(RECORD_DELETE_TIMEOUT, 5000).
 -define(CONSUMER_BIAS_RATIO,   2.0). %% i.e. consume 100% faster
 
 -export([info_keys/0]).
@@ -394,6 +395,12 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                         end,
                 send_reply(ReplyTo, Reply);
             none ->
+                %% Try once to delete the record before exiting so that publishers
+                %% won't try to route to a process that already exited, since
+                %% `noproc` from a monitor cannot know if the queue was really
+                %% deleted.
+                %% If that fails, fall back to the following.
+                %%
                 %% No processes are waiting for this queue process to exit. We
                 %% can handle the deletion of the queue record differently: if
                 %% the deletion times out, we retry indefinitely.
@@ -416,13 +423,27 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                 %% separate process to let this queue process exits. This way,
                 %% connections will be notified that the queue process is
                 %% gone.
-                worker_pool:submit_async(
-                  fun() ->
-                          _ = infinite_internal_delete(Q, ActingUser, Reason0)
-                  end),
-                ok
+                case try_internal_delete(Q, ActingUser, Reason0) of
+                    ok ->
+                        ok;
+                    error ->
+                        worker_pool:submit_async(
+                          fun() ->
+                                  _ = infinite_internal_delete(Q, ActingUser, Reason0)
+                          end),
+                        ok
+                end
         end,
         BQS1
+    end.
+
+try_internal_delete(Q, ActingUser, Reason) ->
+    try rabbit_amqqueue:internal_delete(
+          Q, ActingUser, Reason, #{timeout => ?RECORD_DELETE_TIMEOUT}) of
+        ok -> ok;
+        {error, _} -> error
+    catch
+        _:_ -> error
     end.
 
 infinite_internal_delete(Q, ActingUser, Reason) ->
