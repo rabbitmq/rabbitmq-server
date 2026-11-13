@@ -1505,6 +1505,8 @@ validate_negotiated_integer_value(Field, Min, ClientValue) ->
 %% keep dialyzer happy
 -spec fail_negotiation(atom(), 'min' | 'max', integer(), integer()) ->
           no_return().
+%% The spec allows closing the socket without `connection.close` here.
+%% Replying lets the client report the reason.
 fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
     {S1, S2} = case MinOrMax of
                    min -> {lower,  minimum};
@@ -1513,7 +1515,7 @@ fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
     ClientValueDetail = get_client_value_detail(Field, ClientValue),
     rabbit_misc:protocol_error(
       not_allowed, "negotiated ~w = ~w~ts is ~w than the ~w allowed value (~w)",
-      [Field, ClientValue, ClientValueDetail, S1, S2, ServerValue], 'connection.tune').
+      [Field, ClientValue, ClientValueDetail, S1, S2, ServerValue]).
 
 get_env(Key) ->
     {ok, Value} = application:get_env(rabbit, Key),
