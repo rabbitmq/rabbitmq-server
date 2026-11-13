@@ -4044,7 +4044,9 @@ add_member_with_leftover_member(Config) ->
     ok.
 
 boot_deletes_leftover_members(Config) ->
-    [Server1, Server2, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    %% In mixed versions the second node runs the older version, which has no
+    %% boot sweep.
+    [Server1, _, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     QQ = ?config(queue_name, Config),
     Unlisted = <<QQ/binary, "-unlisted">>,
@@ -4054,32 +4056,32 @@ boot_deletes_leftover_members(Config) ->
          ?assertEqual({'queue.declare_ok', Q, 0, 0}, declare(Ch, Q, Args)),
          ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, Q), ?DEFAULT_AWAIT)
      end || Q <- [QQ, Unlisted, Kept]],
-    UIdOn2 = fun(Q) ->
-                     rpc:call(Server2, ra_directory, uid_of,
+    UIdOn3 = fun(Q) ->
+                     rpc:call(Server3, ra_directory, uid_of,
                               [quorum_queues, ra_name(Q)])
              end,
     DataDir = fun(UId) ->
-                      rpc:call(Server2, ra_env, server_data_dir,
+                      rpc:call(Server3, ra_env, server_data_dir,
                                [quorum_queues, UId])
               end,
-    KeptUId = UIdOn2(Kept),
+    KeptUId = UIdOn3(Kept),
     [DeletedDir, UnlistedDir, KeptDir] =
-        [DataDir(UIdOn2(Q)) || Q <- [QQ, Unlisted, Kept]],
+        [DataDir(UIdOn3(Q)) || Q <- [QQ, Unlisted, Kept]],
     StrayDir = filename:join(filename:dirname(KeptDir), "STRAYUID"),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
     ok = rpc:call(Server1, rabbit_quorum_queue, delete_member,
-                  [<<"/">>, Unlisted, Server2]),
+                  [<<"/">>, Unlisted, Server3]),
     ok = filelib:ensure_dir(filename:join(StrayDir, "config")),
     {ok, _} = file:copy(filename:join(KeptDir, "config"),
                         filename:join(StrayDir, "config")),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server3),
 
-    ?assertEqual(undefined, UIdOn2(QQ)),
-    ?assertEqual(undefined, UIdOn2(Unlisted)),
-    ?assertEqual(KeptUId, UIdOn2(Kept)),
+    ?assertEqual(undefined, UIdOn3(QQ)),
+    ?assertEqual(undefined, UIdOn3(Unlisted)),
+    ?assertEqual(KeptUId, UIdOn3(Kept)),
     [?assertNot(filelib:is_dir(Dir))
      || Dir <- [DeletedDir, UnlistedDir, StrayDir]],
     ?assert(filelib:is_dir(KeptDir)),
