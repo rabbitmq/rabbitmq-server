@@ -40,8 +40,7 @@ all() ->
     ].
 
 groups() ->
-    %% Consumer timeouts are only supported for quorum queues.
-    %% Classic queues and stream queues do not support consumer timeouts.
+    %% Stream queues do not support consumer timeouts.
     AllTests = [consumer_timeout_with_basic_cancel_capability,
                 consumer_timeout_no_basic_cancel_capability,
                 consumer_timeout_basic_get,
@@ -55,8 +54,13 @@ groups() ->
                 server_advertises_accept_consumer_cancel_ok,
                 consumer_timeout_response_close_channel],
 
+    %% Quorum queues ignore the exclusive_consume flag and do not use
+    %% tombstones, so these only apply to classic queues.
+    ClassicOnlyTests = [message_count_after_consumer_timeout],
+
     AllTestsParallel = [
-       {quorum_queue, [], AllTests}
+       {quorum_queue, [], AllTests},
+       {classic_queue, [], AllTests ++ ClassicOnlyTests}
       ],
     [
      {global_consumer_timeout, [], AllTestsParallel},
@@ -104,6 +108,12 @@ init_per_group(quorum_queue, Config) ->
       Config,
       [{policy_type, <<"quorum_queues">>},
        {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+       {queue_durable, true}]);
+init_per_group(classic_queue, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{policy_type, <<"classic_queues">>},
+       {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
        {queue_durable, true}]);
 init_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
@@ -204,6 +214,50 @@ consumer_timeout_with_basic_cancel_capability(Config) ->
     after 1000 ->
               ok
     end,
+    %% The reclaimed message must be back in the queue.
+    {#'basic.get_ok'{delivery_tag = DTag}, #amqp_msg{payload = <<"msg1">>}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = false}),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true}),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    ok.
+
+%% A consumer timeout requeues the expired delivery into the backing queue
+%% and keeps a tombstone until the late ack arrives. The tombstone must not
+%% also be counted as unacknowledged: the single physical message must be
+%% reported once, not twice.
+message_count_after_consumer_timeout(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    publish(Ch, QName, [<<"msg1">>]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    Ctag = <<"ctag">>,
+    subscribe(Ch, QName, false, Ctag),
+    %% Receive the delivery but never acknowledge it, to trigger the timeout.
+    receive
+        {#'basic.deliver'{consumer_tag = Ctag}, _} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(deliver_timeout)
+    end,
+    receive
+        #'basic.cancel'{consumer_tag = Ctag, nowait = true} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(basic_cancel_expected)
+    end,
+
+    %% The message has been requeued and a tombstone is still outstanding.
+    %% It must be reported as a single ready message: messages = 1,
+    %% messages_ready = 1, messages_unacknowledged = 0.
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
@@ -310,7 +364,7 @@ consumer_cancel_ok_after_timeout_removes_consumer(Config) ->
     ?assertEqual(1, channel_consumer_count(Config)),
     ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
     ?awaitMatch(#{consumers := 0,
-                  quorum_queue_consumers := 0,
+                  queue_consumers := 0,
                   consumer_metrics := []},
                 consumer_state(Config, QName), 5000),
     ?assertEqual(0, channel_consumer_count(Config)),
@@ -330,10 +384,10 @@ consumer_removed_when_cancel_ok_never_arrives(Config) ->
     _ = receive_delivery(<<"ctag">>, false),
     await_basic_cancel(<<"ctag">>),
     timer:sleep(3000),
-    ?assertMatch(#{quorum_queue_consumers := 1}, consumer_state(Config, QName)),
+    ?assertMatch(#{queue_consumers := 1}, consumer_state(Config, QName)),
     ?assertEqual(1, channel_consumer_count(Config)),
     ?awaitMatch(#{consumers := 0,
-                  quorum_queue_consumers := 0,
+                  queue_consumers := 0,
                   consumer_metrics := []},
                 consumer_state(Config, QName), ?RECEIVE_TIMEOUT),
     ?assertEqual(0, channel_consumer_count(Config)),
@@ -373,7 +427,7 @@ consumer_timeout_erlang_client_answers_with_cancel_ok(Config) ->
     _ = receive_delivery(<<"ctag">>, false),
     await_basic_cancel(<<"ctag">>),
     ?awaitMatch(#{consumers := 0,
-                  quorum_queue_consumers := 0,
+                  queue_consumers := 0,
                   consumer_metrics := []},
                 consumer_state(Config, QName), ?RECEIVE_TIMEOUT),
     ?assert(is_process_alive(Ch)),
@@ -388,7 +442,7 @@ unsolicited_cancel_ok_keeps_active_consumer(Config) ->
     ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
     #'basic.qos_ok'{} = amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 10}),
     ?assertEqual(1, channel_consumer_count(Config)),
-    ?assertMatch(#{quorum_queue_consumers := 1}, consumer_state(Config, QName)),
+    ?assertMatch(#{queue_consumers := 1}, consumer_state(Config, QName)),
     ?assert(is_process_alive(Ch)),
     amqp_connection:close(Conn).
 
@@ -421,7 +475,7 @@ consumer_timeout_late_ack_after_cancel_ok(Config) ->
     DTag = receive_delivery(<<"ctag">>, false),
     await_basic_cancel(<<"ctag">>),
     ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
-    ?awaitMatch(#{quorum_queue_consumers := 0}, consumer_state(Config, QName),
+    ?awaitMatch(#{queue_consumers := 0}, consumer_state(Config, QName),
                 ?RECEIVE_TIMEOUT),
     ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
@@ -458,7 +512,7 @@ consumer_timeout_response_close_channel(Config) ->
                   exit(channel_close_expected)
         end,
         ?awaitMatch(#{consumers := 0,
-                      quorum_queue_consumers := 0,
+                      queue_consumers := 0,
                       consumer_metrics := []},
                     consumer_state(Config, QName), ?RECEIVE_TIMEOUT),
         ?assert(is_process_alive(Conn)),
@@ -541,13 +595,21 @@ consumer_state(Config, QName) ->
     {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QRes]),
     [{consumers, Consumers}] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
                                                             info, [Q, [consumers]]),
-    {ok, #{machine := #{num_consumers := NumQQConsumers}}, _} =
-        ra:member_overview(amqqueue:get_pid(Q)),
+    %% A quorum queue keeps a cancelled consumer while it still holds
+    %% messages, so its state machine's count can differ from `Consumers'.
+    QueueConsumers = case amqqueue:get_type(Q) of
+                         rabbit_quorum_queue ->
+                             {ok, #{machine := #{num_consumers := N}}, _} =
+                                 ra:member_overview(amqqueue:get_pid(Q)),
+                             N;
+                         _ ->
+                             Consumers
+                     end,
     Metrics = [E || E <- rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list,
                                                       [consumer_created]),
                     element(1, element(1, E)) =:= QRes],
     #{consumers => Consumers,
-      quorum_queue_consumers => NumQQConsumers,
+      queue_consumers => QueueConsumers,
       consumer_metrics => Metrics}.
 
 publish(Ch, QName, Payloads) ->
