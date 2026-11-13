@@ -265,6 +265,8 @@ extract_resource_server_properties(Settings) ->
 
 resource_server_property_value(Key, V) ->
     case resource_servers_key_synonym(Key) of
+        "verify_aud" when is_boolean(V) ->
+            V;
         "scope_pattern_syntax" ->
             parse_scope_pattern_syntax_for_schema(V);
         _ ->
