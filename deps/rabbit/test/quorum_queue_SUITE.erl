@@ -387,10 +387,14 @@ init_per_testcase(T, Config)
             {skip, "machine versions must be the same for desired leader location to work"}
     end;
 init_per_testcase(Testcase, Config) ->
+    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
     SameKhepriMacVers = (
       rabbit_ct_broker_helpers:do_nodes_run_same_ra_machine_version(
         Config, khepri_machine)),
     case Testcase of
+        leader_locator_balanced_random_maintenance when IsMixed ->
+            {skip, "leader_locator_balanced_random_maintenance isn't mixed "
+             "versions compatible"};
         leadership_takeover when not SameKhepriMacVers ->
             {skip, "leadership_takeover will fail with a mix of Khepri state "
              "machine versions"};
@@ -638,6 +642,7 @@ consume_invalid_arg_2(Config) ->
                               self())).
 
 decorator_added_to_idle_queue_is_notified(Config) ->
+    check_quorum_queues_v9_compat(Config),
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
@@ -1394,6 +1399,16 @@ single_active_consumer_priority(Config) ->
     ok.
 
 force_shrink_members_to_local_member(Config) ->
+    %% `rabbit_queue_type_ra` was introduced in 4.3.0.
+    case rabbit_ct_broker_helpers:is_feature_flag_supported(
+           Config, 'rabbitmq_4.3.0') of
+        true ->
+            force_shrink_members_to_local_member_(Config);
+        false ->
+            {skip, "rabbit_queue_type_ra is not available on older nodes"}
+    end.
+
+force_shrink_members_to_local_member_(Config) ->
     [Server0, Server1, Server2] =
     rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1943,9 +1958,9 @@ policy_repair(Config) ->
         ]),
 
     % Wait for the policy to apply
-    QueryFun = fun rabbit_fifo:overview/1,
     ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength1}}}, _},
-                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
+                rpc:call(Server0, rabbit_fifo_client, local_query,
+                         [{RaName, Server0}, overview]),
                 ?DEFAULT_AWAIT),
 
     % Check the policy has been applied
@@ -1979,7 +1994,8 @@ policy_repair(Config) ->
 
     % Wait for the policy to apply
     ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength2}}}, _},
-                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
+                rpc:call(Server0, rabbit_fifo_client, local_query,
+                         [{RaName, Server0}, overview]),
                 ?DEFAULT_AWAIT),
 
     % Check the policy has been applied
@@ -2034,7 +2050,8 @@ policy_repair(Config) ->
 
     % Wait for the policy to apply
     ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength3}}}, _},
-                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
+                rpc:call(Server0, rabbit_fifo_client, local_query,
+                         [{RaName, Server0}, overview]),
                 ?DEFAULT_AWAIT),
 
     % Check the policy has been applied
@@ -3802,6 +3819,14 @@ add_member_not_found(Config) ->
                           [<<"/">>, QQ, Server, voter, 5000])).
 
 add_member(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "an older node cannot join a cluster seeded by a newer one"};
+        false ->
+            add_member_(Config)
+    end.
+
+add_member_(Config) ->
     [Server0, Server1] = Servers0 =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -3910,6 +3935,14 @@ delete_member_not_a_member(Config) ->
                           [<<"/">>, QQ, Server])).
 
 delete_member_member_already_deleted(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "the removed member can be the leader in mixed versions"};
+        false ->
+            delete_member_member_already_deleted_(Config)
+    end.
+
+delete_member_member_already_deleted_(Config) ->
     [Server, Server2] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     NServers = length(Servers),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -6095,6 +6128,15 @@ replica_states(Config) ->
 
 % Testcase motivated by : https://github.com/rabbitmq/rabbitmq-server/discussions/13131
 restart_after_queue_reincarnation(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, track_qq_members_uids) of
+        true ->
+            restart_after_queue_reincarnation_(Config);
+        false ->
+            {skip, "queue reincarnation protection requires track_qq_members_uids ff"}
+    end.
+
+restart_after_queue_reincarnation_(Config) ->
     [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     QName = <<"QQ">>,
@@ -6970,7 +7012,9 @@ check_quorum_queues_vn_compat(Version, Config) ->
         true ->
             ok;
         false ->
-            throw({skip, "test will only work on QQ machine version >= 8"})
+            throw({skip, rabbit_misc:format(
+                           "test will only work on QQ machine version >= ~b",
+                           [Version])})
     end.
 
 lists_interleave([], _List) ->
