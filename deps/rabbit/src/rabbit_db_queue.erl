@@ -549,8 +549,11 @@ update_if_unchanged(QName, Fun, Options) ->
         {ok, #{Path := #{data := Q, payload_version := Vsn}}} ->
             case Fun(Q) of
                 {ok, Q1} ->
+                    %% A recreated record starts again at the same payload
+                    %% version, so the data must match as well.
                     UpdatePath = khepri_path:combine_with_conditions(
-                                   Path, [#if_payload_version{version = Vsn}]),
+                                   Path, [#if_payload_version{version = Vsn},
+                                          #if_data_matches{pattern = Q}]),
                     case rabbit_khepri:put(UpdatePath, Q1, Options) of
                         ok ->
                             {ok, Q1};
