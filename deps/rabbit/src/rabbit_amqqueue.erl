@@ -74,7 +74,7 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
-         emit_consumers_local/3, internal_delete/3]).
+         emit_consumers_local/3, internal_delete/3, internal_delete/4]).
 
 %% Deprecated feature callback.
 -export([are_transient_nonexcl_used/1]).
@@ -1944,6 +1944,16 @@ internal_delete(Queue, ActingUser) ->
     internal_delete(Queue, ActingUser, normal).
 
 internal_delete(Queue, ActingUser, Reason) ->
+    internal_delete(Queue, ActingUser, Reason, #{}).
+
+-spec internal_delete(Queue, ActingUser, Reason, Options) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      ActingUser :: rabbit_types:username(),
+      Reason :: term(),
+      Options :: #{timeout => timeout()},
+      Ret :: ok | {error, timeout}.
+
+internal_delete(Queue, ActingUser, Reason, Options) ->
     QueueName = amqqueue:get_name(Queue),
     Conditions = case amqqueue:get_exclusive_owner(Queue) of
                      none ->
@@ -1953,7 +1963,7 @@ internal_delete(Queue, ActingUser, Reason) ->
                          [#if_data_matches{pattern = Pattern}]
                  end,
     OnlyDurable = Reason =:= missing_owner,
-    case rabbit_db_queue:delete_if(QueueName, Conditions, OnlyDurable) of
+    case rabbit_db_queue:delete_if(QueueName, Conditions, OnlyDurable, Options) of
         ok ->
             ok;
         {error, timeout} = Err ->
