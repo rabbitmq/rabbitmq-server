@@ -1463,7 +1463,7 @@ delete_cluster_and_record(Q, ActingUser) ->
                     erlang:demonitor(MRef, [flush]),
                     ok = force_delete_queue(Q, Servers)
             end,
-            notify_decorators(QName, shutdown),
+            notify_shutdown(Q),
             case delete_queue_data(Q, ActingUser) of
                 ok ->
                     _ = erpc_call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
@@ -1477,7 +1477,7 @@ delete_cluster_and_record(Q, ActingUser) ->
               "While deleting ~ts, the ra cluster was already shutting "
               "down due to a concurrent delete. Proceeding with cleanup.",
               [rabbit_misc:rs(QName)]),
-            notify_decorators(QName, shutdown),
+            notify_shutdown(Q),
             case delete_queue_data(Q, ActingUser) of
                 ok ->
                     rabbit_core_metrics:queue_deleted(QName),
@@ -1514,7 +1514,13 @@ delete_cluster_and_record(Q, ActingUser) ->
 
 force_delete_cluster(Q, Servers) ->
     ok = force_delete_queue(Q, Servers),
-    notify_decorators(amqqueue:get_name(Q), shutdown).
+    notify_shutdown(Q).
+
+%% Decorators such as federation identify a queue by its record as it was
+%% before the delete claimed it.
+notify_shutdown(Q) ->
+    TypeState = maps:remove(deleting_owner, amqqueue:get_type_state(Q)),
+    notify_decorators(amqqueue:set_type_state(Q, TypeState), shutdown, []).
 
 delete_record(Q, ActingUser, ReadyMsgs) ->
     case delete_queue_data(Q, ActingUser) of
