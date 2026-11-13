@@ -198,6 +198,12 @@ process_frame(Type, ChNumber, Payload,
         %% Match heartbeats but don't do anything with them
         heartbeat ->
             State;
+        error ->
+            amqp_gen_connection:server_misbehaved(
+                Connection,
+                #amqp_error{name        = command_invalid,
+                            explanation = "unknown or malformed frame"}),
+            State;
         AnalyzedFrame when ChNumber /= 0 ->
             amqp_channels_manager:pass_frame(ChMgr, ChNumber, AnalyzedFrame),
             State;

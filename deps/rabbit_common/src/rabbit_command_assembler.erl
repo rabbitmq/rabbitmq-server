@@ -56,8 +56,10 @@
 
 analyze_frame(?FRAME_METHOD,
               <<ClassId:16, MethodId:16, MethodFields/binary>>) ->
-    MethodName = rabbit_framing_amqp_0_9_1:lookup_method_name({ClassId, MethodId}),
-    {method, MethodName, MethodFields};
+    try rabbit_framing_amqp_0_9_1:lookup_method_name({ClassId, MethodId}) of
+        MethodName -> {method, MethodName, MethodFields}
+    catch exit:{unknown_method_id, {ClassId, MethodId}} -> error
+    end;
 analyze_frame(?FRAME_HEADER,
               <<ClassId:16, Weight:16, BodySize:64, Properties/binary>>) ->
     {content_header, ClassId, Weight, BodySize, Properties};

@@ -27,7 +27,8 @@ all() ->
      empty_body_frame,
      empty_body_frame_above_limit,
      body_size_above_hard_limit,
-     process_2_applies_the_hard_limit_only
+     process_2_applies_the_hard_limit_only,
+     analyze_frame_with_unknown_method_id
     ].
 
 body_size_at_limit(_Config) ->
@@ -98,6 +99,10 @@ process_2_applies_the_hard_limit_only(_Config) ->
                  rabbit_command_assembler:process(header(?MAX_MSG_SIZE), S0)),
     ?assertMatch({error, #amqp_error{name = frame_error}},
                  rabbit_command_assembler:process(header(?MAX_MSG_SIZE + 1), S0)).
+
+analyze_frame_with_unknown_method_id(_Config) ->
+    ?assertEqual(error,
+                 rabbit_command_assembler:analyze_frame(?FRAME_METHOD, <<16#FFFF:16, 16#FFFF:16>>)).
 
 %% -------------------------------------------------------------------
 %% Implementation
