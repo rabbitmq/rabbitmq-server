@@ -111,10 +111,14 @@
 
 %%----------------------------------------------------------------------------
 
+%% Denying this deprecated feature rejects new declarations and leaves
+%% existing transient queues alone, as they are deleted when the node hosting
+%% them restarts. Therefore existing queues must not prevent the denial.
 -rabbit_deprecated_feature(
    {transient_nonexcl_queues,
     #{deprecation_phase => denied_by_default,
       doc_url => "https://blog.rabbitmq.com/posts/2021/08/4.0-deprecation-announcements/#removal-of-transient-non-exclusive-queues",
+      usage_prevents_denial => false,
       callbacks => #{is_feature_used => {?MODULE, are_transient_nonexcl_used}}
      }}).
 
