@@ -85,6 +85,7 @@ groups() ->
                                             declare_cluster_not_formed,
                                             add_member_when_cluster_deleted,
                                             add_member_with_leftover_member,
+                                            stale_add_member_keeps_member,
                                             boot_deletes_leftover_members,
                                             cleanup_data_dir_needs_metadata_store,
                                             channel_handles_ra_event,
@@ -4354,6 +4355,30 @@ add_member_with_leftover_member(Config) ->
     #{nodes := #{Other := UId}} = amqqueue:get_type_state(Q1),
     ?assertNotEqual(LeftoverUId, UId),
     ?assertEqual(UId, rpc:call(Other, ra_directory, uid_of, [quorum_queues, RaName])),
+    ok.
+
+stale_add_member_keeps_member(Config) ->
+    [Server1 | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 2}])),
+    ?awaitMatch(2, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    {ok, Stale} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    [Other] = Servers -- rpc:call(Server1, rabbit_amqqueue, get_quorum_nodes, [Stale]),
+    ?assertEqual(ok, rpc:call(Server1, rabbit_quorum_queue, add_member,
+                              [<<"/">>, QQ, Other, 30000])),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    UId = rpc:call(Other, ra_directory, uid_of, [quorum_queues, ra_name(QQ)]),
+
+    ?assertMatch({error, _}, rpc:call(Server1, rabbit_quorum_queue, add_member,
+                                      [Stale, Other, promotable, 30000])),
+    ?assertEqual(UId, rpc:call(Other, ra_directory, uid_of,
+                               [quorum_queues, ra_name(QQ)])),
+    ?assertEqual(3, count_online_nodes(Server1, <<"/">>, QQ)),
     ok.
 
 boot_deletes_leftover_members(Config) ->

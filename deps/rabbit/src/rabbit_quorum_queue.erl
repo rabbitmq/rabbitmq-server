@@ -2221,7 +2221,7 @@ start_member(Q, #{id := {RaName, Node} = ServerId, uid := UId} = Conf) ->
                            ?RPC_TIMEOUT) of
                 OtherUId when is_binary(OtherUId) andalso
                               OtherUId =/= UId ->
-                    case is_leftover_member(Q, Node) andalso
+                    case is_unlisted_member(Q, Node, OtherUId) andalso
                          force_delete_member(ServerId, OtherUId) =:= ok of
                         true ->
                             ?LOG_INFO("Deleted leftover member ~w of quorum ~ts",
@@ -2236,14 +2236,34 @@ start_member(Q, #{id := {RaName, Node} = ServerId, uid := UId} = Conf) ->
             end
     end.
 
+%% `Q0` can be stale, for example after a concurrent addition to the same
+%% node, so the check runs against the current record. The write orders it
+%% with a delete's claim.
+is_unlisted_member(Q0, Node, UId) ->
+    Check = fun(Q) when ?amqqueue_state_is(Q, deleting) ->
+                    {error, being_deleted};
+               (Q) ->
+                    case is_same_incarnation(Q, Q0) andalso
+                         not is_listed_member(Q, Node, UId) of
+                        true -> {ok, Q};
+                        false -> {error, not_leftover}
+                    end
+            end,
+    case rabbit_db_queue:try_update(amqqueue:get_name(Q0), Check, #{}) of
+        {ok, _} -> true;
+        _ -> false
+    end.
+
 %% Records created before `track_qq_members_uids` list nodes without UIds, so
 %% a member on a listed node cannot be told apart from a leftover.
-is_leftover_member(Q, Node) ->
+is_listed_member(Q, Node, UId) ->
     case amqqueue:get_type_state(Q) of
         #{nodes := Nodes} when is_list(Nodes) ->
-            not lists:member(Node, Nodes);
+            lists:member(Node, Nodes);
+        #{nodes := Nodes} when is_map(Nodes) ->
+            maps:get(Node, Nodes, undefined) =:= UId;
         _ ->
-            true
+            false
     end.
 
 delete_member(VHost, Name, Node) ->
