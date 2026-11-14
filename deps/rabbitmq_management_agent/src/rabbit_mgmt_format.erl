@@ -77,6 +77,8 @@ format_queue_stats({online, Value}) ->
     [{online, lists:sort(Value)}];
 format_queue_stats({open_files, Value}) ->
     [{open_files, lists:sort(Value)}];
+format_queue_stats({message_rates, Snapshot}) ->
+    [{message_rates, rabbit_msg_rates:format(Snapshot)}];
 format_queue_stats(Stat) ->
     [Stat].
 
@@ -117,6 +119,8 @@ format_queue_basic_stats({online, Value}) ->
     [{online, lists:sort(Value)}];
 format_queue_basic_stats({open_files, Value}) ->
     [{open_files, lists:sort(Value)}];
+format_queue_basic_stats({message_rates, Snapshot}) ->
+    [{message_rates, rabbit_msg_rates:format(Snapshot)}];
 format_queue_basic_stats(Stat) ->
     [Stat].
 

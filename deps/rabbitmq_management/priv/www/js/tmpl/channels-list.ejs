@@ -95,7 +95,7 @@
     <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
 <% } %>
 <% if (show_column('channels', 'msgs-unacked')) { %>
-    <th>Unacked</th>
+    <th><%= t('Unacked') %></th>
 <% } %>
 <% if (show_column('channels', 'msgs-uncommitted')) { %>
     <th>Uncommitted msgs</th>
@@ -123,7 +123,7 @@
     <th>redelivered</th>
 <% } %>
 <% if (show_column('channels', 'rate-ack')) { %>
-    <th>ack</th>
+    <th><%= t('ack') %></th>
 <% } %>
 <% } %>
 <% } %>

@@ -5,6 +5,7 @@
 <div class="hider updatable">
 <% if (!disable_stats) { %>
   <%= data_rates('data-rates-conn', connection, 'Data rates') %>
+  <%= format('smoothed-message-rates', {'rates': connection.message_rates}) %>
 <% } %>
 
 <h3>Details</h3>

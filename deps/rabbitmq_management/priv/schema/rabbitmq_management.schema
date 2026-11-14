@@ -13,6 +13,12 @@
     [{datatype, string},
      {validators, ["file_accessible"]}]}.
 
+%% Terminology used by the management UI. `modern` favours AMQP 1.0 terms,
+%% `legacy` uses AMQP 0-9-1 terms. Users can override this in the UI.
+
+{mapping, "management.ui.terminology", "rabbitmq_management.ui_terminology",
+    [{datatype, {enum, [modern, legacy]}}]}.
+
 %% Log all requests to the management HTTP API to a file.
 %%
 %% {http_log_dir, "/path/to/access.log"},
