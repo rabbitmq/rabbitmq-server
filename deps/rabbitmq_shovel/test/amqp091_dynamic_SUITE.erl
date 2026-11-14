@@ -38,6 +38,7 @@ groups() ->
           set_empty_properties_using_proplist,
           set_empty_properties_using_map,
           headers,
+          headers_depth,
           restart,
           validation,
           runtime_parse_failure,
@@ -220,6 +221,7 @@ headers(Config) ->
             #amqp_msg{props = #'P_basic'{headers = Headers}} =
                     amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi2">>),
             [{<<"x-shovelled">>, _, [{table, ShovelledHeader}]},
+             {<<"x-shovelled-count">>, long, 1},
              {<<"x-shovelled-timestamp">>, long, TS}] = Headers,
             %% We assume that the message was shovelled within a 2 second
             %% window.
@@ -246,9 +248,36 @@ headers(Config) ->
                  {<<"dest-queue">>,           <<"dest">>},
                  {<<"add-forward-headers">>,  true}]),
             #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled">>,
-                                                     _, _}]}} =
+                                                     _, _},
+                                                    {<<"x-shovelled-count">>,
+                                                     long, 1}]}} =
                     amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi4">>)
 
+        end).
+
+headers_depth(Config) ->
+    with_amqp091_ch(Config,
+        fun(Ch) ->
+            shovel_test_utils:set_param(Config,
+                <<"test">>,
+                [{<<"src-queue">>,            <<"src">>},
+                 {<<"dest-queue">>,           <<"dest">>},
+                 {<<"dest-add-forward-headers">>, true},
+                 {<<"dest-add-forward-headers-depth">>, 2}]),
+
+            PriorHeaders = [{<<"x-shovelled">>, array,
+                            [{table, [{<<"shovel-name">>, longstr, <<"hop1">>}]},
+                             {table, [{<<"shovel-name">>, longstr, <<"hop0">>}]}]},
+                           {<<"x-shovelled-count">>, long, 2}],
+            amqp091_publish(Ch, <<>>, <<"src">>,
+                            #amqp_msg{payload = <<"hi5">>,
+                                      props = #'P_basic'{headers = PriorHeaders}}),
+            #amqp_msg{props = #'P_basic'{headers = Headers}} =
+                    amqp091_expect(Ch, <<"dest">>, <<"hi5">>),
+
+            {_, array, Entries} = lists:keyfind(<<"x-shovelled">>, 1, Headers),
+            2 = length(Entries),
+            {_, long, 3} = lists:keyfind(<<"x-shovelled-count">>, 1, Headers)
         end).
 
 restart(Config) ->
