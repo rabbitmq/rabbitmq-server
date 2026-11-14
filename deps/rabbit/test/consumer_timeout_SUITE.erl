@@ -19,8 +19,19 @@
 %% expecting CONSUMER_TIMEOUT*2 might not be enough
 -define(RECEIVE_TIMEOUT, 30_000).
 
+%% The multi-delivery tests set `x-consumer-timeout` per consumer, which takes
+%% precedence over the queue's setting, so they run in one group of their own.
+-define(MULTI_DELIVERY_TIMEOUT, 6000).
+-define(DELIVERY_GAP, 3000).
+-define(SOAK_MESSAGES, 400).
+-define(SOAK_TIMEOUT, 1000).
+-define(SOAK_DEADLINE, 120000).
+
 -define(GROUP_CONFIG,
-        #{global_consumer_timeout => [{rabbit, [{consumer_timeout, ?CONSUMER_TIMEOUT}]},
+        #{multiple_deliveries => [{rabbit, []},
+                                  {queue_policy, []},
+                                  {queue_arguments, []}],
+          global_consumer_timeout => [{rabbit, [{consumer_timeout, ?CONSUMER_TIMEOUT}]},
                                       {queue_policy, []},
                                       {queue_arguments, []}],
           queue_policy_consumer_timeout => [{rabbit, []},
@@ -36,7 +47,8 @@ all() ->
     [
      {group, global_consumer_timeout},
      {group, queue_policy_consumer_timeout},
-     {group, queue_argument_consumer_timeout}
+     {group, queue_argument_consumer_timeout},
+     {group, multiple_deliveries}
     ].
 
 groups() ->
@@ -58,7 +70,32 @@ groups() ->
     AllTestsParallel = [
        {quorum_queue, [], AllTests}
       ],
+    MultipleDeliveryTests =
+        [no_delivery_after_late_ack_while_cancel_pending,
+         timeout_crossing_ack_after_cancel_ok_keeps_channel,
+         timeout_crossing_ack_after_client_cancel_keeps_channel,
+         timeout_during_resubscribe_cancels_after_consume_ok,
+         late_ack_after_tag_reuse_does_not_settle_new_delivery,
+         returned_deliveries_of_old_consumer_not_tracked_after_tag_reuse,
+         late_ack_of_old_consumer_after_tag_reuse_keeps_channel,
+         client_cancel_while_cancel_ok_pending_is_answered,
+         second_delivery_timeout_after_cancel_ok_keeps_channel,
+         second_delivery_timeout_after_cancel_ok_window_keeps_channel,
+         cancelled_consumer_forgotten_once_its_deliveries_return,
+         delivery_acked_before_its_timeout_after_cancel_ok,
+         delivery_acked_in_transaction_after_cancel_ok,
+         timeouts_in_two_release_events_after_cancel_ok_keep_channel,
+         timeout_after_client_initiated_cancel_closes_channel,
+         timeout_does_not_cancel_reused_tag_on_another_queue,
+         timeout_cancels_consumer_resubscribed_with_same_tag,
+         timeout_after_resubscribe_and_client_cancel_closes_channel,
+         delivery_pending_in_transaction_times_out_after_cancel_ok,
+         timeout_after_credential_update_cancel_keeps_channel,
+         second_delivery_timeout_after_leader_change_keeps_channel,
+         consumer_timeouts_under_load_never_close_channel,
+         single_active_consumer_takes_over_after_timeout],
     [
+     {multiple_deliveries, [], [{quorum_queue, [], MultipleDeliveryTests}]},
      {global_consumer_timeout, [], AllTestsParallel},
      {queue_policy_consumer_timeout, [], AllTestsParallel},
      {queue_argument_consumer_timeout, [], AllTestsParallel}
@@ -330,13 +367,15 @@ consumer_removed_when_cancel_ok_never_arrives(Config) ->
     _ = receive_delivery(<<"ctag">>, false),
     await_basic_cancel(<<"ctag">>),
     timer:sleep(3000),
-    ?assertMatch(#{quorum_queue_consumers := 1}, consumer_state(Config, QName)),
+    %% The queue drops the consumer at the timeout; the channel keeps it
+    %% until the `basic.cancel_ok` window ends.
+    ?assertMatch(#{quorum_queue_consumers := 0}, consumer_state(Config, QName)),
     ?assertEqual(1, channel_consumer_count(Config)),
     ?awaitMatch(#{consumers := 0,
                   quorum_queue_consumers := 0,
                   consumer_metrics := []},
                 consumer_state(Config, QName), ?RECEIVE_TIMEOUT),
-    ?assertEqual(0, channel_consumer_count(Config)),
+    ?awaitMatch(0, channel_consumer_count(Config), ?RECEIVE_TIMEOUT, 100),
     ?assert(is_process_alive(Ch)),
     amqp_connection:close(Conn).
 
@@ -481,6 +520,774 @@ server_advertises_accept_consumer_cancel_ok(Config) ->
 %% Test helpers
 %%%%%%%%%%%%%%%%%%%%%%%%
 
+
+%% -------------------------------------------------------------------
+%% A consumer holding more than one delivery. Each test staggers two
+%% deliveries ?DELIVERY_GAP apart under a ?MULTI_DELIVERY_TIMEOUT consumer
+%% timeout, so the first times out and the consumer is cancelled while the
+%% second is still held, and the second times out after that.
+%% -------------------------------------------------------------------
+
+%% The second delivery timing out after the client answered the server's
+%% `basic.cancel` returns it to the queue without closing the channel.
+second_delivery_timeout_after_cancel_ok_keeps_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              erlang:monitor(process, Ch),
+              await_counts(Config, QName, 2, 0),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% Without a `basic.cancel_ok`, the second delivery timing out after the
+%% server gave up waiting for one also keeps the channel open.
+second_delivery_timeout_after_cancel_ok_window_keeps_channel(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, consumer_cancel_ok_timeout, 500]),
+    try
+        with_manual_cancel_ok_channel(
+          Config,
+          fun (Ch, QName) ->
+                  hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+                  await_basic_cancel(<<"ctag">>),
+                  %% Removed after the shortened window, well before the second
+                  %% delivery times out.
+                  await_consumer_removed_holding_one(Config, QName),
+                  erlang:monitor(process, Ch),
+                  await_counts(Config, QName, 2, 0),
+                  assert_channel_stays_open(Ch)
+          end)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                          [rabbit, consumer_cancel_ok_timeout])
+    end.
+
+%% The channel stops tracking a cancelled consumer once the queue has none
+%% of its deliveries checked out.
+cancelled_consumer_forgotten_once_its_deliveries_return(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              ?assertEqual([{<<"ctag">>, 1}], server_cancelled_consumers(Config)),
+              await_counts(Config, QName, 2, 0),
+              ?awaitMatch([], server_cancelled_consumers(Config), ?RECEIVE_TIMEOUT, 50)
+      end).
+
+%% A held delivery acknowledged before its own timeout is settled normally.
+delivery_acked_before_its_timeout_after_cancel_ok(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              [_DTag1, DTag2] = hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag2}),
+              await_counts(Config, QName, 1, 0),
+              ?assertEqual([], server_cancelled_consumers(Config)),
+              erlang:monitor(process, Ch),
+              assert_channel_stays_open(Ch),
+              await_counts(Config, QName, 1, 0)
+      end).
+
+%% Inside a transaction the queue keeps an acknowledged delivery until the
+%% commit, so the channel keeps tracking it until then.
+delivery_acked_in_transaction_after_cancel_ok(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              %% A channel cannot use both publisher confirms and transactions.
+              {ok, PubCh} = amqp_connection:open_channel(Conn),
+              [_DTag1, DTag2] = hold_two_staggered_deliveries(PubCh, Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              #'tx.select_ok'{} = amqp_channel:call(Ch, #'tx.select'{}),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag2}),
+              ?assertEqual([{<<"ctag">>, 1}], server_cancelled_consumers(Config)),
+              #'tx.commit_ok'{} = amqp_channel:call(Ch, #'tx.commit'{}),
+              await_counts(Config, QName, 1, 0),
+              ?assertEqual([], server_cancelled_consumers(Config))
+      end).
+
+%% Two deliveries timing out together are released in one event, and a
+%% third timing out after the cancellation still keeps the channel open.
+timeouts_in_two_release_events_after_cancel_ok_keep_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              publish_and_confirm(Ch, QName, [<<"m1">>, <<"m2">>]),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              _ = receive_delivery(<<"ctag">>, false),
+              _ = receive_delivery(<<"ctag">>, false),
+              timer:sleep(?DELIVERY_GAP),
+              publish(Ch, QName, [<<"m3">>]),
+              _ = receive_delivery(<<"ctag">>, false),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              ?awaitMatch(0, channel_consumer_count(Config), ?RECEIVE_TIMEOUT, 50),
+              await_counts(Config, QName, 2, 1),
+              erlang:monitor(process, Ch),
+              await_counts(Config, QName, 3, 0),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% A consumer the application cancelled itself never received a server
+%% `basic.cancel`, so a later delivery timeout still closes the channel.
+timeout_after_client_initiated_cancel_closes_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              publish_and_confirm(Ch, QName, [<<"m1">>]),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              _ = receive_delivery(<<"ctag">>, false),
+              #'basic.cancel_ok'{} =
+                  amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>}),
+              await_channel_closed_406(Ch)
+      end).
+
+%% The consumer tag of a consumer cancelled for a timeout can be reused on
+%% another queue, and the old consumer's remaining delivery timing out does
+%% not cancel the new consumer.
+timeout_does_not_cancel_reused_tag_on_another_queue(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              QName2 = ?config(queue_name_2, Config),
+              declare_queue(Ch, Config, QName2),
+              hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              subscribe(Ch, QName2, false, <<"ctag">>),
+              erlang:monitor(process, Ch),
+              await_counts(Config, QName, 2, 0),
+              receive
+                  #'basic.cancel'{consumer_tag = <<"ctag">>} ->
+                      exit(healthy_consumer_cancelled)
+              after 2000 ->
+                        ok
+              end,
+              ?assertMatch(#{quorum_queue_consumers := 1}, consumer_state(Config, QName2)),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% Resubscribing with the same tag on the same queue takes over the old
+%% consumer's remaining delivery, so its timeout cancels the new consumer,
+%% which the channel then tracks in turn.
+timeout_cancels_consumer_resubscribed_with_same_tag(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              erlang:monitor(process, Ch),
+              await_counts(Config, QName, 2, 0),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% Resubscribing with the same tag makes the remaining delivery the new
+%% consumer's, so once the client cancels that consumer itself, the
+%% delivery timing out closes the channel.
+timeout_after_resubscribe_and_client_cancel_closes_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              %% Settle the first delivery, redelivered to the new consumer, so
+              %% that only the second one can time out and close the channel.
+              DTag3 = receive_delivery(<<"ctag">>, true),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag3}),
+              #'basic.cancel_ok'{} =
+                  amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>}),
+              await_channel_closed_406(Ch)
+      end).
+
+%% An acknowledgement still pending in a transaction when the server cancels
+%% the consumer leaves the delivery checked out until the commit, so its
+%% timing out before the commit keeps the channel open.
+delivery_pending_in_transaction_times_out_after_cancel_ok(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              %% A channel cannot use both publisher confirms and transactions.
+              {ok, PubCh} = amqp_connection:open_channel(Conn),
+              #'tx.select_ok'{} = amqp_channel:call(Ch, #'tx.select'{}),
+              [_DTag1, DTag2] = hold_two_staggered_deliveries(PubCh, Ch, QName, <<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag2}),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              ?assertEqual([{<<"ctag">>, 1}], server_cancelled_consumers(Config)),
+              erlang:monitor(process, Ch),
+              await_counts(Config, QName, 2, 0),
+              assert_channel_stays_open(Ch),
+              ?assertEqual([], server_cancelled_consumers(Config)),
+              #'tx.commit_ok'{} = amqp_channel:call(Ch, #'tx.commit'{}),
+              assert_channel_stays_open(Ch),
+              await_counts(Config, QName, 2, 0)
+      end).
+
+%% A consumer cancelled because read access was refused after a credential
+%% update received a `basic.cancel` too, so its deliveries timing out later
+%% keep the channel open.
+timeout_after_credential_update_cancel_keeps_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              ok = rabbit_ct_broker_helpers:set_permissions(
+                     Config, <<"guest">>, <<"/">>, <<".*">>, <<".*">>, <<"">>),
+              try
+                  ok = refresh_channel_credentials(Config),
+                  await_basic_cancel(<<"ctag">>),
+                  ?awaitMatch(0, channel_consumer_count(Config), ?RECEIVE_TIMEOUT, 50),
+                  ?assertEqual([{<<"ctag">>, 2}], server_cancelled_consumers(Config)),
+                  erlang:monitor(process, Ch),
+                  await_counts(Config, QName, 2, 0),
+                  assert_channel_stays_open(Ch),
+                  ?assertEqual([], server_cancelled_consumers(Config))
+              after
+                  ok = rabbit_ct_broker_helpers:set_permissions(
+                         Config, <<"guest">>, <<"/">>, <<".*">>, <<".*">>, <<".*">>)
+              end
+      end).
+
+%% The queue's new leader times out the remaining delivery and the channel
+%% treats it like any other, after a leader change between the two timeouts.
+second_delivery_timeout_after_leader_change_keeps_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              transfer_queue_leadership(Config, QName),
+              erlang:monitor(process, Ch),
+              await_counts(Config, QName, 2, 0),
+              assert_channel_stays_open(Ch),
+              ?assertEqual([], server_cancelled_consumers(Config))
+      end).
+
+%% Deliveries timing out at many different moments, settled early, late or
+%% never, across server cancellations answered at once, late or not at all,
+%% and resubscriptions with new or reused tags, never close the channel.
+consumer_timeouts_under_load_never_close_channel(Config) ->
+    _ = rand:seed(exsss),
+    ct:pal("soak seed ~p", [rand:export_seed()]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, consumer_cancel_ok_timeout, 500]),
+    try
+        with_manual_cancel_ok_channel(
+          Config,
+          fun (Conn, Ch, QName) ->
+                  #'basic.qos_ok'{} = amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 50}),
+                  erlang:monitor(process, Ch),
+                  {ok, PubCh} = amqp_connection:open_channel(Conn),
+                  Self = self(),
+                  _ = spawn_link(fun () ->
+                                         soak_publish(PubCh, QName, ?SOAK_MESSAGES),
+                                         Self ! publisher_done
+                                 end),
+                  Tag = soak_subscribe(Ch, QName, <<>>),
+                  erlang:send_after(?SOAK_DEADLINE, self(), soak_deadline),
+                  Stats = soak_loop(Config, Ch, QName,
+                                    #{tag => Tag, held => #{}, draining => false,
+                                      cancel_ok_sent => #{}, cancels => 0,
+                                      cancels_holding_more => 0, same_tag_resubscribes => 0}),
+                  ct:pal("soak stats ~p", [Stats]),
+                  ?assert(maps:get(cancels, Stats) >= 5),
+                  ?assert(maps:get(cancels_holding_more, Stats) >= 3),
+                  ?assert(maps:get(same_tag_resubscribes, Stats) > 0),
+                  ?awaitMatch([], server_cancelled_consumers(Config), ?RECEIVE_TIMEOUT, 50),
+                  assert_channel_stays_open(Ch)
+          end)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                          [rabbit, consumer_cancel_ok_timeout])
+    end.
+
+soak_publish(_Ch, _QName, 0) ->
+    ok;
+soak_publish(Ch, QName, N) ->
+    timer:sleep(rand:uniform(75)),
+    publish(Ch, QName, [integer_to_binary(N)]),
+    soak_publish(Ch, QName, N - 1).
+
+soak_subscribe(Ch, QName, Tag) ->
+    #'basic.consume_ok'{consumer_tag = Actual} =
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName,
+                                                    consumer_tag = Tag,
+                                                    arguments = [{<<"x-consumer-timeout">>,
+                                                                  long, ?SOAK_TIMEOUT}]},
+                               self()),
+    Actual.
+
+soak_ack(Ch, DTag, #{held := Held} = S) ->
+    case maps:is_key(DTag, Held) of
+        true ->
+            ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
+            S#{held := maps:remove(DTag, Held)};
+        false ->
+            S
+    end.
+
+soak_loop(Config, Ch, QName, S0 = #{held := Held, draining := Draining}) ->
+    receive
+        {#'basic.deliver'{delivery_tag = DTag, consumer_tag = CTag}, _} ->
+            S1 = S0#{held := Held#{DTag => CTag}},
+            R = rand:uniform(),
+            S = if Draining; R < 0.4 -> soak_ack(Ch, DTag, S1);
+                   R < 0.7 -> erlang:send_after(rand:uniform(1500), self(), {ack, DTag}),
+                              S1;
+                   true -> S1
+                end,
+            soak_loop(Config, Ch, QName, S);
+        {ack, DTag} ->
+            soak_loop(Config, Ch, QName, soak_ack(Ch, DTag, S0));
+        #'basic.cancel'{consumer_tag = CTag} ->
+            #{cancels := C, cancels_holding_more := M} = S0,
+            Holding = length([T || T <- maps:values(Held), T =:= CTag]),
+            S1 = S0#{cancels := C + 1,
+                     cancels_holding_more := M + min(1, max(0, Holding - 1))},
+            R = rand:uniform(),
+            S = if R < 0.6 -> soak_cancel_ok(Ch, CTag, S1);
+                   R < 0.8 -> erlang:send_after(rand:uniform(300), self(), {cancel_ok, CTag}),
+                              S1;
+                   true -> S1
+                end,
+            erlang:send_after(200 + rand:uniform(300), self(), {resubscribe, CTag}),
+            soak_loop(Config, Ch, QName, S);
+        {cancel_ok, CTag} ->
+            soak_loop(Config, Ch, QName, soak_cancel_ok(Ch, CTag, S0));
+        {resubscribe, OldTag} ->
+            %% Reusing a tag is only safe once the channel has removed the
+            %% old consumer, which a `basic.cancel_ok` sent earlier ensures.
+            #{cancel_ok_sent := Sent, same_tag_resubscribes := N} = S0,
+            %% The first chance to reuse a tag always does, so every run
+            %% covers it.
+            Reuse = maps:is_key(OldTag, Sent) andalso
+                        (N =:= 0 orelse rand:uniform() < 0.5),
+            Tag = soak_subscribe(Ch, QName, case Reuse of
+                                                true -> OldTag;
+                                                false -> <<>>
+                                            end),
+            soak_loop(Config, Ch, QName,
+                      S0#{tag := Tag,
+                          cancel_ok_sent := maps:remove(OldTag, Sent),
+                          same_tag_resubscribes := N + case Reuse of
+                                                           true -> 1;
+                                                           false -> 0
+                                                       end});
+        publisher_done ->
+            erlang:send_after(3000, self(), drain),
+            soak_loop(Config, Ch, QName, S0);
+        drain ->
+            S = lists:foldl(fun (DTag, Acc) -> soak_ack(Ch, DTag, Acc) end,
+                            S0#{draining := true}, maps:keys(Held)),
+            self() ! drained_check,
+            soak_loop(Config, Ch, QName, S);
+        drained_check ->
+            case {map_size(Held), queue_counts(Config, QName)} of
+                {0, {0, 0}} ->
+                    S0;
+                _ ->
+                    S = lists:foldl(fun (DTag, Acc) -> soak_ack(Ch, DTag, Acc) end,
+                                    S0, maps:keys(Held)),
+                    erlang:send_after(200, self(), drained_check),
+                    soak_loop(Config, Ch, QName, S)
+            end;
+        soak_deadline ->
+            exit({soak_deadline, S0, queue_counts(Config, QName)});
+        #'basic.consume_ok'{} ->
+            soak_loop(Config, Ch, QName, S0);
+        #'basic.cancel_ok'{} ->
+            soak_loop(Config, Ch, QName, S0);
+        {'DOWN', _, process, Ch, Reason} ->
+            exit({channel_closed, Reason, S0})
+    end.
+
+soak_cancel_ok(Ch, CTag, #{cancel_ok_sent := Sent} = S) ->
+    ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = CTag}),
+    S#{cancel_ok_sent := Sent#{CTag => true}}.
+
+%% After the server cancels a consumer for a delivery timeout, settling the
+%% timed-out delivery late must not make the queue deliver to it again.
+no_delivery_after_late_ack_while_cancel_pending(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
+              publish_and_confirm(Ch, QName, [<<"m1">>]),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              DTag1 = receive_delivery(<<"ctag">>, false),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag1}),
+              timer:sleep(500),
+              publish(Ch, QName, [<<"m2">>]),
+              receive
+                  {#'basic.deliver'{consumer_tag = <<"ctag">>} = D, _} ->
+                      exit({delivered_to_cancelled_consumer, D})
+              after 2000 ->
+                        ok
+              end
+      end).
+
+%% A client cancelling a consumer itself while the server waits for its
+%% `basic.cancel_ok` still gets a `basic.cancel_ok` back.
+client_cancel_while_cancel_ok_pending_is_answered(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, QName) ->
+              %% The Erlang client forgets the tag on the server's cancel, so
+              %% it hands the `basic.cancel_ok` to the default consumer.
+              ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
+              publish_and_confirm(Ch, QName, [<<"m1">>]),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              _ = receive_delivery(<<"ctag">>, false),
+              await_basic_cancel(<<"ctag">>),
+              erlang:monitor(process, Ch),
+              #'basic.cancel_ok'{} =
+                  amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>}),
+              ?assertEqual(0, channel_consumer_count(Config)),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% A consumer resubscribed with the tag of one the queue has dropped starts
+%% its message ids from 0 again, the same ids as the old consumer's
+%% deliveries the channel still lists. A late settlement of one of those must
+%% not stand in for the new consumer's delivery with the same id.
+late_ack_of_old_consumer_after_tag_reuse_keeps_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              {ok, PubCh} = amqp_connection:open_channel(Conn),
+              [_OldDTag1, OldDTag2] = hold_two_staggered_deliveries(PubCh, Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_counts(Config, QName, 2, 0),
+              %% Settle both returned messages elsewhere so the queue drops
+              %% the old consumer and the new one starts from message id 0.
+              _ = [begin
+                       {#'basic.get_ok'{delivery_tag = T}, _} =
+                           amqp_channel:call(PubCh, #'basic.get'{queue = QName}),
+                       ok = amqp_channel:cast(PubCh, #'basic.ack'{delivery_tag = T})
+                   end || _ <- [1, 2]],
+              await_counts(Config, QName, 0, 0),
+              [_DTag1, _DTag2] = hold_two_staggered_deliveries(PubCh, Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = OldDTag2}),
+              erlang:monitor(process, Ch),
+              await_counts(Config, QName, 2, 0),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% A late acknowledgement of a delivery that timed out must not settle another
+%% message delivered to a consumer resubscribed with the same tag, which the
+%% queue numbers from message id 0 again.
+late_ack_after_tag_reuse_does_not_settle_new_delivery(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              {ok, PubCh} = amqp_connection:open_channel(Conn),
+              publish_and_confirm(PubCh, QName, [<<"m1">>]),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              OldDTag = receive_delivery(<<"ctag">>, false),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              ?awaitMatch(0, channel_consumer_count(Config), ?RECEIVE_TIMEOUT, 50),
+              await_counts(Config, QName, 1, 0),
+              {#'basic.get_ok'{delivery_tag = GetTag}, _} =
+                  amqp_channel:call(PubCh, #'basic.get'{queue = QName}),
+              ok = amqp_channel:cast(PubCh, #'basic.ack'{delivery_tag = GetTag}),
+              await_counts(Config, QName, 0, 0),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              publish(PubCh, QName, [<<"m2">>]),
+              _ = receive_delivery(<<"ctag">>, false),
+              await_counts(Config, QName, 0, 1),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = OldDTag}),
+              timer:sleep(1000),
+              ?assertEqual({0, 1}, queue_counts(Config, QName))
+      end).
+
+%% The old consumer's returned deliveries the channel still lists are not the
+%% resubscribed consumer's, so they do not keep it tracked after its own
+%% deliveries have returned.
+returned_deliveries_of_old_consumer_not_tracked_after_tag_reuse(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              {ok, PubCh} = amqp_connection:open_channel(Conn),
+              hold_two_staggered_deliveries(PubCh, Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_counts(Config, QName, 2, 0),
+              _ = [begin
+                       {#'basic.get_ok'{delivery_tag = T}, _} =
+                           amqp_channel:call(PubCh, #'basic.get'{queue = QName}),
+                       ok = amqp_channel:cast(PubCh, #'basic.ack'{delivery_tag = T})
+                   end || _ <- [1, 2]],
+              await_counts(Config, QName, 0, 0),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              publish(PubCh, QName, [<<"m3">>]),
+              _ = receive_delivery(<<"ctag">>, false),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_counts(Config, QName, 1, 0),
+              ?awaitMatch([], server_cancelled_consumers(Config), ?RECEIVE_TIMEOUT, 50)
+      end).
+
+%% A timeout of the old consumer's delivery that the channel handles while
+%% resubscribing with the same tag cancels the new consumer, which the queue
+%% merged with the old one, but only after its `basic.consume_ok`.
+timeout_during_resubscribe_cancels_after_consume_ok(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              %% The client hands a cancel for a tag it has not registered yet
+              %% to the default consumer instead of crashing.
+              ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
+              hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              %% Queue the resubscription and then the second delivery's timeout
+              %% behind it, so the channel handles both before the
+              %% `basic.consume_ok` the queue sends back to it.
+              ServerCh = server_channel(Config, Conn),
+              ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, suspend, [ServerCh]),
+              Self = self(),
+              _ = spawn_link(
+                    fun () ->
+                            amqp_channel:subscribe(
+                              Ch, #'basic.consume'{queue = QName,
+                                                   consumer_tag = <<"ctag">>,
+                                                   arguments = consumer_timeout_args()},
+                              Self)
+                    end),
+              await_counts(Config, QName, 2, 0),
+              ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, resume, [ServerCh]),
+              receive
+                  #'basic.consume_ok'{consumer_tag = <<"ctag">>} -> ok;
+                  #'basic.cancel'{consumer_tag = <<"ctag">>} ->
+                      exit(basic_cancel_before_consume_ok)
+              after ?RECEIVE_TIMEOUT ->
+                        exit(consume_ok_expected)
+              end,
+              %% Well before any delivery to the new consumer could time out.
+              receive
+                  #'basic.cancel'{consumer_tag = <<"ctag">>} -> ok
+              after 2000 ->
+                        exit(basic_cancel_expected)
+              end
+      end).
+
+%% An acknowledgement and the queue's timeout of the same delivery can cross:
+%% the channel acknowledges first and handles the timeout afterwards. A
+%% delivery the client settled does not close the channel.
+timeout_crossing_ack_after_cancel_ok_keeps_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              [_DTag1, DTag2] = hold_two_staggered_deliveries(Ch, QName, <<"ctag">>),
+              await_basic_cancel(<<"ctag">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"ctag">>}),
+              await_consumer_removed_holding_one(Config, QName),
+              ServerCh = server_channel(Config, Conn),
+              ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, suspend, [ServerCh]),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag2}),
+              await_counts(Config, QName, 2, 0),
+              erlang:monitor(process, Ch),
+              ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, resume, [ServerCh]),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% The same crossing for a consumer the client cancelled itself: the
+%% delivery it settled does not close the channel either.
+timeout_crossing_ack_after_client_cancel_keeps_channel(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Conn, Ch, QName) ->
+              publish_and_confirm(Ch, QName, [<<"m1">>]),
+              subscribe(Ch, QName, false, <<"ctag">>, consumer_timeout_args()),
+              DTag = receive_delivery(<<"ctag">>, false),
+              #'basic.cancel_ok'{} =
+                  amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>}),
+              ServerCh = server_channel(Config, Conn),
+              ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, suspend, [ServerCh]),
+              ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
+              await_counts(Config, QName, 1, 0),
+              erlang:monitor(process, Ch),
+              ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, resume, [ServerCh]),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% With a single active consumer, the waiting consumer takes over once the
+%% timed-out one is gone, on the same channel, and gets both deliveries.
+single_active_consumer_takes_over_after_timeout(Config) ->
+    with_manual_cancel_ok_channel(
+      Config,
+      fun (Ch, _) ->
+              QName = ?config(queue_name_2, Config),
+              #'queue.declare_ok'{} =
+                  amqp_channel:call(Ch, #'queue.declare'{
+                                           queue = QName,
+                                           durable = true,
+                                           arguments = ?config(queue_args, Config) ++
+                                               [{<<"x-single-active-consumer">>, bool, true}]}),
+              hold_two_staggered_deliveries(Ch, QName, <<"active">>),
+              subscribe(Ch, QName, false, <<"waiting">>),
+              await_basic_cancel(<<"active">>),
+              ok = amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = <<"active">>}),
+              erlang:monitor(process, Ch),
+              _ = receive_delivery(<<"waiting">>, true),
+              _ = receive_delivery(<<"waiting">>, true),
+              assert_channel_stays_open(Ch)
+      end).
+
+%% Closes the connection however the test ends, since a consumer left behind
+%% would be counted by the next test's `channel_consumer_count/1`.
+with_manual_cancel_ok_channel(Config, Fun) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    try
+        {ok, Ch} = amqp_connection:open_channel(Conn),
+        %% The Erlang client then leaves `basic.cancel_ok` to the test.
+        ok = amqp_channel:set_server_properties(Ch, []),
+        QName = ?config(queue_name, Config),
+        declare_queue(Ch, Config, QName),
+        case erlang:fun_info(Fun, arity) of
+            {arity, 2} -> Fun(Ch, QName);
+            {arity, 3} -> Fun(Conn, Ch, QName)
+        end
+    after
+        catch amqp_connection:close(Conn)
+    end.
+
+consumer_timeout_args() ->
+    [{<<"x-consumer-timeout">>, long, ?MULTI_DELIVERY_TIMEOUT}].
+
+%% Returns the two delivery tags, delivered ?DELIVERY_GAP apart.
+hold_two_staggered_deliveries(Ch, QName, CTag) ->
+    hold_two_staggered_deliveries(Ch, Ch, QName, CTag).
+
+hold_two_staggered_deliveries(PubCh, Ch, QName, CTag) ->
+    publish_and_confirm(PubCh, QName, [<<"m1">>]),
+    subscribe(Ch, QName, false, CTag, consumer_timeout_args()),
+    DTag1 = receive_delivery(CTag, false),
+    timer:sleep(?DELIVERY_GAP),
+    publish(PubCh, QName, [<<"m2">>]),
+    DTag2 = receive_delivery(CTag, false),
+    [DTag1, DTag2].
+
+%% The channel has removed the consumer while it still holds the second
+%% delivery, so the second's timeout happens after the consumer is gone. The
+%% queue keeps a cancelled consumer until its last delivery is returned, so
+%% its consumer count is no use here; the channel's is.
+await_consumer_removed_holding_one(Config, QName) ->
+    ?awaitMatch(0, channel_consumer_count(Config), ?RECEIVE_TIMEOUT, 50),
+    await_counts(Config, QName, 1, 1).
+
+%% Read from the queue's state machine: `rabbitmqctl list_queues` is too slow
+%% to see the queue between two timeouts ?DELIVERY_GAP apart, and the queue
+%% metrics are only refreshed on a tick.
+await_counts(Config, QName, Ready, CheckedOut) ->
+    ?awaitMatch({Ready, CheckedOut}, queue_counts(Config, QName), ?RECEIVE_TIMEOUT, 50).
+
+queue_counts(Config, QName) ->
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QRes]),
+    {ok, #{machine := #{num_ready_messages := Ready,
+                        num_checked_out := CheckedOut}}, _} =
+        ra:member_overview(amqqueue:get_pid(Q)),
+    {Ready, CheckedOut}.
+
+%% Consumer tags the channels on node 0 track as cancelled by the server, each
+%% with the number of its deliveries the queue still has checked out.
+server_cancelled_consumers(Config) ->
+    Pids = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel, list_local, []),
+    lists:sort(
+      [{CTag, sets:size(Held)}
+       || Pid <- Pids,
+          {{_QName, CTag}, Held}
+              <- maps:to_list(rabbit_ct_broker_helpers:rpc(
+                                Config, 0, rabbit_channel,
+                                server_cancelled_consumers, [Pid]))]).
+
+%% Has every channel on node 0 re-check its consumers' read access, as after
+%% a credential update.
+refresh_channel_credentials(Config) ->
+    {ok, User} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_access_control,
+                                              check_user_pass_login,
+                                              [<<"guest">>, <<"guest">>]),
+    Pids = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel, list_local, []),
+    _ = [rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel, update_user_state,
+                                      [Pid, User]) || Pid <- Pids],
+    ok.
+
+transfer_queue_leadership(Config, QName) ->
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    Leader = fun () ->
+                     {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                                            lookup, [QRes]),
+                     {_, Node} = amqqueue:get_pid(Q),
+                     {Q, Node}
+             end,
+    {Q, Old} = Leader(),
+    [New | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename) -- [Old],
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                     transfer_leadership, [Q, New]),
+    ?awaitMatch({_, New}, Leader(), ?RECEIVE_TIMEOUT, 50).
+
+%% The channel process on node 0 serving `Conn', which has one channel.
+server_channel(Config, Conn) ->
+    [{sock, Sock}] = amqp_connection:info(Conn, [sock]),
+    {ok, {_, Port}} = inet:sockname(Sock),
+    [Pid] = [P || P <- rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel, list_local, []),
+                  [{connection, CPid}] <-
+                      [rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_channel, info,
+                                                    [P, [connection]])],
+                  [{peer_port, Port}] =:=
+                      rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_reader, info,
+                                                   [CPid, [peer_port]])],
+    Pid.
+
+assert_channel_stays_open(Ch) ->
+    receive
+        {'DOWN', _, process, Ch, Reason} ->
+            exit({channel_closed, Reason})
+    after 2000 ->
+              ?assert(is_process_alive(Ch))
+    end.
+
+await_channel_closed_406(Ch) ->
+    erlang:monitor(process, Ch),
+    receive
+        {'DOWN', _, process, Ch, {shutdown, {server_initiated_close, 406, _}}} ->
+            ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(channel_close_expected)
+    end.
+
 declare_queue(Ch, Config, QName) ->
     Args = ?config(queue_args, Config),
     Durable = ?config(queue_durable, Config),
@@ -569,9 +1376,13 @@ subscribe(Ch, Queue, NoAck) ->
     subscribe(Ch, Queue, NoAck, <<"ctag">>).
 
 subscribe(Ch, Queue, NoAck, Ctag) ->
+    subscribe(Ch, Queue, NoAck, Ctag, []).
+
+subscribe(Ch, Queue, NoAck, Ctag, Args) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Queue,
                                                 no_ack = NoAck,
-                                                consumer_tag = Ctag
+                                                consumer_tag = Ctag,
+                                                arguments = Args
                                                },
                            self()),
     receive
