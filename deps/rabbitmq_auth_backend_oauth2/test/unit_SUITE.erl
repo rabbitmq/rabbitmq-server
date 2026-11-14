@@ -1211,7 +1211,10 @@ test_invalid_signature(_) ->
     TokenData =  ?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username),
     Token     = ?UTIL_MOD:sign_token_hs(TokenData, Jwk),
     ?assertMatch({refused, _, [signature_invalid]},
-                 user_login_authentication(Username, [{password, Token}])).
+                 user_login_authentication(Username, [{password, Token}])),
+    ?assertMatch({refused, _, [signature_invalid]},
+                 rabbit_auth_backend_oauth2:update_state(
+                     #auth_user{username = Username}, Token)).
 
 test_token_expiration(_) ->
     VHost = <<"vhost">>,
