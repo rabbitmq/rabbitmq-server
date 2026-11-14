@@ -518,7 +518,6 @@ delete_for_destination(QName, User) ->
 
 -spec delete_for_destination(rabbit_types:binding_destination(), rabbit_types:username(),
                              [khepri_condition:condition()]) -> ok.
-
 delete_for_destination(QName, User, Conditions) ->
     case rabbit_db_binding:delete_for_destination(QName, Conditions) of
         Deletions when is_map(Deletions) ->

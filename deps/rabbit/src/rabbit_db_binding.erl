@@ -721,7 +721,6 @@ delete_for_destination(Dst) ->
 -spec delete_for_destination(rabbit_types:binding_destination(),
                              [khepri_condition:condition()]) ->
     rabbit_binding:deletions() | {error, any()}.
-
 delete_for_destination(Dst, Conditions) ->
     rabbit_khepri:transaction(
       fun () ->
