@@ -37,6 +37,7 @@
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
+-export([finish_delete/2]).
 -export([rpc_delete_metrics/1,
          key_metrics_rpc/1]).
 -export([format/2]).
@@ -112,6 +113,7 @@
 -include("amqqueue.hrl").
 -include("mc.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("khepri/include/khepri.hrl").
 
 -rabbit_boot_step(
    {rabbit_quorum_queue_type,
@@ -130,6 +132,15 @@
      {cleanup, {rabbit_quorum_memory_manager, unregister, [?MODULE]}},
      {requires, rabbit_event},
      {enables, recovery}]}).
+
+%% Runs before peers are notified that this node is up, so that no member can
+%% be added to this node while it runs.
+-rabbit_boot_step(
+   {rabbit_quorum_queue_cleanup_data_dir,
+    [{description, "Quorum queue: delete leftover members"},
+     {mfa, {?MODULE, cleanup_data_dir, []}},
+     {requires, recovery},
+     {enables, pre_flight}]}).
 
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
@@ -175,6 +186,8 @@
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
+-define(FORCE_DELETE_TIMEOUT, 30_000).
+-define(MEMBER_EXIT_TIMEOUT, 5000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 %% setting a low default here to allow quorum queues to better chose themselves
@@ -342,8 +355,8 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
 
 start_cluster(Q) ->
     QName = amqqueue:get_name(Q),
-    Durable = true = amqqueue:is_durable(Q),
-    AutoDelete = false = amqqueue:is_auto_delete(Q),
+    true = amqqueue:is_durable(Q),
+    false = amqqueue:is_auto_delete(Q),
     Arguments = amqqueue:get_arguments(Q),
     Opts = amqqueue:get_options(Q),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
@@ -388,31 +401,17 @@ start_cluster(Q) ->
                 %% This call is inside the try so that a timeout is cleaned up
                 %% like a failed Ra cluster start.
                 rabbit_queue_type_util:wait_for_projection(LeaderNode, QName),
-                erpc_call(LeaderNode, ra, start_cluster,
-                          [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
-                          ?START_CLUSTER_RPC_TIMEOUT)
+                start_ra_cluster(QName, LeaderNode, RaConfs)
             of
                 {ok, _, _} ->
-                    %% ensure the latest config is evaluated properly
-                    %% even when running the machine version from 0
-                    %% as earlier versions may not understand all the config
-                    %% keys
-                    %% TODO: handle error - what should be done if the
-                    %% config cannot be updated
-                    ok = rabbit_fifo_client:update_machine_state(LeaderId,
-                                                                 ra_machine_config(NewQ)),
-                    notify_decorators(NewQ, startup),
-                    rabbit_quorum_queue_periodic_membership_reconciliation:queue_created(NewQ),
-                    rabbit_event:notify(queue_created,
-                                        [{name, QName},
-                                         {durable, Durable},
-                                         {auto_delete, AutoDelete},
-                                         {exclusive, false},
-                                         {type, amqqueue:get_type(Q)},
-                                         {arguments, Arguments},
-                                         {user_who_performed_action,
-                                          ActingUser}]),
-                    {new, NewQ};
+                    case confirm_declared(NewQ) of
+                        {ok, _} ->
+                            finish_declare(NewQ, Q, LeaderId, LeaderNode);
+                        {error, timeout} = Err ->
+                            declare_queue_error(Err, NewQ, LeaderNode, ActingUser);
+                        _ ->
+                            declared_queue_deleted(NewQ)
+                    end;
                 {error, Error} ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             catch
@@ -421,6 +420,9 @@ start_cluster(Q) ->
                 error:Error ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             end;
+        {existing, ExistingQ} when ?amqqueue_state_is(ExistingQ, deleting) ->
+            {protocol_error, not_found, "~ts is being deleted",
+             [rabbit_misc:rs(QName)]};
         {existing, _} = Ex ->
             Ex;
         {error, timeout} ->
@@ -430,11 +432,182 @@ start_cluster(Q) ->
              [rabbit_misc:rs(QName), node()]}
     end.
 
+%% A delete that claimed or removed the record before the members started
+%% may have found none to delete. The write orders this check with the claim.
+confirm_declared(Q0) ->
+    rabbit_db_queue:try_update(
+      amqqueue:get_name(Q0),
+      fun(Q) when ?amqqueue_state_is(Q, deleting) ->
+              {error, being_deleted};
+         (Q) ->
+              case is_same_incarnation(Q, Q0) of
+                  true -> {ok, Q};
+                  false -> {error, other_incarnation}
+              end
+      end, #{}).
+
+finish_declare(NewQ, Q, LeaderId, LeaderNode) ->
+    QName = amqqueue:get_name(NewQ),
+    Durable = amqqueue:is_durable(Q),
+    AutoDelete = amqqueue:is_auto_delete(Q),
+    Arguments = amqqueue:get_arguments(Q),
+    ActingUser = maps:get(user, amqqueue:get_options(Q), ?UNKNOWN_USER),
+    %% ensure the latest config is evaluated properly
+    %% even when running the machine version from 0
+    %% as earlier versions may not understand all the config
+    %% keys
+    case rabbit_fifo_client:update_machine_state(LeaderId,
+                                                 ra_machine_config(NewQ)) of
+        ok ->
+            notify_decorators(NewQ, startup),
+            rabbit_quorum_queue_periodic_membership_reconciliation:queue_created(NewQ),
+            rabbit_event:notify(queue_created,
+                                [{name, QName},
+                                 {durable, Durable},
+                                 {auto_delete, AutoDelete},
+                                 {exclusive, false},
+                                 {type, amqqueue:get_type(Q)},
+                                 {arguments, Arguments},
+                                 {user_who_performed_action, ActingUser}]),
+            {new, NewQ};
+        %% A concurrent delete has deleted the cluster.
+        {error, {shutdown, delete}} ->
+            {protocol_error, not_found, "~ts is being deleted",
+             [rabbit_misc:rs(QName)]};
+        Err ->
+            case confirm_declared(NewQ) of
+                {ok, _} ->
+                    declare_queue_error(Err, NewQ, LeaderNode, ActingUser);
+                {error, timeout} ->
+                    declare_queue_error(Err, NewQ, LeaderNode, ActingUser);
+                _ ->
+                    declared_queue_deleted(NewQ)
+            end
+    end.
+
+declared_queue_deleted(Q) ->
+    ok = delete_declared_members(Q),
+    {protocol_error, not_found, "~ts is being deleted",
+     [rabbit_misc:rs(amqqueue:get_name(Q))]}.
+
+%% With no record for this queue, any registered member is a leftover.
+start_ra_cluster(QName, LeaderNode, RaConfs) ->
+    ok = delete_registered_members(QName, RaConfs),
+    case start_ra_cluster(LeaderNode, RaConfs) of
+        {error, {members_exist, Existing}} = Err ->
+            case delete_leftover_members(Existing) of
+                ok ->
+                    ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
+                              [Existing, rabbit_misc:rs(QName)]),
+                    start_ra_cluster(LeaderNode, RaConfs);
+                error ->
+                    Err
+            end;
+        Res ->
+            Res
+    end.
+
+%% `ra:start_cluster/3' only reports running members, and replaces a stopped
+%% one without deleting its data directory.
+delete_registered_members(QName, RaConfs) ->
+    Registered = lists:append(
+                   rabbit_misc:upmap(
+                     fun(#{id := {Name, Node} = ServerId}) ->
+                             case erpc_call(Node, ra_directory, uid_of,
+                                            [?RA_SYSTEM, Name], ?RPC_TIMEOUT) of
+                                 UId when is_binary(UId) ->
+                                     [{ServerId, UId}];
+                                 _ ->
+                                     []
+                             end
+                     end, RaConfs)),
+    case Registered of
+        [] ->
+            ok;
+        _ ->
+            case delete_leftover_members(Registered) of
+                ok ->
+                    ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
+                              [Registered, rabbit_misc:rs(QName)]);
+                error ->
+                    ?LOG_WARNING("Could not delete all leftover members ~w of "
+                                 "quorum ~ts", [Registered, rabbit_misc:rs(QName)])
+            end
+    end.
+
+start_ra_cluster(LeaderNode, RaConfs) ->
+    erpc_call(LeaderNode, ra, start_cluster,
+              [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
+              ?START_CLUSTER_RPC_TIMEOUT).
+
+%% Ra versions that predate `ra:force_delete_server/4` report existing
+%% members without their UIds.
+delete_leftover_members(Existing) ->
+    case lists:all(fun({{_, _}, _}) -> true;
+                      (_) -> false
+                   end, Existing) of
+        true ->
+            Results = rabbit_misc:upmap(fun delete_clashing_member/1, Existing),
+            case lists:all(fun(R) -> R =:= ok end, Results) of
+                true -> ok;
+                false -> error
+            end;
+        false ->
+            error
+    end.
+
+%% A member that runs without a registered UId is starting, or is terminating
+%% after its UId was unregistered.
+delete_clashing_member({ServerId, UId}) when is_binary(UId) ->
+    force_delete_member(ServerId, UId);
+delete_clashing_member({{Name, Node} = ServerId, undefined}) ->
+    MRef = erlang:monitor(process, ServerId),
+    receive
+        {'DOWN', MRef, process, _, _} ->
+            ok
+    after ?MEMBER_EXIT_TIMEOUT ->
+              erlang:demonitor(MRef, [flush]),
+              case erpc_call(Node, ra_directory, uid_of, [?RA_SYSTEM, Name],
+                             ?RPC_TIMEOUT) of
+                  UId when is_binary(UId) ->
+                      force_delete_member(ServerId, UId);
+                  _ ->
+                      error
+              end
+    end.
+
 declare_queue_error(Error, Queue, Leader, ActingUser) ->
-    _ = rabbit_amqqueue:internal_delete(Queue, ActingUser),
-    {protocol_error, internal_error,
+    _ = delete_declared_members(Queue),
+    _ = delete_declared_record(Queue, ActingUser),
+    {protocol_error, declare_error_type(Error),
      "Cannot declare quorum ~ts on node '~ts' with leader on node '~ts': ~255p",
      [rabbit_misc:rs(amqqueue:get_name(Queue)), node(), Leader, Error]}.
+
+%% Concurrent membership changes can stop a majority of the members from
+%% starting, and a later declare can succeed.
+declare_error_type(cluster_not_formed) -> resource_locked;
+declare_error_type(_) -> internal_error.
+
+%% A delete may have claimed the record in the meantime.
+delete_declared_record(Q, ActingUser) ->
+    Pattern = amqqueue:pattern_match_on_type_state(
+                live, maps:with([nodes], amqqueue:get_type_state(Q))),
+    rabbit_amqqueue:internal_delete_if(
+      Q, [#if_data_matches{pattern = Pattern}], false, ActingUser).
+
+%% A member can finish starting after `ra:start_cluster/3` has given up.
+delete_declared_members(Q) ->
+    case amqqueue:get_type_state(Q) of
+        #{nodes := Nodes} when is_map(Nodes) ->
+            {RaName, _} = amqqueue:get_pid(Q),
+            _ = rabbit_misc:upmap(
+                  fun({Node, UId}) ->
+                          force_delete_member({RaName, Node}, UId)
+                  end, maps:to_list(Nodes)),
+            ok;
+        _ ->
+            ok
+    end.
 
 ra_machine(Q) ->
     {module, rabbit_fifo, ra_machine_config(Q)}.
@@ -518,7 +691,9 @@ become_leader(_QName, _Name) ->
     ok.
 
 become_leader0(QName, Name) ->
-    Fun = fun (Q1) ->
+    Fun = fun (Q1) when ?amqqueue_state_is(Q1, deleting) ->
+                  amqqueue:set_pid(Q1, {Name, node()});
+              (Q1) ->
                   amqqueue:set_state(
                     amqqueue:set_pid(Q1, {Name, node()}),
                     live)
@@ -1109,6 +1284,7 @@ restart_server({_, _} = Ref) ->
              boolean(), boolean(),
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()} |
+    {error, timeout} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, true, _IfEmpty, _ActingUser) when ?amqqueue_is_quorum(Q) ->
     {protocol_error, not_implemented,
@@ -1119,6 +1295,153 @@ delete(Q, _IfUnused, true, _ActingUser) when ?amqqueue_is_quorum(Q) ->
      "cannot delete ~ts. queue.delete operations with if-empty flag set are not supported by quorum queues",
      [rabbit_misc:rs(amqqueue:get_name(Q))]};
 delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+    case rabbit_feature_flags:is_enabled(quorum_queue_deleting_state) of
+        true ->
+            delete_as_owner(Q, ActingUser, true);
+        false ->
+            delete_cluster_and_record(Q, ActingUser)
+    end.
+
+%% Finishes the delete of a queue whose delete owner has died.
+-spec finish_delete(amqqueue:amqqueue(), rabbit_types:username()) ->
+    ok | {error, being_deleted}.
+finish_delete(Q, ActingUser) ->
+    case delete_as_owner(Q, ActingUser, false) of
+        {ok, _} ->
+            ok;
+        _ ->
+            {error, being_deleted}
+    end.
+
+%% The owner is a process of its own, because a caller such as a channel
+%% outlives a delete attempt that fails, and would block later deletes.
+delete_as_owner(Q, ActingUser, WaitForOwner) ->
+    QName = amqqueue:get_name(Q),
+    Caller = self(),
+    {Pid, MRef} = spawn_monitor(
+                    fun() ->
+                            Caller ! {self(),
+                                      delete_owned(Q, ActingUser, WaitForOwner)}
+                    end),
+    receive
+        {Pid, Result} ->
+            erlang:demonitor(MRef, [flush]),
+            Result;
+        {'DOWN', MRef, process, Pid, Reason} ->
+            {protocol_error, internal_error, "Cannot delete ~ts: ~255p",
+             [rabbit_misc:rs(QName), Reason]}
+    end.
+
+delete_owned(Q0, ActingUser, WaitForOwner) ->
+    QName = amqqueue:get_name(Q0),
+    case claim_delete(Q0) of
+        {ok, Q} ->
+            delete_cluster_and_record(Q, ActingUser);
+        {error, {being_deleted, Owner}} when WaitForOwner ->
+            MRef = erlang:monitor(process, Owner),
+            receive
+                {'DOWN', MRef, process, _, noconnection} ->
+                    being_deleted_error(QName);
+                {'DOWN', MRef, process, _, _} ->
+                    delete_owned(Q0, ActingUser, false)
+            end;
+        {error, {being_deleted, _}} ->
+            being_deleted_error(QName);
+        {error, other_incarnation} ->
+            ?LOG_DEBUG("~ts was declared again before it could be deleted",
+                       [rabbit_misc:rs(QName)]),
+            {ok, 0};
+        {error, being_deleted} ->
+            being_deleted_error(QName);
+        {error, timeout} = Err ->
+            Err;
+        {error, not_quorum} ->
+            {ok, 0};
+        not_found ->
+            {ok, 0};
+        {error, Reason} ->
+            {protocol_error, internal_error, "Cannot delete ~ts: ~255p",
+             [rabbit_misc:rs(QName), Reason]}
+    end.
+
+being_deleted_error(QName) ->
+    {protocol_error, resource_locked, "~ts is being deleted",
+     [rabbit_misc:rs(QName)]}.
+
+claim_delete(Q0) ->
+    Owner = self(),
+    rabbit_db_queue:try_update(
+      amqqueue:get_name(Q0),
+      fun(Q) when not ?amqqueue_is_quorum(Q) ->
+              {error, not_quorum};
+         (Q) ->
+              case is_same_incarnation(Q, Q0) of
+                  true ->
+                      claim_delete_of(Q, Owner);
+                  false ->
+                      {error, other_incarnation}
+              end
+      end, #{}).
+
+claim_delete_of(Q, Owner) when ?amqqueue_state_is(Q, deleting) ->
+    case is_delete_owner_alive(Q) of
+        false ->
+            {ok, set_deleting(Q, Owner)};
+        true ->
+            #{deleting_owner := CurrentOwner} = amqqueue:get_type_state(Q),
+            {error, {being_deleted, CurrentOwner}};
+        unknown ->
+            {error, being_deleted}
+    end;
+claim_delete_of(Q, Owner) ->
+    {ok, set_deleting(Q, Owner)}.
+
+%% Member UIds are new for each incarnation of a queue. Records with a
+%% legacy list of nodes cannot be told apart.
+is_same_incarnation(Q1, Q2) ->
+    case {amqqueue:get_type_state(Q1), amqqueue:get_type_state(Q2)} of
+        {#{nodes := Nodes1}, #{nodes := Nodes2}}
+          when is_map(Nodes1) andalso is_map(Nodes2) ->
+            lists:any(fun({Node, UId}) ->
+                              maps:get(Node, Nodes2, undefined) =:= UId
+                      end, maps:to_list(Nodes1));
+        _ ->
+            true
+    end.
+
+set_deleting(Q, Owner) ->
+    amqqueue:set_state(
+      amqqueue:update_type_state(
+        Q, fun(TS) -> TS#{deleting_owner => Owner} end),
+      deleting).
+
+%% `erlang:is_process_alive/1' returns `false' for a pid from before its
+%% node restarted.
+is_delete_owner_alive(Q) ->
+    case amqqueue:get_type_state(Q) of
+        #{deleting_owner := Pid} ->
+            Node = node(Pid),
+            case rabbit_nodes:list_members() of
+                [] ->
+                    unknown;
+                Members ->
+                    case lists:member(Node, Members) of
+                        true ->
+                            try
+                                erpc:call(Node, erlang, is_process_alive,
+                                          [Pid], ?RPC_TIMEOUT)
+                            catch
+                                _:_ -> unknown
+                            end;
+                        false ->
+                            false
+                    end
+            end;
+        _ ->
+            false
+    end.
+
+delete_cluster_and_record(Q, ActingUser) ->
     {Name, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     QNodes = get_nodes(Q),
@@ -1134,13 +1457,13 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 {'DOWN', MRef, process, _, _} ->
                     %% leader is down,
                     %% force delete remaining members
-                    ok = force_delete_queue(lists:delete(Leader, Servers)),
+                    ok = force_delete_queue(Q, lists:delete(Leader, Servers)),
                     ok
             after Timeout ->
                     erlang:demonitor(MRef, [flush]),
-                    ok = force_delete_queue(Servers)
+                    ok = force_delete_queue(Q, Servers)
             end,
-            notify_decorators(QName, shutdown),
+            notify_shutdown(Q),
             case delete_queue_data(Q, ActingUser) of
                 ok ->
                     _ = erpc_call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
@@ -1154,7 +1477,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
               "While deleting ~ts, the ra cluster was already shutting "
               "down due to a concurrent delete. Proceeding with cleanup.",
               [rabbit_misc:rs(QName)]),
-            notify_decorators(QName, shutdown),
+            notify_shutdown(Q),
             case delete_queue_data(Q, ActingUser) of
                 ok ->
                     rabbit_core_metrics:queue_deleted(QName),
@@ -1177,23 +1500,51 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                        " online to reach a quorum: ~255p."
                        " Attempting force delete.",
                       [rabbit_misc:rs(QName), Errs]),
-                    ok = force_delete_queue(Servers),
-                    notify_decorators(QName, shutdown)
+                    force_delete_cluster(Q, Servers)
             end,
-            case delete_queue_data(Q, ActingUser) of
-                ok ->
-                    {ok, ReadyMsgs};
-                {error, timeout} = Err ->
-                    Err
-            end
+            delete_record(Q, ActingUser, ReadyMsgs);
+        %% The leader can exit during the call, for example when a concurrent
+        %% `delete_member/3' removes it.
+        {error, Reason} ->
+            ?LOG_WARNING("Could not delete quorum '~ts': ~255p. Attempting "
+                         "force delete.", [rabbit_misc:rs(QName), Reason]),
+            force_delete_cluster(Q, Servers),
+            delete_record(Q, ActingUser, ReadyMsgs)
     end.
 
-force_delete_queue(Servers) ->
+force_delete_cluster(Q, Servers) ->
+    ok = force_delete_queue(Q, Servers),
+    notify_shutdown(Q).
+
+%% Decorators such as federation identify a queue by its record as it was
+%% before the delete claimed it.
+notify_shutdown(Q) ->
+    TypeState = maps:remove(deleting_owner, amqqueue:get_type_state(Q)),
+    notify_decorators(amqqueue:set_type_state(Q, TypeState), shutdown, []).
+
+delete_record(Q, ActingUser, ReadyMsgs) ->
+    case delete_queue_data(Q, ActingUser) of
+        ok ->
+            {ok, ReadyMsgs};
+        {error, timeout} = Err ->
+            Err
+    end.
+
+force_delete_queue(Q, Servers) ->
+    UIds = case amqqueue:get_type_state(Q) of
+               #{nodes := Nodes} when is_map(Nodes) -> Nodes;
+               _ -> #{}
+           end,
     [begin
-         case try ra:force_delete_server(?RA_SYSTEM, S)
-              catch _:E -> {error, E}
-              end of
+         Res = case UIds of
+                   #{Node := UId} ->
+                       force_delete_member(S, UId);
+                   _ ->
+                       force_delete_member(S)
+               end,
+         case Res of
              ok -> ok;
+             {error, not_owner} -> ok;
              Err ->
                  ?LOG_WARNING(
                    "Force delete of ~w failed with: ~w"
@@ -1201,8 +1552,24 @@ force_delete_queue(Servers) ->
                    [S, Err]),
                  ok
          end
-     end || S <- Servers],
+     end || {_, Node} = S <- Servers],
     ok.
+
+force_delete_member(ServerId) ->
+    try ra:force_delete_server(?RA_SYSTEM, ServerId, ?FORCE_DELETE_TIMEOUT)
+    catch _:E -> {error, E}
+    end.
+
+force_delete_member(ServerId, UId) ->
+    try ra:force_delete_server(?RA_SYSTEM, ServerId, UId, ?FORCE_DELETE_TIMEOUT) of
+        {badrpc, {'EXIT', {undef, _}}} ->
+            %% The member's node runs a Ra version without the UId check.
+            force_delete_member(ServerId);
+        Res ->
+            Res
+    catch _:E ->
+              {error, E}
+    end.
 
 -spec delete_queue_data(Queue, ActingUser) -> Ret when
       Queue :: amqqueue:amqqueue(),
@@ -1210,7 +1577,15 @@ force_delete_queue(Servers) ->
       Ret :: ok | {error, timeout}.
 
 delete_queue_data(Queue, ActingUser) ->
-    rabbit_amqqueue:internal_delete(Queue, ActingUser).
+    case amqqueue:get_type_state(Queue) of
+        #{deleting_owner := Owner} ->
+            Pattern = amqqueue:pattern_match_on_type_state(
+                        #{deleting_owner => Owner}),
+            rabbit_amqqueue:internal_delete_if(
+              Queue, [#if_data_matches{pattern = Pattern}], false, ActingUser);
+        _ ->
+            rabbit_amqqueue:internal_delete(Queue, ActingUser)
+    end.
 
 
 delete_immediately(Queue) ->
@@ -1444,18 +1819,91 @@ retry_delayed(Q, Mode) when ?is_amqqueue(Q) ->
 assign_deferred(_QName, CTag, Tokens, QState) ->
     rabbit_fifo_client:assign_deferred(quorum_ctag(CTag), Tokens, QState).
 
+-spec cleanup_data_dir() -> ok.
 cleanup_data_dir() ->
-    Names = [begin
-                 {Name, _} = amqqueue:get_pid(Q),
-                 Name
-             end
-             || Q <- rabbit_amqqueue:list_by_type(?MODULE),
-                lists:member(node(), get_nodes(Q))],
-    Registered = ra_directory:list_registered(?RA_SYSTEM),
-    Running = Names,
-    _ = [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
-                                       not lists:member(Name, Running)],
+    try
+        ok = rabbit_khepri:fence(?RA_MEMBERS_TIMEOUT),
+        Expected = expected_local_members(),
+        Registered = ra_directory:list_registered(?RA_SYSTEM),
+        _ = [delete_leftover_member(Name, UId)
+             || {Name, UId} <- Registered,
+                is_leftover_member(Name, UId, Expected)],
+        delete_unregistered_data_dirs(Registered, Expected)
+    catch
+        Class:Reason ->
+            ?LOG_WARNING("Skipped the deletion of leftover quorum queue "
+                         "members: ~0p", [{Class, Reason}]),
+            ok
+    end.
+
+%% Records without UIds map to `any`.
+expected_local_members() ->
+    Node = node(),
+    lists:foldl(
+      fun(Q, Acc) ->
+              {Name, _} = amqqueue:get_pid(Q),
+              case amqqueue:get_type_state(Q) of
+                  #{nodes := #{Node := UId}} ->
+                      Acc#{Name => UId};
+                  #{nodes := Nodes} when is_list(Nodes) ->
+                      case lists:member(Node, Nodes) of
+                          true -> Acc#{Name => any};
+                          false -> Acc
+                      end;
+                  _ ->
+                      Acc
+              end
+      end, #{}, rabbit_amqqueue:list_by_type(?MODULE)).
+
+is_leftover_member(Name, UId, Expected) ->
+    case Expected of
+        #{Name := any} -> false;
+        #{Name := UId} -> false;
+        _ -> true
+    end.
+
+delete_leftover_member(Name, UId) ->
+    case is_rabbit_fifo_data_dir(UId) of
+        true ->
+            case force_delete_member({Name, node()}, UId) of
+                ok ->
+                    ?LOG_INFO("Deleted leftover quorum queue member ~ts "
+                              "with UId ~ts", [Name, UId]);
+                Err ->
+                    ?LOG_WARNING("Could not delete leftover quorum queue "
+                                 "member ~ts with UId ~ts: ~0p",
+                                 [Name, UId, Err])
+            end;
+        false ->
+            ok
+    end.
+
+%% A partly completed force delete can leave a data directory behind after
+%% its UId has been unregistered.
+delete_unregistered_data_dirs(Registered, Expected) ->
+    #{data_dir := DataDir} = ra_system:fetch(?RA_SYSTEM),
+    Known = maps:from_keys([UId || {_, UId} <- Registered] ++
+                           [UId || UId <- maps:values(Expected),
+                                   is_binary(UId)], ok),
+    {ok, Entries} = file:list_dir(DataDir),
+    _ = [begin
+             Dir = filename:join(DataDir, Entry),
+             ?LOG_INFO("Deleting unregistered quorum queue data directory "
+                       "~ts", [Dir]),
+             ra_lib:recursive_delete(Dir)
+         end
+         || Entry <- Entries,
+            UId <- [list_to_binary(Entry)],
+            not is_map_key(UId, Known),
+            ra_directory:name_of(?RA_SYSTEM, UId) =:= undefined,
+            is_rabbit_fifo_data_dir(UId)],
     ok.
+
+is_rabbit_fifo_data_dir(UId) ->
+    case ra_log:read_config(ra_env:server_data_dir(?RA_SYSTEM, UId)) of
+        {ok, #{machine := {module, rabbit_fifo, _}}} -> true;
+        _ -> false
+    end.
 
 maybe_delete_data_dir(UId) ->
     _ = ra_directory:unregister_name(?RA_SYSTEM, UId),
@@ -1639,6 +2087,9 @@ add_member(Q, Node, Membership) ->
     do_add_member(Q, Node, Membership, ?MEMBER_CHANGE_TIMEOUT).
 
 
+do_add_member(Q, _Node, _Membership, _Timeout)
+  when ?amqqueue_state_is(Q, deleting) ->
+    {error, queue_being_deleted};
 do_add_member(Q0, Node, Membership, Timeout)
   when ?is_amqqueue(Q0) andalso
        ?amqqueue_is_quorum(Q0) andalso
@@ -1667,7 +2118,7 @@ do_add_member(Q0, Node, Membership, Timeout)
         NodeVersion ->
             MachineVersion = min(NodeVersion, min_machine_version(get_nodes(Q0))),
             Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
-            case ra:start_server(?RA_SYSTEM, Conf) of
+            case start_member(Q0, Conf) of
                 ok ->
                     ServerIdSpec = maps:with([id, uid, membership], Conf),
                     case ra:add_member(Members, ServerIdSpec, Timeout) of
@@ -1692,13 +2143,29 @@ do_add_member(Q0, Node, Membership, Timeout)
                             %% cluster membership change, we wait for the current add
                             %% to be applied using a conditional leader query before
                             %% proceeding and returning.
-                            {ok, _, _} = ra:leader_query(
-                                           Leader,
-                                           {erlang, is_list, []},
-                                           #{condition => {applied, {RaIndex, RaTerm}}}),
-                            _ = rabbit_amqqueue:update(QName, Fun),
-                            ?LOG_INFO("Added a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
-                            ok;
+                            case ra:leader_query(
+                                   Leader,
+                                   {erlang, is_list, []},
+                                   #{condition => {applied, {RaIndex, RaTerm}}}) of
+                                {ok, _, _} ->
+                                    _ = rabbit_amqqueue:update(QName, Fun),
+                                    ?LOG_INFO("Added a replica of quorum ~ts on node ~ts",
+                                              [rabbit_misc:rs(QName), Node]),
+                                    ok;
+                                %% The leader can exit, for example when a
+                                %% concurrent delete deletes the cluster. The
+                                %% record does not list the new member, so the
+                                %% delete would not reach it.
+                                QueryErr ->
+                                    _ = force_delete_member(ServerId, maps:get(uid, Conf)),
+                                    _ = ra:remove_member(Members, ServerId),
+                                    ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
+                                                 [rabbit_misc:rs(QName), Node, QueryErr]),
+                                    case QueryErr of
+                                        {timeout, _} -> {error, timeout};
+                                        _ -> QueryErr
+                                    end
+                            end;
                         {timeout, _} ->
                             _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
                             _ = ra:remove_member(Members, ServerId),
@@ -1714,6 +2181,40 @@ do_add_member(Q0, Node, Membership, Timeout)
                                  [rabbit_misc:rs(QName), Node, E]),
                     E
             end
+    end.
+
+start_member(Q, #{id := {RaName, Node} = ServerId, uid := UId} = Conf) ->
+    case ra:start_server(?RA_SYSTEM, Conf) of
+        ok ->
+            ok;
+        Err ->
+            case erpc_call(Node, ra_directory, uid_of, [?RA_SYSTEM, RaName],
+                           ?RPC_TIMEOUT) of
+                OtherUId when is_binary(OtherUId) andalso
+                              OtherUId =/= UId ->
+                    case is_leftover_member(Q, Node) andalso
+                         force_delete_member(ServerId, OtherUId) =:= ok of
+                        true ->
+                            ?LOG_INFO("Deleted leftover member ~w of quorum ~ts",
+                                      [ServerId,
+                                       rabbit_misc:rs(amqqueue:get_name(Q))]),
+                            ra:start_server(?RA_SYSTEM, Conf);
+                        false ->
+                            Err
+                    end;
+                _ ->
+                    Err
+            end
+    end.
+
+%% Records created before `track_qq_members_uids` list nodes without UIds, so
+%% a member on a listed node cannot be told apart from a leftover.
+is_leftover_member(Q, Node) ->
+    case amqqueue:get_type_state(Q) of
+        #{nodes := Nodes} when is_list(Nodes) ->
+            not lists:member(Node, Nodes);
+        _ ->
+            true
     end.
 
 delete_member(VHost, Name, Node) ->
@@ -2167,6 +2668,8 @@ i(memory, Q) when ?is_amqqueue(Q) ->
         error:badarg ->
             0
     end;
+i(state, Q) when ?amqqueue_state_is(Q, deleting) ->
+    deleting;
 i(state, Q) when ?is_amqqueue(Q) ->
     {Name, Node} = case find_leader(Q) of
                        undefined ->

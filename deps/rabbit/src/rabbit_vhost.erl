@@ -415,9 +415,15 @@ delete_ignoring_protection(Name, ActingUser) ->
     ok = rabbit_auth_backend_internal:clear_all_permissions_for_vhost(Name, ActingUser),
     ?LOG_INFO("Deleting queues in vhost '~ts' because it's being deleted", [Name]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
+    %% The delete of a queue that is being deleted waits for the delete
+    %% that is running, or takes over if it failed.
+    AbsentFun = fun ({absent, Q, deleting}) -> QDelFun(Q);
+                    (Reason) -> {error, Reason}
+                end,
     [begin
          QName = amqqueue:get_name(Q),
-         assert_benign(rabbit_amqqueue:with(QName, QDelFun), ActingUser)
+         assert_benign(rabbit_amqqueue:with(QName, QDelFun, AbsentFun),
+                       ActingUser)
      end || Q <- rabbit_amqqueue:list(Name)],
     ?LOG_INFO("Deleting exchanges in vhost '~ts' because it's being deleted", [Name]),
     ok = rabbit_exchange:delete_all(Name, ActingUser),
@@ -591,6 +597,8 @@ assert_benign(ok, _)                 -> ok;
 assert_benign({ok, _}, _)            -> ok;
 assert_benign({ok, _, _}, _)         -> ok;
 assert_benign({error, not_found}, _) -> ok;
+%% Another delete of the quorum queue is in progress.
+assert_benign({protocol_error, resource_locked, _, _}, _) -> ok;
 assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the database entries here is safe. If/when the down node
     %% restarts, it will clear out the on-disk storage of the queue.

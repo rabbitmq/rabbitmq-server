@@ -315,7 +315,8 @@ join_khepri_mnesia_mnesia_cluster_reverse(Config) ->
         {skip, _} = Skip -> Skip
     end.
 
-join_size_2_cluster(Config, [Server0, Server1]) ->
+join_size_2_cluster(Config, Servers) ->
+    [Server0, Server1] = old_version_first(Config, Servers),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
 
@@ -336,7 +337,8 @@ join_size_2_cluster(Config, [Server0, Server1]) ->
             {skip, "'khepri_db' feature flag is unsupported"}
     end.
 
-join_size_3_cluster(Config, [Server0, Server1, Server2]) ->
+join_size_3_cluster(Config, Servers) ->
+    [Server0, Server1, Server2] = old_version_first(Config, Servers),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Q = ?config(queue_name, Config),
 
@@ -369,6 +371,20 @@ join_size_3_cluster(Config, [Server0, Server1, Server2]) ->
             end;
         {error, 69, <<"Error:\nincompatible_feature_flags">>} ->
             {skip, "'khepri_db' feature flag is unsupported"}
+    end.
+
+%% A node that runs the older version cannot join a node that has newer feature
+%% flags enabled, so in mixed versions the others join an older node. Nodes at
+%% odd indexes run the older version.
+old_version_first(Config, Servers) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            All = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+            Old = [S || {I, S} <- lists:enumerate(0, All), I rem 2 =:= 1],
+            [Seed | _] = [S || S <- Servers, lists:member(S, Old)],
+            [Seed | Servers -- [Seed]];
+        false ->
+            Servers
     end.
 
 declare(Ch, Q) ->
