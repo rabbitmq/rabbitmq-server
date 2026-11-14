@@ -261,6 +261,42 @@ extract_resource_server_properties(Settings) ->
         || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
+<<<<<<< HEAD
+=======
+resource_server_property_value(_Key, V) when is_boolean(V) ->
+    V;
+resource_server_property_value(Key, V) ->
+    case resource_servers_key_synonym(Key) of
+        "scope_pattern_syntax" ->
+            parse_scope_pattern_syntax_for_schema(V);
+        _ ->
+            resource_server_string_property_value(V)
+    end.
+
+resource_server_string_property_value(V) when is_binary(V) ->
+    V;
+resource_server_string_property_value(V) when is_list(V) ->
+    list_to_binary(V).
+
+parse_scope_pattern_syntax_for_schema(wildcard) ->
+    wildcard;
+parse_scope_pattern_syntax_for_schema(regex) ->
+    regex;
+parse_scope_pattern_syntax_for_schema(V) when is_binary(V) ->
+    parse_scope_pattern_syntax_for_schema(binary_to_list(V));
+parse_scope_pattern_syntax_for_schema(V) when is_list(V) ->
+    case string:lowercase(V) of
+        "wildcard" -> wildcard;
+        "regex" -> regex;
+        _ ->
+            cuttlefish:invalid(io_lib:format(
+                "Invalid scope_pattern_syntax: ~tp", [V]))
+    end;
+parse_scope_pattern_syntax_for_schema(V) ->
+    cuttlefish:invalid(io_lib:format(
+        "Invalid scope_pattern_syntax: ~tp", [V])).
+
+>>>>>>> 3a3177e (OAuth 2: support per-resource server `verify_aud` settings)
 mapOauthProviderProperty({Key, Value}) ->
     {Key, case Key of
         issuer -> validator_https_uri(Key, Value);
