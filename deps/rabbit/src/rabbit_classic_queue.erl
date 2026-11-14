@@ -16,8 +16,12 @@
 -record(?STATE, {
            pid :: pid(),
            unconfirmed = #{} :: #{non_neg_integer() => #msg_status{}},
-           monitored = #{} :: #{pid() => ok}
+           monitored = #{} :: #{pid() => ok},
+           %% Pending checks of the exclusive owners of exited queue processes.
+           owner_checks = #{} :: #{pid() => reference()}
           }).
+
+-define(OWNER_CHECK_TIMEOUT, 5_000).
 
 -define(STATIC_KEYS, [name,
                       durable,
@@ -397,9 +401,37 @@ handle_event(QName, {reject_publish, SeqNo, _QPid},
     {U, Rejected} = reject_seq_no(SeqNo, U0),
     Actions = [{rejected, QName, maxlen, Rejected}],
     {ok, State#?STATE{unconfirmed = U}, Actions};
-handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
-                                               unconfirmed = U0} = State0) ->
+handle_event(QName, {owner_alive, Ref, QPid, Alive},
+             #?STATE{owner_checks = Checks0} = State0) ->
+    case maps:take(QPid, Checks0) of
+        {Ref, Checks} ->
+            State = State0#?STATE{owner_checks = Checks},
+            case Alive =:= false andalso is_deleted(QName, QPid, State) of
+                true -> {eol, []};
+                false -> queue_down(QName, QPid, noproc, State)
+            end;
+        _ ->
+            {ok, State0, []}
+    end;
+handle_event(_QName, {down, Pid, noproc},
+             #?STATE{monitored = Monitored, owner_checks = Checks} = State)
+  when is_map_key(Pid, Checks) ->
+    {ok, State#?STATE{monitored = maps:remove(Pid, Monitored)}, []};
+handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored} = State0) ->
     State = State0#?STATE{monitored = maps:remove(Pid, Monitored)},
+    case Info =:= noproc andalso has_pending(Pid, State) andalso
+         check_deleted(QName, Pid, State) of
+        true ->
+            {eol, []};
+        {owner, Owner} ->
+            {ok, check_owner(QName, Pid, Owner, State), []};
+        _ ->
+            queue_down(QName, Pid, Info, State)
+    end;
+handle_event(_QName, Action, State) ->
+    {ok, State, [Action]}.
+
+queue_down(QName, Pid, Info, #?STATE{unconfirmed = U0} = State) ->
     Actions0 = [{queue_down, QName}],
     case rabbit_misc:is_abnormal_exit(Info) of
         false when Info =:= normal ->
@@ -439,9 +471,61 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
             U = maps:without(MsgIds, U0),
             {ok, State#?STATE{unconfirmed = U},
              [{rejected, QName, down, MsgIds} | Actions0]}
-    end;
-handle_event(_QName, Action, State) ->
-    {ok, State, [Action]}.
+    end.
+
+%% A queue process that exited before it was monitored reports `noproc`
+%% instead of `normal`. The record of an exclusive queue deleted along with
+%% its owner can outlive the process, so a dead owner also means deletion.
+check_deleted(QName, Pid, State) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {error, not_found} ->
+            is_deleted(QName, Pid, State);
+        {ok, Q} ->
+            case amqqueue:get_pid(Q) =:= Pid andalso
+                 amqqueue:get_exclusive_owner(Q) of
+                Owner when is_pid(Owner) andalso node(Owner) =:= node() ->
+                    not erlang:is_process_alive(Owner) andalso
+                    is_deleted(QName, Pid, State);
+                Owner when is_pid(Owner) ->
+                    {owner, Owner};
+                _ ->
+                    false
+            end
+    end.
+
+%% `eol` settles every pending publish to the queue, so it is only used when
+%% the record has not been replaced and nothing is pending on another pid.
+is_deleted(QName, Pid, #?STATE{unconfirmed = U}) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_pid_equals(Q, Pid) -> true;
+        {ok, _} -> false;
+        {error, not_found} -> true
+    end andalso
+    maps:fold(fun(_, #msg_status{pending = Pids}, Acc) ->
+                      Acc andalso lists:all(fun(P) -> P =:= Pid end, Pids)
+              end, true, U).
+
+has_pending(Pid, #?STATE{unconfirmed = U}) ->
+    lists:any(fun(#msg_status{pending = Pids}) -> lists:member(Pid, Pids) end,
+              maps:values(U)).
+
+%% Publishes pending on the exited queue process stay unsettled until the
+%% result arrives. A result that does not match the current check is ignored.
+check_owner(QName, QPid, Owner, #?STATE{owner_checks = Checks} = State) ->
+    Self = self(),
+    Ref = make_ref(),
+    _ = spawn(fun() ->
+                      Alive = try
+                                  erpc:call(node(Owner), erlang, is_process_alive,
+                                            [Owner], ?OWNER_CHECK_TIMEOUT)
+                              catch
+                                  _:_ -> unknown
+                              end,
+                      send_queue_event(Self, QName,
+                                       {'$queue_type', ?MODULE,
+                                        {owner_alive, Ref, QPid, Alive}})
+              end),
+    State#?STATE{owner_checks = Checks#{QPid => Ref}}.
 
 supports_stateful_delivery() -> true.
 

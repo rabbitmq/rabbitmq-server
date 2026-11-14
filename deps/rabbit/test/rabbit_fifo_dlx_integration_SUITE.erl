@@ -51,6 +51,7 @@ groups() ->
        delivery_limit,
        target_queue_not_bound,
        target_queue_deleted,
+       target_queue_deleted_after_other_target_confirmed,
        dlx_missing,
        cycle,
        stats,
@@ -346,6 +347,43 @@ target_queue_deleted(Config) ->
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
     ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config)).
+
+target_queue_deleted_after_other_target_confirmed(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SourceQ = ?config(source_queue, Config),
+    TargetQ1 = ?config(target_queue_1, Config),
+    TargetQ2 = ?config(target_queue_2, Config),
+    DLX = ?config(dead_letter_exchange, Config),
+    RaName = ra_name(SourceQ),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX}),
+    declare_queue(Ch, TargetQ1, []),
+    declare_queue(Ch, TargetQ2, [{<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                 {<<"x-max-length">>, long, 1}]),
+    bind_queue(Ch, TargetQ1, DLX, <<"k1">>),
+    bind_queue(Ch, TargetQ2, DLX, <<"k1">>),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    ok = publish_confirm(Ch, TargetQ2),
+    Msg = <<"m">>,
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = SourceQ},
+                           #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
+                                     payload = Msg}),
+    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg}},
+                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ1}))),
+    eventually(?_assertMatch([{1, _}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ2}),
+    eventually(?_assertMatch([{0, _}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)),
+               500, 20).
 
 %% Test that message is not lost when configured dead-letter exchange does not exist.
 %% Once the exchange gets declared, the message is delivered to the target queue

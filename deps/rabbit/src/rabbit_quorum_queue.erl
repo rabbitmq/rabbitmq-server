@@ -1351,9 +1351,10 @@ supports_stateful_delivery() -> true.
 
 deliver0(QName, undefined, Msg, QState0) ->
     case rabbit_fifo_client:enqueue(QName, Msg, QState0) of
-        {ok, _, _} = Res -> Res;
         {reject_publish, State} ->
-            {ok, State, []}
+            {ok, State, []};
+        Res ->
+            Res
     end;
 deliver0(QName, Correlation, Msg, QState0) ->
     rabbit_fifo_client:enqueue(QName, Correlation,
@@ -1374,6 +1375,10 @@ deliver(QSs, Msg0, Options) ->
                   {reject_publish, S} ->
                       {[{Q, S} | Qs],
                        [{rejected, QName, maxlen, [Correlation]} | Actions]};
+                  {deleted, S} ->
+                      {[{Q, S} | Qs],
+                       rabbit_queue_type:deleted_queue_actions(QName, Options) ++
+                       Actions};
                   {ok, S, As} ->
                       {[{Q, S} | Qs], As ++ Actions}
               end

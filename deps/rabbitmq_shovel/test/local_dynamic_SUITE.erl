@@ -36,6 +36,9 @@ groups() ->
                   local_to_local_opt_headers,
                   local_to_local_stream_no_ack,
                   local_to_local_delete_dest_queue,
+                  local_to_local_dest_exchange_classic_queue_deleted,
+                  local_to_local_dest_exchange_quorum_queue_deleted,
+                  local_to_local_dest_exchange_stream_queue_deleted,
                   local_to_local_stream_credit_flow_no_ack,
                   local_to_local_simple_uri,
                   local_to_local_counters,
@@ -104,6 +107,76 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
+
+local_to_local_dest_exchange_classic_queue_deleted(Config) ->
+    dest_exchange_queue_deleted(Config, <<"classic">>).
+
+local_to_local_dest_exchange_quorum_queue_deleted(Config) ->
+    dest_exchange_queue_deleted(Config, <<"quorum">>).
+
+local_to_local_dest_exchange_stream_queue_deleted(Config) ->
+    dest_exchange_queue_deleted(Config, <<"stream">>).
+
+dest_exchange_queue_deleted(Config, Type) ->
+    Dest = ?config(destq, Config),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(
+                       Config, 0, ?MODULE, dest_queue_deleted, [Dest, Type])).
+
+dest_queue_deleted(QName, Type) ->
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    {new, Q} = rabbit_amqqueue:declare(QRes, true, false,
+                                       [{<<"x-queue-type">>, longstr, Type}], none,
+                                       <<"acting-user">>),
+    {ok, Mc} = mc_amqpl:message(
+                 rabbit_misc:r(<<"/">>, exchange, <<>>), QName,
+                 rabbit_basic:build_content(#'P_basic'{delivery_mode = 2}, <<"msg">>)),
+    {ok, QStates, []} = rabbit_queue_type:deliver([Q], Mc, #{correlation => 1},
+                                                  rabbit_queue_type:init()),
+    DeliveryTag = 42,
+    State0 = #{ack_mode => on_confirm,
+               name => <<"test">>,
+               source => #{module => ?MODULE, remaining => unlimited},
+               dest => #{unconfirmed => rabbit_shovel_confirms:insert(
+                                          1, [QRes], DeliveryTag,
+                                          rabbit_shovel_confirms:init()),
+                         confirmed => [],
+                         confirmed_count => 0,
+                         rejected => [],
+                         rejected_count => 0,
+                         current => #{vhost => <<"/">>,
+                                      queue_states => QStates}}},
+    %% The confirm sent by the queue is left in the mailbox, so that the
+    %% shovel sees the queue going away first.
+    QPid = amqqueue:get_pid(Q),
+    Event = case Type of
+                <<"classic">> ->
+                    {{'DOWN', QRes}, make_ref(), process, QPid, normal};
+                <<"quorum">> ->
+                    {queue_event, QRes, {QPid, {machine, eol}}};
+                <<"stream">> ->
+                    {queue_event, QRes, eol}
+            end,
+    #{dest := Dest0} = State0,
+    ?assertMatch({stop, {outbound_link_or_channel_closure, _}},
+                 rabbit_local_shovel:handle_dest(
+                   Event, State0#{dest => Dest0#{queue => QName}})),
+    #{dest := #{unconfirmed := UC,
+                current := #{queue_states := QStates1}}} =
+        rabbit_local_shovel:handle_dest(Event, State0),
+    ?assert(rabbit_shovel_confirms:is_empty(UC)),
+    ?assertEqual({error, not_found}, rabbit_queue_type:module(QRes, QStates1)),
+    receive
+        {acked, DeliveryTag, false} -> ok
+    after 5000 ->
+              error(source_message_not_acked)
+    end,
+    {ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>),
+    ok.
+
+%% Stands in for the source module of the shovel.
+ack(Tag, Multiple, State) ->
+    self() ! {acked, Tag, Multiple},
+    State.
 
 local_to_local_opt_headers(Config) ->
     Src = ?config(srcq, Config),

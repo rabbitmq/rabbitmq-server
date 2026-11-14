@@ -30,7 +30,8 @@ groups() ->
                   local_to_local_dest_down,
                   local_to_local_multiple_all_dest_down,
                   local_to_local_multiple_some_dest_down,
-                  local_to_local_no_destination
+                  local_to_local_no_destination,
+                  local_to_local_dest_exchange_remote_exclusive_queue_deleted
                  ]}
     ].
 
@@ -216,6 +217,91 @@ local_to_local_no_destination(Config) ->
       end).
 
 %%----------------------------------------------------------------------------
+%% The exclusive queue is on another node, so the shovel learns that it was
+%% deleted from the result of an asynchronous check of the queue owner.
+local_to_local_dest_exchange_remote_exclusive_queue_deleted(Config) ->
+    QName = ?config(destq, Config),
+    {Owner, Q} = rabbit_ct_broker_helpers:rpc(
+                   Config, 1, ?MODULE, declare_exclusive_queue, [QName]),
+    %% The queue record outlives the queue process while the pool is blocked.
+    Blockers = rabbit_ct_broker_helpers:rpc(Config, 1, ?MODULE,
+                                            block_worker_pool, []),
+    try
+        MRef = erlang:monitor(process, amqqueue:get_pid(Q)),
+        Owner ! stop,
+        receive {'DOWN', MRef, process, _, _} -> ok
+        after 5000 -> error(queue_not_stopped)
+        end,
+        ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(
+                           Config, 0, ?MODULE, dest_queue_deleted, [Q]))
+    after
+        [Blocker ! release || Blocker <- Blockers]
+    end.
+
+declare_exclusive_queue(QName) ->
+    Owner = spawn(fun() -> receive stop -> ok end end),
+    {new, Q} = rabbit_amqqueue:declare(rabbit_misc:r(<<"/">>, queue, QName),
+                                       true, false, [], Owner,
+                                       <<"acting-user">>),
+    {Owner, Q}.
+
+block_worker_pool() ->
+    Self = self(),
+    Size = worker_pool_sup:default_pool_size(),
+    [worker_pool:submit_async(fun() ->
+                                      Self ! {blocked, self()},
+                                      receive release -> ok
+                                      after 30_000 -> ok
+                                      end
+                              end)
+     || _ <- lists:seq(1, Size)],
+    [receive {blocked, Worker} -> Worker end || _ <- lists:seq(1, Size)].
+
+dest_queue_deleted(Q) ->
+    QRes = amqqueue:get_name(Q),
+    #resource{name = QName} = QRes,
+    QPid = amqqueue:get_pid(Q),
+    {ok, Mc} = mc_amqpl:message(
+                 rabbit_misc:r(<<"/">>, exchange, <<>>), QName,
+                 rabbit_basic:build_content(#'P_basic'{delivery_mode = 2}, <<"msg">>)),
+    {ok, QStates, []} = rabbit_queue_type:deliver([Q], Mc, #{correlation => 1},
+                                                  rabbit_queue_type:init()),
+    DeliveryTag = 42,
+    State0 = #{ack_mode => on_confirm,
+               name => <<"test">>,
+               source => #{module => ?MODULE, remaining => unlimited},
+               dest => #{unconfirmed => rabbit_shovel_confirms:insert(
+                                          1, [QRes], DeliveryTag,
+                                          rabbit_shovel_confirms:init()),
+                         confirmed => [],
+                         confirmed_count => 0,
+                         rejected => [],
+                         rejected_count => 0,
+                         current => #{vhost => <<"/">>,
+                                      queue_states => QStates}}},
+    Down = receive {{'DOWN', QRes}, _, process, QPid, noproc} = D -> D
+           after 5000 -> error(no_down)
+           end,
+    #{dest := #{unconfirmed := UC1}} = State1 =
+        rabbit_local_shovel:handle_dest(Down, State0),
+    ?assertNot(rabbit_shovel_confirms:is_empty(UC1)),
+    Event = receive {'$gen_cast', {queue_event, QRes, _} = E} -> E
+            after 5000 -> error(no_owner_check_result)
+            end,
+    #{dest := #{unconfirmed := UC2,
+                current := #{queue_states := QStates2}}} =
+        rabbit_local_shovel:handle_dest(Event, State1),
+    ?assert(rabbit_shovel_confirms:is_empty(UC2)),
+    ?assertEqual({error, not_found}, rabbit_queue_type:module(QRes, QStates2)),
+    receive {acked, DeliveryTag, false} -> ok
+    after 5000 -> error(source_message_not_acked)
+    end.
+
+%% Stands in for the source module of the shovel.
+ack(Tag, Multiple, State) ->
+    self() ! {acked, Tag, Multiple},
+    State.
+
 list_queue_messages(Config) ->
     [[N, to_int(M), to_int(MR), to_int(MU)]
      || [N, M, MR, MU] <- lists:sort(
