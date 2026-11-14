@@ -41,23 +41,11 @@ to_json(ReqData, Context) ->
 
 accept_content(ReqData0, Context = #context{user = #user{username = Username}}) ->
     rabbit_mgmt_util:with_decode(
-<<<<<<< HEAD
-      [name], ReqData0, Context, fun([Name], _, ReqData) ->
+      [name], ReqData0, Context, fun(Values, _, ReqData) ->
+                                        [Name] = rabbit_mgmt_format:copy_binaries(Values),
                                         rabbit_nodes:set_cluster_name(
                                           as_binary(Name), Username),
                                         {true, ReqData, Context}
-=======
-      [name], ReqData0, Context, fun(Values, _, ReqData) ->
-                                        [Name] = rabbit_mgmt_format:copy_binaries(Values),
-                                        case rabbit_nodes:set_cluster_name(
-                                               as_binary(Name), Username) of
-                                            ok ->
-                                                {true, ReqData, Context};
-                                            {error_string, Error} ->
-                                                rabbit_mgmt_util:bad_request(
-                                                  Error, ReqData, Context)
-                                        end
->>>>>>> af7e876 (Management: copy parameter values and cluster name decoded from JSON)
                                 end).
 
 is_authorized(ReqData, Context) ->
