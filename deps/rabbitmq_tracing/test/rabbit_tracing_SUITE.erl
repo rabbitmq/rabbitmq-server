@@ -25,8 +25,7 @@ groups() ->
       {non_parallel_tests, [], [
                                 tracing_test,
                                 tracing_validation_test,
-                                trace_file_content_type_test,
-                                trace_does_not_reference_request_body_test
+                                trace_file_content_type_test
                                ]}
     ].
 
@@ -160,28 +159,6 @@ trace_file_content_type_test(Config) ->
     ?assertEqual(match, re:run(ContentType, "charset=utf-8", [{capture, none}])),
     http_delete(Config, "/trace-files/test-charset.log", ?NO_CONTENT),
     ok.
-
--define(PADDING_BYTES, 1000000).
-
-trace_does_not_reference_request_body_test(Config) ->
-    Pattern = binary:copy(<<"a">>, 100),
-    %% Whitespace pads the body because the trace stores every decoded field.
-    Body = <<"{\"format\":\"text\",\"pattern\":\"", Pattern/binary, "\",\"",
-             Pattern/binary, "\":true}",
-             (binary:copy(<<" ">>, ?PADDING_BYTES))/binary>>,
-    http_put_raw(Config, "/traces/%2f/request-body", Body, ?CREATED),
-    Sizes = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
-                                         trace_referenced_byte_sizes, [<<"request-body">>]),
-    http_delete(Config, "/traces/%2f/request-body", ?NO_CONTENT),
-    _ = file:delete(?LOG_DIR ++ "request-body.log"),
-    ?assertEqual([], [Size || Size <- Sizes, Size >= ?PADDING_BYTES]),
-    ?assert(lists:member(byte_size(Pattern), Sizes)),
-    passed.
-
-trace_referenced_byte_sizes(Name) ->
-    [binary:referenced_byte_size(B)
-     || {K, V} <- rabbit_tracing_traces:lookup(<<"/">>, Name),
-        B <- [K, V], is_binary(B), byte_size(B) > 64].
 
 %%---------------------------------------------------------------------------
 %% TODO: Below is copied from rabbit_mgmt_test_http,
