@@ -1953,7 +1953,18 @@ internal_delete(Queue, ActingUser, Reason) ->
                          [#if_data_matches{pattern = Pattern}]
                  end,
     OnlyDurable = Reason =:= missing_owner,
-    case rabbit_db_queue:delete_if(QueueName, Conditions, OnlyDurable) of
+    IncarnationConditions = case amqqueue:get_type(Queue) of
+                                rabbit_quorum_queue ->
+                                    {RaName, _} = amqqueue:get_pid(Queue),
+                                    %% A leader change does not create a new incarnation.
+                                    RaPattern = amqqueue:pattern_match_on_type_and_pid(
+                                                  rabbit_quorum_queue, {RaName, '_'}),
+                                    [#if_data_matches{pattern = RaPattern}];
+                                _ ->
+                                    []
+                            end,
+    case rabbit_db_queue:delete_if(QueueName, Conditions ++ IncarnationConditions,
+                                  OnlyDurable) of
         ok ->
             ok;
         {error, timeout} = Err ->

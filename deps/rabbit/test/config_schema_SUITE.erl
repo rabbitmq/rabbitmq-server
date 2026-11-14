@@ -7,11 +7,14 @@
 
 -module(config_schema_SUITE).
 
+-include_lib("stdlib/include/assert.hrl").
+
 -compile(export_all).
 
 all() ->
     [
-        run_snippets
+        run_snippets,
+        quorum_queue_unique_names_invalid
     ].
 
 %% -------------------------------------------------------------------
@@ -39,3 +42,10 @@ end_per_testcase(Testcase, Config) ->
 
 run_snippets(Config) ->
     rabbit_ct_config_schema:run_snippets(Config).
+
+quorum_queue_unique_names_invalid(_Config) ->
+    SchemaFiles = rabbit_prelaunch_conf:find_cuttlefish_schemas(rabbit_env:get_context()),
+    Schema = cuttlefish_schema:files(SchemaFiles),
+    Conf = [{["quorum_queue", "unique_names"], "invalid"}],
+    ?assertMatch({error, _, {errorlist, [_ | _]}},
+                 cuttlefish_generator:map(Schema, Conf)).

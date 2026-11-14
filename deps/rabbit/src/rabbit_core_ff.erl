@@ -272,3 +272,10 @@
       stability     => stable,
       depends_on    => ['rabbitmq_4.3.0']
      }}).
+
+-rabbit_feature_flag(
+   {quorum_queue_unique_names,
+    #{desc          => "Use unique Ra names for new quorum queue incarnations",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.4.0']
+     }}).

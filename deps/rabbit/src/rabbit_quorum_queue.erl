@@ -7,6 +7,8 @@
 
 -module(rabbit_quorum_queue).
 
+-include_lib("khepri/include/khepri.hrl").
+
 -behaviour(rabbit_queue_type).
 -behaviour(rabbit_queue_type_ra).
 -behaviour(rabbit_policy_validator).
@@ -337,7 +339,23 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
         ok ?= rabbit_queue_type_util:check_auto_delete(Q),
         ok ?= rabbit_queue_type_util:check_exclusive(Q),
         ok ?= rabbit_queue_type_util:check_non_durable(Q),
+        ok ?= check_unique_names_feature_flag(),
         start_cluster(Q)
+    end.
+
+check_unique_names_feature_flag() ->
+    case application:get_env(rabbit, quorum_queue_unique_names, false) of
+        false ->
+            ok;
+        true ->
+            case rabbit_feature_flags:is_enabled(quorum_queue_unique_names) of
+                true ->
+                    ok;
+                false ->
+                    {protocol_error, precondition_failed,
+                     "Unique quorum queue names require the quorum_queue_unique_names feature flag",
+                     []}
+            end
     end.
 
 start_cluster(Q) ->
@@ -352,11 +370,15 @@ start_cluster(Q) ->
     %% It is known that declaring many quorum queues with different names can lead to
     %% Erlang atom limit exhaustion. This behavior is by design, as the underlying Ra library
     %% requires cluster names to be atoms. Please do not report this as a vulnerability.
-    RaName = case qname_to_internal_name(QName) of
-                 {ok, A} ->
-                     A;
-                 {error, {too_long, N}} ->
-                     rabbit_data_coercion:to_atom(ra:new_uid(N))
+    RaName = case application:get_env(rabbit, quorum_queue_unique_names, false) of
+                 true ->
+                     rabbit_data_coercion:to_atom(ra:new_uid(QName#resource.name));
+                 false ->
+                     case qname_to_internal_name(QName) of
+                         {ok, A} -> A;
+                         {error, {too_long, N}} ->
+                             rabbit_data_coercion:to_atom(ra:new_uid(N))
+                     end
              end,
     {LeaderNode, FollowerNodes} =
         rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
@@ -1124,7 +1146,9 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     QNodes = get_nodes(Q),
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Timeout = ?DELETE_TIMEOUT,
-    rabbit_binding:delete_for_destination(QName, ActingUser),
+    Pattern = amqqueue:pattern_match_on_type_and_pid(rabbit_quorum_queue, {Name, '_'}),
+    rabbit_binding:delete_for_destination(
+      QName, ActingUser, [#if_data_matches{pattern = Pattern}]),
     {ok, ReadyMsgs, _} = stat(Q),
     Servers = [{Name, Node} || Node <- QNodes],
     case ra:delete_cluster(Servers, Timeout) of
