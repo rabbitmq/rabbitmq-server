@@ -29,8 +29,8 @@
 -spec consult_file(atom() | string()) ->
     {'error',{'badfile',atom() | string() | {_,_} | {'scan_error',{_,_,_},non_neg_integer() | {_,_}}}} | {'ok',_}.
 consult_file(Path) ->
-    case erl_prim_loader:get_file(Path) of
-        {ok, Binary, _FullName} ->
+    case file:read_file(Path) of
+        {ok, Binary} ->
             Encoding =
                 case epp:read_encoding_from_binary(Binary) of
                     none ->
@@ -46,7 +46,7 @@ consult_file(Path) ->
                 String when is_list(String) ->
                     consult_string(String)
             end;
-        error ->
+        {error, _} ->
             {error, {badfile, Path}}
     end.
 

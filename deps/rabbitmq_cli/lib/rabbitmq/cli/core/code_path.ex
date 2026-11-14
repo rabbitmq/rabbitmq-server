@@ -6,73 +6,27 @@
 
 defmodule RabbitMQ.CLI.Core.CodePath do
   alias RabbitMQ.CLI.Core.{Config, Paths, Platform}
+  import RabbitCommon.Records
 
   def add_plugins_to_load_path(opts) do
     case Paths.plugins_dir(opts) do
+      {:ok, plugins_dir} ->
+        dirs = String.split(to_string(plugins_dir), Platform.path_separator())
+        {plugins, _} = :rabbit_plugin_discovery.list(Enum.map(dirs, &to_charlist/1))
+
+        Enum.each(plugins, fn
+          plugin(type: :dir, location: location) ->
+            Code.prepend_path(Path.join(to_string(location), "ebin"))
+
+          plugin(type: :ez) ->
+            :ok
+        end)
+
       {:error, _} ->
         :ok
-
-      val ->
-        with {:ok, plugins_dir} <- val do
-          String.split(to_string(plugins_dir), Platform.path_separator())
-          |> Enum.each(&add_directory_plugins_to_load_path/1)
-
-          :ok
-        end
     end
-  end
 
-  def add_directory_plugins_to_load_path(directory_with_plugins_inside_it) do
-    with {:ok, files} <- File.ls(directory_with_plugins_inside_it) do
-      Enum.map(
-        files,
-        fn filename ->
-          cond do
-            String.ends_with?(filename, [".ez"]) ->
-              Path.join([directory_with_plugins_inside_it, filename])
-              |> String.to_charlist()
-              |> add_archive_code_path()
-
-            File.dir?(filename) ->
-              Path.join([directory_with_plugins_inside_it, filename])
-              |> add_dir_code_path()
-
-            true ->
-              {:error, {:not_a_plugin, filename}}
-          end
-        end
-      )
-    end
-  end
-
-  defp add_archive_code_path(ez_dir) do
-    case :erl_prim_loader.list_dir(ez_dir) do
-      {:ok, [app_dir]} ->
-        app_in_ez = :filename.join(ez_dir, app_dir)
-        add_dir_code_path(app_in_ez)
-
-      _ ->
-        {:error, :no_app_dir}
-    end
-  end
-
-  defp add_dir_code_path(app_dir_0) do
-    app_dir = to_charlist(app_dir_0)
-
-    case :erl_prim_loader.list_dir(app_dir) do
-      {:ok, list} ->
-        case Enum.member?(list, ~c"ebin") do
-          true ->
-            ebin_dir = :filename.join(app_dir, ~c"ebin")
-            Code.append_path(ebin_dir)
-
-          false ->
-            {:error, :no_ebin}
-        end
-
-      _ ->
-        {:error, :app_dir_empty}
-    end
+    :ok
   end
 
   def require_rabbit_and_plugins(_, opts) do
