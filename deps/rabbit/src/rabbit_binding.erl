@@ -16,7 +16,7 @@
          list_explicit/0]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/5,
          process_deletions/1, notify_deletions/2, group_bindings_fold/3,
-         delete_for_destination/2]).
+         delete_for_destination/2, delete_for_destination/3]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
 
 -export([reverse_binding/1]).
@@ -514,7 +514,12 @@ fetch_deletion(XName, Deletions) ->
 %% It is to avoid bindings pointing to queues under deletion.
 -spec delete_for_destination(rabbit_types:binding_destination(), rabbit_types:username()) -> ok.
 delete_for_destination(QName, User) ->
-    case rabbit_db_binding:delete_for_destination(QName) of
+    delete_for_destination(QName, User, []).
+
+-spec delete_for_destination(rabbit_types:binding_destination(), rabbit_types:username(),
+                             [khepri_condition:condition()]) -> ok.
+delete_for_destination(QName, User, Conditions) ->
+    case rabbit_db_binding:delete_for_destination(QName, Conditions) of
         Deletions when is_map(Deletions) ->
             process_deletions(Deletions),
             notify_deletions(Deletions, User);

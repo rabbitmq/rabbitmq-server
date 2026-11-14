@@ -30,6 +30,7 @@
 %% Exported to be used by various rabbit_db_* modules
 -export([
          delete_for_destination/1,
+         delete_for_destination/2,
          delete_for_destination_in_khepri/2,
          delete_all_for_exchange_in_khepri/3,
          has_for_source_in_khepri/1,
@@ -715,9 +716,31 @@ get_for_source_in_khepri(#resource{virtual_host = VHost, name = SrcName}) ->
       Error :: {error, any()}.
 
 delete_for_destination(Dst) ->
+    delete_for_destination(Dst, []).
+
+-spec delete_for_destination(rabbit_types:binding_destination(),
+                             [khepri_condition:condition()]) ->
+    rabbit_binding:deletions() | {error, any()}.
+delete_for_destination(Dst, Conditions) ->
     rabbit_khepri:transaction(
       fun () ->
-              delete_for_destination_in_khepri(Dst, false)
+              case Conditions of
+                  [] ->
+                      delete_for_destination_in_khepri(Dst, false);
+                  _ ->
+                      Path = rabbit_db_queue:khepri_queue_path(Dst),
+                      Pattern = khepri_path:combine_with_conditions(Path, Conditions),
+                      case khepri_tx:get(Pattern) of
+                          {ok, _} ->
+                              delete_for_destination_in_khepri(Dst, false);
+                          {error, {khepri, node_not_found, _}} ->
+                              rabbit_binding:new_deletions();
+                          {error, {khepri, mismatching_node, _}} ->
+                              rabbit_binding:new_deletions();
+                          Error ->
+                              Error
+                      end
+              end
       end).
 
 -spec delete_for_destination_in_khepri(Dst, OnlyDurable) -> Deletions when

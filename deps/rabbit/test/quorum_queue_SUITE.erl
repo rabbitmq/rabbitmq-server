@@ -130,6 +130,13 @@ groups() ->
                                             replica_states,
                                             restart_after_queue_reincarnation,
                                             no_messages_after_queue_reincarnation,
+                                            stale_delete_preserves_redeclared_queue,
+                                            stale_delete_preserves_redeclared_queue_bindings,
+                                            unique_name_recovers_after_restart,
+                                            unique_name_survives_leader_change,
+                                            legacy_queue_reincarnation_with_unique_names,
+                                            unique_name_stale_delete_from_other_node,
+                                            unique_names_require_cluster_support,
                                             consumer_message_is_delevered_after_snapshot,
                                             mixed_version_local_queries
                                            ]
@@ -151,7 +158,8 @@ groups() ->
                         partitioned_publisher,
                         reconnect_consumer_and_publish,
                         reconnect_consumer_and_wait,
-                        reconnect_consumer_and_wait_channel_down
+                        reconnect_consumer_and_wait_channel_down,
+                        recreate_queue_during_partition
                        ]}
                      ]}
     ].
@@ -348,7 +356,8 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                          Testcase == reconnect_consumer_and_publish;
                                          Testcase == reconnect_consumer_and_wait;
-                                         Testcase == reconnect_consumer_and_wait_channel_down ->
+                                         Testcase == reconnect_consumer_and_wait_channel_down;
+                                         Testcase == recreate_queue_during_partition ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
     Q = rabbit_data_coercion:to_binary(Testcase),
     Config2 = rabbit_ct_helpers:set_config(Config1,
@@ -420,7 +429,8 @@ merge_app_env(Config) ->
 end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                         Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
-                                        Testcase == reconnect_consumer_and_wait_channel_down ->
+                                        Testcase == reconnect_consumer_and_wait_channel_down;
+                                        Testcase == recreate_queue_during_partition ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()),
@@ -4096,6 +4106,307 @@ cleanup_data_dir(Config) ->
                  rpc:call(Server2, rabbit_quorum_queue, cleanup_data_dir, [])),
     ?awaitMatch(false, filelib:is_dir(DataDir2), 30000),
     ok.
+
+recreate_queue_during_partition(Config) ->
+    with_unique_quorum_names(Config, fun() -> recreate_queue_during_partition0(Config) end).
+
+recreate_queue_during_partition0(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch0, QQ, Args)),
+    RaName = lookup_quorum_ra_name(Server, QQ),
+
+    %% The leaked replica must retain a higher term than the replacement.
+    [trigger_elections_until_leader(RaName, Node) || _ <- lists:seq(1, 2), Node <- Servers],
+    {ok, _, {_, Leader}} = ra:members({RaName, Server}),
+    [Stale, Follower] = lists:delete(Leader, Servers),
+    ChStale = rabbit_ct_client_helpers:open_channel(Config, Stale),
+    #'confirm.select_ok'{} = amqp_channel:call(ChStale, #'confirm.select'{}),
+    ok = publish_confirm(ChStale, QQ),
+    wait_for_messages_ready(Servers, RaName, 1),
+
+    rabbit_ct_broker_helpers:block_traffic_between(Stale, Leader),
+    rabbit_ct_broker_helpers:block_traffic_between(Stale, Follower),
+    await_disconnected(Stale, Leader),
+    await_disconnected(Stale, Follower),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Leader),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    NewRaName = lookup_quorum_ra_name(Leader, QQ),
+    ConfirmedMsgs = 10,
+    publish_confirm_many(Ch, QQ, ConfirmedMsgs),
+    wait_for_messages_ready([Leader, Follower], NewRaName, ConfirmedMsgs),
+
+    rabbit_ct_broker_helpers:allow_traffic_between(Stale, Follower),
+    await_connected(Stale, Follower),
+    _ = rpc:call(Stale, ra, trigger_election, [{RaName, Stale}]),
+    rabbit_ct_broker_helpers:allow_traffic_between(Stale, Leader),
+    await_connected(Stale, Leader),
+    case NewRaName of
+        RaName -> await_leader_convergence(NewRaName, Servers);
+        _ -> await_leader_convergence(NewRaName, [Leader, Follower])
+    end,
+
+    {ok, {_, ReadyMsgs}, _} = ra:leader_query({NewRaName, Follower},
+                                             {rabbit_fifo, query_messages_ready, []}),
+    ?assertEqual(ConfirmedMsgs, ReadyMsgs).
+
+trigger_elections_until_leader(RaName, Node) ->
+    ServerId = {RaName, Node},
+    ?awaitMatch({ok, _, ServerId},
+                case ra:members(ServerId) of
+                    {ok, _, ServerId} = Members -> Members;
+                    Other ->
+                        _ = rpc:call(Node, ra, trigger_election, [ServerId]),
+                        Other
+                end,
+                ?DEFAULT_AWAIT).
+
+await_leader_convergence(RaName, Nodes) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Leaders = [Leader || Node <- Nodes,
+                                   {ok, _, Leader} <- [catch ra:members({RaName, Node}, 1000)]],
+              length(Leaders) =:= length(Nodes) andalso
+                  length(lists:usort(Leaders)) =:= 1
+      end, 30000).
+
+await_disconnected(Node, Peer) ->
+    rabbit_ct_helpers:await_condition(
+      fun() -> not lists:member(Peer, erpc:call(Node, erlang, nodes, [])) end, 30000).
+
+await_connected(Node, Peer) ->
+    rabbit_ct_helpers:await_condition(
+      fun() -> true =:= erpc:call(Node, net_kernel, connect_node, [Peer]) end, 30000).
+
+stale_delete_preserves_redeclared_queue(Config) ->
+    with_unique_quorum_names(Config,
+                            fun() -> stale_delete_preserves_redeclared_queue0(Config) end).
+
+stale_delete_preserves_redeclared_queue0(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    {ok, OldQ} = rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?assertMatch({ok, _}, rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>])),
+
+    ok = rpc:call(Server, rabbit_amqqueue, internal_delete, [OldQ, <<"guest">>]),
+    ?assertMatch({ok, _}, rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>])).
+
+stale_delete_preserves_redeclared_queue_bindings(Config) ->
+    with_unique_quorum_names(
+      Config,
+      fun() ->
+              Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+              Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+              QQ = ?config(queue_name, Config),
+              Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+              ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+              {ok, OldQ} = rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+              #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
+              ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+              #'queue.bind_ok'{} = amqp_channel:call(
+                                    Ch, #'queue.bind'{queue = QQ, exchange = <<"amq.fanout">>}),
+              QName = amqqueue:get_name(OldQ),
+              Bindings = rpc:call(Server, rabbit_db_binding, get_all_for_destination, [QName]),
+              ?assert(is_list(Bindings)),
+              ?assert(length(Bindings) > 0),
+
+              ?assertMatch({ok, _}, rpc:call(Server, rabbit_quorum_queue, delete,
+                                           [OldQ, false, false, <<"guest">>])),
+              ?assertMatch({ok, _}, rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>])),
+              ?assertEqual(lists:sort(Bindings),
+                           lists:sort(rpc:call(Server, rabbit_db_binding, get_all_for_destination,
+                                               [QName]))),
+              #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+              amqp_channel:register_confirm_handler(Ch, self()),
+              amqp_channel:cast(Ch, #'basic.publish'{exchange = <<"amq.fanout">>},
+                                #amqp_msg{payload = <<"new incarnation">>}),
+              receive #'basic.ack'{} -> ok after ?TIMEOUT -> ct:fail(confirm_timeout) end,
+              ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"new incarnation">>}},
+                           amqp_channel:call(Ch, #'basic.get'{queue = QQ, no_ack = true})),
+              #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
+              ?assertEqual([], rpc:call(Server, rabbit_db_binding, get_all_for_destination, [QName]))
+      end).
+
+unique_name_recovers_after_restart(Config) ->
+    with_unique_quorum_names(
+      Config,
+      fun() ->
+              [Server | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+              QQ = ?config(queue_name, Config),
+              Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+              Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+              ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+              RaName = lookup_quorum_ra_name(Server, QQ),
+              #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+              publish_confirm_many(Ch, QQ, 10),
+              wait_for_messages_ready(Nodes, RaName, 10),
+
+              [begin
+                   ok = rabbit_ct_broker_helpers:restart_node(Config, Node),
+                   await_leader_convergence(RaName, Nodes),
+                   ?assertEqual(RaName, lookup_quorum_ra_name(Node, QQ)),
+                   wait_for_messages_ready(Nodes, RaName, 10)
+               end || Node <- Nodes],
+              Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+              ?assertEqual({'queue.declare_ok', QQ, 10, 0}, declare(Ch1, QQ, Args)),
+              ?assertEqual(10, length(consume_all(Ch1, QQ))),
+              #'queue.delete_ok'{} = amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})
+      end).
+
+unique_name_survives_leader_change(Config) ->
+    with_unique_quorum_names(
+      Config,
+      fun() ->
+              [Server | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+              QQ = ?config(queue_name, Config),
+              Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+              Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+              ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+              {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+              {RaName, Leader} = amqqueue:get_pid(Q),
+              [Target | _] = lists:delete(Leader, Nodes),
+              #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+              publish_confirm_many(Ch, QQ, 10),
+              trigger_elections_until_leader(RaName, Target),
+              await_leader_convergence(RaName, Nodes),
+              ?awaitMatch({ok, {RaName, Target}},
+                          case rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]) of
+                              {ok, CurrentQ} -> {ok, amqqueue:get_pid(CurrentQ)};
+                              Error -> Error
+                          end, ?DEFAULT_AWAIT),
+              wait_for_messages_ready(Nodes, RaName, 10),
+
+              ?assertMatch({ok, 10}, rpc:call(Server, rabbit_quorum_queue, delete,
+                                            [Q, false, false, <<"guest">>])),
+              ?assertEqual({error, not_found},
+                           rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>])),
+              ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+              ?assertNotEqual(RaName, lookup_quorum_ra_name(Server, QQ)),
+              #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ})
+      end).
+
+legacy_queue_reincarnation_with_unique_names(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    QQ = ?config(queue_name, Config),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    {ok, OldQ} = rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+    {OldRaName, _} = amqqueue:get_pid(OldQ),
+    ?assertEqual(ra_name(QQ), OldRaName),
+    with_unique_quorum_names(
+      Config,
+      fun() ->
+              ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+              ?assertEqual(OldRaName, lookup_quorum_ra_name(Server, QQ)),
+              #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
+              ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+              ?assertNotEqual(OldRaName, lookup_quorum_ra_name(Server, QQ)),
+              ok = rpc:call(Server, rabbit_amqqueue, internal_delete, [OldQ, <<"guest">>]),
+              ?assertMatch({ok, _}, rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>])),
+              #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+              publish_confirm_many(Ch, QQ, 10),
+              ?assertEqual(10, length(consume_all(Ch, QQ))),
+              #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ})
+      end).
+
+unique_name_stale_delete_from_other_node(Config) ->
+    with_unique_quorum_names(
+      Config,
+      fun() ->
+              [Server, Other | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+              QQ = ?config(queue_name, Config),
+              Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+              Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+              ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+              {ok, OldQ} = rpc:call(Other, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+              #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
+              ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+              {ok, NewQ} = rpc:call(Other, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+              ?assertNotEqual(element(1, amqqueue:get_pid(OldQ)),
+                              element(1, amqqueue:get_pid(NewQ))),
+              ok = rpc:call(Other, rabbit_amqqueue, internal_delete, [OldQ, <<"guest">>]),
+              ?assertMatch({ok, _}, rpc:call(Other, rabbit_amqqueue, lookup, [QQ, <<"/">>])),
+              #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+              publish_confirm_many(Ch, QQ, 10),
+              ?assertEqual(10, length(consume_all(Ch, QQ))),
+              #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ})
+      end).
+
+lookup_quorum_ra_name(Server, Queue) ->
+    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [Queue, <<"/">>]),
+    {RaName, _} = amqqueue:get_pid(Q),
+    RaName.
+
+unique_names_require_cluster_support(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, quorum_queue_unique_names) of
+        true ->
+            with_unique_quorum_names(
+              Config,
+              fun() ->
+                      Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+                      Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+                      QQ = ?config(queue_name, Config),
+                      Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+                      ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+                      ?assertNotEqual(ra_name(QQ), lookup_quorum_ra_name(Server, QQ)),
+                      #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ})
+              end);
+        false ->
+            Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+            ?assertEqual({error, unsupported},
+                         rpc:call(Server, rabbit_feature_flags, enable,
+                                  [quorum_queue_unique_names])),
+            ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                         Config, quorum_queue_unique_names)),
+            with_unique_quorum_names_setting(
+              Config,
+              fun() ->
+                      Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+                      QQ = ?config(queue_name, Config),
+                      Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+                      ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                                  declare(Ch, QQ, Args)),
+                      ?assertEqual({error, not_found},
+                                   rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]))
+              end)
+    end.
+
+with_unique_quorum_names(Config, Test) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, quorum_queue_unique_names) of
+        true ->
+            with_unique_quorum_names_setting(Config, Test);
+        false ->
+            {skip, "unique quorum queue names require every node to support the feature flag"}
+    end.
+
+with_unique_quorum_names_setting(Config, Test) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ct:pal("Queue lifecycle test node versions: ~tp",
+           [[{Node, erpc:call(Node, application, get_key, [rabbit, vsn])} || Node <- Nodes]]),
+    Previous = [{Node, erpc:call(Node, application, get_env,
+                               [rabbit, quorum_queue_unique_names])} || Node <- Nodes],
+    [ok = erpc:call(Node, application, set_env,
+                   [rabbit, quorum_queue_unique_names, true]) || Node <- Nodes],
+    try Test()
+    after
+        [case Value of
+             undefined -> erpc:call(Node, application, unset_env,
+                                    [rabbit, quorum_queue_unique_names]);
+             {ok, V} -> erpc:call(Node, application, set_env,
+                                  [rabbit, quorum_queue_unique_names, V])
+         end || {Node, Value} <- Previous]
+    end.
 
 partitioned_publisher(Config) ->
     [Node0, Node1, Node2] = Nodes =
