@@ -57,7 +57,8 @@ accept_content(ReqData0, Context = #context{user = #user{username = ActingUser}}
               fun(_, User, ReqData) ->
                       case validate_tag_count(User) of
                           ok ->
-                              _ = put_user(User#{name => Username}, ActingUser),
+                              _ = put_user(rabbit_mgmt_format:copy_binaries(User#{name => Username}),
+                                       ActingUser),
                               {true, ReqData, Context};
                           {error, Msg} ->
                               rabbit_mgmt_util:bad_request(Msg, ReqData, Context)
