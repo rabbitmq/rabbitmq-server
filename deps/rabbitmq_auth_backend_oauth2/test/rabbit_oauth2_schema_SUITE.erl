@@ -191,7 +191,17 @@ test_resource_servers_attributes(_) ->
                           {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
                           {scope_prefix, <<"somescope.">>}
                         ]
-    } = sort_settings(translate_resource_servers(Conf2)).
+    } = sort_settings(translate_resource_servers(Conf2)),
+
+    Conf3 = [
+        {["auth_oauth2","resource_servers","rabbitmq1","verify_aud"], false},
+        {["auth_oauth2","resource_servers","rabbitmq1","require_exp"], false}
+    ],
+    #{<<"rabbitmq1">> := [{id, <<"rabbitmq1">>},
+                          {require_exp, false},
+                          {verify_aud, false}
+                        ]
+    } = sort_settings(translate_resource_servers(Conf3)).
 
 test_oauth_providers_attributes_with_invalid_uri(_) ->
     Conf = [

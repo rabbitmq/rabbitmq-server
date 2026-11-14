@@ -469,12 +469,12 @@
 
 {mapping,
  "auth_oauth2.resource_servers.$name.verify_aud",
- "rabbitmq_auth_backend_oauth2.verify_aud",
+ "rabbitmq_auth_backend_oauth2.resource_servers",
  [{datatype, boolean}]}.
 
 {mapping,
  "auth_oauth2.resource_servers.$name.require_exp",
- "rabbitmq_auth_backend_oauth2.require_exp",
+ "rabbitmq_auth_backend_oauth2.resource_servers",
  [{datatype, boolean}]}.
 
 {mapping,

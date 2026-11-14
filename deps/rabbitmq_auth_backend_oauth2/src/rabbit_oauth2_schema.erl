@@ -263,6 +263,8 @@ extract_resource_server_properties(Settings) ->
         || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
+resource_server_property_value(_Key, V) when is_boolean(V) ->
+    V;
 resource_server_property_value(Key, V) ->
     case resource_servers_key_synonym(Key) of
         "scope_pattern_syntax" ->
