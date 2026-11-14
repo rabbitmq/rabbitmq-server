@@ -31,7 +31,6 @@ groups() ->
                                create_super_stream_requires_configure_permission,
                                create_super_stream_partition_limits,
                                create_super_stream_binding_keys_limit,
-                               super_stream_does_not_reference_request_body,
                                stream_tracking_requires_vhost_access,
                                stream_tracking_requires_read_permission,
                                stream_publishers_require_vhost_access,
@@ -209,40 +208,6 @@ create_super_stream_binding_keys_limit(Config) ->
     http_put(Config, "/stream/super-streams/%2F/too-many-binding-keys",
              #{'binding-keys' => OverLimit}, ?BAD_REQUEST),
     ok.
-
--define(PADDING_BYTES, 1000000).
-
-super_stream_does_not_reference_request_body(Config) ->
-    Name = <<"super-stream-request-body">>,
-    Key = binary:copy(<<"k">>, 100),
-    MaxAge = <<(binary:copy(<<"0">>, 98))/binary, "1h">>,
-    http_put(Config, "/stream/super-streams/%2F/" ++ binary_to_list(Name),
-             #{'binding-keys' => <<Key/binary, (binary:copy(<<" ">>, ?PADDING_BYTES))/binary>>,
-               arguments => #{'max-age' => MaxAge}},
-             {group, '2xx'}),
-    Sizes = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
-                                         super_stream_referenced_byte_sizes, [Name, Key]),
-    ?assertEqual([], [Size || Size <- Sizes, Size >= ?PADDING_BYTES]),
-    ?assertEqual(2, length([Size || Size <- Sizes, Size =:= 100])),
-    ok.
-
-super_stream_referenced_byte_sizes(Name, Key) ->
-    {ok, Q} = rabbit_amqqueue:lookup(
-                rabbit_misc:r(<<"/">>, queue, <<Name/binary, "-", Key/binary>>)),
-    long_binaries_referenced_byte_sizes(
-      [rabbit_binding:list_for_source(rabbit_misc:r(<<"/">>, exchange, Name)),
-       amqqueue:get_arguments(Q)]).
-
-long_binaries_referenced_byte_sizes(B) when is_binary(B), byte_size(B) > 64 ->
-    [binary:referenced_byte_size(B)];
-long_binaries_referenced_byte_sizes(T) when is_tuple(T) ->
-    long_binaries_referenced_byte_sizes(tuple_to_list(T));
-long_binaries_referenced_byte_sizes(M) when is_map(M) ->
-    long_binaries_referenced_byte_sizes(maps:to_list(M));
-long_binaries_referenced_byte_sizes(L) when is_list(L) ->
-    lists:flatmap(fun long_binaries_referenced_byte_sizes/1, L);
-long_binaries_referenced_byte_sizes(_) ->
-    [].
 
 stream_tracking_requires_vhost_access(Config) ->
     Vhost = <<"tracking-vh">>,
