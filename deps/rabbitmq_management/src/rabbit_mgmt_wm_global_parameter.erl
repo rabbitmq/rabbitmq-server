@@ -61,7 +61,8 @@ to_json(ReqData, Context) ->
 accept_content(ReqData0, Context = #context{user = #user{username = Username}}) ->
     rabbit_mgmt_util:with_decode(
       [value], ReqData0, Context,
-      fun([Value], _, ReqData) ->
+      fun(Values, _, ReqData) ->
+          [Value] = rabbit_mgmt_format:copy_binaries(Values),
           Val = if is_map(Value) -> maps:to_list(Value);
                     true         -> Value
                 end,

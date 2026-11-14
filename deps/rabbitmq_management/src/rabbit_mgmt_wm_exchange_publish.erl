@@ -97,11 +97,12 @@ publish_amqp091(VHost, X, RoutingKey, Props0, Payload0, Enc, ReqData, Context) -
                         amqp_channel:register_confirm_handler(Ch, self()),
                         amqp_channel:register_return_handler(Ch, self()),
                         amqp_channel:call(Ch, #'confirm.select'{}),
-                        Props = rabbit_mgmt_format:to_basic_properties(Props0),
-                        Payload = decode(Payload0, Enc),
+                        Props = rabbit_mgmt_format:to_basic_properties(
+                                  rabbit_mgmt_format:copy_binaries(Props0)),
+                        Payload = decode(binary:copy(Payload0), Enc),
                         amqp_channel:cast(Ch, #'basic.publish'{
                                             exchange    = X,
-                                            routing_key = RoutingKey,
+                                            routing_key = binary:copy(RoutingKey),
                                             mandatory   = true},
                                           #amqp_msg{props   = Props,
                                                     payload = Payload}),

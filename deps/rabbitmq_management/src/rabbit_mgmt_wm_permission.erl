@@ -53,7 +53,8 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
             VHost = rabbit_mgmt_util:id(vhost, ReqData0),
             rabbit_mgmt_util:with_decode(
               [configure, write, read], ReqData0, Context,
-              fun([Conf, Write, Read], _, ReqData) ->
+              fun(Perms, _, ReqData) ->
+                      [Conf, Write, Read] = rabbit_mgmt_format:copy_binaries(Perms),
                       rabbit_auth_backend_internal:set_permissions(
                         User, VHost, Conf, Write, Read, Username),
                       {true, ReqData, Context}
