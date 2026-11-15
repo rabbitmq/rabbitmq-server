@@ -32,8 +32,6 @@
          begin_quorum_chaos/1,
          begin_coordination_chaos/0,
          begin_coordination_chaos/1,
-         begin_delayed_chaos/0,
-         begin_delayed_chaos/1,
          begin_jms_chaos/0,
          begin_jms_chaos/1,
          stop/0
@@ -74,7 +72,7 @@
 %% inside the broker.
 %%----------------------------------------------------------------------------
 
--define(ALL_SYSTEMS, [quorum_queues, coordination, delayed_queues, jms_queues]).
+-define(ALL_SYSTEMS, [quorum_queues, coordination, jms_queues]).
 -define(DEFAULT_INTERVAL, 20000).
 
 begin_chaos() ->
@@ -96,12 +94,6 @@ begin_coordination_chaos() ->
 
 begin_coordination_chaos(Interval) ->
     begin_for_systems([coordination], Interval).
-
-begin_delayed_chaos() ->
-    begin_delayed_chaos(?DEFAULT_INTERVAL).
-
-begin_delayed_chaos(Interval) ->
-    begin_for_systems([delayed_queues], Interval).
 
 begin_jms_chaos() ->
     begin_jms_chaos(?DEFAULT_INTERVAL).
@@ -175,12 +167,6 @@ events_for_system(coordination) ->
       {kill_named_proc, ra_coordination_segment_writer, kill}},
      {kill_coord_member, 2, {kill_ra_member, chaos}},
      {restart_coord_member, 2, restart_ra_member}];
-events_for_system(delayed_queues) ->
-    [{kill_dq_wal, 1, {kill_named_proc, ra_delayed_queues_log_wal, chaos}},
-     {kill_dq_seg_writer, 1,
-      {kill_named_proc, ra_delayed_queues_segment_writer, kill}},
-     {kill_dq_member, 2, {kill_ra_member, chaos}},
-     {restart_dq_member, 2, restart_ra_member}];
 events_for_system(jms_queues) ->
     [{kill_jms_wal, 1, {kill_named_proc, ra_jms_queues_log_wal, chaos}},
      {kill_jms_seg_writer, 1,
