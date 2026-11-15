@@ -2197,13 +2197,10 @@ function is_internal(queue) {
 }
 
 function get_queue_type (queue) {
-    switch(queue.type) {
-        case "classic":
-        case "quorum":
-        case "stream":
-            return queue.type;
-        default:
-            return "default"
+    if (QUEUE_TYPE.hasOwnProperty(queue.type)) {
+        return queue.type;
+    } else {
+        return "default";
     }
 }
 
