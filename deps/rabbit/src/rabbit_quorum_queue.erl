@@ -406,7 +406,7 @@ start_cluster(Q) ->
                 {ok, _, _} ->
                     case confirm_declared(NewQ) of
                         {ok, _} ->
-                            finish_declare(NewQ, Q, LeaderId, LeaderNode);
+                            finish_declare(NewQ, Q);
                         {error, timeout} = Err ->
                             declare_queue_error(Err, NewQ, LeaderNode, ActingUser);
                         _ ->
@@ -448,44 +448,20 @@ confirm_declared(Q0) ->
               end
       end, #{}).
 
-finish_declare(NewQ, Q, LeaderId, LeaderNode) ->
+finish_declare(NewQ, Q) ->
     QName = amqqueue:get_name(NewQ),
-    Durable = amqqueue:is_durable(Q),
-    AutoDelete = amqqueue:is_auto_delete(Q),
-    Arguments = amqqueue:get_arguments(Q),
     ActingUser = maps:get(user, amqqueue:get_options(Q), ?UNKNOWN_USER),
-    %% ensure the latest config is evaluated properly
-    %% even when running the machine version from 0
-    %% as earlier versions may not understand all the config
-    %% keys
-    case rabbit_fifo_client:update_machine_state(LeaderId,
-                                                 ra_machine_config(NewQ)) of
-        ok ->
-            notify_decorators(NewQ, startup),
-            rabbit_quorum_queue_periodic_membership_reconciliation:queue_created(NewQ),
-            rabbit_event:notify(queue_created,
-                                [{name, QName},
-                                 {durable, Durable},
-                                 {auto_delete, AutoDelete},
-                                 {exclusive, false},
-                                 {type, amqqueue:get_type(Q)},
-                                 {arguments, Arguments},
-                                 {user_who_performed_action, ActingUser}]),
-            {new, NewQ};
-        %% A concurrent delete has deleted the cluster.
-        {error, {shutdown, delete}} ->
-            {protocol_error, not_found, "~ts is being deleted",
-             [rabbit_misc:rs(QName)]};
-        Err ->
-            case confirm_declared(NewQ) of
-                {ok, _} ->
-                    declare_queue_error(Err, NewQ, LeaderNode, ActingUser);
-                {error, timeout} ->
-                    declare_queue_error(Err, NewQ, LeaderNode, ActingUser);
-                _ ->
-                    declared_queue_deleted(NewQ)
-            end
-    end.
+    notify_decorators(NewQ, startup),
+    rabbit_quorum_queue_periodic_membership_reconciliation:queue_created(NewQ),
+    rabbit_event:notify(queue_created,
+                        [{name, QName},
+                         {durable, amqqueue:is_durable(Q)},
+                         {auto_delete, amqqueue:is_auto_delete(Q)},
+                         {exclusive, false},
+                         {type, amqqueue:get_type(Q)},
+                         {arguments, amqqueue:get_arguments(Q)},
+                         {user_who_performed_action, ActingUser}]),
+    {new, NewQ}.
 
 declared_queue_deleted(Q) ->
     ok = delete_declared_members(Q),
