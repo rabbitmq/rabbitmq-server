@@ -776,8 +776,7 @@ parse_request(<<?REQUEST:1,
                 ?VERSION_1:16,
                 PublisherId:8,
                 _Count:32,
-                DetailsBin/binary>>)
-  when byte_size(DetailsBin) > 0, byte_size(DetailsBin) rem 10 =:= 0 ->
+                DetailsBin/binary>>) ->
     %% TODO: change protocol to match
     [{_, ErrCode} | _] = Details = list_of_longcodes(DetailsBin),
     {PublishingIds, _} = lists:unzip(Details),
