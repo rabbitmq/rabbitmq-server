@@ -479,7 +479,9 @@ start_ra_cluster(Q, LeaderNode, RaConfs) ->
         _ ->
             case start_ra_cluster(LeaderNode, RaConfs) of
                 {error, {members_exist, Existing}} = Err ->
-                    case delete_leftover_members(Q, Existing) of
+                    Members = rabbit_misc:upmap(fun clashing_member_uid/1,
+                                                Existing),
+                    case delete_leftover_members(Q, Members) of
                         ok ->
                             ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
                                       [Existing, rabbit_misc:rs(amqqueue:get_name(Q))]),
@@ -500,9 +502,8 @@ delete_registered_members(Q, RaConfs) ->
     QName = amqqueue:get_name(Q),
     Registered = lists:append(
                    rabbit_misc:upmap(
-                     fun(#{id := {Name, Node} = ServerId}) ->
-                             case erpc_call(Node, ra_directory, uid_of,
-                                            [?RA_SYSTEM, Name], ?RPC_TIMEOUT) of
+                     fun(#{id := ServerId}) ->
+                             case member_uid(ServerId) of
                                  UId when is_binary(UId) ->
                                      [{ServerId, UId}];
                                  _ ->
@@ -530,58 +531,52 @@ start_ra_cluster(LeaderNode, RaConfs) ->
               [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
               ?START_CLUSTER_RPC_TIMEOUT).
 
-%% Ra versions that predate `ra:force_delete_server/4` report existing
-%% members without their UIds.
-%%
 %% A delete and another declare can complete while this declare waits, and the
 %% members are then that declare's. The record is checked after the UIds are
 %% read, since a declare writes its record before it starts its members.
-delete_leftover_members(Q, Existing) ->
-    case lists:all(fun({{_, _}, _}) -> true;
-                      (_) -> false
-                   end, Existing) of
-        true ->
-            Resolved = rabbit_misc:upmap(fun clashing_member_uid/1, Existing),
-            case confirm_declared(Q) of
-                {ok, _} ->
-                    Results = rabbit_misc:upmap(
-                                fun({ServerId, UId}) ->
-                                        force_delete_member(ServerId, UId);
-                                   (R) ->
-                                        R
-                                end, Resolved),
-                    case lists:all(fun(R) -> R =:= ok end, Results) of
-                        true -> ok;
-                        false -> error
-                    end;
-                {error, timeout} ->
-                    error;
-                _ ->
-                    not_declared
+delete_leftover_members(Q, Members) ->
+    case confirm_declared(Q) of
+        {ok, _} ->
+            Results = rabbit_misc:upmap(
+                        fun({ServerId, UId}) ->
+                                force_delete_member(ServerId, UId);
+                           (R) ->
+                                R
+                        end, Members),
+            case lists:all(fun(R) -> R =:= ok end, Results) of
+                true -> ok;
+                false -> error
             end;
-        false ->
-            error
+        {error, timeout} ->
+            error;
+        _ ->
+            not_declared
     end.
 
 %% A member that runs without a registered UId is starting, or is terminating
 %% after its UId was unregistered.
-clashing_member_uid({_ServerId, UId} = Member) when is_binary(UId) ->
-    Member;
-clashing_member_uid({{Name, Node} = ServerId, undefined}) ->
-    MRef = erlang:monitor(process, ServerId),
-    receive
-        {'DOWN', MRef, process, _, _} ->
-            ok
-    after ?MEMBER_EXIT_TIMEOUT ->
-              erlang:demonitor(MRef, [flush]),
-              case erpc_call(Node, ra_directory, uid_of, [?RA_SYSTEM, Name],
-                             ?RPC_TIMEOUT) of
-                  UId when is_binary(UId) ->
-                      {ServerId, UId};
-                  _ ->
-                      error
-              end
+clashing_member_uid(ServerId) ->
+    case member_uid(ServerId) of
+        UId when is_binary(UId) ->
+            {ServerId, UId};
+        _ ->
+            MRef = erlang:monitor(process, ServerId),
+            receive
+                {'DOWN', MRef, process, _, _} ->
+                    ok
+            after ?MEMBER_EXIT_TIMEOUT ->
+                      erlang:demonitor(MRef, [flush]),
+                      case member_uid(ServerId) of
+                          UId when is_binary(UId) ->
+                              {ServerId, UId};
+                          _ ->
+                              error
+                      end
+            end
     end.
+
+member_uid({Name, Node}) ->
+    erpc_call(Node, ra_directory, uid_of, [?RA_SYSTEM, Name], ?RPC_TIMEOUT).
 
 declare_queue_error(Error, Queue, Leader, ActingUser) ->
     _ = delete_declared_members(Queue),

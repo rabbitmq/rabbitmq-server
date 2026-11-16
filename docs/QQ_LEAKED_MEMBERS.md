@@ -26,19 +26,20 @@ records.
 
 Changes 1 to 3 are small and can ship first. Change 4 removes the delete race and needs its own review.
 
-### 1. Ra: report and delete by UID
+### 1. Ra: delete by UID
 
 On the `members-exist-uids` branch of Ra, on top of the unreleased `start_cluster` work:
 
- * `{error, {members_exist, [{ServerId, UId}]}}` reports the UID of each clashing member
  * `ra:force_delete_server/4` deletes a member only if it is registered with the given UID, and returns
    `{error, not_owner}` otherwise
+ * `ra:start_cluster/3` has no pre-check. A start that fails because a member with the same server id
+   is running deletes the members it started, by UID, and returns `{error, {members_exist, ServerIds}}`
 
-Both are pushed. `rabbitmq-components.mk` points `dep_ra` at that branch until Ra is released.
+`rabbitmq-components.mk` points `dep_ra` at that branch until Ra is released.
 
-The pre-check still only finds running members. Making it also find stopped ones broke Ra callers that
-start a cluster over stopped members on purpose, such as `ra_system_SUITE:restart_system`, so that
-check is done by RabbitMQ instead (change 2).
+Ra does not detect stopped members. Doing so broke Ra callers that start a cluster over stopped members
+on purpose, such as `ra_system_SUITE:restart_system`, so that check is done by RabbitMQ instead
+(change 2).
 
 ### 2. Clean up in the declare and delete paths
 
@@ -46,7 +47,8 @@ When `internal_declare/2` returns `created`, no record exists for the name, so a
 name is an orphan. Before `ra:start_cluster/3`, the declare reads the UID registered for the name on
 each member node and deletes those members by UID. Otherwise `ra:start_cluster/3` would replace a
 stopped one and leave its data directory behind. On `members_exist`, which a member started in the
-meantime can still cause, the declare deletes the clashing members by UID and retries once. If the
+meantime can still cause, the declare reads the UIDs of the clashing members, deletes them by UID and
+retries once. If the
 declare fails for another reason, it deletes the members it tried to start, by UID, before removing
 the record.
 
@@ -150,16 +152,15 @@ Ra cluster by name, and the condition then keeps a record with no cluster behind
 ## Compatibility
 
  * Changes 1 to 3 need no feature flag. Change 4 does
- * `ra:start_cluster/3` runs on the leader node, so during a rolling upgrade `members_exist` can come back
-   in the old shape. Change 2 then fails the declare as today
+ * `ra:start_cluster/3` runs on the leader node. On an older node it does not return `members_exist`
  * Change 2 needs a released Ra with change 1, and `dep_ra` back on a hex pin. Change 3 does not
 
 ## Tests
 
- * Ra: UIDs in `members_exist` and `not_owner` (done), the
+ * Ra: `not_owner` and `members_exist` when only some members are running (done), the
    `force_delete_server/4` success path (to do)
- * Declare: succeeds against leftover members, running and stopped (done). Cleans up after a timeout,
-   and handles the old `members_exist` shape (to do)
+ * Declare: succeeds against leftover members, running and stopped (done). Cleans up after a timeout
+   (to do)
  * `add_member`: succeeds on a node that holds a running leftover member (done), and does not delete a
    member that the record lists with the same UID (covered by `add_member_already_a_member`)
  * Boot sweep: removes a member with no record, one left by `delete_member` while its node was down,
