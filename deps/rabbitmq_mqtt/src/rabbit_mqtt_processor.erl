@@ -494,17 +494,23 @@ process_request(?SUBSCRIBE,
          (#mqtt_subscription{topic_filter = TopicFilter,
                              options = Opts0 = #mqtt_subscription_opts{
                                                   qos = Qos0,
-                                                  retain_handling = Rh}},
+                                                  retain_handling = RetainHandling}},
           {L0, R0, S0}) ->
               QoS = maybe_downgrade_qos(Qos0),
               Opts = Opts0#mqtt_subscription_opts{qos = QoS},
               L = [QoS | L0],
-              R1 = [{TopicFilter, QoS} | R0],
+              SubscriptionExists = maps:is_key(TopicFilter, S0#state.subscriptions),
+              SendRetained = case RetainHandling of
+                                 0 -> true;
+                                 1 -> not SubscriptionExists;
+                                 2 -> false
+                             end,
+              R = case SendRetained of
+                      true -> [{TopicFilter, QoS} | R0];
+                      false -> R0
+                  end,
               case S0#state.subscriptions of
                   #{TopicFilter := Opts} ->
-                      R = if Rh =:= 0 -> R1;
-                             Rh > 0 -> R0
-                          end,
                       {L, R, S0};
                   _ ->
                       maybe
@@ -516,9 +522,6 @@ process_request(?SUBSCRIBE,
                           Subs = maps:put(TopicFilter, Opts, S0#state.subscriptions),
                           S1 = S0#state{subscriptions = Subs},
                           maybe_increment_consumer(S0, S1),
-                          R = if Rh < 2 -> R1;
-                                 Rh =:= 2 -> R0
-                              end,
                           case self_consumes(Q) of
                               false ->
                                   case consume(Q, QoS, S1) of
