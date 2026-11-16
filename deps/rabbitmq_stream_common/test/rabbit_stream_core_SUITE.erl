@@ -23,6 +23,7 @@ groups() ->
     [{tests, [],
       [roundtrip, roundtrip_metadata, roundtrip_metadata_no_leader,
        zero_size_frame_does_not_crash,
+       publish_error_malformed_details_does_not_crash,
        frame_size_enforcement,
        frame_size_enforcement_partial,
        frame_size_enforcement_unlimited,
@@ -225,6 +226,26 @@ zero_size_frame_does_not_crash(_Config) ->
     State = rabbit_stream_core:incoming_data(Data, Init),
     {[{unknown, <<>>}, {unknown, <<>>}], _} = rabbit_stream_core:all_commands(State),
     ok.
+
+%% Exception safety: an empty or non-10-byte-aligned PUBLISH_ERROR
+%% details section is reported as an unknown command, not a crash.
+publish_error_malformed_details_does_not_crash(_Config) ->
+    {unknown, _} = parse_publish_error(<<>>),
+    {unknown, _} = parse_publish_error(<<1, 2, 3>>),
+    ok.
+
+parse_publish_error(DetailsBin) ->
+    Body = <<?REQUEST:1,
+             ?COMMAND_PUBLISH_ERROR:15,
+             ?VERSION_1:16,
+             0:8,
+             0:32,
+             DetailsBin/binary>>,
+    Frame = <<(byte_size(Body)):32, Body/binary>>,
+    Init = rabbit_stream_core:init(undefined),
+    State = rabbit_stream_core:incoming_data(Frame, Init),
+    {[Cmd], _} = rabbit_stream_core:all_commands(State),
+    Cmd.
 
 test_roundtrip(Cmd) ->
     Init = rabbit_stream_core:init(undefined),
