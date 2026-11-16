@@ -82,6 +82,7 @@ groups() ->
                                             declare_when_leader_exits,
                                             delete_during_declare,
                                             stale_declare_keeps_redeclared_queue,
+                                            stale_declare_with_older_ra_keeps_redeclared_queue,
                                             declare_cluster_not_formed,
                                             add_member_when_cluster_deleted,
                                             add_member_with_leftover_member,
@@ -4244,12 +4245,26 @@ delete_during_declare(Config) ->
     ok.
 
 stale_declare_keeps_redeclared_queue(Config) ->
+    stale_declare_keeps_redeclared_queue(Config, false).
+
+%% Ra versions without `ra:force_delete_server/4` fail with `undef`.
+stale_declare_with_older_ra_keeps_redeclared_queue(Config) ->
+    stale_declare_keeps_redeclared_queue(Config, true).
+
+stale_declare_keeps_redeclared_queue(Config, OlderRa) ->
     [Server1, Server2 | _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
     QName = rabbit_misc:r(<<"/">>, queue, QQ),
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
     ok = rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
+    OlderRa andalso
+        begin
+            ok = rpc:call(Server1, meck, new, [ra, [passthrough, no_link, unstick]]),
+            ok = rpc:call(Server1, meck, expect,
+                          [ra, force_delete_server, 4,
+                           {badrpc, {'EXIT', {undef, []}}}])
+        end,
     ok = rpc:call(Server1, meck, new,
                   [rabbit_queue_type_util, [passthrough, no_link]]),
     ok = rpc:call(Server1, meck, expect,
@@ -4276,7 +4291,8 @@ stale_declare_keeps_redeclared_queue(Config) ->
                   ct:fail(no_declare)
         end
     after
-        ok = rpc:call(Server1, meck, unload, [rabbit_queue_type_util])
+        ok = rpc:call(Server1, meck, unload, [rabbit_queue_type_util]),
+        OlderRa andalso rpc:call(Server1, meck, unload, [ra])
     end,
     {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
     #{nodes := UIds} = amqqueue:get_type_state(Q),
