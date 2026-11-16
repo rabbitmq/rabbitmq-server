@@ -17,6 +17,7 @@
          table_lookup/2,
          path_for/2,
          path_for/3,
+         vhost_name_to_dir_name/2,
          vhost_name_to_table_name/1,
          init_sparkplug/0,
          mqtt_to_amqp/1,

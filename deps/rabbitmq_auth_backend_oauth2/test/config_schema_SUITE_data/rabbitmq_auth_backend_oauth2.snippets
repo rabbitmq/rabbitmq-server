@@ -127,6 +127,86 @@
         ]}
         ],[]
   },
+  {resource_server_verify_aud_false_overrides_global_true,
+       "auth_oauth2.verify_aud = true
+        auth_oauth2.resource_servers.1.id = rabbitmq-operations
+        auth_oauth2.resource_servers.1.verify_aud = false
+        auth_oauth2.resource_servers.customers.id = rabbitmq-customers",
+        [
+        {rabbitmq_auth_backend_oauth2, [
+            {verify_aud, true},
+            {resource_servers, #{
+                <<"rabbitmq-operations">> => [
+                    {verify_aud, false},
+                    {id, <<"rabbitmq-operations">>}
+                ],
+                <<"rabbitmq-customers">> => [
+                    {id, <<"rabbitmq-customers">>}
+                ]
+            }}
+        ]}
+        ],[]
+  },
+  {resource_server_verify_aud_true_overrides_global_false,
+       "auth_oauth2.verify_aud = false
+        auth_oauth2.resource_servers.1.id = rabbitmq-operations
+        auth_oauth2.resource_servers.1.verify_aud = true
+        auth_oauth2.resource_servers.customers.id = rabbitmq-customers",
+        [
+        {rabbitmq_auth_backend_oauth2, [
+            {verify_aud, false},
+            {resource_servers, #{
+                <<"rabbitmq-operations">> => [
+                    {verify_aud, true},
+                    {id, <<"rabbitmq-operations">>}
+                ],
+                <<"rabbitmq-customers">> => [
+                    {id, <<"rabbitmq-customers">>}
+                ]
+            }}
+        ]}
+        ],[]
+  },
+  {resource_server_require_exp_false_overrides_global_true,
+       "auth_oauth2.require_exp = true
+        auth_oauth2.resource_servers.1.id = rabbitmq-operations
+        auth_oauth2.resource_servers.1.require_exp = false
+        auth_oauth2.resource_servers.customers.id = rabbitmq-customers",
+        [
+        {rabbitmq_auth_backend_oauth2, [
+            {require_exp, true},
+            {resource_servers, #{
+                <<"rabbitmq-operations">> => [
+                    {require_exp, false},
+                    {id, <<"rabbitmq-operations">>}
+                ],
+                <<"rabbitmq-customers">> => [
+                    {id, <<"rabbitmq-customers">>}
+                ]
+            }}
+        ]}
+        ],[]
+  },
+  {resource_server_require_exp_true_overrides_global_false,
+       "auth_oauth2.require_exp = false
+        auth_oauth2.resource_servers.1.id = rabbitmq-operations
+        auth_oauth2.resource_servers.1.require_exp = true
+        auth_oauth2.resource_servers.customers.id = rabbitmq-customers",
+        [
+        {rabbitmq_auth_backend_oauth2, [
+            {require_exp, false},
+            {resource_servers, #{
+                <<"rabbitmq-operations">> => [
+                    {require_exp, true},
+                    {id, <<"rabbitmq-operations">>}
+                ],
+                <<"rabbitmq-customers">> => [
+                    {id, <<"rabbitmq-customers">>}
+                ]
+            }}
+        ]}
+        ],[]
+  },
   {multiple_oauth_providers,
        "auth_oauth2.resource_server_id = new_resource_server_id
         auth_oauth2.scope_prefix = new_resource_server_id.
