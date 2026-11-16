@@ -13,7 +13,7 @@
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2, internal_owner/1]).
 -export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, web_context/1, properties/1, basic_properties/1]).
--export([record/2, to_basic_properties/1]).
+-export([record/2, to_basic_properties/1, copy_binaries/1]).
 -export([addr/1, port/1]).
 -export([prepare_for_encoding/1]).
 -export([print/2, print/1]).
@@ -406,7 +406,17 @@ tokenise(Str) ->
                   tokenise(string:sub_string(Str, Count + 2))]
     end.
 
-to_amqp_table(V) -> rabbit_misc:to_amqp_table(V).
+to_amqp_table(V) -> rabbit_misc:to_amqp_table(copy_binaries(V)).
+
+%% Decoded JSON strings are sub-binaries that keep the whole request body alive.
+copy_binaries(B) when is_binary(B) ->
+    binary:copy(B);
+copy_binaries(M) when is_map(M) ->
+    maps:fold(fun(K, V, Acc) -> Acc#{copy_binaries(K) => copy_binaries(V)} end, #{}, M);
+copy_binaries(L) when is_list(L) ->
+    [copy_binaries(E) || E <- L];
+copy_binaries(T) ->
+    T.
 
 url(Fmt, Vals) ->
     print(Fmt, [rabbit_http_util:quote_plus(V) || V <- Vals]).

@@ -73,7 +73,7 @@ accept_content(ReqData0, {_Mode, Context}) ->
         {ok, Body, ReqData} ->
             case rabbit_mgmt_util:decode(Body) of
                 {ok, Props} ->
-                    create_binding(Props, ReqData, Context);
+                    create_binding(rabbit_mgmt_format:copy_binaries(Props), ReqData, Context);
                 {error, Reason} ->
                     rabbit_mgmt_util:bad_request(Reason, ReqData, Context)
             end;
