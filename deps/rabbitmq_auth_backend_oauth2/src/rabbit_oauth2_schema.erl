@@ -257,9 +257,16 @@ extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
-    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
+    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), resource_server_property_value(V)}}
         || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
+
+resource_server_property_value(V) when is_boolean(V) ->
+    V;
+resource_server_property_value(V) when is_binary(V) ->
+    V;
+resource_server_property_value(V) when is_list(V) ->
+    list_to_binary(V).
 
 mapOauthProviderProperty({Key, Value}) ->
     {Key, case Key of

@@ -9,13 +9,16 @@
 
 -behaviour(supervisor).
 
+-include_lib("kernel/include/logger.hrl").
+
 %% supervsior callback
 -export([init/1]).
 
 %% API
 -export([start_link/0,
          start_child_for_vhost/1,
-         delete_child_for_vhost/1]).
+         delete_child_for_vhost/1,
+         delete_orphaned_storage/0]).
 
 -spec start_link() -> supervisor:startlink_ret().
 start_link() ->
@@ -29,11 +32,56 @@ start_child_for_vhost(VHost)
         {error, {already_started, Pid}} -> Pid
     end.
 
--spec delete_child_for_vhost(rabbit_types:vhost()) -> ok.
+-spec delete_child_for_vhost(rabbit_types:vhost()) -> rabbit_types:ok_or_error(any()).
 delete_child_for_vhost(VHost) ->
-    Id = vhost_to_atom(VHost),
-    ok = supervisor:terminate_child(?MODULE, Id),
-    ok = supervisor:delete_child(?MODULE, Id).
+    Running = whereis(?MODULE) =/= undefined,
+    _ = Running andalso supervisor:terminate_child(?MODULE, VHost),
+    %% The stopped child stays until the files are gone, so that a concurrent
+    %% start cannot open them.
+    Result = delete_storage(VHost),
+    _ = Running andalso supervisor:delete_child(?MODULE, VHost),
+    Result.
+
+%% Also matches files of other backends and the `.TMP` file of a DETS repair.
+delete_storage(VHost) ->
+    Dir = rabbit:data_dir(),
+    rabbit_file:recursive_delete(
+      [filename:join(Dir, F)
+       || F <- filelib:wildcard(rabbit_mqtt_util:vhost_name_to_dir_name(VHost, ".*"), Dir)]).
+
+%% Deletes the stores of vhosts that were deleted while this node was down.
+-spec delete_orphaned_storage() -> ok.
+delete_orphaned_storage() ->
+    Dir = rabbit:data_dir(),
+    Files = filelib:wildcard("mqtt_retained_*", Dir),
+    %% The projection can be out of sync while Khepri recovers.
+    %% rabbitmq/rabbitmq-server#16422.
+    case rabbit_db_vhost:list_uncached() of
+        {error, Reason} ->
+            ?LOG_WARNING("Not deleting MQTT retained message stores of deleted vhosts, "
+                         "vhosts cannot be listed: ~tp", [Reason]);
+        {ok, VHosts} ->
+            Live = maps:from_keys(
+                     [rabbit_mqtt_util:vhost_name_to_dir_name(V, "") || V <- VHosts], true),
+            case [filename:join(Dir, F) || F <- Files,
+                                           not maps:is_key(hd(string:split(F, ".")), Live)] of
+                [] ->
+                    ok;
+                Orphaned ->
+                    ?LOG_INFO("Deleting MQTT retained message stores of deleted vhosts: ~tp",
+                              [Orphaned]),
+                    lists:foreach(
+                      fun(Path) ->
+                              case rabbit_file:recursive_delete([Path]) of
+                                  ok ->
+                                      ok;
+                                  {error, Reason} ->
+                                      ?LOG_WARNING("Failed to delete MQTT retained message "
+                                                   "store of a deleted vhost: ~tp", [Reason])
+                              end
+                      end, Orphaned)
+            end
+    end.
 
 -spec init([]) ->
     {ok, {supervisor:sup_flags(),
@@ -52,14 +100,6 @@ child_specs(VHosts) ->
 -spec child_spec(rabbit_types:vhost()) ->
     supervisor:child_spec().
 child_spec(VHost) ->
-    #{id => vhost_to_atom(VHost),
+    #{id => VHost,
       start => {rabbit_mqtt_retainer, start_link, [VHost]},
       shutdown => 120_000}.
-
--spec vhost_to_atom(rabbit_types:vhost()) -> atom().
-vhost_to_atom(VHost) ->
-    %% we'd like to avoid any conversion here because
-    %% this atom isn't meant to be human-readable, only
-    %% unique. This makes sure we don't get noisy process restarts
-    %% with really unusual vhost names used by various HTTP API test suites
-    rabbit_data_coercion:to_atom(VHost, latin1).
