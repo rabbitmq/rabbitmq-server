@@ -50,7 +50,8 @@ accept_content(ReqData0, Context = #context{user = User}) ->
         VHost ->
             rabbit_mgmt_util:with_decode(
               [value], ReqData0, Context,
-              fun([Value], _, ReqData) ->
+              fun(Values, _, ReqData) ->
+                      [Value] = rabbit_mgmt_format:copy_binaries(Values),
                       case rabbit_runtime_parameters:set(
                              VHost, component(ReqData), name(ReqData),
                              if

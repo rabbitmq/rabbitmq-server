@@ -52,8 +52,9 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
               [pattern, definition], ReqData0, Context,
               fun([Pattern, Definition], Body, ReqData) ->
                       case rabbit_policy:set_op(
-                             VHost, name(ReqData), Pattern,
-                             maps:to_list(Definition),
+                             VHost, name(ReqData),
+                             rabbit_mgmt_format:copy_binaries(Pattern),
+                             maps:to_list(rabbit_mgmt_format:copy_binaries(Definition)),
                              maps:get(priority, Body, undefined),
                              maps:get('apply-to', Body, undefined),
                              Username) of

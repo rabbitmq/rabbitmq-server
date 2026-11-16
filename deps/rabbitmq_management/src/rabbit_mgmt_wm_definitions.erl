@@ -318,7 +318,7 @@ decode(<<"">>) ->
 decode(Body0) ->
     Body = rabbit_misc:strip_bom(Body0),
     try
-      Decoded = rabbit_json:decode(Body),
+      Decoded = rabbit_mgmt_format:copy_binaries(rabbit_json:decode(Body)),
       Normalised = atomise_known_keys(Decoded),
       {ok, Normalised}
     catch error:_ -> {error, not_json}
