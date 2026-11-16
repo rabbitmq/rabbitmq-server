@@ -1566,8 +1566,14 @@ force_delete_member(ServerId) ->
 force_delete_member(ServerId, UId) ->
     try ra:force_delete_server(?RA_SYSTEM, ServerId, UId, ?FORCE_DELETE_TIMEOUT) of
         {badrpc, {'EXIT', {undef, _}}} ->
-            %% The member's node runs a Ra version without the UId check.
-            force_delete_member(ServerId);
+            %% The member's node runs a Ra version without the UId check, so
+            %% the check runs here, separately from the delete.
+            case member_uid(ServerId) of
+                UId -> force_delete_member(ServerId);
+                undefined -> ok;
+                {error, _} = Err -> Err;
+                _ -> {error, not_owner}
+            end;
         Res ->
             Res
     catch _:E ->
