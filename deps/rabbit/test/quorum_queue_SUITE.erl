@@ -85,6 +85,7 @@ groups() ->
                                             stale_declare_with_older_ra_keeps_redeclared_queue,
                                             declare_cluster_not_formed,
                                             add_member_when_cluster_deleted,
+                                            add_member_keeps_member_when_outcome_unknown,
                                             add_member_with_leftover_member,
                                             stale_add_member_keeps_member,
                                             boot_deletes_leftover_members,
@@ -4350,9 +4351,43 @@ add_member_when_cluster_deleted(Config) ->
     end,
     ?assertEqual(undefined,
                  rpc:call(Other, ra_directory, uid_of, [quorum_queues, ra_name(QQ)])),
-    {ok, Q1} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
-    ?assertNot(lists:member(Other,
-                            rpc:call(Server1, rabbit_amqqueue, get_quorum_nodes, [Q1]))),
+    ?awaitMatch(false,
+                begin
+                    {ok, Q1} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+                    lists:member(Other, rpc:call(Server1, rabbit_amqqueue,
+                                                 get_quorum_nodes, [Q1]))
+                end, ?DEFAULT_AWAIT),
+    ok.
+
+add_member_keeps_member_when_outcome_unknown(Config) ->
+    [Server1 | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 2}])),
+    ?awaitMatch(2, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    [Other] = Servers -- rpc:call(Server1, rabbit_amqqueue, get_quorum_nodes, [Q]),
+
+    ok = rabbit_ct_broker_helpers:setup_meck(Config),
+    ok = rpc:call(Server1, meck, new, [ra, [passthrough, no_link, unstick]]),
+    ok = rpc:call(Server1, meck, expect, [ra, leader_query, 3, {error, noproc}]),
+    ok = rpc:call(Server1, meck, expect,
+                  [ra, remove_member, fun(_, Id) -> {timeout, Id} end]),
+    try
+        ?assertEqual({error, noproc},
+                     rpc:call(Server1, rabbit_quorum_queue, add_member,
+                              [<<"/">>, QQ, Other, 30000]))
+    after
+        ok = rpc:call(Server1, meck, unload, [ra])
+    end,
+    ?assert(is_binary(rpc:call(Other, ra_directory, uid_of,
+                               [quorum_queues, ra_name(QQ)]))),
+    {ok, Members, _} = rpc:call(Server1, ra, members, [{ra_name(QQ), Server1}]),
+    ?assert(lists:member({ra_name(QQ), Other}, Members)),
     ok.
 
 add_member_with_leftover_member(Config) ->

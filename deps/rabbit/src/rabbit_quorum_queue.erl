@@ -2163,8 +2163,8 @@ do_add_member(Q0, Node, Membership, Timeout)
                                 %% record does not list the new member, so the
                                 %% delete would not reach it.
                                 QueryErr ->
-                                    _ = force_delete_member(ServerId, maps:get(uid, Conf)),
-                                    _ = ra:remove_member(Members, ServerId),
+                                    ok = delete_added_member(Q0, Members, ServerId,
+                                                             maps:get(uid, Conf)),
                                     ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
                                                  [rabbit_misc:rs(QName), Node, QueryErr]),
                                     case QueryErr of
@@ -2187,6 +2187,44 @@ do_add_member(Q0, Node, Membership, Timeout)
                                  [rabbit_misc:rs(QName), Node, E]),
                     E
             end
+    end.
+
+%% A failed query does not show that the addition failed. A member that the
+%% cluster can still count is kept.
+delete_added_member(Q0, Members, ServerId, UId) ->
+    IsDeleted = case rabbit_amqqueue:lookup(amqqueue:get_name(Q0)) of
+                    {ok, Q} ->
+                        ?amqqueue_state_is(Q, deleting) orelse
+                        not is_same_incarnation(Q, Q0);
+                    {error, not_found} ->
+                        true
+                end,
+    case IsDeleted orelse remove_added_member(Members, ServerId, 10) of
+        true ->
+            _ = force_delete_member(ServerId, UId),
+            ok;
+        {ok, _, _} ->
+            _ = force_delete_member(ServerId, UId),
+            ok;
+        {error, not_member} ->
+            _ = force_delete_member(ServerId, UId),
+            ok;
+        Err ->
+            ?LOG_WARNING("Kept member ~w of quorum ~ts that may be in the "
+                         "cluster: ~p",
+                         [ServerId, rabbit_misc:rs(amqqueue:get_name(Q0)), Err]),
+            ok
+    end.
+
+%% The addition can still be pending, and only one membership change is
+%% permitted at a time.
+remove_added_member(Members, ServerId, Attempts) ->
+    case ra:remove_member(Members, ServerId) of
+        {error, cluster_change_not_permitted} when Attempts > 1 ->
+            timer:sleep(500),
+            remove_added_member(Members, ServerId, Attempts - 1);
+        Res ->
+            Res
     end.
 
 start_member(Q, #{id := {RaName, Node} = ServerId, uid := UId} = Conf) ->
