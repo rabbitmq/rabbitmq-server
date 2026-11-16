@@ -79,7 +79,7 @@ groups() ->
                                             declare_with_leftover_members,
                                             declare_with_terminating_member,
                                             delete_when_leader_exits,
-                                            declare_when_cluster_deleted,
+                                            declare_when_leader_exits,
                                             delete_during_declare,
                                             stale_declare_keeps_redeclared_queue,
                                             declare_cluster_not_formed,
@@ -4171,21 +4171,34 @@ delete_when_leader_exits(Config) ->
      || S <- Servers],
     ok.
 
-declare_when_cluster_deleted(Config) ->
-    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+declare_when_leader_exits(Config) ->
+    [Server1 | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     QQ = ?config(queue_name, Config),
     ok = rabbit_ct_broker_helpers:setup_meck(Config),
-    ok = rpc:call(Server1, meck, new, [rabbit_fifo_client, [passthrough, no_link]]),
-    ok = rpc:call(Server1, meck, expect,
-                  [rabbit_fifo_client, update_machine_state, 2,
-                   {error, {shutdown, delete}}]),
+    [begin
+         ok = rpc:call(S, meck, new, [ra, [passthrough, no_link, unstick]]),
+         ok = rpc:call(S, meck, expect,
+                       [ra, start_cluster,
+                        fun(System, Confs, Timeout) ->
+                                Res = meck:passthrough([System, Confs, Timeout]),
+                                [Id | _] = [I || #{id := {_, N} = I} <- Confs,
+                                                 N =:= node()],
+                                ok = ra:stop_server(System, Id),
+                                Res
+                        end])
+     end || S <- Servers],
     try
-        ?assertExit({{shutdown, {server_initiated_close, 404, _}}, _},
-                    declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]))
+        ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                     declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]))
     after
-        ok = rpc:call(Server1, meck, unload, [rabbit_fifo_client])
+        [ok = rpc:call(S, meck, unload, [ra]) || S <- Servers]
     end,
+    publish(Ch, QQ),
+    ?awaitMatch({#'basic.get_ok'{}, _},
+                amqp_channel:call(Ch, #'basic.get'{queue = QQ, no_ack = true}),
+                ?DEFAULT_AWAIT),
     ok.
 
 delete_during_declare(Config) ->
