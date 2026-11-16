@@ -2665,7 +2665,6 @@ end}.
 }.
 
 %% Uses a new Ra name for each new quorum queue incarnation. Disabled by default.
-%% Requires the quorum_queue_unique_names feature flag on all cluster nodes.
 %% Each incarnation allocates an Erlang atom that is retained until node restart.
 {mapping, "quorum_queue.unique_names", "rabbit.quorum_queue_unique_names", [
     {datatype, boolean}]}.

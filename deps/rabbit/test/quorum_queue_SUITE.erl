@@ -131,12 +131,12 @@ groups() ->
                                             restart_after_queue_reincarnation,
                                             no_messages_after_queue_reincarnation,
                                             stale_delete_preserves_redeclared_queue,
+                                            stale_delete_preserves_long_named_queue,
                                             stale_delete_preserves_redeclared_queue_bindings,
                                             unique_name_recovers_after_restart,
                                             unique_name_survives_leader_change,
                                             legacy_queue_reincarnation_with_unique_names,
                                             unique_name_stale_delete_from_other_node,
-                                            unique_names_require_cluster_support,
                                             consumer_message_is_delevered_after_snapshot,
                                             mixed_version_local_queries
                                            ]
@@ -4187,6 +4187,11 @@ stale_delete_preserves_redeclared_queue(Config) ->
     with_unique_quorum_names(Config,
                             fun() -> stale_delete_preserves_redeclared_queue0(Config) end).
 
+stale_delete_preserves_long_named_queue(Config) ->
+    QQ = binary:copy(<<"q">>, 253),
+    Config1 = rabbit_ct_helpers:set_config(Config, [{queue_name, QQ}]),
+    stale_delete_preserves_redeclared_queue0(Config1).
+
 stale_delete_preserves_redeclared_queue0(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -4196,7 +4201,9 @@ stale_delete_preserves_redeclared_queue0(Config) ->
     {ok, OldQ} = rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
-    ?assertMatch({ok, _}, rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>])),
+    {ok, NewQ} = rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+    ?assertNotEqual(element(1, amqqueue:get_pid(OldQ)),
+                    element(1, amqqueue:get_pid(NewQ))),
 
     ok = rpc:call(Server, rabbit_amqqueue, internal_delete, [OldQ, <<"guest">>]),
     ?assertMatch({ok, _}, rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>])).
@@ -4348,49 +4355,7 @@ lookup_quorum_ra_name(Server, Queue) ->
     {RaName, _} = amqqueue:get_pid(Q),
     RaName.
 
-unique_names_require_cluster_support(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, quorum_queue_unique_names) of
-        true ->
-            with_unique_quorum_names(
-              Config,
-              fun() ->
-                      Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-                      Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-                      QQ = ?config(queue_name, Config),
-                      Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
-                      ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
-                      ?assertNotEqual(ra_name(QQ), lookup_quorum_ra_name(Server, QQ)),
-                      #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ})
-              end);
-        false ->
-            Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-            ?assertEqual({error, unsupported},
-                         rpc:call(Server, rabbit_feature_flags, enable,
-                                  [quorum_queue_unique_names])),
-            ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                         Config, quorum_queue_unique_names)),
-            with_unique_quorum_names_setting(
-              Config,
-              fun() ->
-                      Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-                      QQ = ?config(queue_name, Config),
-                      Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
-                      ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
-                                  declare(Ch, QQ, Args)),
-                      ?assertEqual({error, not_found},
-                                   rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]))
-              end)
-    end.
-
 with_unique_quorum_names(Config, Test) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, quorum_queue_unique_names) of
-        true ->
-            with_unique_quorum_names_setting(Config, Test);
-        false ->
-            {skip, "unique quorum queue names require every node to support the feature flag"}
-    end.
-
-with_unique_quorum_names_setting(Config, Test) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ct:pal("Queue lifecycle test node versions: ~tp",
            [[{Node, erpc:call(Node, application, get_key, [rabbit, vsn])} || Node <- Nodes]]),

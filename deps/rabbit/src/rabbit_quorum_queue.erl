@@ -339,23 +339,7 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
         ok ?= rabbit_queue_type_util:check_auto_delete(Q),
         ok ?= rabbit_queue_type_util:check_exclusive(Q),
         ok ?= rabbit_queue_type_util:check_non_durable(Q),
-        ok ?= check_unique_names_feature_flag(),
         start_cluster(Q)
-    end.
-
-check_unique_names_feature_flag() ->
-    case application:get_env(rabbit, quorum_queue_unique_names, false) of
-        false ->
-            ok;
-        true ->
-            case rabbit_feature_flags:is_enabled(quorum_queue_unique_names) of
-                true ->
-                    ok;
-                false ->
-                    {protocol_error, precondition_failed,
-                     "Unique quorum queue names require the quorum_queue_unique_names feature flag",
-                     []}
-            end
     end.
 
 start_cluster(Q) ->
