@@ -131,6 +131,7 @@ cluster_size_1_tests() ->
      ,notify_consumer_quorum_queue_deleted
      ,notify_consumer_qos0_queue_deleted
      ,consumer_timeout_quorum_queue
+     ,subscribe_replaces_queue_declared_by_old_connection
     ].
 
 cluster_size_3_tests() ->
@@ -2055,6 +2056,31 @@ notify_consumer_queue_deleted(Config, Name = Topic, ExpectedType, ConnOpts, Qos)
     {ok, _} = rabbitmqctl(Config, 0, ["delete_queue", QName]),
 
     await_exit(C).
+
+%% The old connection of a client ID can declare its queue after the new
+%% connection looked the queue up, before the old connection closes.
+subscribe_replaces_queue_declared_by_old_connection(Config) ->
+    ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
+    QName = rabbit_misc:r(<<"/">>, queue, <<"mqtt-subscription-", ClientId/binary, "qos0">>),
+    OldConnection = rpc(Config, erlang, spawn, [timer, sleep, [infinity]]),
+    Q = rpc(Config, amqqueue, new, [QName, none, true, false, OldConnection, [], <<"/">>,
+                                    #{user => <<"guest">>}, rabbit_mqtt_qos0_queue]),
+    {new, _} = rpc(Config, rabbit_queue_type, declare, [Q, get_node_config(Config, 0, nodename)]),
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    ok = rpc(Config, meck, new, [rabbit_amqqueue, [no_link, passthrough]]),
+    ok = rpc(Config, meck, expect, [rabbit_amqqueue, lookup, [{[QName], {error, not_found}},
+                                                               {['_'], meck:passthrough()}]]),
+    C = connect(ClientId, Config),
+    unlink(C),
+    try
+        ?assertMatch({ok, _, [0]}, emqtt:subscribe(C, Topic, qos0))
+    after
+        ok = rpc(Config, meck, unload, [rabbit_amqqueue])
+    end,
+    {ok, _} = emqtt:publish(C, Topic, <<"m">>, qos1),
+    ok = expect_publishes(C, Topic, [<<"m">>]),
+    ok = emqtt:disconnect(C),
+    rpc(Config, erlang, exit, [OldConnection, kill]).
 
 %% Test that consumer timeout on a quorum queue terminates the MQTT connection.
 %% Consumer timeouts are only supported for quorum queues.

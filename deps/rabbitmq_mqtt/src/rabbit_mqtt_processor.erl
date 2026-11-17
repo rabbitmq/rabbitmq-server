@@ -1427,19 +1427,34 @@ ensure_queue(QoS, State) ->
         {ok, _Q} = Ok ->
             Ok;
         {error, {resource_locked, Q}} ->
-            QName = amqqueue:get_name(Q),
-            ?LOG_DEBUG("MQTT deleting exclusive ~s owned by ~p",
-                       [rabbit_misc:rs(QName), ?amqqueue_v2_field_exclusive_owner(Q)]),
-            case delete_queue(QName, State) of
-                ok ->
-                    create_queue(QoS, State);
-                {error, _} = Err ->
-                    Err;
-                {protocol_error, _, _, _} = Err ->
-                    {error, Err}
-            end;
+            replace_queue(Q, QoS, State);
         {error, not_found} ->
-            create_queue(QoS, State)
+            case create_queue(QoS, State) of
+                %% The old connection of the same client ID can declare the queue
+                %% after the lookup, before it closes.
+                {error, {resource_locked, Q}} ->
+                    replace_queue(Q, QoS, State);
+                Result ->
+                    Result
+            end
+    end.
+
+replace_queue(Q, QoS, State) ->
+    QName = amqqueue:get_name(Q),
+    ?LOG_DEBUG("MQTT deleting exclusive ~s owned by ~p",
+               [rabbit_misc:rs(QName), ?amqqueue_v2_field_exclusive_owner(Q)]),
+    case delete_queue(QName, State) of
+        ok ->
+            case create_queue(QoS, State) of
+                {error, {resource_locked, _}} ->
+                    {error, queue_declare};
+                Result ->
+                    Result
+            end;
+        {error, _} = Err ->
+            Err;
+        {protocol_error, _, _, _} = Err ->
+            {error, Err}
     end.
 
 create_queue(Qos, State = #state{cfg = #cfg{session_expiry_interval_secs = SessionExpiry}}) ->
@@ -1493,6 +1508,8 @@ create_queue(QNamePart, QOwner, QArgs, QType,
             {error, queue_limit_exceeded, Reason, ReasonArgs} ->
                 ?LOG_ERROR(Reason, ReasonArgs),
                 {error, queue_limit_exceeded};
+            {existing, Q} when ?amqqueue_exclusive_owner_is_pid(Q) ->
+                {error, {resource_locked, Q}};
             Other ->
                 ?LOG_ERROR("Failed to declare ~s: ~p",
                            [rabbit_misc:rs(QName), Other]),
