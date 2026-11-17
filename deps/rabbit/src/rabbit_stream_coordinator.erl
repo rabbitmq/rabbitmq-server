@@ -557,7 +557,7 @@ start_coordinator_cluster() ->
         {error, {members_exist, Existing}} ->
             ?LOG_DEBUG("Stream coordinator members ~w already exist",
                        [Existing]),
-            Existing;
+            [Id || {Id, _} <- Existing];
         {error, cluster_not_formed} ->
             ?LOG_WARNING("Stream coordinator could not be started on nodes ~w",
                                [Nodes]),

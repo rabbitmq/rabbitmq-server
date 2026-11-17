@@ -479,7 +479,7 @@ start_ra_cluster(Q, LeaderNode, RaConfs) ->
         _ ->
             case start_ra_cluster(LeaderNode, RaConfs) of
                 {error, {members_exist, Existing}} = Err ->
-                    Members = rabbit_misc:upmap(fun clashing_member_uid/1,
+                    Members = rabbit_misc:upmap(fun clashing_member/1,
                                                 Existing),
                     case delete_leftover_members(Q, Members) of
                         ok ->
@@ -555,24 +555,21 @@ delete_leftover_members(Q, Members) ->
 
 %% A member that runs without a registered UId is starting, or is terminating
 %% after its UId was unregistered.
-clashing_member_uid(ServerId) ->
-    case member_uid(ServerId) of
-        UId when is_binary(UId) ->
-            {ServerId, UId};
-        _ ->
-            MRef = erlang:monitor(process, ServerId),
-            receive
-                {'DOWN', MRef, process, _, _} ->
-                    ok
-            after ?MEMBER_EXIT_TIMEOUT ->
-                      erlang:demonitor(MRef, [flush]),
-                      case member_uid(ServerId) of
-                          UId when is_binary(UId) ->
-                              {ServerId, UId};
-                          _ ->
-                              error
-                      end
-            end
+clashing_member({ServerId, UId}) when is_binary(UId) ->
+    {ServerId, UId};
+clashing_member({ServerId, _}) ->
+    MRef = erlang:monitor(process, ServerId),
+    receive
+        {'DOWN', MRef, process, _, _} ->
+            ok
+    after ?MEMBER_EXIT_TIMEOUT ->
+              erlang:demonitor(MRef, [flush]),
+              case member_uid(ServerId) of
+                  UId when is_binary(UId) ->
+                      {ServerId, UId};
+                  _ ->
+                      error
+              end
     end.
 
 member_uid({Name, Node}) ->

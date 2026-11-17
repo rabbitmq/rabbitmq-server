@@ -33,7 +33,8 @@ On the `members-exist-uids` branch of Ra, on top of the unreleased `start_cluste
  * `ra:force_delete_server/4` deletes a member only if it is registered with the given UID, and returns
    `{error, not_owner}` otherwise
  * `ra:start_cluster/3` has no pre-check. A start that fails because a member with the same server id
-   is running deletes the members it started, by UID, and returns `{error, {members_exist, ServerIds}}`
+   is running deletes the members it started, by UID, and returns `{error, {members_exist, Existing}}`,
+   with the UID each running member is registered with, or `undefined` if it could not be read
 
 `rabbitmq-components.mk` points `dep_ra` at that branch until Ra is released.
 
@@ -47,8 +48,8 @@ When `internal_declare/2` returns `created`, no record exists for the name, so a
 name is an orphan. Before `ra:start_cluster/3`, the declare reads the UID registered for the name on
 each member node and deletes those members by UID. Otherwise `ra:start_cluster/3` would replace a
 stopped one and leave its data directory behind. On `members_exist`, which a member started in the
-meantime can still cause, the declare reads the UIDs of the clashing members, deletes them by UID and
-retries once. If the
+meantime can still cause, the declare deletes the clashing members by the UIDs Ra returns and retries
+once. If the
 declare fails for another reason, it deletes the members it tried to start, by UID, before removing
 the record.
 
