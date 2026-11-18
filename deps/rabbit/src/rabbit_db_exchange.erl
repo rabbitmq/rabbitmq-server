@@ -55,6 +55,9 @@
 
 -define(KHEPRI_PROJECTION, rabbit_khepri_exchange).
 
+%% Nodes without the fix for #18393 can store `undefined' as the record.
+-define(UNDEFINED_RECORD_COND, #if_data_matches{pattern = undefined}).
+
 %% -------------------------------------------------------------------
 %% get_all().
 %% -------------------------------------------------------------------
@@ -294,6 +297,14 @@ create_or_get(#exchange{name = XName} = X) ->
     case rabbit_khepri:put(Path1, X, PutOptions) of
         ok ->
             {new, X};
+        {error, {khepri, mismatching_node,
+                 #{node_props := #{data := undefined}}}} ->
+            UndefinedPath = khepri_path:combine_with_conditions(
+                              Path0, [?UNDEFINED_RECORD_COND]),
+            case rabbit_khepri:delete(UndefinedPath) of
+                ok               -> create_or_get(X);
+                {error, _} = Err -> Err
+            end;
         {error, {khepri, mismatching_node, #{node_props := #{data := ExistingX}}}} ->
             {existing, ExistingX};
         {error, timeout} = Err ->
@@ -557,10 +568,13 @@ recover(VHost) ->
     %% Any other request stays with the default timeout, currently 30s.
     Path = khepri_exchange_path(VHost, #if_has_data{}),
     Exchanges0 = rabbit_db:list_in_khepri(Path, #{timeout => infinity}),
-    Exchanges = [rabbit_exchange_decorator:set(X) || X <- Exchanges0],
+    Exchanges = [rabbit_exchange_decorator:set(X)
+                 || #exchange{} = X <- Exchanges0],
 
+    UndefinedPath = khepri_exchange_path(VHost, ?UNDEFINED_RECORD_COND),
     rabbit_khepri:transaction(
       fun() ->
+              ok = khepri_tx:delete_many(UndefinedPath),
               [_ = set_in_khepri_tx(X) || X <- Exchanges]
       end, rw, #{timeout => infinity}),
     Exchanges.
