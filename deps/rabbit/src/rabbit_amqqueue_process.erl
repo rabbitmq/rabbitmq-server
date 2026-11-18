@@ -399,7 +399,7 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                 %% won't try to route to a process that already exited, since
                 %% `noproc` from a monitor cannot know if the queue was really
                 %% deleted.
-                %% If that fails, fall back to retrying using the default worker pool.
+                %% If that times out, fall back to retrying using the default worker pool.
                 %%
                 %% No processes are waiting for this queue process to exit. We
                 %% can handle the deletion of the queue record differently: if
@@ -426,7 +426,7 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                 case try_internal_delete(Q, ActingUser, Reason0) of
                     ok ->
                         ok;
-                    error ->
+                    {error, timeout} ->
                         worker_pool:submit_async(
                           fun() ->
                                   _ = infinite_internal_delete(Q, ActingUser, Reason0)
@@ -437,13 +437,19 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
         BQS1
     end.
 
+%% An exception can be raised after the record deletion has been committed.
+%% It is not retried, because a retry could delete a queue re-declared under
+%% the same name.
 try_internal_delete(Q, ActingUser, Reason) ->
-    try rabbit_amqqueue:internal_delete(
-          Q, ActingUser, Reason, #{timeout => ?RECORD_DELETE_TIMEOUT}) of
-        ok -> ok;
-        {error, _} -> error
+    try
+        rabbit_amqqueue:internal_delete(
+          Q, ActingUser, Reason, #{timeout => ?RECORD_DELETE_TIMEOUT})
     catch
-        _:_ -> error
+        Class:Error:Stacktrace ->
+            ?LOG_ERROR("Failed to delete the record of ~ts: ~tp:~tP~n~tP",
+                       [rabbit_misc:rs(amqqueue:get_name(Q)), Class,
+                        Error, ?FORMAT_DEPTH_LIMIT, Stacktrace, 30]),
+            ok
     end.
 
 infinite_internal_delete(Q, ActingUser, Reason) ->

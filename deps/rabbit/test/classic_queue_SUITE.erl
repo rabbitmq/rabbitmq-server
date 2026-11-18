@@ -228,11 +228,22 @@ exclusive_queue_record_deleted_before_process_exits(Config, CloseFun) ->
                                                         exclusive = true})),
     QPid = get_queue_pid(Config, QName),
     MRef = erlang:monitor(process, QPid),
-    CloseFun(Conn),
-    receive {'DOWN', MRef, process, QPid, _} -> ok
-    after 10_000 -> ct:fail("queue process did not exit")
-    end,
-    ?assertEqual({error, not_found}, lookup_queue(Config, QName)).
+    %% Suspended workers cannot delete the record asynchronously.
+    Workers = worker_pool_workers(Config),
+    [ok = rpc(Config, sys, suspend, [W]) || W <- Workers],
+    try
+        CloseFun(Conn),
+        receive {'DOWN', MRef, process, QPid, _} -> ok
+        after 10_000 -> ct:fail("queue process did not exit")
+        end,
+        ?assertEqual({error, not_found}, lookup_queue(Config, QName))
+    after
+        [ok = rpc(Config, sys, resume, [W]) || W <- Workers]
+    end.
+
+worker_pool_workers(Config) ->
+    Children = rpc(Config, supervisor, which_children, [worker_pool_sup]),
+    [Pid || {_, Pid, worker, [worker_pool_worker]} <- Children].
 
 flow_control(Config, FlowEnabled, VerifyFun) ->
     OrigCredit = set_default_credit(Config, {2, 1}),
