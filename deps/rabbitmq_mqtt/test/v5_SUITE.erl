@@ -997,11 +997,12 @@ subscription_option_retain_handling(Config) ->
     assert_nothing_received(),
 
     {ok, _, [0, 0, 0]} = emqtt:subscribe(C1, [{<<"t/1">>, [{rh, 0}, {qos, 0}]},
-                                              %% That specific subscription does not exist.
+                                              %% Subscription exists with other options [MQTT-3.8.4-3].
                                               {<<"t/2">>, [{rh, 1}, {qos, 0}]},
                                               {<<"t/3">>, [{rh, 2}, {qos, 0}]}]),
     ok = expect_publishes(C1, <<"t/1">>, [<<"m1">>]),
-    ok = expect_publishes(C1, <<"t/2">>, [<<"m2">>]),
+    assert_nothing_received(),
+    {ok, _, [0]} = emqtt:subscribe(C1, [{<<"t/2">>, [{rh, 1}, {qos, 0}, {rap, true}]}]),
     assert_nothing_received(),
 
     ok = emqtt:disconnect(C1),
