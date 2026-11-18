@@ -11,7 +11,9 @@ all() ->
      filter_nonvoters,
      filter_quorum_critical_accounts_nonvoters,
      ra_machine_conf_delivery_limit,
-     periodic_membership_reconciliation_target_group_size
+     periodic_membership_reconciliation_target_group_size,
+     leader_health_check_caps_time_per_queue,
+     leader_health_check_reports_outstanding_queues_on_timeout
     ].
 
 ra_machine_conf_delivery_limit(_Config) ->
@@ -133,6 +135,41 @@ periodic_membership_reconciliation_target_group_size(_Config) ->
        3, rabbit_quorum_queue_periodic_membership_reconciliation:get_target_size(
             Q, undefined)),
     ok.
+
+leader_health_check_caps_time_per_queue(_Config) ->
+    Pids = start_qprocs([qq_hc_member_1, qq_hc_member_2, qq_hc_member_3]),
+    Members = [{N, node()} || N <- [qq_hc_member_1, qq_hc_member_2, qq_hc_member_3]],
+    QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+    Ref = make_ref(),
+    {Time, ok} = timer:tc(rabbit_quorum_queue, run_leader_health_check,
+                          [Members, QName, Ref, self(), 200], millisecond),
+    ?assert(Time < 1000),
+    receive
+        Msg -> ?assertEqual({error, Ref, QName}, Msg)
+    after 0 ->
+        ct:fail(no_result)
+    end,
+    stop_qprocs(Pids),
+    ok.
+
+leader_health_check_reports_outstanding_queues_on_timeout(_Config) ->
+    ok = meck:new(rabbit_queue_type, [passthrough]),
+    ok = meck:expect(rabbit_queue_type, discover,
+                     fun(rabbit_quorum_queue) -> rabbit_quorum_queue end),
+    try
+        [Q1, Q2, Q3] = [rabbit_misc:r(<<"/">>, queue, N)
+                        || N <- [<<"q1">>, <<"q2">>, <<"q3">>]],
+        Ref = make_ref(),
+        self() ! {ok, Ref, Q1},
+        self() ! {ok, make_ref(), Q2},
+        self() ! {error, Ref, Q3},
+        Pending = maps:from_keys([Q1, Q2, Q3], true),
+        Result = rabbit_quorum_queue:wait_for_leader_health_checks(Ref, Pending, 100),
+        ?assertEqual([<<"queue 'q2' in vhost '/'">>, <<"queue 'q3' in vhost '/'">>],
+                     lists:sort([maps:get(<<"readable_name">>, R) || R <- Result]))
+    after
+        meck:unload(rabbit_queue_type)
+    end.
 
 make_ra_machine_conf(Q0, Arg, Pol, OpPol) ->
     Q1 = amqqueue:set_arguments(Q0, [{<<"x-delivery-limit">>, long, Arg}]),
