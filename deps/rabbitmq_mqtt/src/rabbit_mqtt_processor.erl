@@ -1458,7 +1458,12 @@ create_queue(Qos, State = #state{cfg = #cfg{session_expiry_interval_secs = Sessi
     Owner = queue_owner(SessionExpiry),
     Args = queue_args(Qos, SessionExpiry),
     Type = queue_type(Qos, SessionExpiry, Args),
-    create_queue(Qos, Owner, Args, Type, State).
+    case create_queue(Qos, Owner, Args, Type, State) of
+        {error, {existing, Q}} ->
+            {ok, Q};
+        Result ->
+            Result
+    end.
 
 create_queue(QNamePart, QOwner, QArgs, QType,
              #state{cfg = #cfg{
@@ -1507,6 +1512,8 @@ create_queue(QNamePart, QOwner, QArgs, QType,
                 {error, queue_limit_exceeded};
             {existing, Q} when ?amqqueue_exclusive_owner_is_pid(Q) ->
                 {error, {resource_locked, Q}};
+            {existing, Q} when ?amqqueue_exclusive_owner_is(Q, none) ->
+                {error, {existing, Q}};
             Other ->
                 ?LOG_ERROR("Failed to declare ~s: ~p",
                            [rabbit_misc:rs(QName), Other]),
