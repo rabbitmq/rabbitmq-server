@@ -1447,6 +1447,8 @@ replace_queue(Q, QoS, State) ->
         ok ->
             case create_queue(QoS, State) of
                 {error, {resource_locked, _}} ->
+                    ?LOG_WARNING("MQTT could not declare ~ts due to a concurrent declaration by another connection",
+                                 [rabbit_misc:rs(QName)]),
                     {error, queue_declare};
                 Result ->
                     Result
@@ -1974,6 +1976,10 @@ maybe_send_will(
                 {error, access_refused = Reason} ->
                     log_delayed_will_failure(Topic, ClientId, Reason)
             end;
+        {error, {_, Q}} when ?is_amqqueue(Q) ->
+            ?LOG_ERROR("The delayed Will Message of MQTT client ID ~ts will not be sent "
+                       "because another connection with the same client ID already uses ~ts",
+                       [ClientId, rabbit_misc:rs(amqqueue:get_name(Q))]);
         {error, Reason} ->
             log_delayed_will_failure(Topic, ClientId, Reason)
     end;
