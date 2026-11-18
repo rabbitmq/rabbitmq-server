@@ -2790,18 +2790,25 @@ run_leader_health_check(Members, QResource, HealthCheckRef, From) ->
 run_leader_health_check(Members, QResource, HealthCheckRef, From, Timeout) ->
     %% Followers redirect the query to their known leader, so only a leader replies.
     %% Members are tried one at a time, each with the full timeout.
+    Self = self(),
+    ReplyRef = make_ref(),
     {Pid, MRef} = spawn_monitor(
                     fun() ->
-                            exit({result, ra:members(Members, ?LEADER_HEALTH_CHECK_TIMEOUT)})
+                            Self ! {ReplyRef, ra:members(Members, ?LEADER_HEALTH_CHECK_TIMEOUT)}
                     end),
     Tag = receive
-              {'DOWN', MRef, process, Pid, {result, {ok, _, _}}} ->
-                  ok;
+              {ReplyRef, Reply} ->
+                  erlang:demonitor(MRef, [flush]),
+                  case Reply of
+                      {ok, _, _} -> ok;
+                      _ -> error
+                  end;
               {'DOWN', MRef, process, Pid, _} ->
                   error
           after Timeout ->
-                  erlang:demonitor(MRef, [flush]),
                   exit(Pid, kill),
+                  receive {'DOWN', MRef, process, Pid, _} -> ok end,
+                  receive {ReplyRef, _} -> ok after 0 -> ok end,
                   error
           end,
     From ! {Tag, HealthCheckRef, QResource},
