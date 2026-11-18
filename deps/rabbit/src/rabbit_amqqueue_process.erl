@@ -399,7 +399,7 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                 %% won't try to route to a process that already exited, since
                 %% `noproc` from a monitor cannot know if the queue was really
                 %% deleted.
-                %% If that fails, fall back to the following.
+                %% If that fails, fall back to retrying using the default worker pool.
                 %%
                 %% No processes are waiting for this queue process to exit. We
                 %% can handle the deletion of the queue record differently: if
