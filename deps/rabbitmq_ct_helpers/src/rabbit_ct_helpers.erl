@@ -610,7 +610,10 @@ ensure_ssl_certs(Config) ->
               Config1,
               [{rmq_certsdir, CertsDir},
                {rmq_certspwd, CertsPwd}]);
-        _ ->
+        Error ->
+            ct:pal("Failed to create SSL certificates: ~tp", [Error]),
+            Retry = make(Config, CertsMakeDir, ["V=2" | Cmd]),
+            ct:pal("Verbose retry of SSL certificate creation: ~tp", [Retry]),
             {skip, "Failed to create SSL certificates"}
     end.
 
