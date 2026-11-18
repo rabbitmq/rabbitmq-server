@@ -2090,15 +2090,16 @@ subscribe_replaces_queue_declared_by_old_connection(Config) ->
     {new, _} = rpc(Config, rabbit_queue_type, declare, [Q, get_node_config(Config, 0, nodename)]),
     rabbit_ct_broker_helpers:setup_meck(Config),
     ok = rpc(Config, meck, new, [rabbit_amqqueue, [no_link, passthrough]]),
-    ok = rpc(Config, meck, expect, [rabbit_amqqueue, lookup, [{[QName], {error, not_found}},
-                                                               {['_'], meck:passthrough()}]]),
-    C = connect(ClientId, Config),
-    unlink(C),
-    try
-        ?assertMatch({ok, _, [0]}, emqtt:subscribe(C, Topic, qos0))
-    after
-        ok = rpc(Config, meck, unload, [rabbit_amqqueue])
-    end,
+    C = try
+            ok = rpc(Config, meck, expect, [rabbit_amqqueue, lookup, [{[QName], {error, not_found}},
+                                                                       {['_'], meck:passthrough()}]]),
+            C0 = connect(ClientId, Config),
+            unlink(C0),
+            ?assertMatch({ok, _, [0]}, emqtt:subscribe(C0, Topic, qos0)),
+            C0
+        after
+            ok = rpc(Config, meck, unload, [rabbit_amqqueue])
+        end,
     {ok, _} = emqtt:publish(C, Topic, <<"m">>, qos1),
     ok = expect_publishes(C, Topic, [<<"m">>]),
     ok = emqtt:disconnect(C),
