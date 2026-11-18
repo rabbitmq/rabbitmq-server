@@ -156,7 +156,7 @@ get(Name) ->
 get_in_khepri_tx(Name) ->
     Path = khepri_exchange_path(Name),
     case khepri_tx:get(Path) of
-        {ok, X} -> [X];
+        {ok, #exchange{} = X} -> [X];
         _ -> []
     end.
 
