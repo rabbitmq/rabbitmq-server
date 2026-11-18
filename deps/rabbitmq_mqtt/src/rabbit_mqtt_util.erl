@@ -124,11 +124,15 @@ cached(CacheName, Fun, Arg) ->
 %% #    #    match multiple topic levels
 %% .    /    topic level separator
 
+to_amqp(T) when is_binary(T) ->
+    << <<(case C of $/ -> $.; $+ -> $*; _ -> C end)>> || <<C>> <= T >>;
 to_amqp(T0) ->
     T1 = string:replace(T0, "/", ".", all),
     T2 = string:replace(T1, "+", "*", all),
     erlang:iolist_to_binary(T2).
 
+to_mqtt(T) when is_binary(T) ->
+    << <<(case C of $* -> $+; $. -> $/; _ -> C end)>> || <<C>> <= T >>;
 to_mqtt(T0) ->
     T1 = string:replace(T0, "*", "+", all),
     T2 = string:replace(T1, ".", "/", all),
