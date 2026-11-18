@@ -136,28 +136,14 @@ create(#binding{source = SrcName,
                     MaybeSerial = rabbit_exchange:serialise_events(Src),
                     Serial = rabbit_khepri:transaction(
                                fun() ->
-                                       case khepri_tx:get(RoutePath) of
-                                           {ok, Set} ->
-                                               case sets:is_element(Binding, Set) of
-                                                   true ->
-                                                       already_exists;
-                                                   false ->
-                                                       ok = khepri_tx:put(
-                                                              RoutePath,
-                                                              sets:add_element(Binding, Set),
-                                                              PutOptions),
-                                                       ok = maybe_tie_source_in_khepri_tx(
-                                                              FeatureFlag, Src),
-                                                       serial_in_khepri(MaybeSerial, Src)
-                                               end;
-                                           _ ->
-                                               ok = khepri_tx:put(
-                                                      RoutePath,
-                                                      sets:add_element(Binding, sets:new([{version, 2}])),
-                                                      PutOptions),
-                                               ok = maybe_tie_source_in_khepri_tx(
-                                                      FeatureFlag, Src),
-                                               serial_in_khepri(MaybeSerial, Src)
+                                       case check_in_khepri_tx(
+                                              FeatureFlag, SrcName, DstName) of
+                                           ok ->
+                                               create_in_khepri_tx(
+                                                 Binding, RoutePath, PutOptions,
+                                                 FeatureFlag, Src, MaybeSerial);
+                                           {error, _} = Err ->
+                                               Err
                                        end
                                end, rw),
                     case Serial of
@@ -173,6 +159,42 @@ create(#binding{source = SrcName,
             end;
         Errs ->
             not_found_errs_in_khepri(not_found(Errs, SrcName, DstName))
+    end.
+
+%% The exchange projection can keep an auto-deleted exchange while the
+%% feature flag is disabled, so the check only applies once it is enabled.
+check_in_khepri_tx(true, SrcName, DstName) ->
+    case {lookup_resource_in_khepri_tx(SrcName),
+          lookup_resource_in_khepri_tx(DstName)} of
+        {[_], [_]} ->
+            ok;
+        Errs ->
+            not_found_errs_in_khepri(not_found(Errs, SrcName, DstName))
+    end;
+check_in_khepri_tx(false, _SrcName, _DstName) ->
+    ok.
+
+create_in_khepri_tx(Binding, RoutePath, PutOptions, FeatureFlag, Src,
+                    MaybeSerial) ->
+    case khepri_tx:get(RoutePath) of
+        {ok, Set} ->
+            case sets:is_element(Binding, Set) of
+                true ->
+                    already_exists;
+                false ->
+                    ok = khepri_tx:put(
+                           RoutePath, sets:add_element(Binding, Set),
+                           PutOptions),
+                    ok = maybe_tie_source_in_khepri_tx(FeatureFlag, Src),
+                    serial_in_khepri(MaybeSerial, Src)
+            end;
+        _ ->
+            ok = khepri_tx:put(
+                   RoutePath,
+                   sets:add_element(Binding, sets:new([{version, 2}])),
+                   PutOptions),
+            ok = maybe_tie_source_in_khepri_tx(FeatureFlag, Src),
+            serial_in_khepri(MaybeSerial, Src)
     end.
 
 %% An auto-delete exchange skipped by the feature flag migration for

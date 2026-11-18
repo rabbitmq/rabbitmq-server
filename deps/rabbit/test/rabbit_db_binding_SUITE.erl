@@ -21,6 +21,10 @@
          end_per_testcase/2,
 
          create/1, create1/1,
+         create_source_deleted/1, create_source_deleted1/1,
+         create_source_deleted_flag_disabled/1,
+         create_source_deleted_flag_disabled1/1,
+         create_destination_deleted/1, create_destination_deleted1/1,
          exists/1, exists1/1,
          delete_v1/1, delete_v2/1, delete1/2,
          auto_delete_v1/1, auto_delete_v2/1, auto_delete1/2,
@@ -72,7 +76,8 @@ groups() ->
     [
      {all_tests, [], all_tests()},
      {feature_flags, [],
-      [delete_v1,
+      [create_source_deleted_flag_disabled,
+       delete_v1,
        delete_v2,
        auto_delete_v1,
        auto_delete_v2,
@@ -94,6 +99,8 @@ groups() ->
 all_tests() ->
     [
      create,
+     create_source_deleted,
+     create_destination_deleted,
      exists,
      get_all,
      get_all_by_vhost,
@@ -178,6 +185,86 @@ create1(_Config) ->
     ?assertMatch({error, too_bad},
                  rabbit_db_binding:create(Binding, fun(_, _) -> {error, too_bad} end)),
     ?assertMatch(ok, rabbit_db_binding:create(Binding, fun(_, _) -> ok end)),
+    passed.
+
+create_source_deleted(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, create_source_deleted1, [Config]).
+
+create_source_deleted1(_Config) ->
+    XName = rabbit_misc:r(?VHOST, exchange, <<"auto-delete-x">>),
+    Exchange = #exchange{name = XName, type = fanout,
+                         durable = false, auto_delete = true,
+                         decorators = {[], []}},
+    ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(Exchange)),
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
+    Queue = amqqueue:new(QName, none, false, true, none, [], ?VHOST, #{}),
+    ?assertMatch({created, Queue}, rabbit_db_queue:create_or_get(Queue)),
+    Binding = #binding{source = XName, key = <<>>,
+                       destination = QName, args = #{}},
+    %% The source exchange is auto-deleted by another client after it was
+    %% looked up but before the binding is written.
+    ChecksFun = fun(_, _) ->
+                        {deleted, _, _, _} = rabbit_db_exchange:delete(
+                                               XName, false),
+                        ok
+                end,
+    ?assertEqual({error, {resources_missing, [{not_found, XName}]}},
+                 rabbit_db_binding:create(Binding, ChecksFun)),
+    XPath = rabbit_db_exchange:khepri_exchange_path(XName),
+    ?assertNot(rabbit_khepri:exists(XPath)),
+    ?assertEqual({new, Exchange}, rabbit_db_exchange:create_or_get(Exchange)),
+    _ = rabbit_db_queue:delete(QName, false),
+    passed.
+
+create_source_deleted_flag_disabled(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, create_source_deleted_flag_disabled1,
+               [Config]).
+
+create_source_deleted_flag_disabled1(_Config) ->
+    ?assertNot(
+       rabbit_feature_flags:is_enabled(
+         tie_binding_to_dest_with_keep_while_cond)),
+    XName = rabbit_misc:r(?VHOST, exchange, <<"auto-delete-x">>),
+    Exchange = #exchange{name = XName, type = fanout,
+                         durable = true, auto_delete = true,
+                         decorators = {[], []}},
+    ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(Exchange)),
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
+    Queue = amqqueue:new(QName, none, true, false, none, [], ?VHOST, #{}),
+    ?assertMatch({created, Queue}, rabbit_db_queue:create_or_get(Queue)),
+    Binding = #binding{source = XName, key = <<>>,
+                       destination = QName, args = #{}},
+    ChecksFun = fun(_, _) ->
+                        {deleted, _, _, _} = rabbit_db_exchange:delete(
+                                               XName, false),
+                        ok
+                end,
+    ?assertEqual(ok, rabbit_db_binding:create(Binding, ChecksFun)),
+    passed.
+
+create_destination_deleted(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, create_destination_deleted1, [Config]).
+
+create_destination_deleted1(_Config) ->
+    XName = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
+    Exchange = #exchange{name = XName, type = fanout, durable = true,
+                         decorators = {[], []}},
+    ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(Exchange)),
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
+    Queue = amqqueue:new(QName, none, false, true, none, [], ?VHOST, #{}),
+    ?assertMatch({created, Queue}, rabbit_db_queue:create_or_get(Queue)),
+    Binding = #binding{source = XName, key = <<>>,
+                       destination = QName, args = #{}},
+    ChecksFun = fun(_, _) ->
+                        _ = rabbit_db_queue:delete(QName, false),
+                        ok
+                end,
+    ?assertEqual({error, {resources_missing, [{not_found, QName}]}},
+                 rabbit_db_binding:create(Binding, ChecksFun)),
+    ?assertEqual([], rabbit_db_binding:get_all(?VHOST)),
     passed.
 
 exists(Config) ->
