@@ -26,6 +26,7 @@ groups() ->
 all_tests() ->
     [
      create_or_get,
+     create_or_get_undefined_record,
      get,
      get_many,
      get_all,
@@ -45,7 +46,8 @@ all_tests() ->
      delete_all,
      exists,
      match,
-     recover
+     recover,
+     recover_undefined_record
     ].
 
 %% -------------------------------------------------------------------
@@ -85,6 +87,20 @@ end_per_testcase(Testcase, Config) ->
 %% ---------------------------------------------------------------------------
 %% Test Cases
 %% ---------------------------------------------------------------------------
+
+create_or_get_undefined_record(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, create_or_get_undefined_record1, [Config]).
+
+create_or_get_undefined_record1(_Config) ->
+    XName = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
+    Exchange = rabbit_exchange_decorator:set(
+                 #exchange{name = XName, auto_delete = true}),
+    ok = rabbit_khepri:put(
+           rabbit_db_exchange:khepri_exchange_path(XName), undefined),
+    ?assertEqual({new, Exchange}, rabbit_db_exchange:create_or_get(Exchange)),
+    ?assertEqual({ok, Exchange}, rabbit_db_exchange:get(XName)),
+    passed.
 
 create_or_get(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, create_or_get1, [Config]).
@@ -391,6 +407,21 @@ recover1(_Config) ->
     ?assertMatch([Exchange], rabbit_db_exchange:recover(?VHOST)),
     ?assertMatch({ok, #exchange{name = XName}}, rabbit_db_exchange:get(XName)),
     ?assertEqual([Exchange], rabbit_db_exchange:get_all_durable()),
+    passed.
+
+recover_undefined_record(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, recover_undefined_record1, [Config]).
+
+recover_undefined_record1(_Config) ->
+    XName = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
+    Exchange = rabbit_exchange_decorator:set(#exchange{name = XName, durable = true}),
+    ?assertEqual(ok, rabbit_db_exchange:set([Exchange])),
+    BadXPath = rabbit_db_exchange:khepri_exchange_path(?VHOST, <<"bad">>),
+    ok = rabbit_khepri:put(BadXPath, undefined),
+    ?assertMatch([Exchange], rabbit_db_exchange:recover(?VHOST)),
+    ?assertNot(rabbit_khepri:exists(BadXPath)),
+    ?assertEqual([Exchange], rabbit_db_exchange:get_all(?VHOST)),
     passed.
 
 create(Exchanges) ->
