@@ -33,6 +33,7 @@
          set/1,
          delete/2,
          delete_if/3,
+         delete_if/4,
          update/2,
          update/3,
          update_decorators/2,
@@ -314,13 +315,25 @@ delete(QueueName, OnlyDurable) ->
              rabbit_khepri:timeout_error().
 
 delete_if(QueueName, Conditions, OnlyDurable) ->
+    delete_if(QueueName, Conditions, OnlyDurable, #{}).
+
+-spec delete_if(QName, Conditions, OnlyDurable, Options) -> Ret when
+      QName :: rabbit_amqqueue:name(),
+      Conditions :: [khepri_condition:condition()],
+      OnlyDurable :: boolean(),
+      Options :: #{timeout => timeout()},
+      Ret :: ok |
+             Deletions :: rabbit_binding:deletions() |
+             rabbit_khepri:timeout_error().
+
+delete_if(QueueName, Conditions, OnlyDurable, Options) ->
     Path = khepri_queue_path(QueueName),
     Pattern = khepri_path:combine_with_conditions(Path, Conditions),
     FeatureFlag = rabbit_feature_flags:is_enabled(
                     tie_binding_to_dest_with_keep_while_cond),
     case FeatureFlag of
         true ->
-            case rabbit_khepri:adv_delete(Pattern) of
+            case rabbit_khepri:adv_delete(Pattern, Options) of
                 {ok, #{Path := #{data := _}} = Deleted} ->
                     rabbit_db_binding:node_props_to_deletions(
                       Deleted, OnlyDurable);
@@ -355,7 +368,7 @@ delete_if(QueueName, Conditions, OnlyDurable) ->
                           {ok, _} ->
                               ok
                       end
-              end, rw)
+              end, rw, Options)
     end.
 
 %% -------------------------------------------------------------------
