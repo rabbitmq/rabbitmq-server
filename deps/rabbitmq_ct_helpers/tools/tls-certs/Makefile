@@ -68,3 +68,5 @@ clean:
 	rm -rf $(DIR)/testca
 	rm -rf $(DIR)/server
 	rm -rf $(DIR)/client
+
+.NOTPARALLEL:
