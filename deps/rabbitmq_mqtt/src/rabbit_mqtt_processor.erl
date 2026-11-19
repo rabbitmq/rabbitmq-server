@@ -1001,7 +1001,7 @@ recreate_subscription(TopicFilter, OldBindingArgs, NewBindingArgs, Qos, State) -
 
 -spec hand_off_to_retainer(pid(), topic(), mqtt_msg()) -> ok.
 hand_off_to_retainer(RetainerPid, Topic0, Msg = #mqtt_msg{payload = Payload}) ->
-    Topic = amqp_to_mqtt(Topic0),
+    Topic = subscription_key(Topic0),
     case Payload of
         <<>> ->
             rabbit_mqtt_retainer:clear(RetainerPid, Topic);
@@ -1016,10 +1016,9 @@ send_retained_messages(Subscriptions, State) ->
                 end, State, Subscriptions).
 
 -spec send_retained_message(topic_filter(), qos(), state()) -> state().
-send_retained_message(TopicFilter0, SubscribeQos,
+send_retained_message(TopicFilter, SubscribeQos,
                       State0 = #state{packet_id = PacketId0,
                                       cfg = #cfg{retainer_pid = RPid}}) ->
-    TopicFilter = amqp_to_mqtt(TopicFilter0),
     case rabbit_mqtt_retainer:fetch(RPid, TopicFilter) of
         undefined ->
             State0;
@@ -1029,9 +1028,9 @@ send_retained_message(TopicFilter0, SubscribeQos,
                   props = Props0} ->
             Qos = effective_qos(MsgQos, SubscribeQos),
             %% Wildcards are currently not supported when fetching retained
-            %% messages. Therefore, TopicFilter must must be a topic name.
+            %% messages. Therefore, TopicFilter must be a topic name.
             Props1 = maybe_add_subscription_ids(
-                       [TopicFilter0], maps:remove('Will-Delay-Interval', Props0), State0),
+                       [TopicFilter], maps:remove('Will-Delay-Interval', Props0), State0),
             {Topic, Props, State1} = process_topic_alias_outbound(TopicFilter, Props1, State0),
             {PacketId, State} = case Qos of
                                     ?QOS_0 ->

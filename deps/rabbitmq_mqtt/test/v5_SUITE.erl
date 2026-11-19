@@ -1144,8 +1144,10 @@ subscription_identifier_retained_message_sparkplug(Config) ->
         C = connect(?FUNCTION_NAME, Config),
         {ok, _, [0]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 1}, [{Topic, []}]),
         receive {publish, #{client_pid := C,
+                            topic := ReceivedTopic,
                             payload := <<"m1">>,
                             properties := Props}} ->
+                    ?assertEqual(Topic, ReceivedTopic),
                     ?assertEqual(#{'Subscription-Identifier' => 1}, Props)
         after ?TIMEOUT -> ct:fail("did not receive m1")
         end,
