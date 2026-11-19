@@ -201,6 +201,7 @@ with_connection(Config, Fun) ->
 
 with_connection(Config, ConnectHeaders, InitialData, Fun) ->
     Before = rpc(Config, ets, tab2list, [connection_created]),
+    Alertees = handler_pids(Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_stomp),
     {ok, Conn} = gun:open("localhost", Port, #{protocols => [http]}),
     try
@@ -214,8 +215,8 @@ with_connection(Config, ConnectHeaders, InitialData, Fun) ->
         rabbit_ct_helpers:await_condition(fun() ->
             length(rpc(Config, ets, tab2list, [connection_created]) -- Before) =:= 1
         end, 5000),
-        [{Pid, _}] = rpc(Config, ets, tab2list, [connection_created]) -- Before,
-        Fun(Conn, Ref, Pid)
+        [{ConnPid, _}] = rpc(Config, ets, tab2list, [connection_created]) -- Before,
+        Fun(Conn, Ref, {handler_pid(Config, Alertees), ConnPid})
     after
         gun:close(Conn)
     end.
@@ -231,11 +232,19 @@ await_receipt(Conn, Ref, Id) ->
     {<<"RECEIPT">>, Headers, <<>>} = recv(Conn, Ref),
     ?assertEqual(Id, proplists:get_value(<<"receipt-id">>, Headers)).
 
-await_state(Config, Pid, Expected) ->
+handler_pids(Config) ->
+    [Alertees] = [A || {rabbit_alarm, _, {alarms, A, _}} <- rpc(Config, sys, get_state, [rabbit_alarm])],
+    [Pid || {Pid, {rabbit_web_stomp_handler, _, _}} <- dict:to_list(Alertees)].
+
+handler_pid(Config, Before) ->
+    [Pid] = handler_pids(Config) -- Before,
+    Pid.
+
+await_state(Config, {HandlerPid, ConnPid}, Expected) ->
     rabbit_ct_helpers:await_condition(fun() ->
-        rpc(Config, erlang, send, [Pid, emit_stats]),
-        case rpc(Config, ets, lookup, [connection_metrics, Pid]) of
-            [{Pid, Infos}] -> proplists:get_value(state, Infos) =:= Expected;
+        rpc(Config, erlang, send, [HandlerPid, emit_stats]),
+        case rpc(Config, ets, lookup, [connection_metrics, ConnPid]) of
+            [{ConnPid, Infos}] -> proplists:get_value(state, Infos) =:= Expected;
             [] -> false
         end
     end, 5000).
