@@ -1077,7 +1077,10 @@ two_nodes_same_otp_version(Config0) ->
 
 %% Run the log on two Erlang nodes with different OTP versions.
 two_nodes_different_otp_version(_Config) ->
-    Node = 'rabbit_fifo_prop@localhost',
+    Node = case os:getenv("RABBIT_FIFO_PROP_NODE") of
+               false -> 'rabbit_fifo_prop@localhost';
+               NodeStr -> list_to_atom(NodeStr)
+           end,
     case net_adm:ping(Node) of
         pong ->
             OurOTP = otp_major(erlang:system_info(otp_release)),
@@ -1085,8 +1088,9 @@ two_nodes_different_otp_version(_Config) ->
             ct:pal("Our CT node runs OTP ~b, other node runs OTP ~b", [OurOTP, OtherOTP]),
             case {OurOTP =:= OtherOTP, straddles_atom_table_change(OurOTP, OtherOTP)} of
                 {true, _} ->
-                    {skip, "expected CT node and 'rabbit_fifo_prop@localhost' "
-                            "to have different OTP versions"};
+                    {skip, rabbit_misc:format(
+                             "expected CT node and ~ts to have different "
+                             "OTP versions", [Node])};
                 {false, true} ->
                     %% Compiling a BEAM file on OTP 28 (or later) and loading
                     %% it on an OTP 27 (or earlier) node causes a

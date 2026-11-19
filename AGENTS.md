@@ -22,6 +22,10 @@ The GNU Make 4-based build system is described in `CONTRIBUTING.md`.
 Consult `CONTRIBUTING.md` before running any tests, in particular to learn how to run
 a specific suite, group of cases or a single test case.
 
+For new test cases, prefer unit tests or integration tests that exercise real
+behaviour end to end. Use `meck` or other mocking tools only when neither
+approach can easily cover the behaviour.
+
 When looking for GNU Make 4, consult `gmake` as well as `make`.
 
 ### Dialyzer and xref
@@ -392,6 +396,8 @@ For GitHub Security Advisories, make sure to:
    * Define "Affected Versions" explicitly per minor release line using version ranges (e.g. `>= 4.2.0`, `< 4.2.10`)
    * For the Patch version, provide the exact release containing the fix (e.g. `4.2.6`)
    * If a fix is included in the first release of a new minor line (e.g. `4.3.0`), omit that release line entirely as no vulnerable `4.3.x` releases exist
+   * If a minor release line is out of **commercial** support  - e.g. `v4.0.x`, see https://www.rabbitmq.com/release-information for up to date information -
+     omit that release line entirely even if it is affected by the vulnerability.
 
 ### Use CVSSv4 Scores
 

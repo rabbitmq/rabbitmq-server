@@ -74,7 +74,7 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
-         emit_consumers_local/3, internal_delete/3]).
+         emit_consumers_local/3, internal_delete/3, internal_delete/4]).
 
 %% Deprecated feature callback.
 -export([are_transient_nonexcl_used/1]).
@@ -188,7 +188,7 @@ find_local_durable_queues(VHostName) ->
               boolean(),
               boolean(),
               rabbit_framing:amqp_table(),
-              rabbit_types:'maybe'(pid()),
+              rabbit_types:option(pid()),
               rabbit_types:username()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
@@ -207,7 +207,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
               boolean(),
               boolean(),
               rabbit_framing:amqp_table(),
-              rabbit_types:'maybe'(pid()),
+              rabbit_types:option(pid()),
               rabbit_types:username(),
               node() | {'ignore_location', node()}) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
@@ -740,7 +740,7 @@ priv_absent(QueueName, QPid, _IsDurable, alive) ->
 
 -spec assert_equivalence
         (amqqueue:amqqueue(), boolean(), boolean(),
-         rabbit_framing:amqp_table(), rabbit_types:'maybe'(pid())) ->
+         rabbit_framing:amqp_table(), rabbit_types:option(pid())) ->
             'ok' | rabbit_types:channel_exit() | rabbit_types:connection_exit().
 
 assert_equivalence(Q, DurableDeclare, AutoDeleteDeclare, Args1, Owner) ->
@@ -1944,6 +1944,16 @@ internal_delete(Queue, ActingUser) ->
     internal_delete(Queue, ActingUser, normal).
 
 internal_delete(Queue, ActingUser, Reason) ->
+    internal_delete(Queue, ActingUser, Reason, #{}).
+
+-spec internal_delete(Queue, ActingUser, Reason, Options) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      ActingUser :: rabbit_types:username(),
+      Reason :: term(),
+      Options :: #{timeout => timeout()},
+      Ret :: ok | {error, timeout}.
+
+internal_delete(Queue, ActingUser, Reason, Options) ->
     QueueName = amqqueue:get_name(Queue),
     Conditions = case amqqueue:get_exclusive_owner(Queue) of
                      none ->
@@ -1964,7 +1974,7 @@ internal_delete(Queue, ActingUser, Reason) ->
                                     []
                             end,
     case rabbit_db_queue:delete_if(QueueName, Conditions ++ IncarnationConditions,
-                                  OnlyDurable) of
+                                  OnlyDurable, Options) of
         ok ->
             ok;
         {error, timeout} = Err ->

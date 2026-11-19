@@ -15,6 +15,7 @@
 
 -define(SYNC_INTERVAL,         200). %% milliseconds
 -define(UPDATE_RATES_INTERVAL, 5000).
+-define(RECORD_DELETE_TIMEOUT, 5000).
 -define(CONSUMER_BIAS_RATIO,   2.0). %% i.e. consume 100% faster
 
 -export([info_keys/0]).
@@ -394,6 +395,12 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                         end,
                 send_reply(ReplyTo, Reply);
             none ->
+                %% Try once to delete the record before exiting so that publishers
+                %% won't try to route to a process that already exited, since
+                %% `noproc` from a monitor cannot know if the queue was really
+                %% deleted.
+                %% If that times out, fall back to retrying using the default worker pool.
+                %%
                 %% No processes are waiting for this queue process to exit. We
                 %% can handle the deletion of the queue record differently: if
                 %% the deletion times out, we retry indefinitely.
@@ -416,13 +423,33 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                 %% separate process to let this queue process exits. This way,
                 %% connections will be notified that the queue process is
                 %% gone.
-                worker_pool:submit_async(
-                  fun() ->
-                          _ = infinite_internal_delete(Q, ActingUser, Reason0)
-                  end),
-                ok
+                case try_internal_delete(Q, ActingUser, Reason0) of
+                    ok ->
+                        ok;
+                    {error, timeout} ->
+                        worker_pool:submit_async(
+                          fun() ->
+                                  _ = infinite_internal_delete(Q, ActingUser, Reason0)
+                          end),
+                        ok
+                end
         end,
         BQS1
+    end.
+
+%% An exception can be raised after the record deletion has been committed.
+%% It is not retried, because a retry could delete a queue re-declared under
+%% the same name.
+try_internal_delete(Q, ActingUser, Reason) ->
+    try
+        rabbit_amqqueue:internal_delete(
+          Q, ActingUser, Reason, #{timeout => ?RECORD_DELETE_TIMEOUT})
+    catch
+        Class:Error:Stacktrace ->
+            ?LOG_ERROR("Failed to delete the record of ~ts: ~tp:~tP~n~tP",
+                       [rabbit_misc:rs(amqqueue:get_name(Q)), Class,
+                        Error, ?FORMAT_DEPTH_LIMIT, Stacktrace, 30]),
+            ok
     end.
 
 infinite_internal_delete(Q, ActingUser, Reason) ->
