@@ -164,6 +164,8 @@ groups() ->
                       {clustered_with_partitions, [],
                        [
                         partitioned_publisher,
+                        redeclare_after_partial_delete,
+                        declare_after_partial_delete_and_heal,
                         reconnect_consumer_and_publish,
                         reconnect_consumer_and_wait,
                         reconnect_consumer_and_wait_channel_down
@@ -371,6 +373,8 @@ end_per_group(_, Config) ->
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
+                                         Testcase == redeclare_after_partial_delete;
+                                         Testcase == declare_after_partial_delete_and_heal;
                                          Testcase == reconnect_consumer_and_publish;
                                          Testcase == reconnect_consumer_and_wait;
                                          Testcase == reconnect_consumer_and_wait_channel_down ->
@@ -418,7 +422,8 @@ init_per_testcase(Testcase, Config) ->
       rabbit_ct_broker_helpers:do_nodes_run_same_ra_machine_version(
         Config, khepri_machine)),
     NoDeletingState = (
-      lists:member(Testcase, deleting_state_tests()) andalso
+      lists:member(Testcase, [restart_after_queue_reincarnation
+                              | deleting_state_tests()]) andalso
       not rabbit_ct_broker_helpers:is_feature_flag_enabled(
             Config, quorum_queue_deleting_state)),
     case Testcase of
@@ -449,6 +454,8 @@ merge_app_env(Config) ->
       {ra, [{min_wal_roll_over_interval, 30000}]}).
 
 end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
+                                        Testcase == redeclare_after_partial_delete;
+                                        Testcase == declare_after_partial_delete_and_heal;
                                         Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
                                         Testcase == reconnect_consumer_and_wait_channel_down ->
@@ -4951,6 +4958,115 @@ partitioned_publisher(Config) ->
     wait_for_messages_ready(Nodes, RaName, 4),
     ok.
 
+redeclare_after_partial_delete(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        true ->
+            redeclare_after_partial_delete_(Config);
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"}
+    end.
+
+redeclare_after_partial_delete_(Config) ->
+    [Server1, Server2, Server3] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    RaName = ra_name(QQ),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    [publish(Ch, QQ, <<"old">>) || _ <- lists:seq(1, 3)],
+    true = amqp_channel:wait_for_confirms(Ch, 5),
+
+    partition(Config, Server3),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    {ok, Deleting} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    ?assertEqual(deleting, amqqueue:get_state(Deleting)),
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    {NewRaName, _} = amqqueue:get_pid(Q),
+    ?assertNotEqual(RaName, NewRaName),
+    publish(Ch, QQ, <<"new">>),
+    true = amqp_channel:wait_for_confirms(Ch, 5),
+
+    heal(Config, Server3),
+    ?assert(is_binary(rpc:call(Server3, ra_directory, uid_of,
+                               [quorum_queues, RaName]))),
+    timer:sleep(5000),
+    wait_for_messages_ready([Server1, Server2], NewRaName, 1),
+    ?assertEqual(3, num_ready_messages({RaName, Server3})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"new">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QQ, no_ack = true})),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QQ, no_ack = true})),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server3),
+    ?assertEqual(undefined, rpc:call(Server3, ra_directory, uid_of,
+                                     [quorum_queues, RaName])),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    ok.
+
+declare_after_partial_delete_and_heal(Config) ->
+    [Server1, _, Server3] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    RaName = ra_name(QQ),
+    publish(Ch, QQ, <<"old">>),
+    wait_for_messages_ready([Server1], RaName, 1),
+
+    partition(Config, Server3),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    heal(Config, Server3),
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    ?assertMatch({RaName, _}, amqqueue:get_pid(Q)),
+    #{nodes := UIds} = amqqueue:get_type_state(Q),
+    ?awaitMatch(UIds,
+                maps:from_list(
+                  [{S, rpc:call(S, ra_directory, uid_of, [quorum_queues, RaName])}
+                   || S <- Servers]),
+                ?DEFAULT_AWAIT),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QQ, no_ack = true})),
+    ok.
+
+num_ready_messages(ServerId) ->
+    case ra:member_overview(ServerId) of
+        {ok, #{machine := #{num_ready_messages := N}}, _} -> N;
+        _ -> undefined
+    end.
+
+partition(Config, Node) ->
+    Others = rabbit_ct_broker_helpers:get_node_configs(Config, nodename) -- [Node],
+    [rabbit_ct_broker_helpers:block_traffic_between(Node, N) || N <- Others],
+    [rabbit_ct_helpers:await_condition(
+       fun() -> not lists:member(Node, erpc:call(N, erlang, nodes, [])) end,
+       30000) || N <- Others],
+    ok.
+
+heal(Config, Node) ->
+    Others = rabbit_ct_broker_helpers:get_node_configs(Config, nodename) -- [Node],
+    [rabbit_ct_broker_helpers:allow_traffic_between(Node, N) || N <- Others],
+    [rabbit_ct_helpers:await_condition(
+       fun() ->
+               _ = erpc:call(N, net_adm, ping, [Node]),
+               lists:member(Node, erpc:call(N, erlang, nodes, []))
+       end, 30000) || N <- Others],
+    ok.
+
 reconnect_consumer_and_publish(Config) ->
     [Server | _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -6989,7 +7105,7 @@ restart_after_queue_reincarnation(Config) ->
     end.
 
 restart_after_queue_reincarnation_(Config) ->
-    [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [S1, _, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     QName = <<"QQ">>,
 
@@ -7015,30 +7131,17 @@ restart_after_queue_reincarnation_(Config) ->
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    % Now S3 should have the old queue state, and S1 and S2 a new one.
+    %% The delete could not delete the member on S3, so the queue is declared
+    %% again under another Ra name.
+    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                            [amqqueue:get_name(Q)]),
+    {OldRaName, _} = amqqueue:get_pid(Q),
+    {NewRaName, _} = amqqueue:get_pid(Q1),
+    ?assertNotEqual(OldRaName, NewRaName),
     St1 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, status, [VHost, QName]),
     Status0 = [{proplists:get_value(<<"Node Name">>, S), S} || S <- St1],
     S3_Status1 = proplists:get_value(S3, Status0),
-    Others_Status1 = [V || {_K, V} <- proplists:delete(S3, Status0)],
-
-    S3_LastLogIndex = proplists:get_value(<<"Last Log Index">>, S3_Status1),
-    S3_LastWritten = proplists:get_value(<<"Last Written">>, S3_Status1),
-    S3_LastApplied = proplists:get_value(<<"Last Applied">>, S3_Status1),
-    S3_CommitIndex = proplists:get_value(<<"Commit Index">>, S3_Status1),
-    S3_Term = proplists:get_value(<<"Term">>, S3_Status1),
-
     ?assertEqual(noproc, proplists:get_value(<<"Raft State">>, S3_Status1)),
-    ?assertEqual(unknown, proplists:get_value(<<"Membership">>, S3_Status1)),
-    [begin
-        ?assert(S3_LastLogIndex > proplists:get_value(<<"Last Log Index">>, O)),
-        ?assert(S3_LastWritten > proplists:get_value(<<"Last Written">>, O)),
-        ?assert(S3_LastApplied > proplists:get_value(<<"Last Applied">>, O)),
-        ?assert(S3_CommitIndex > proplists:get_value(<<"Commit Index">>, O)),
-        ?assertEqual(S3_Term, proplists:get_value(<<"Term">>, O))
-     end || O <- Others_Status1],
-
-    %% Bumping term in online nodes
-    rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_quorum_queue, transfer_leadership, [Q, S2]),
 
     %% Restart S3
     ?assertEqual(ok, rabbit_control_helper:command(start_app, S3)),

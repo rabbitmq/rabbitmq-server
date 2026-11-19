@@ -2647,6 +2647,10 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
                              Q, Durable, AutoDelete, Args, Owner),
                       maybe_stat(NoWait, Q)
+           end,
+           %% The declare takes over a delete whose owner died.
+           fun ({absent, _, deleting}) -> {error, not_found};
+               (Reason) -> {error, Reason}
            end) of
         {ok, MessageCount, ConsumerCount} ->
             {ok, QueueName, MessageCount, ConsumerCount};
@@ -2697,14 +2701,6 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     rabbit_misc:precondition_failed(Reason, ReasonArgs);
                 {protocol_error, ErrorType, Reason, ReasonArgs} ->
                     rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
-            end;
-        {error, {absent, Q, deleting}} ->
-            case rabbit_amqqueue:finish_delete(Q, Username) of
-                ok ->
-                    handle_method(Declare, ConnPid, AuthzContext, CollectorPid,
-                                  VHostPath, User);
-                {error, being_deleted} ->
-                    rabbit_amqqueue:absent(Q, deleting)
             end;
         {error, {absent, Q, Reason}} ->
             rabbit_amqqueue:absent(Q, Reason)
