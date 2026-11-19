@@ -1427,26 +1427,48 @@ ensure_queue(QoS, State) ->
         {ok, _Q} = Ok ->
             Ok;
         {error, {resource_locked, Q}} ->
-            QName = amqqueue:get_name(Q),
-            ?LOG_DEBUG("MQTT deleting exclusive ~s owned by ~p",
-                       [rabbit_misc:rs(QName), ?amqqueue_v2_field_exclusive_owner(Q)]),
-            case delete_queue(QName, State) of
-                ok ->
-                    create_queue(QoS, State);
-                {error, _} = Err ->
-                    Err;
-                {protocol_error, _, _, _} = Err ->
-                    {error, Err}
-            end;
+            replace_queue(Q, QoS, State);
         {error, not_found} ->
-            create_queue(QoS, State)
+            case create_queue(QoS, State) of
+                %% The old connection of the same client ID can declare the queue
+                %% after the lookup, before it closes.
+                {error, {resource_locked, Q}} ->
+                    replace_queue(Q, QoS, State);
+                Result ->
+                    Result
+            end
+    end.
+
+replace_queue(Q, QoS, State) ->
+    QName = amqqueue:get_name(Q),
+    ?LOG_DEBUG("MQTT deleting exclusive ~s owned by ~p",
+               [rabbit_misc:rs(QName), ?amqqueue_v2_field_exclusive_owner(Q)]),
+    case delete_queue(QName, State) of
+        ok ->
+            case create_queue(QoS, State) of
+                {error, {resource_locked, _}} ->
+                    ?LOG_WARNING("MQTT could not declare ~ts due to a concurrent declaration by another connection",
+                                 [rabbit_misc:rs(QName)]),
+                    {error, queue_declare};
+                Result ->
+                    Result
+            end;
+        {error, _} = Err ->
+            Err;
+        {protocol_error, _, _, _} = Err ->
+            {error, Err}
     end.
 
 create_queue(Qos, State = #state{cfg = #cfg{session_expiry_interval_secs = SessionExpiry}}) ->
     Owner = queue_owner(SessionExpiry),
     Args = queue_args(Qos, SessionExpiry),
     Type = queue_type(Qos, SessionExpiry, Args),
-    create_queue(Qos, Owner, Args, Type, State).
+    case create_queue(Qos, Owner, Args, Type, State) of
+        {error, {existing, Q}} ->
+            {ok, Q};
+        Result ->
+            Result
+    end.
 
 create_queue(QNamePart, QOwner, QArgs, QType,
              #state{cfg = #cfg{
@@ -1493,6 +1515,10 @@ create_queue(QNamePart, QOwner, QArgs, QType,
             {error, queue_limit_exceeded, Reason, ReasonArgs} ->
                 ?LOG_ERROR(Reason, ReasonArgs),
                 {error, queue_limit_exceeded};
+            {existing, Q} when ?amqqueue_exclusive_owner_is_pid(Q) ->
+                {error, {resource_locked, Q}};
+            {existing, Q} when ?amqqueue_exclusive_owner_is(Q, none) ->
+                {error, {existing, Q}};
             Other ->
                 ?LOG_ERROR("Failed to declare ~s: ~p",
                            [rabbit_misc:rs(QName), Other]),
@@ -1955,6 +1981,10 @@ maybe_send_will(
                 {error, access_refused = Reason} ->
                     log_delayed_will_failure(Topic, ClientId, Reason)
             end;
+        {error, {_, Q}} when ?is_amqqueue(Q) ->
+            ?LOG_ERROR("The delayed Will Message of MQTT client ID ~ts will not be sent "
+                       "because another connection with the same client ID already uses ~ts",
+                       [ClientId, rabbit_misc:rs(amqqueue:get_name(Q))]);
         {error, Reason} ->
             log_delayed_will_failure(Topic, ClientId, Reason)
     end;
