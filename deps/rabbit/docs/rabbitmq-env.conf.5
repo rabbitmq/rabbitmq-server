@@ -71,6 +71,27 @@ file RabbitMQ configuration file location is changed to "/data/services/rabbitmq
 .Dl # Comment lines start with a hash character.
 .Dl # This is a /bin/sh script file - use ordinary envt var syntax
 .Dl CONFIG_FILE=/data/services/rabbitmq/rabbitmq.conf
+.Pp
+On Unix, the following setting adds a random offset between zero and 500000
+to the default atom table limit of 5000000 at each server start:
+.sp
+.Dl MAX_NUMBER_OF_ATOMS_JITTER=500000
+.Pp
+Randomization is disabled by default. The range must be an integer between
+0 and 129217727. An explicit
+.Ev MAX_NUMBER_OF_ATOMS
+or
+.Ev RABBITMQ_MAX_NUMBER_OF_ATOMS
+disables randomization. Explicit Erlang server arguments retain their existing
+precedence. The environment equivalent is
+.Ev RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER .
+This setting is independent of quorum queue naming.
+.Pp
+Different limits can reduce the likelihood of simultaneous atom exhaustion
+across nodes, but do not prevent exhaustion or reclaim atoms. The actual limit
+can be inspected using:
+.sp
+.Dl rabbitmq-diagnostics eval 'erlang:system_info(atom_limit).'
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
 .\" ------------------------------------------------------------------

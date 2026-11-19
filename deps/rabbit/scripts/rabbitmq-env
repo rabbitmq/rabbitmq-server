@@ -127,6 +127,27 @@ DEFAULT_MAX_NUMBER_OF_PROCESSES=1048576
 [ -n "$RABBITMQ_MAX_NUMBER_OF_PROCESSES" ] || RABBITMQ_MAX_NUMBER_OF_PROCESSES="$MAX_NUMBER_OF_PROCESSES"
 
 DEFAULT_MAX_NUMBER_OF_ATOMS=5000000
+if [ -z "$RABBITMQ_MAX_NUMBER_OF_ATOMS" ] && [ -z "$MAX_NUMBER_OF_ATOMS" ]; then
+    _rmq_atom_limit_jitter="${RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER:-${MAX_NUMBER_OF_ATOMS_JITTER:-0}}"
+    case "$_rmq_atom_limit_jitter" in
+        *[!0-9]*|0?*)
+            _rmq_env_perr 'MAX_NUMBER_OF_ATOMS_JITTER must be an integer between 0 and 129217727'
+            exit 78
+            ;;
+    esac
+    if [ "${#_rmq_atom_limit_jitter}" -gt 9 ] || [ "$_rmq_atom_limit_jitter" -gt 129217727 ]; then
+        _rmq_env_perr 'MAX_NUMBER_OF_ATOMS_JITTER must be an integer between 0 and 129217727'
+        exit 78
+    fi
+    if [ "$_rmq_atom_limit_jitter" -gt 0 ]; then
+        _rmq_atom_limit_random=$(od -An -N4 -tu4 /dev/urandom) || {
+            _rmq_env_perr 'Could not read randomness for MAX_NUMBER_OF_ATOMS_JITTER'
+            exit 78
+        }
+        DEFAULT_MAX_NUMBER_OF_ATOMS=$((DEFAULT_MAX_NUMBER_OF_ATOMS + _rmq_atom_limit_random % (_rmq_atom_limit_jitter + 1)))
+    fi
+    unset _rmq_atom_limit_jitter _rmq_atom_limit_random
+fi
 [ -n "$MAX_NUMBER_OF_ATOMS" ] || MAX_NUMBER_OF_ATOMS="$DEFAULT_MAX_NUMBER_OF_ATOMS"
 [ -n "$RABBITMQ_MAX_NUMBER_OF_ATOMS" ] || RABBITMQ_MAX_NUMBER_OF_ATOMS="$MAX_NUMBER_OF_ATOMS"
 
