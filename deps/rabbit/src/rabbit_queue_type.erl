@@ -991,6 +991,14 @@ check_queue_limits(Q) ->
         ok ?= check_cluster_queue_limit(Q)
     end.
 
+%% A declare of a queue that is being deleted replaces its record, so it does
+%% not add a queue.
+is_being_deleted(Q) ->
+    case rabbit_db_queue:get(amqqueue:get_name(Q)) of
+        {ok, Existing} -> ?amqqueue_state_is(Existing, deleting);
+        _ -> false
+    end.
+
 check_vhost_queue_limit(Q) ->
     #resource{name = QueueName} = amqqueue:get_name(Q),
     VHost = amqqueue:get_vhost(Q),
@@ -998,9 +1006,14 @@ check_vhost_queue_limit(Q) ->
         false ->
             ok;
         {true, Limit} ->
-            queue_limit_error("cannot declare queue '~ts': "
-                              "queue limit in vhost '~ts' (~tp) is reached",
-                              [QueueName, VHost, Limit])
+            case is_being_deleted(Q) of
+                true ->
+                    ok;
+                false ->
+                    queue_limit_error("cannot declare queue '~ts': "
+                                      "queue limit in vhost '~ts' (~tp) is reached",
+                                      [QueueName, VHost, Limit])
+            end
     end.
 
 get_consumer_timeout(#{timeout := Timeout}, _Q)
@@ -1039,9 +1052,14 @@ check_cluster_queue_limit(Q) ->
         Limit ->
             case rabbit_db_queue:count() >= Limit of
                 true ->
-                    queue_limit_error("cannot declare queue '~ts': "
-                                      "queue limit in cluster (~tp) is reached",
-                                      [QueueName, Limit]);
+                    case is_being_deleted(Q) of
+                        true ->
+                            ok;
+                        false ->
+                            queue_limit_error("cannot declare queue '~ts': "
+                                              "queue limit in cluster (~tp) is reached",
+                                              [QueueName, Limit])
+                    end;
                 false ->
                     ok
             end

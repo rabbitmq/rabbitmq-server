@@ -924,10 +924,19 @@ rpc_delete_metrics(QName) ->
     ets:delete(queue_metrics, QName),
     ok.
 
+%% Runs in the Ra server process. A member of an earlier incarnation has
+%% another Ra name than the queue's current record, and must not delete it.
 spawn_deleter(QName) ->
+    Registered = process_info(self(), registered_name),
     spawn(fun () ->
                   {ok, Q} = rabbit_amqqueue:lookup(QName),
-                  delete(Q, false, false, <<"expired">>)
+                  case {Registered, amqqueue:get_pid(Q)} of
+                      {{registered_name, Name}, {RaName, _}}
+                        when Name =/= RaName ->
+                          ok;
+                      _ ->
+                          delete(Q, false, false, <<"expired">>)
+                  end
           end).
 
 spawn_notify_decorators(QName, startup = Fun, Args) ->
@@ -958,6 +967,8 @@ handle_tick(QName,
       fun() ->
               try
                   {ok, Q} = rabbit_amqqueue:lookup(QName),
+                  %% A member of an earlier incarnation has another Ra name.
+                  {Name, _} = amqqueue:get_pid(Q),
                   ok = repair_leader_record(Q, Name),
                   Reductions = reductions(Name),
                   rabbit_core_metrics:queue_stats(QName, NumReadyMsgs,

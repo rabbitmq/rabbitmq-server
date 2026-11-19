@@ -2685,6 +2685,12 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                          end,
                     rabbit_core_metrics:queue_created(QueueName),
                     {ok, QueueName, 0, 0};
+                {existing, Q} when ?amqqueue_state_is(Q, deleting) ->
+                    %% A declare of another queue type does not take over
+                    %% the delete, so looping would not end.
+                    rabbit_misc:protocol_error(
+                      resource_locked, "~ts is being deleted",
+                      [rabbit_misc:rs(QueueName)]);
                 {existing, _Q} ->
                     %% must have been created between the stat and the
                     %% declare. Loop around again.

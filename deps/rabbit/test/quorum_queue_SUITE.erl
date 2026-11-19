@@ -5081,6 +5081,22 @@ delete_redeclared_deletes_leftovers_(Config) ->
     ?assertEqual(deleting, amqqueue:get_state(Deleting)),
     ?assertMatch(#{leftovers := [_ | _]}, amqqueue:get_type_state(Deleting)),
 
+    %% Another queue type cannot take over the delete.
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    ?assertExit({{shutdown, {server_initiated_close, 405, _}}, _},
+                declare(Ch2, QQ, [{<<"x-queue-type">>, longstr, <<"classic">>}])),
+
+    %% The queue that is being deleted is not counted again by its declare.
+    ok = rabbit_ct_broker_helpers:set_vhost_limit(
+           Config, Server1, <<"/">>, max_queues, 1),
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch3, QQ, Args)),
+    ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, Server1, <<"/">>),
+    {ok, Q3} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    ?assertNotMatch({RaName, _}, amqqueue:get_pid(Q3)),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch3, #'queue.delete'{queue = QQ})),
+
     heal(Config, Server3),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
     {ok, Q2} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
