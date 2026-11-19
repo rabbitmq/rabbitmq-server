@@ -420,11 +420,23 @@ delete_ignoring_protection(Name, ActingUser) ->
     AbsentFun = fun ({absent, Q, deleting}) -> QDelFun(Q);
                     (Reason) -> {error, Reason}
                 end,
-    [begin
-         QName = amqqueue:get_name(Q),
-         assert_benign(rabbit_amqqueue:with(QName, QDelFun, AbsentFun),
-                       ActingUser)
-     end || Q <- rabbit_amqqueue:list(Name)],
+    Locked = [QName || Q <- rabbit_amqqueue:list(Name),
+                       QName <- [amqqueue:get_name(Q)],
+                       assert_benign(rabbit_amqqueue:with(QName, QDelFun, AbsentFun),
+                                     ActingUser) =:= locked],
+    case Locked of
+        [] ->
+            delete_vhost_resources(Name, ActingUser);
+        _ ->
+            %% The owner of a running delete cannot be reached. It can still
+            %% delete the queue's Ra cluster, so the queue must keep its record.
+            ?LOG_ERROR("Cannot delete vhost '~ts': deletes of queues ~w are "
+                       "running on unreachable nodes",
+                       [Name, [N || #resource{name = N} <- Locked]]),
+            {error, {queues_locked, [N || #resource{name = N} <- Locked]}}
+    end.
+
+delete_vhost_resources(Name, ActingUser) ->
     ?LOG_INFO("Deleting exchanges in vhost '~ts' because it's being deleted", [Name]),
     ok = rabbit_exchange:delete_all(Name, ActingUser),
     ?LOG_INFO("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [Name]),
@@ -597,6 +609,7 @@ assert_benign(ok, _)                 -> ok;
 assert_benign({ok, _}, _)            -> ok;
 assert_benign({ok, _, _}, _)         -> ok;
 assert_benign({error, not_found}, _) -> ok;
+assert_benign({protocol_error, resource_locked, _, _}, _) -> locked;
 assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the database entries here is safe. If/when the down node
     %% restarts, it will clear out the on-disk storage of the queue.
