@@ -392,6 +392,8 @@ For GitHub Security Advisories, make sure to:
    * Define "Affected Versions" explicitly per minor release line using version ranges (e.g. `>= 4.2.0`, `< 4.2.10`)
    * For the Patch version, provide the exact release containing the fix (e.g. `4.2.6`)
    * If a fix is included in the first release of a new minor line (e.g. `4.3.0`), omit that release line entirely as no vulnerable `4.3.x` releases exist
+   * If a minor release line is out of **commercial** support  - e.g. `v4.0.x`, see https://www.rabbitmq.com/release-information for up to date information -
+     omit that release line entirely even if it is affected by the vulnerability.
 
 ### Use CVSSv4 Scores
 
