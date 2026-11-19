@@ -72,6 +72,7 @@ groups() ->
                                             delete_member_not_a_member,
                                             delete_member_member_already_deleted,
                                             long_name_member_management,
+                                            shrink_once_stable_after_grow,
                                             node_removal_is_quorum_critical]
                        ++ memory_tests()},
                       {cluster_size_3, [], [
@@ -4052,6 +4053,35 @@ long_name_member_management(Config) ->
                  rpc:call(Server, rabbit_queue_type_ra, delete_members,
                           [<<"/">>, QQ, NonMember, all])),
     queue_utils:assert_number_of_replicas(Config, Server, <<"/">>, QQ, 1),
+    ok.
+
+shrink_once_stable_after_grow(Config) ->
+    Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers,
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 1}])),
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_amqqueue,
+                                           lookup, [QQ, <<"/">>]),
+    {RaName, _} = amqqueue:get_pid(Q),
+    [Member] = rabbit_queue_type:get_nodes(Q),
+    [NonMember | _] = Servers -- [Member],
+    [begin
+         %% The previous shrink can still be waiting for its commit.
+         ?awaitMatch([{_, {ok, 2}}],
+                     rpc:call(Server, rabbit_quorum_queue, grow,
+                              [NonMember, <<"/">>, QQ, all]),
+                     ?DEFAULT_AWAIT),
+         ?awaitMatch(true,
+                     rpc:call(Server, rabbit_queue_type_ra, all_members_stable,
+                              [RaName, [Member, NonMember]]),
+                     ?DEFAULT_AWAIT),
+         ?assertMatch([{_, {ok, 1}}],
+                      rpc:call(Server, rabbit_queue_type_ra, delete_members,
+                               [<<"/">>, QQ, NonMember, all]))
+     end || _ <- lists:seq(1, 30)],
     ok.
 
 delete_member_during_node_down(Config) ->

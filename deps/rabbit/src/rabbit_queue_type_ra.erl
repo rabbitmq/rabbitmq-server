@@ -189,7 +189,8 @@ is_ra_based(Mod) ->
                  (_) -> false
               end, Mod:module_info(attributes)).
 
-%% Check that all Ra members are stable (voter or non_voter, not promotable).
+%% Check that all Ra members are stable (voter or non_voter, not promotable)
+%% and that the leader has committed its latest cluster change.
 %% This is used to ensure that we don't add/remove members while another
 %% membership change is in progress.
 -spec all_members_stable(atom(), [node()]) -> boolean().
@@ -201,7 +202,24 @@ all_members_stable(RaName, QNodes) ->
                       true;
                  (_) ->
                       false
-              end, Result).
+              end, Result) andalso
+        leader_accepts_cluster_changes(RaName, lists:zip(QNodes, Result)).
+
+%% A follower applies a cluster change when it appends it, so its membership
+%% can change before the leader has committed the change. The leader rejects
+%% cluster changes until then.
+leader_accepts_cluster_changes(RaName, NodeResults) ->
+    case [N || {N, {ok, [{_, leader, _}]}} <- NodeResults] of
+        [Leader] ->
+            case ra:member_overview({RaName, Leader}, ?RA_MEMBERS_TIMEOUT) of
+                {ok, #{cluster_change_permitted := Permitted}, _} ->
+                    Permitted;
+                _ ->
+                    false
+            end;
+        _ ->
+            false
+    end.
 
 matches_strategy(all, _Members) ->
     true;
