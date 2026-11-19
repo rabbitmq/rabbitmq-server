@@ -166,6 +166,7 @@ groups() ->
                        [
                         partitioned_publisher,
                         redeclare_after_partial_delete,
+                        delete_redeclared_deletes_leftovers,
                         declare_after_partial_delete_and_heal,
                         reconnect_consumer_and_publish,
                         reconnect_consumer_and_wait,
@@ -375,6 +376,7 @@ end_per_group(_, Config) ->
 
 init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                          Testcase == redeclare_after_partial_delete;
+                                         Testcase == delete_redeclared_deletes_leftovers;
                                          Testcase == declare_after_partial_delete_and_heal;
                                          Testcase == reconnect_consumer_and_publish;
                                          Testcase == reconnect_consumer_and_wait;
@@ -456,6 +458,7 @@ merge_app_env(Config) ->
 
 end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                         Testcase == redeclare_after_partial_delete;
+                                        Testcase == delete_redeclared_deletes_leftovers;
                                         Testcase == declare_after_partial_delete_and_heal;
                                         Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
@@ -5040,6 +5043,56 @@ redeclare_after_partial_delete_(Config) ->
     ?assertEqual(undefined, rpc:call(Server3, ra_directory, uid_of,
                                      [quorum_queues, RaName])),
     ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    ok.
+
+delete_redeclared_deletes_leftovers(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        true ->
+            delete_redeclared_deletes_leftovers_(Config);
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"}
+    end.
+
+delete_redeclared_deletes_leftovers_(Config) ->
+    [Server1, _, Server3] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    RaName = ra_name(QQ),
+    OldUId = rpc:call(Server3, ra_directory, uid_of, [quorum_queues, RaName]),
+
+    partition(Config, Server3),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    ?assertMatch(#{leftovers := [{{RaName, Server3}, OldUId}]},
+                 amqqueue:get_type_state(Q)),
+
+    %% The leftover is still out of reach, so the record is kept.
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    {ok, Deleting} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    ?assertEqual(deleting, amqqueue:get_state(Deleting)),
+    ?assertMatch(#{leftovers := [_ | _]}, amqqueue:get_type_state(Deleting)),
+
+    heal(Config, Server3),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    {ok, Q2} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    ?assertMatch({RaName, _}, amqqueue:get_pid(Q2)),
+    ?assertNot(maps:is_key(leftovers, amqqueue:get_type_state(Q2))),
+    #{nodes := UIds} = amqqueue:get_type_state(Q2),
+    ?awaitMatch(UIds,
+                maps:from_list(
+                  [{S, rpc:call(S, ra_directory, uid_of, [quorum_queues, RaName])}
+                   || S <- Servers]),
+                ?DEFAULT_AWAIT),
+    ?assertNotEqual(OldUId, maps:get(Server3, UIds)),
     ok.
 
 declare_after_partial_delete_and_heal(Config) ->

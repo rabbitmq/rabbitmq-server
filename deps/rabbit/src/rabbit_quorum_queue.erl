@@ -463,8 +463,13 @@ replace_deleting(DeletingQ, Q) ->
               rabbit_policy:set(amqqueue:set_state(NewQ0, live))),
     Replace = fun(Current) ->
                       case amqqueue:get_type_state(Current) of
-                          #{deleting_owner := Owner} ->
-                              {ok, NewQ1};
+                          #{deleting_owner := Owner} = TS ->
+                              Leftovers = maps:get(leftovers, TS, []),
+                              {ok, amqqueue:update_type_state(
+                                     NewQ1,
+                                     fun(NewTS) ->
+                                             NewTS#{leftovers => Leftovers}
+                                     end)};
                           _ ->
                               {error, replaced}
                       end
@@ -650,7 +655,13 @@ member_uid({Name, Node}) ->
 
 declare_queue_error(Error, Queue, Leader, ActingUser) ->
     _ = delete_declared_members(Queue),
-    _ = delete_declared_record(Queue, ActingUser),
+    _ = case amqqueue:get_type_state(Queue) of
+            #{leftovers := [_ | _]} ->
+                %% The record is kept while leftovers remain.
+                delete_as_owner(Queue, ActingUser, false);
+            _ ->
+                delete_declared_record(Queue, ActingUser)
+        end,
     {protocol_error, declare_error_type(Error),
      "Cannot declare quorum ~ts on node '~ts' with leader on node '~ts': ~255p",
      [rabbit_misc:rs(amqqueue:get_name(Queue)), node(), Leader, Error]}.
@@ -1584,45 +1595,71 @@ notify_shutdown(Q) ->
     notify_decorators(amqqueue:set_type_state(Q, TypeState), shutdown, []).
 
 %% Members that could not be deleted may still run under this Ra name. The
-%% record is kept, so that the next declare of the queue uses another one.
+%% record is kept, so that the next declare of the queue uses another one. It
+%% lists them as `leftovers', and those are deleted with the queue.
 delete_record(Q, [], ActingUser) ->
     delete_queue_data(Q, ActingUser);
 delete_record(Q, Unconfirmed, ActingUser) ->
     case amqqueue:get_type_state(Q) of
-        #{deleting_owner := _} ->
-            ?LOG_WARNING("Kept the record of ~ts in the deleting state, as "
-                         "members ~w could not be deleted",
-                         [rabbit_misc:rs(amqqueue:get_name(Q)), Unconfirmed]),
-            kept;
+        #{deleting_owner := Owner} ->
+            case keep_record(Q, Owner, Unconfirmed) of
+                {error, timeout} = Err ->
+                    Err;
+                _ ->
+                    ?LOG_WARNING("Kept the record of ~ts in the deleting state, "
+                                 "as members ~w could not be deleted",
+                                 [rabbit_misc:rs(amqqueue:get_name(Q)),
+                                  [S || {S, _} <- Unconfirmed]]),
+                    kept
+            end;
         _ ->
             delete_queue_data(Q, ActingUser)
     end.
 
+keep_record(Q, Owner, Unconfirmed) ->
+    rabbit_db_queue:try_update(
+      amqqueue:get_name(Q),
+      fun(Current) ->
+              case amqqueue:get_type_state(Current) of
+                  #{deleting_owner := Owner} ->
+                      {ok, amqqueue:update_type_state(
+                             Current,
+                             fun(TS) -> TS#{leftovers => Unconfirmed} end)};
+                  _ ->
+                      {error, not_owner}
+              end
+      end, #{}).
+
 %% Returns the members that could not be deleted. A member on a node that is
 %% no longer a cluster member is gone, as the node must be reset to join again.
 force_delete_queue(Q, Servers) ->
-    UIds = case amqqueue:get_type_state(Q) of
+    TypeState = amqqueue:get_type_state(Q),
+    UIds = case TypeState of
                #{nodes := Nodes} when is_map(Nodes) -> Nodes;
                _ -> #{}
            end,
-    Results = [{S, case UIds of
-                       #{Node := UId} -> force_delete_member(S, UId);
-                       _ -> force_delete_registered_member(S)
-                   end} || {_, Node} = S <- Servers],
+    Leftovers = maps:get(leftovers, TypeState, []),
+    %% A kept record lists its unconfirmed members as leftovers too.
+    Candidates = lists:usort([{S, maps:get(Node, UIds, undefined)}
+                              || {_, Node} = S <- Servers] ++ Leftovers),
+    Results = [{M, case M of
+                       {S, undefined} -> force_delete_registered_member(S);
+                       {S, UId} -> force_delete_member(S, UId)
+                   end} || M <- Candidates],
     Members = rabbit_nodes:list_members(),
     lists:filtermap(
       fun({_, ok}) ->
               false;
          ({_, {error, not_owner}}) ->
               false;
-         ({{_, Node} = S, Err}) ->
+         ({{{_, Node} = S, _} = M, Err}) ->
               case Members =/= [] andalso not lists:member(Node, Members) of
                   true ->
                       false;
                   false ->
                       ?LOG_WARNING("Force delete of ~w failed with: ~w",
                                    [S, Err]),
-                      {true, S}
+                      {true, M}
               end
       end, Results).
 
