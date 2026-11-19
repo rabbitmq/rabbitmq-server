@@ -153,6 +153,15 @@ jobs:
         path: deps/amqp10_client/test/system_SUITE_data/apache-activemq-${{ env.ACTIVEMQ_VERSION }}-bin.tar.gz
         key: activemq-${{ env.ACTIVEMQ_VERSION }}
 
+    - name: FETCH DEPS
+      run: |
+        for attempt in 1 2 3 4 5; do
+          make -C deps/${{ inputs.plugin }} fetch-deps DEP_TYPES=test && exit 0
+          echo "Fetching dependencies failed (attempt $attempt), retrying"
+          sleep $((attempt * 10))
+        done
+        exit 1
+
     - name: RUN TESTS
       if: inputs.plugin != 'rabbitmq_cli'
       env:
