@@ -585,7 +585,8 @@ ensure_ssl_certs(Config) ->
     CertsPwd = proplists:get_value(rmq_certspwd, Config, ?SSL_CERT_PASSWORD),
     Cmd = [
       "PASSWORD=" ++ CertsPwd,
-      "DIR=" ++ CertsDir],
+      "DIR=" ++ CertsDir,
+      "V=2"],
     case make(Config, CertsMakeDir, Cmd) of
         {ok, _} ->
             %% Add SSL certs to the broker configuration.
@@ -610,7 +611,8 @@ ensure_ssl_certs(Config) ->
               Config1,
               [{rmq_certsdir, CertsDir},
                {rmq_certspwd, CertsPwd}]);
-        _ ->
+        Error ->
+            ct:pal("Failed to create SSL certificates: ~tp", [Error]),
             {skip, "Failed to create SSL certificates"}
     end.
 
