@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "amqplib": "2.3.3",
-    "chromedriver": "^157.0.0",
+    "chromedriver": "^158.0.0",
     "ejs": "^7.0.2",
     "express": "^5.1.0",
     "geckodriver": "^8.0.0",
