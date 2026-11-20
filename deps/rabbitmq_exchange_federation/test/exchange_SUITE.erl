@@ -48,6 +48,7 @@ essential() ->
     [
       single_upstream,
       malformed_bound_from_does_not_crash_link,
+      oversized_binding_is_refused_and_link_keeps_running,
       single_upstream_quorum,
       multiple_upstreams,
       multiple_upstreams_pattern,
@@ -244,6 +245,47 @@ malformed_bound_from_does_not_crash_link(Config) ->
 
   [?assertEqual([], bound_keys_from(Config, 0, <<"/">>, UpX, RK))
    || RK <- MalformedRKs],
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
+
+oversized_binding_is_refused_and_link_keeps_running(Config) ->
+  FedX = <<"oversized_binding.federated">>,
+  UpX = <<"oversized_binding.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^oversized_binding.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+  declare_exchanges(Ch, [exchange_declare_method(FedX)]),
+
+  _ = declare_and_bind_queue(Ch, FedX, <<"warmup">>),
+  await_binding(Config, 0, UpX, <<"warmup">>),
+  [Link0] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status, status, []),
+
+  Q = declare_queue(Ch),
+  OversizedArgs = [{<<"pad">>, longstr, binary:copy(<<"a">>, 16384)}],
+  Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
+  ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+              bind_queue(Ch2, Q, FedX, <<"oversized">>, OversizedArgs)),
+
+  _ = declare_and_bind_queue(Ch, FedX, <<"after-oversized">>),
+  await_binding(Config, 0, UpX, <<"after-oversized">>),
+  ?assertEqual([], bound_keys_from(Config, 0, <<"/">>, UpX, <<"oversized">>)),
+
+  [Link1] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_federation_status, status, []),
+  ?assertEqual(running, proplists:get_value(status, Link1)),
+  ?assertEqual(proplists:get_value(timestamp, Link0),
+               proplists:get_value(timestamp, Link1)),
 
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).

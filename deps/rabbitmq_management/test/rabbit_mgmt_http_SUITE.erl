@@ -177,6 +177,7 @@ all_tests() -> [
     quorum_queues_test,
     stream_queues_have_consumers_field,
     bindings_post_test,
+    bindings_post_arguments_size_limit_test,
     bindings_post_non_object_body_test,
     bindings_null_routing_key_test,
     bindings_e2e_test,
@@ -1824,6 +1825,15 @@ bindings_post_test(Config) ->
     http_get(Config, URI ++ "x", ?NOT_FOUND),
     http_delete(Config, URI, {group, '2xx'}),
     http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
+    passed.
+
+bindings_post_arguments_size_limit_test(Config) ->
+    http_put(Config, "/queues/%2F/myqueue", #{durable => true}, {group, '2xx'}),
+    BArgs = [{routing_key, <<"routing">>},
+             {arguments, [{foo, binary:copy(<<"a">>, 16384)}]}],
+    http_post(Config, "/bindings/%2F/e/amq.fanout/q/myqueue", BArgs, ?BAD_REQUEST),
+    http_post(Config, "/bindings/%2F/e/amq.fanout/q/myqueue", #{}, {group, '2xx'}),
     http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
     passed.
 
