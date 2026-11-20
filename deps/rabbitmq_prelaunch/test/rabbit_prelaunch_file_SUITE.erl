@@ -21,7 +21,8 @@ all() ->
     [{group, tests}].
 
 all_tests() ->
-    [consult_advanced_config, consult_rabbitmq_config, consult_badfile].
+    [consult_advanced_config, consult_rabbitmq_config, consult_badfile,
+     consult_missing_file, consult_encodings].
 
 groups() ->
     [{tests, [], all_tests()}].
@@ -74,6 +75,18 @@ consult_rabbitmq_config(Config) ->
        [{rabbit,[{consumer_timeout,none}]},
         {kernel,
          [{inet_dist_use_interface,{127,0,0,1}}]}], RabbitMQConfig).
+
+consult_missing_file(Config) ->
+    Path = filename:join(?config(priv_dir, Config), "missing.config"),
+    ?assertEqual({error, {badfile, Path}}, rabbit_prelaunch_file:consult_file(Path)).
+
+consult_encodings(Config) ->
+    Path = filename:join(?config(priv_dir, Config), "encoding.config"),
+    Expected = {ok, [#{text => [233]}]},
+    ok = file:write_file(Path, <<"#{text => \"", 233, "\"}.">>),
+    ?assertEqual(Expected, rabbit_prelaunch_file:consult_file(Path)),
+    ok = file:write_file(Path, <<"%% coding: utf-8\n#{text => \"", 195, 169, "\"}.">>),
+    ?assertEqual(Expected, rabbit_prelaunch_file:consult_file(Path)).
 
 consult_badfile(Config) ->
     AdvancedConfigPath =
