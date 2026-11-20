@@ -33,6 +33,8 @@
          check_RABBITMQ_ADVANCED_CONFIG_FILE/1,
          check_RABBITMQ_CONFIG_FILE/1,
          check_RABBITMQ_CONFIG_FILES/1,
+         check_RABBITMQ_CONF_ENV_FILE/1,
+         check_RABBITMQ_DBG/1,
          check_RABBITMQ_DEFAULT_PASS/1,
          check_RABBITMQ_DEFAULT_USER/1,
          check_RABBITMQ_DEFAULT_VHOST/1,
@@ -40,6 +42,7 @@
          check_RABBITMQ_ENABLED_PLUGINS/1,
          check_RABBITMQ_ENABLED_PLUGINS_FILE/1,
          check_RABBITMQ_ERLANG_COOKIE/1,
+         check_RABBITMQ_FEATURE_FLAGS/1,
          check_RABBITMQ_FEATURE_FLAGS_FILE/1,
          check_RABBITMQ_KEEP_PID_FILE_ON_EXIT/1,
          check_RABBITMQ_LOG/1,
@@ -101,6 +104,8 @@ all() ->
      check_RABBITMQ_ADVANCED_CONFIG_FILE,
      check_RABBITMQ_CONFIG_FILE,
      check_RABBITMQ_CONFIG_FILES,
+     check_RABBITMQ_CONF_ENV_FILE,
+     check_RABBITMQ_DBG,
      check_RABBITMQ_DEFAULT_PASS,
      check_RABBITMQ_DEFAULT_USER,
      check_RABBITMQ_DEFAULT_VHOST,
@@ -108,6 +113,7 @@ all() ->
      check_RABBITMQ_ENABLED_PLUGINS,
      check_RABBITMQ_ENABLED_PLUGINS_FILE,
      check_RABBITMQ_ERLANG_COOKIE,
+     check_RABBITMQ_FEATURE_FLAGS,
      check_RABBITMQ_FEATURE_FLAGS_FILE,
      check_RABBITMQ_KEEP_PID_FILE_ON_EXIT,
      check_RABBITMQ_LOG,
@@ -814,6 +820,36 @@ check_RABBITMQ_CONFIG_FILES(_) ->
                             Value1, Value1,
                             Value2, Value2).
 
+check_RABBITMQ_CONF_ENV_FILE(_) ->
+    Value1 = random_string(),
+    Value2 = random_string(),
+    check_prefixed_variable("RABBITMQ_CONF_ENV_FILE",
+                            conf_env_file,
+                            '_',
+                            Value1, Value1,
+                            Value2, Value2).
+
+%% The bare (non-`RABBITMQ_`-prefixed) form is never read as a
+%% fallback, so it must not attach `dbg` tracing to anything.
+check_RABBITMQ_DBG(_) ->
+    ModName = "mod_" ++ random_string(),
+    without_env_vars(
+      ["RABBITMQ_DBG"],
+      fun() ->
+              #{dbg_mods := ModsFromBare} =
+                  with_env_vars(
+                    [{"DBG", ModName}],
+                    fun() -> rabbit_env:dbg_config() end),
+              ?assertEqual([], ModsFromBare),
+
+              #{dbg_mods := ModsFromPrefixed} =
+                  with_env_vars(
+                    [{"RABBITMQ_DBG", ModName}],
+                    fun() -> rabbit_env:dbg_config() end),
+              ?assertEqual([{list_to_atom(ModName), '_', '_'}],
+                           ModsFromPrefixed)
+      end).
+
 check_RABBITMQ_DEFAULT_PASS(_) ->
     Value1 = random_string(),
     check_variable("RABBITMQ_DEFAULT_PASS",
@@ -869,6 +905,26 @@ check_RABBITMQ_ERLANG_COOKIE(_) ->
     check_variable("RABBITMQ_ERLANG_COOKIE",
                    erlang_cookie,
                    atom_to_list(Value1), Value1).
+
+%% The bare (non-`RABBITMQ_`-prefixed) form is never read as a
+%% fallback. Uses `with_env_vars/2` rather than `check_prefixed_variable/7`
+%% because CI sets `$RABBITMQ_FEATURE_FLAGS` to an empty string for
+%% mixed-version-cluster testing (see `forced_feature_flags_on_init_expect/0`),
+%% so the "unset" default cannot be hardcoded.
+check_RABBITMQ_FEATURE_FLAGS(_) ->
+    {DefaultValue, _} = forced_feature_flags_on_init_expect(),
+    Value = "flag-" ++ random_string(),
+    #{forced_feature_flags_on_init := FromBare} =
+        with_env_vars(
+          [{"FEATURE_FLAGS", Value}],
+          fun() -> rabbit_env:get_context() end),
+    ?assertEqual(DefaultValue, FromBare),
+
+    #{forced_feature_flags_on_init := FromPrefixed} =
+        with_env_vars(
+          [{"RABBITMQ_FEATURE_FLAGS", Value}],
+          fun() -> rabbit_env:get_context() end),
+    ?assertEqual([Value], FromPrefixed).
 
 check_RABBITMQ_FEATURE_FLAGS_FILE(_) ->
     Value1 = random_string(),
@@ -1204,10 +1260,8 @@ check_log_context(_) ->
 
 %% Must not crash when unset.
 check_log_context_with_default_values(_) ->
-    %% `get_prefixed_env_var/1` falls back to the unprefixed name.
     Lines = without_env_vars(
-              ["RABBITMQ_ERLANG_COOKIE", "ERLANG_COOKIE",
-               "RABBITMQ_DEFAULT_PASS", "DEFAULT_PASS"],
+              ["RABBITMQ_ERLANG_COOKIE", "RABBITMQ_DEFAULT_PASS"],
               fun() ->
                       Context = rabbit_env:get_context(),
                       ?assertMatch(
@@ -1278,7 +1332,9 @@ check_get_used_env_vars(_) ->
     os:putenv("CONFIG_FILE", "filename"),
     Vars = rabbit_env:get_used_env_vars(),
     ?assert(lists:keymember("RABBITMQ_LOGS", 1, Vars)),
-    ?assert(lists:keymember("CONFIG_FILE", 1, Vars)),
+    %% The bare (non-`RABBITMQ_`-prefixed) form is never read as a
+    %% fallback, so it must not show up as used either.
+    ?assertNot(lists:keymember("CONFIG_FILE", 1, Vars)),
     ?assertNot(lists:keymember("HOME", 1, Vars)),
     ?assertNot(lists:keymember("PATH", 1, Vars)),
     os:unsetenv("RABBITMQ_LOGS"),
@@ -1416,6 +1472,10 @@ check_variable(Variable, Key, ValueToSet, Comparison) ->
     ?assertNotMatch(#{Key := Comparison}, Context),
     ?assertMatch(#{Key := _}, Context).
 
+%% The bare (non-`RABBITMQ_`-prefixed) form is never read as a
+%% fallback: setting only `Variable` must leave `Key` at its default,
+%% while the `RABBITMQ_`-prefixed form is honored regardless of
+%% whether the bare form is also set.
 check_prefixed_variable("RABBITMQ_" ++ Variable = PrefixedVariable,
                         Key,
                         DefaultValue,
@@ -1423,7 +1483,11 @@ check_prefixed_variable("RABBITMQ_" ++ Variable = PrefixedVariable,
                         Value2ToSet, Comparison2) ->
     os:putenv(Variable, Value1ToSet),
     os:unsetenv(PrefixedVariable),
-    ?assertMatch(#{Key := Comparison1}, rabbit_env:get_context()),
+    ContextWithBareOnly = rabbit_env:get_context(),
+    case DefaultValue of
+        '_' -> ?assertNotMatch(#{Key := Comparison1}, ContextWithBareOnly);
+        _   -> ?assertMatch(#{Key := DefaultValue}, ContextWithBareOnly)
+    end,
 
     os:putenv(PrefixedVariable, Value2ToSet),
     ?assertMatch(#{Key := Comparison2}, rabbit_env:get_context()),
