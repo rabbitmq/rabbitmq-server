@@ -169,6 +169,7 @@ groups() ->
                         redeclare_after_partial_delete,
                         delete_redeclared_deletes_leftovers,
                         declare_after_partial_delete_and_heal,
+                        redeclare_on_new_vhost,
                         reconnect_consumer_and_publish,
                         reconnect_consumer_and_wait,
                         reconnect_consumer_and_wait_channel_down
@@ -379,6 +380,7 @@ init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                          Testcase == redeclare_after_partial_delete;
                                          Testcase == delete_redeclared_deletes_leftovers;
                                          Testcase == declare_after_partial_delete_and_heal;
+                                         Testcase == redeclare_on_new_vhost;
                                          Testcase == reconnect_consumer_and_publish;
                                          Testcase == reconnect_consumer_and_wait;
                                          Testcase == reconnect_consumer_and_wait_channel_down ->
@@ -461,6 +463,7 @@ end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                         Testcase == redeclare_after_partial_delete;
                                         Testcase == delete_redeclared_deletes_leftovers;
                                         Testcase == declare_after_partial_delete_and_heal;
+                                        Testcase == redeclare_on_new_vhost;
                                         Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
                                         Testcase == reconnect_consumer_and_wait_channel_down ->
@@ -5147,6 +5150,75 @@ declare_after_partial_delete_and_heal(Config) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{queue = QQ, no_ack = true})),
     ok.
+
+redeclare_on_new_vhost(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        true ->
+            redeclare_on_new_vhost_(Config);
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"}
+    end.
+
+redeclare_on_new_vhost_(Config) ->
+    [Server1, Server2, Server3] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    VHost = <<"redeclare_on_new_vhost">>,
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(VHost, queue, QQ),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+
+    ok = add_vhost_with_full_permissions(Config, Server1, VHost),
+    Ch = open_vhost_confirm_channel(Config, Server1, VHost),
+
+    %% initial queue
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, VHost, QQ), ?DEFAULT_AWAIT),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    {RaName, _} = amqqueue:get_pid(Q),
+    ?awaitMatch(ok,
+                rpc:call(Server1, ra, transfer_leadership,
+                         [{RaName, Server1}, {RaName, Server2}]),
+                ?DEFAULT_AWAIT),
+    ?awaitMatch({ok, _, {RaName, Server2}},
+                rpc:call(Server1, ra, members, [{RaName, Server1}]),
+                ?DEFAULT_AWAIT),
+    [publish(Ch, QQ, <<"old">>) || _ <- lists:seq(1, 3)],
+    true = amqp_channel:wait_for_confirms(Ch, 5),
+    OldUId = rpc:call(Server3, ra_directory, uid_of, [quorum_queues, RaName]),
+
+    partition(Config, Server3),
+
+    %% recreate vhost
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+    ok = add_vhost_with_full_permissions(Config, Server1, VHost),
+    Ch2 = open_vhost_confirm_channel(Config, Server1, VHost),
+
+    %% remade queue
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch2, QQ, Args)),
+    publish(Ch2, QQ, <<"new">>),
+    true = amqp_channel:wait_for_confirms(Ch2, 5),
+    ?assertEqual(OldUId,
+                 rpc:call(Server3, ra_directory, uid_of, [quorum_queues, RaName])),
+
+    heal(Config, Server3),
+    timer:sleep(5000),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"new">>}},
+                 amqp_channel:call(Ch2, #'basic.get'{queue = QQ, no_ack = true})),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch2, #'basic.get'{queue = QQ, no_ack = true})),
+    ok.
+
+add_vhost_with_full_permissions(Config, Node, VHost) ->
+    User = ?config(rmq_username, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost).
+
+open_vhost_confirm_channel(Config, Node, VHost) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node, VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    Ch.
 
 num_ready_messages(ServerId) ->
     case ra:member_overview(ServerId) of
