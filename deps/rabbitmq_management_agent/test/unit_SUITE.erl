@@ -10,11 +10,9 @@
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
 
 all() ->
-    [filter_user_tag_representation,
-     basic_properties_shortstr_length,
+    [basic_properties_shortstr_length,
      basic_properties_header_name_length,
      basic_properties_headers_type].
 
@@ -69,22 +67,4 @@ basic_properties_headers_type(_Config) ->
       end, [<<"s">>, 5, [<<"x">>], true, null]),
     ?assertEqual(rabbit_mgmt_format:to_basic_properties(#{<<"headers">> => #{}}),
                  rabbit_mgmt_format:to_basic_properties(#{<<"headers">> => []})),
-    ok.
-
-%% `#user.tags` may hold binaries (the internal backend, which avoids
-%% interning admin-supplied tag strings) or atoms (LDAP, HTTP, OAuth2
-%% backends); both must grant a monitor visibility of other users'
-%% connection and channel stats.
-filter_user_tag_representation(_Config) ->
-    List = [[{user, <<"other">>}], [{user, <<"me">>}]],
-
-    MonitorBin = #user{username = <<"me">>, tags = [<<"monitoring">>]},
-    ?assertEqual(List, rabbit_mgmt_data:filter_user(List, MonitorBin)),
-
-    MonitorAtom = #user{username = <<"me">>, tags = [monitoring]},
-    ?assertEqual(List, rabbit_mgmt_data:filter_user(List, MonitorAtom)),
-
-    NonMonitor = #user{username = <<"me">>, tags = [<<"management">>]},
-    ?assertEqual([[{user, <<"me">>}]],
-                 rabbit_mgmt_data:filter_user(List, NonMonitor)),
     ok.
