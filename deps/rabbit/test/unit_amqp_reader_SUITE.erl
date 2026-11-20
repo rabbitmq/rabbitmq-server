@@ -45,6 +45,7 @@ groups() ->
      {credential_tests, [],
       [
        close_frame_on_credential_update_state_error,
+       close_frame_on_credential_update_state_refusal,
        close_frame_on_credential_check_vhost_access_error
       ]}
     ].
@@ -250,6 +251,15 @@ close_frame_on_abnormal_session_exit(_Config) ->
 close_frame_on_credential_update_state_error(_Config) ->
     ok = meck:expect(rabbit_access_control, update_state,
                      fun(_User, _Cred) -> {error, invalid_credentials} end),
+    ?assertMatch(#'v1_0.error'{
+                    condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                    description = {utf8, <<"credential update failed">>}},
+                 assert_credential_update_closes(<<"new-token">>)),
+    passed.
+
+close_frame_on_credential_update_state_refusal(_Config) ->
+    ok = meck:expect(rabbit_access_control, update_state,
+                     fun(_User, _Cred) -> {refused, "refused: ~tp", ["~ts"]} end),
     ?assertMatch(#'v1_0.error'{
                     condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
                     description = {utf8, <<"credential update failed">>}},

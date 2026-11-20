@@ -140,7 +140,7 @@ update_state(AuthUser, NewToken) ->
                 {refused, {error, {invalid_token, _Type, _Err, _Stacktrace}}} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
                 {refused, Err} ->
-                    {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err]), []};
+                    {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
                 {ok, DecodedToken} ->
                     CurToken = AuthUser#auth_user.impl,
                     case ensure_same_username(
