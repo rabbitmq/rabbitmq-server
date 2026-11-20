@@ -209,6 +209,7 @@ groups() ->
        x_cc_annotation_queue,
        x_cc_annotation_null,
        non_utf8_names,
+       binding_arguments_size_limit,
        bad_x_cc_annotation_exchange,
        decimal_types,
        consumer_timeout_quorum_queue_policy,
@@ -8249,6 +8250,29 @@ x_cc_annotation_queue(Config) ->
 
     {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
     {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
+
+binding_arguments_size_limit(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    QName = <<"my queue">>,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    %% Each `ulong 0` is 1 byte on the wire and 9 bytes in AMQP 0.9.1.
+    Args = #{<<"list">> => {list, lists:duplicate(100_000, {ulong, 0})}},
+    ?assertMatch(
+       {error, _},
+       rabbitmq_amqp_client:bind_queue(LinkPair, QName, <<"amq.fanout">>, <<>>, Args)),
+    {ok, Resp} = management_request(
+                   LinkPair,
+                   #{subject => <<"POST">>, to => <<"/bindings">>},
+                   {map, [{{utf8, <<"source">>}, {utf8, <<"amq.fanout">>}},
+                          {{utf8, <<"destination_queue">>}, {utf8, QName}},
+                          {{utf8, <<"binding_key">>}, {utf8, <<>>}},
+                          {{utf8, <<"arguments">>},
+                           {map, [{{utf8, <<"list">>}, {list, lists:duplicate(100_000, {ulong, 0})}}]}}]}),
+    ?assertMatch(#{subject := <<"400">>}, amqp10_msg:properties(Resp)),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, <<"amq.fanout">>, <<>>, #{}),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
 

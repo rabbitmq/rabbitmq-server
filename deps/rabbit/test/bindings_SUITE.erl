@@ -14,6 +14,8 @@
 
 -compile([nowarn_export_all, export_all]).
 
+-define(MAX_BINDING_ARGS_SIZE, 16384).
+
 suite() ->
     [{timetrap, 5 * 60000}].
 
@@ -51,13 +53,15 @@ all_tests() ->
      topic_exchange_binding_hash_limit,
      topic_binding_hash_limit_allows_unbind,
      rebind_on_lagging_node,
+     queue_binding_args_size_limit,
 
      %% Exchange bindings
      bind_and_unbind_direct_exchange,
      bind_and_unbind_fanout_exchange,
      bind_and_delete_exchange_source,
      bind_and_delete_exchange_destination,
-     bind_to_unknown_exchange
+     bind_to_unknown_exchange,
+     exchange_binding_args_size_limit
     ].
 
 %% -------------------------------------------------------------------
@@ -1045,7 +1049,51 @@ bind_and_delete_exchange_source(Config) ->
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [<<"/">>])),
     ok.
 
+queue_binding_args_size_limit(Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    X = ?config(exchange_name, Config),
+    Q = ?config(queue_name, Config),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Ch, #'exchange.declare'{exchange = X, type = <<"fanout">>}),
+    #'queue.declare_ok'{} = declare(Ch, Q, []),
+    Bind = fun(Ch0, Size) ->
+                   amqp_channel:call(Ch0, #'queue.bind'{exchange  = X,
+                                                        queue     = Q,
+                                                        arguments = args_of_size(Size)})
+           end,
+    #'queue.bind_ok'{} = Bind(Ch, ?MAX_BINDING_ARGS_SIZE),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                Bind(Ch2, ?MAX_BINDING_ARGS_SIZE + 1)),
+    ok.
+
+exchange_binding_args_size_limit(Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    Src = ?config(exchange_name, Config),
+    Dst = <<Src/binary, "_dst">>,
+    [#'exchange.declare_ok'{} =
+         amqp_channel:call(Ch, #'exchange.declare'{exchange = Name, type = <<"fanout">>})
+     || Name <- [Src, Dst]],
+    Bind = fun(Ch0, Size) ->
+                   amqp_channel:call(Ch0, #'exchange.bind'{source      = Src,
+                                                           destination = Dst,
+                                                           arguments   = args_of_size(Size)})
+           end,
+    #'exchange.bind_ok'{} = Bind(Ch, ?MAX_BINDING_ARGS_SIZE),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                Bind(Ch2, ?MAX_BINDING_ARGS_SIZE + 1)),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_exchange, [Dst]),
+    ok.
+
 %% Internal
+
+args_of_size(Size) ->
+    Overhead = iolist_size(rabbit_binary_generator:generate_table(
+                             [{<<"pad">>, longstr, <<>>}])),
+    Args = [{<<"pad">>, longstr, binary:copy(<<"a">>, Size - Overhead)}],
+    Size = iolist_size(rabbit_binary_generator:generate_table(Args)),
+    Args.
 
 delete_queues() ->
     [{ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
