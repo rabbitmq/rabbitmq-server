@@ -58,8 +58,15 @@ get_settings(ReqData) ->
         {default_queue_type,        rabbit_queue_type:default_alias()},
         {is_op_policy_updating_enabled, not is_op_policy_updating_disabled()},
         {enable_queue_totals,       rabbit_mgmt_util:enable_queue_totals(ReqData)},
+        {ui_terminology,            ui_terminology()},
         {definitions,               get_definitions_settings()}
     ].
+
+ui_terminology() ->
+    case application:get_env(rabbitmq_management, ui_terminology, modern) of
+        legacy -> legacy;
+        _      -> modern
+    end.
 
 get_product_info() ->
     [

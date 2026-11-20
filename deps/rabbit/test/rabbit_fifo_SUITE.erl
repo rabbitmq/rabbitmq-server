@@ -4640,7 +4640,7 @@ aux_upgrade_from_v1_test(_) ->
     ok = meck:new(ra_log, []),
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
     {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV1, State0),
-    ?assertEqual(aux_v5, element(1, Aux)),
+    ?assertEqual(aux_v6, element(1, Aux)),
     ?assertEqual(Name, element(2, Aux)),
     meck:unload(),
     ok.
@@ -4662,7 +4662,7 @@ aux_upgrade_from_v2_test(_) ->
     ok = meck:new(ra_log, []),
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
     {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV2, State0),
-    ?assertEqual(aux_v5, element(1, Aux)),
+    ?assertEqual(aux_v6, element(1, Aux)),
     ?assertEqual(Name, element(2, Aux)),
     meck:unload(),
     ok.
@@ -4685,7 +4685,7 @@ aux_upgrade_from_v3_test(_) ->
     ok = meck:new(ra_log, []),
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
     {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV3, State0),
-    ?assertEqual(aux_v5, element(1, Aux)),
+    ?assertEqual(aux_v6, element(1, Aux)),
     ?assertEqual(Name, element(2, Aux)),
     meck:unload(),
     ok.
@@ -4708,7 +4708,31 @@ aux_upgrade_from_v4_test(_) ->
     ok = meck:new(ra_log, []),
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
     {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV4, State0),
-    ?assertEqual(aux_v5, element(1, Aux)),
+    ?assertEqual(aux_v6, element(1, Aux)),
+    ?assertEqual(Name, element(2, Aux)),
+    meck:unload(),
+    ok.
+
+aux_upgrade_from_v5_test(_) ->
+    _ = ra_machine_ets:start_link(),
+    Name = ?FUNCTION_NAME,
+    %% shape of the aux state as used by an earlier version of rabbit_fifo,
+    %% before message rates were added
+    AuxV5 = {aux_v5, Name, unused_last_decorators_state, unused_consumer_timeout,
+             {aux_gc, 0}, unused_tick_pid, unused_cache, unused_last_checkpoint,
+             unused_ingress, unknown},
+    LastApplied = 0,
+    State0 = #{machine_state =>
+               init(#{name => Name,
+                      queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                      single_active_consumer_on => false}),
+               log => mock_log,
+               cfg => #cfg{},
+               last_applied => LastApplied},
+    ok = meck:new(ra_log, []),
+    meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
+    {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV5, State0),
+    ?assertEqual(aux_v6, element(1, Aux)),
     ?assertEqual(Name, element(2, Aux)),
     meck:unload(),
     ok.
@@ -6067,6 +6091,94 @@ update_ingress_seeds_baseline_on_first_observation_test(_Config) ->
     %% a spike from the whole ~10M cumulative total leaking through would
     %% be several orders of magnitude larger than this
     ?assert(Rate2 < 1000),
+    ok.
+
+%% Message rate tests
+
+update_rates_first_observation_is_a_baseline_test(Config) ->
+    _ = ra_machine_ets:start_link(),
+    S0 = test_init(?FUNCTION_NAME),
+    {S1, _} = enq(Config, 1, 1, mk_mc(<<"m1">>), S0),
+    {S2, _} = enq(Config, 2, 2, mk_mc(<<"m2">>), S1),
+    R0 = rabbit_fifo:new_rates_aux(),
+    R1 = rabbit_fifo:update_rates(S2, 1000, R0),
+    ?assertMatch(#{publish := Publish, deliver := Deliver, ack := Ack}
+                   when Publish == 0 andalso Deliver == 0 andalso Ack == 0,
+                 rabbit_fifo:rates_snapshot(R1, 1000)),
+    ok.
+
+update_rates_counts_publishes_deliveries_and_settles_test(Config) ->
+    _ = ra_machine_ets:start_link(),
+    Cid = {?FUNCTION_NAME_B, self()},
+    S0 = test_init(?FUNCTION_NAME),
+    R0 = rabbit_fifo:update_rates(S0, 0, rabbit_fifo:new_rates_aux()),
+    {S1, _} = lists:foldl(
+                fun(N, {S, _}) ->
+                        enq(Config, N, N, mk_mc(<<"m">>), S)
+                end, {S0, ok}, lists:seq(1, 50)),
+    {S2, _} = check_auto(Config, Cid, 51, S1),
+    R1 = rabbit_fifo:update_rates(S2, 5000, R0),
+    #{publish := Publish1, deliver := Deliver1, ack := Ack1} =
+        rabbit_fifo:rates_snapshot(R1, 5000),
+    ?assert(Publish1 > 0),
+    ?assert(Deliver1 > 0),
+    ?assert(Publish1 > Deliver1),
+    ?assertEqual(0.0, Ack1),
+    %% the delivered message is settled
+    {S3, _} = settle(Config, Cid, 52, 0, S2),
+    R2 = rabbit_fifo:update_rates(S3, 10_000, R1),
+    #{ack := Ack2} = rabbit_fifo:rates_snapshot(R2, 10_000),
+    ?assert(Ack2 > 0),
+    ok.
+
+update_rates_ignores_a_backwards_timestamp_test(Config) ->
+    _ = ra_machine_ets:start_link(),
+    S0 = test_init(?FUNCTION_NAME),
+    R0 = rabbit_fifo:update_rates(S0, 5000, rabbit_fifo:new_rates_aux()),
+    {S1, _} = enq(Config, 1, 1, mk_mc(<<"m">>), S0),
+    R1 = rabbit_fifo:update_rates(S1, 1000, R0),
+    ?assertMatch(#{publish := Publish} when Publish == 0,
+                 rabbit_fifo:rates_snapshot(R1, 5000)),
+    ok.
+
+rate_events_are_emitted_for_discards_and_returns_test(Config) ->
+    Cid = {?FUNCTION_NAME_B, self()},
+    S0 = test_init(?FUNCTION_NAME),
+    {S1, _} = lists:foldl(
+                fun(N, {S, _}) ->
+                        enq(Config, N, N, mk_mc(<<"m">>), S)
+                end, {S0, ok}, lists:seq(1, 3)),
+    {S2, _} = check(Config, Cid, 4, 3, S1),
+    Ts = 1234,
+    {S3, _, Effects1} = apply(meta(Config, 5, Ts),
+                              rabbit_fifo:make_discard(Cid, [0, 1]), S2),
+    ?assert(lists:member({aux, {rate_event, reject, 2, Ts}}, Effects1)),
+    {_, _, Effects2} = apply(meta(Config, 6, Ts),
+                             rabbit_fifo:make_return(Cid, [2]), S3),
+    ?assert(lists:member({aux, {rate_event, redeliver, 1, Ts}}, Effects2)),
+    ok.
+
+update_rates_counts_rate_events_test(Config) ->
+    _ = ra_machine_ets:start_link(),
+    S0 = test_init(?FUNCTION_NAME),
+    Aux0 = rabbit_fifo:init_aux(?FUNCTION_NAME),
+    Now = erlang:system_time(millisecond),
+    {no_reply, Aux1, ra_aux_stub} =
+        rabbit_fifo:handle_aux(leader, cast, {rate_event, reject, 5, Now},
+                               Aux0, ra_aux_stub),
+    {no_reply, Aux2, ra_aux_stub} =
+        rabbit_fifo:handle_aux(follower, cast, {rate_event, redeliver, 3, Now},
+                               Aux1, ra_aux_stub),
+    %% an event from a command that a member applied while catching up
+    {no_reply, Aux3, ra_aux_stub} =
+        rabbit_fifo:handle_aux(follower, cast, {rate_event, reject, 100, Now - 60_000},
+                               Aux2, ra_aux_stub),
+    R0 = rabbit_fifo:update_rates(S0, 0, element(11, Aux3)),
+    R1 = rabbit_fifo:update_rates(S0, 5000, R0),
+    #{reject := Reject, redeliver := Redeliver} = rabbit_fifo:rates_snapshot(R1, 5000),
+    ?assert(abs(Reject - 1.0) < 0.05),
+    ?assert(abs(Redeliver - 0.6) < 0.05),
+    _ = Config,
     ok.
 
 %% Ingress tracking tests end

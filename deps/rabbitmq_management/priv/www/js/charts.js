@@ -49,6 +49,7 @@ function rates_chart_or_text_no_heading(type_id, id, stats, items,
     var mode = get_pref('rate-mode-' + type_id);
     var range = get_pref('chart-range');
     var res;
+    items = t_items(items);
     if (keys(stats).length > 0) {
         if (mode == 'chart') {
             res = rates_chart(
