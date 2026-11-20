@@ -78,6 +78,7 @@ groups() ->
                       {cluster_size_3, [], [
                                             cleanup_data_dir,
                                             declare_with_leftover_members,
+                                            report_members_exist,
                                             declare_with_terminating_member,
                                             delete_when_leader_exits,
                                             declare_when_leader_exits,
@@ -4129,6 +4130,11 @@ node_removal_is_not_quorum_critical(Config) ->
     Qs = rpc:call(Server, rabbit_quorum_queue, list_with_minimum_quorum, []),
     ?assertEqual([], Qs).
 
+
+report_members_exist(Config) ->
+    ?assertEqual({ok, true},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+                                              [ra, report_members_exist])).
 
 declare_with_leftover_members(Config) ->
     [Server1, Server2, _] = Servers =
