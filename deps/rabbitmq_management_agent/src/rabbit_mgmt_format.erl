@@ -506,6 +506,7 @@ to_basic_properties(Props) when is_map(Props) ->
               (priority,      _V)                   -> E(not_int, priority);
               (timestamp,     V) when is_integer(V) -> V;
               (timestamp,     _V)                   -> E(not_int, timestamp);
+              (K,             V) when byte_size(V) > 255 -> E(string_too_long, K);
               (_,             V) when is_binary(V)  -> V;
               (K,            _V)                    -> E(not_string, K)
           end,
@@ -520,7 +521,7 @@ to_basic_properties(Props) when is_map(Props) ->
     try rabbit_framing_amqp_0_9_1:encode_properties(Res) of
         _ -> Res
     catch
-        exit:content_properties_shortstr_overflow -> err(string_too_long, properties)
+        exit:content_properties_shortstr_overflow -> err(string_too_long, headers)
     end.
 
 -spec err(term(), term()) -> no_return().

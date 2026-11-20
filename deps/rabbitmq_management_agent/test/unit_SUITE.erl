@@ -32,7 +32,7 @@ basic_properties_shortstr_length(_Config) ->
                       <<(binary:copy(<<195, 169>>, 127))/binary, "a">>]),
               lists:foreach(
                 fun(Value) ->
-                        ?assertThrow({error, {string_too_long, properties}},
+                        ?assertThrow({error, {string_too_long, Field}},
                                      rabbit_mgmt_format:to_basic_properties(#{Key => Value}))
                 end, [binary:copy(<<"a">>, 256), binary:copy(<<195, 169>>, 128)])
       end, Fields),
@@ -51,7 +51,7 @@ basic_properties_header_name_length(_Config) ->
                                 ?assertEqual([{headers, Headers}],
                                              rabbit_mgmt_format:basic_properties(Props));
                             error ->
-                                ?assertThrow({error, {string_too_long, properties}},
+                                ?assertThrow({error, {string_too_long, headers}},
                                              rabbit_mgmt_format:to_basic_properties(Input))
                         end
                 end, [Header, #{<<"nested">> => Header},
