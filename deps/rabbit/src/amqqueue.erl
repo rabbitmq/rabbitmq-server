@@ -75,6 +75,8 @@
          pattern_match_on_type_and_durable/2,
          pattern_match_on_type_and_vhost/2,
          pattern_match_on_exclusive_owner/1,
+         pattern_match_on_type_state/1,
+         pattern_match_on_type_state/2,
          reset_decorators/1,
          set_immutable/1,
          qnode/1,
@@ -622,6 +624,17 @@ pattern_match_on_type_and_vhost(Type, VHost) ->
 
 pattern_match_on_exclusive_owner(Owner) ->
     #amqqueue{exclusive_owner = Owner, _ = '_'}.
+
+%% A map pattern matches any type state that contains its keys and values.
+-spec pattern_match_on_type_state(map()) -> amqqueue_pattern().
+
+pattern_match_on_type_state(TypeState) ->
+    #amqqueue{type_state = TypeState, _ = '_'}.
+
+-spec pattern_match_on_type_state(atom(), map()) -> amqqueue_pattern().
+
+pattern_match_on_type_state(State, TypeState) ->
+    #amqqueue{state = State, type_state = TypeState, _ = '_'}.
 
 -spec reset_decorators(amqqueue()) -> amqqueue().
 

@@ -102,7 +102,8 @@ set_default_config() ->
               {ra,
                [
                 {wal_max_size_bytes, 536870912}, %% 5 * 2 ^ 20
-                {wal_max_batch_size, 4096}
+                {wal_max_batch_size, 4096},
+                {report_members_exist, true}
                ]},
               {aten,
                [

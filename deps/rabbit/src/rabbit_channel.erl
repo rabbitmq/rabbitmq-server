@@ -2647,6 +2647,10 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
                              Q, Durable, AutoDelete, Args, Owner),
                       maybe_stat(NoWait, Q)
+           end,
+           %% The declare takes over a delete whose owner died.
+           fun ({absent, _, deleting}) -> {error, not_found};
+               (Reason) -> {error, Reason}
            end) of
         {ok, MessageCount, ConsumerCount} ->
             {ok, QueueName, MessageCount, ConsumerCount};
@@ -2681,6 +2685,12 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                          end,
                     rabbit_core_metrics:queue_created(QueueName),
                     {ok, QueueName, 0, 0};
+                {existing, Q} when ?amqqueue_state_is(Q, deleting) ->
+                    %% A declare of another queue type does not take over
+                    %% the delete, so looping would not end.
+                    rabbit_misc:protocol_error(
+                      resource_locked, "~ts is being deleted",
+                      [rabbit_misc:rs(QueueName)]);
                 {existing, _Q} ->
                     %% must have been created between the stat and the
                     %% declare. Loop around again.

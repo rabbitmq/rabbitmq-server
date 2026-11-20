@@ -36,6 +36,7 @@
          delete_if/4,
          update/2,
          update/3,
+         try_update/3,
          update_decorators/2,
          exists/1,
          foreach/2
@@ -45,6 +46,7 @@
 -export([
          get_all_durable/0,
          get_all_durable_by_type/1,
+         try_get_all_durable_by_type/1,
          filter_all_durable/1,
          update_durable/2,
          get_durable/1,
@@ -189,6 +191,26 @@ get_all_durable_by_type(Type) ->
     catch
         error:badarg ->
             []
+    end.
+
+-spec try_get_all_durable_by_type(Type) -> Ret when
+      Type :: atom(),
+      Ret :: {ok, [amqqueue:amqqueue()]} | {error, any()}.
+
+%% @doc Gets all durable queues of the given type from the metadata store,
+%% unlike `get_all_durable_by_type/1', which returns `[]' if the read fails.
+%%
+%% @private
+
+try_get_all_durable_by_type(Type) ->
+    Path = khepri_queue_path(
+             ?KHEPRI_WILDCARD_STAR,
+             #if_data_matches{
+                pattern = amqqueue:pattern_match_on_type_and_durable(
+                            Type, true)}),
+    case rabbit_khepri:get_many(Path) of
+        {ok, Map} -> {ok, maps:values(Map)};
+        {error, _} = Err -> Err
     end.
 
 %% -------------------------------------------------------------------
@@ -513,22 +535,65 @@ update(QName, Fun) ->
 %% @private
 
 update(QName, Fun, Options) ->
+    %% Callers handle a record that cannot be read as one that does not exist.
+    case update_if_unchanged(QName, fun(Q) -> {ok, Fun(Q)} end, Options) of
+        {ok, Q1} -> Q1;
+        {read_error, _} -> not_found;
+        Ret -> Ret
+    end.
+
+-spec try_update(QName, UpdateFun, Options) -> Ret when
+      QName :: rabbit_amqqueue:name(),
+      Queue :: amqqueue:amqqueue(),
+      UpdateFun :: fun((Queue) -> {ok, NewQueue} | {error, Reason}),
+      NewQueue :: amqqueue:amqqueue(),
+      Reason :: term(),
+      Options :: #{timeout => timeout()},
+      Ret :: {ok, NewQueue} | {error, Reason} | not_found |
+             {error, term()}.
+%% @doc Updates an existing queue record using `UpdateFun', unless
+%% `UpdateFun' returns an error.
+%%
+%% `UpdateFun' is called again if the record changed after it was read.
+%%
+%% @private
+
+try_update(QName, Fun, Options) ->
+    case update_if_unchanged(QName, Fun, Options) of
+        {read_error, Err} -> Err;
+        Ret -> Ret
+    end.
+
+update_if_unchanged(QName, Fun, Options) ->
     Path = khepri_queue_path(QName),
-    Ret1 = rabbit_khepri:adv_get(Path, Options),
-    case Ret1 of
+    case rabbit_khepri:adv_get(Path, Options) of
         {ok, #{Path := #{data := Q, payload_version := Vsn}}} ->
-            UpdatePath = khepri_path:combine_with_conditions(
-                           Path, [#if_payload_version{version = Vsn}]),
-            Q1 = Fun(Q),
-            Ret2 = rabbit_khepri:put(UpdatePath, Q1, Options),
-            case Ret2 of
-                ok -> Q1;
-                {error, {khepri, mismatching_node, _}} ->
-                    update(QName, Fun);
-                Err -> Err
+            case Fun(Q) of
+                {ok, Q1} ->
+                    %% A recreated record starts again at the same payload
+                    %% version, so the data must match as well.
+                    UpdatePath = khepri_path:combine_with_conditions(
+                                   Path, [#if_payload_version{version = Vsn},
+                                          #if_data_matches{pattern = Q}]),
+                    case rabbit_khepri:put(UpdatePath, Q1, Options) of
+                        ok ->
+                            {ok, Q1};
+                        {error, {khepri, mismatching_node, _}} ->
+                            update_if_unchanged(QName, Fun, Options);
+                        {error, {khepri, node_not_found, _}} ->
+                            not_found;
+                        {error, _} = Err ->
+                            Err
+                    end;
+                {error, _} = Err ->
+                    Err
             end;
-        _  ->
-            not_found
+        {ok, _} ->
+            not_found;
+        {error, {khepri, node_not_found, _}} ->
+            not_found;
+        {error, _} = Err ->
+            {read_error, Err}
     end.
 
 %% -------------------------------------------------------------------
