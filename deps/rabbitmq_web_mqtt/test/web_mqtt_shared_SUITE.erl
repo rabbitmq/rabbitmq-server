@@ -84,6 +84,9 @@ default_queue_type(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 message_interceptors(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 utf8(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 retained_message_conversion(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+retained_message_sparkplug_topic(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+sparkplug_topic_live_delivery(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+sparkplug_retained_will_topic(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 bind_exchange_to_exchange(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 bind_exchange_to_exchange_single_message(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 pubsub(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).

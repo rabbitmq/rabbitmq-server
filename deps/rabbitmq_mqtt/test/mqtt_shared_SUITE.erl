@@ -126,6 +126,9 @@ cluster_size_1_tests() ->
      ,message_interceptors
      ,utf8
      ,retained_message_conversion
+     ,retained_message_sparkplug_topic
+     ,sparkplug_topic_live_delivery
+     ,sparkplug_retained_will_topic
      ,bind_exchange_to_exchange
      ,bind_exchange_to_exchange_single_message
      ,notify_consumer_classic_queue_deleted
@@ -1099,6 +1102,66 @@ non_clean_sess_empty_client_id(Config) ->
             ?assertNotEqual(ClientId, ClientId2),
             ok = emqtt:disconnect(C),
             ok = emqtt:disconnect(C2)
+    end.
+
+retained_message_sparkplug_topic(Config) ->
+    with_sparkplug(
+      Config,
+      fun() ->
+              Topic = <<"spBv1.0/group/DDATA/node">>,
+              C = connect(?FUNCTION_NAME, Config),
+              {ok, _} = emqtt:publish(C, Topic, <<"retained">>, [{retain, true}, {qos, 1}]),
+              {ok, _, [0]} = emqtt:subscribe(C, Topic, qos0),
+              ok = expect_publishes(C, Topic, [<<"retained">>]),
+              {ok, _} = emqtt:publish(C, Topic, <<>>, [{retain, true}, {qos, 1}]),
+              ok = emqtt:disconnect(C)
+      end).
+
+sparkplug_topic_live_delivery(Config) ->
+    with_sparkplug(
+      Config,
+      fun() ->
+              Topic = <<"spBv1.0/group/DDATA/node">>,
+              Sub = connect(<<"sub">>, Config),
+              {ok, _, [1]} = emqtt:subscribe(Sub, Topic, qos1),
+              Pub = connect(<<"pub">>, Config),
+              {ok, _} = emqtt:publish(Pub, Topic, <<"live">>, qos1),
+              ok = expect_publishes(Sub, Topic, [<<"live">>]),
+              ok = emqtt:disconnect(Pub),
+              ok = emqtt:disconnect(Sub)
+      end).
+
+sparkplug_retained_will_topic(Config) ->
+    with_sparkplug(
+      Config,
+      fun() ->
+              Topic = <<"spBv1.0/group/NDEATH/node">>,
+              Watcher = connect(<<"watcher">>, Config),
+              {ok, _, [1]} = emqtt:subscribe(Watcher, Topic, qos1),
+              Will = connect(<<"will">>, Config, [{will_topic, Topic},
+                                                  {will_payload, <<"dead">>},
+                                                  {will_retain, true},
+                                                  {will_qos, 1}]),
+              unlink(Will),
+              erlang:exit(Will, test_will),
+              ok = expect_publishes(Watcher, Topic, [<<"dead">>]),
+              ok = emqtt:disconnect(Watcher),
+              Sub = connect(<<"sub">>, Config),
+              {ok, _, [0]} = emqtt:subscribe(Sub, Topic, qos0),
+              ok = expect_publishes(Sub, Topic, [<<"dead">>]),
+              {ok, _} = emqtt:publish(Sub, Topic, <<>>, [{retain, true}, {qos, 1}]),
+              ok = emqtt:disconnect(Sub)
+      end).
+
+with_sparkplug(Config, Fun) ->
+    ok = rpc(Config, application, set_env, [rabbitmq_mqtt, sparkplug, true]),
+    ok = rpc(Config, rabbit_mqtt_util, init_sparkplug, []),
+    try
+        Fun()
+    after
+        ok = rpc(Config, application, unset_env, [rabbitmq_mqtt, sparkplug]),
+        [true = rpc(Config, persistent_term, erase, [K])
+         || K <- [sparkplug_mp_mqtt_to_amqp, sparkplug_mp_amqp_to_mqtt]]
     end.
 
 subscribe_same_topic_same_qos(Config) ->
