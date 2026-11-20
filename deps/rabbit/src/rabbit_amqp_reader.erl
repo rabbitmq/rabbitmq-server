@@ -1131,11 +1131,16 @@ set_credential0(Cred,
                       handle_exception(State, 0, Error,
                                         rabbit_misc:format("~tp", [Reason]))
             end;
+        {refused, Fmt, FmtArgs} ->
+            credential_update_failed(State, rabbit_misc:format(Fmt, FmtArgs));
         Err ->
-            Error = error_frame(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                                "credential update failed", []),
-            handle_exception(State, 0, Error, rabbit_misc:format("~tp", [Err]))
+            credential_update_failed(State, rabbit_misc:format("~tp", [Err]))
     end.
+
+credential_update_failed(State, Detail) ->
+    Error = error_frame(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                        "credential update failed", []),
+    handle_exception(State, 0, Error, Detail).
 
 maybe_start_credential_expiry_timer(User) ->
     case rabbit_access_control:expiry_timestamp(User) of
