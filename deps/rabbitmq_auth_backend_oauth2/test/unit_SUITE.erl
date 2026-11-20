@@ -46,6 +46,7 @@ all() ->
         test_missing_required_exp_claim,
         test_missing_not_required_exp_claim,
         test_invalid_signature,
+        test_update_state_with_invalid_signature,
         test_incorrect_kid,
         normalize_token_scope_using_multiple_scopes_key,
         normalize_token_scope_with_requesting_party_token_scopes,
@@ -1225,6 +1226,19 @@ test_invalid_signature(_) ->
     Token     = ?UTIL_MOD:sign_token_hs(TokenData, Jwk),
     ?assertMatch({refused, _, [signature_invalid]},
                  user_login_authentication(Username, [{password, Token}])).
+
+test_update_state_with_invalid_signature(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    WrongJwk = ?UTIL_MOD:fixture_jwk("wrong", <<"GawgguFyGrWKav7AX4VKUg">>),
+    set_env(key_config, [{signing_keys, #{<<"token-key">> => {map, WrongJwk}}}]),
+    set_env(resource_server_id, <<"rabbitmq">>),
+    TokenData = ?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username),
+    AuthUser = #auth_user{username = Username, impl = fun() -> TokenData end},
+    ?assertMatch({refused, "Authentication using an OAuth 2/JWT token failed: ~tp",
+                  [signature_invalid]},
+                 rabbit_auth_backend_oauth2:update_state(
+                   AuthUser, ?UTIL_MOD:sign_token_hs(TokenData, Jwk))).
 
 test_token_expiration(_) ->
     VHost = <<"vhost">>,
