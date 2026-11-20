@@ -498,15 +498,17 @@ record(Record, Fields) ->
 
 to_basic_properties(Props) when is_map(Props) ->
     E = fun err/2,
-    Fmt = fun (headers,       H)                    -> to_amqp_table(H);
-              (delivery_mode, V) when is_integer(V) -> V;
-              (delivery_mode, _V)                   -> E(not_int,delivery_mode);
-              (priority,      V) when is_integer(V) -> V;
-              (priority,      _V)                   -> E(not_int, priority);
-              (timestamp,     V) when is_integer(V) -> V;
-              (timestamp,     _V)                   -> E(not_int, timestamp);
-              (_,             V) when is_binary(V)  -> V;
-              (K,            _V)                    -> E(not_string, K)
+    Fmt = fun (headers,       H) when is_map(H); H =:= [] -> to_amqp_table(H);
+              (headers,       _H)                         -> E(not_table, headers);
+              (delivery_mode, V) when is_integer(V)       -> V;
+              (delivery_mode, _V)                         -> E(not_int,delivery_mode);
+              (priority,      V) when is_integer(V)       -> V;
+              (priority,      _V)                         -> E(not_int, priority);
+              (timestamp,     V) when is_integer(V)       -> V;
+              (timestamp,     _V)                         -> E(not_int, timestamp);
+              (K,             V) when byte_size(V) > 255  -> E(string_too_long, K);
+              (_,             V) when is_binary(V)        -> V;
+              (K,             _V)                         -> E(not_string, K)
           end,
     {Res, _Ix} = lists:foldl(
                    fun (K, {P, Ix}) ->
@@ -516,7 +518,11 @@ to_basic_properties(Props) when is_map(Props) ->
                             end, Ix + 1}
                    end, {#'P_basic'{}, 2},
                    record_info(fields, 'P_basic')),
-    Res.
+    try rabbit_framing_amqp_0_9_1:encode_properties(Res) of
+        _ -> Res
+    catch
+        exit:content_properties_shortstr_overflow -> err(string_too_long, headers)
+    end.
 
 -spec err(term(), term()) -> no_return().
 err(A, B) ->
