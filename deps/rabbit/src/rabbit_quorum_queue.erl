@@ -102,7 +102,7 @@
 -ifdef(TEST).
 -export([filter_promotable/2,
          ra_machine_config/1,
-         run_leader_health_check/5,
+         run_leader_health_check/6,
          wait_for_leader_health_checks/3]).
 -endif.
 
@@ -2765,54 +2765,83 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
             VHost when is_binary(VHost) ->
                 rabbit_db_queue:get_all_by_type_and_vhost(?MODULE, VHost)
         end,
-    check_process_limit_safety(2 * length(Qs), ProcessLimitThreshold),
+    Checks = [begin
+                  {ClusterName, LeaderNode} = amqqueue:get_pid(Q),
+                  Members = [{ClusterName, N} || N <- [LeaderNode | lists:delete(LeaderNode, get_nodes(Q))]],
+                  {QResource, Members}
+              end || Q <- Qs,
+                     amqqueue:get_type(Q) == ?MODULE,
+                     {resource, _, queue, QueueName} = QResource <- [amqqueue:get_name(Q)],
+                     rabbit_re:run(QueueName, QueueNameOrRegEx) =:= match],
+    check_process_limit_safety(lists:sum([1 + length(Members) || {_, Members} <- Checks]),
+                               ProcessLimitThreshold),
     ParentPID = self(),
     HealthCheckRef = make_ref(),
     Pending =
         maps:from_list(
           [begin
-               {ClusterName, LeaderNode} = amqqueue:get_pid(Q),
-               Members = [{ClusterName, N} || N <- [LeaderNode | lists:delete(LeaderNode, get_nodes(Q))]],
                _ = spawn(fun() -> run_leader_health_check(Members, QResource, HealthCheckRef, ParentPID) end),
                {QResource, true}
-           end || Q <- Qs,
-                  amqqueue:get_type(Q) == ?MODULE,
-                  {resource, _, queue, QueueName} = QResource <- [amqqueue:get_name(Q)],
-                  rabbit_re:run(QueueName, QueueNameOrRegEx) =:= match]),
+           end || {QResource, Members} <- Checks]),
     Result = wait_for_leader_health_checks(HealthCheckRef, Pending, ?GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT),
     _ = spawn(fun() -> maybe_log_leader_health_check_result(Result) end),
     Result.
 
 run_leader_health_check(Members, QResource, HealthCheckRef, From) ->
     run_leader_health_check(Members, QResource, HealthCheckRef, From,
+                            ?LEADER_HEALTH_CHECK_TIMEOUT,
                             ?LEADER_HEALTH_CHECK_QUEUE_TIMEOUT).
 
-run_leader_health_check(Members, QResource, HealthCheckRef, From, Timeout) ->
+run_leader_health_check([Leader | Others], QResource, HealthCheckRef, From,
+                        CheckTimeout, Timeout) ->
+    Now = erlang:monotonic_time(millisecond),
+    Deadline = Now + Timeout,
     %% Followers redirect the query to their known leader, so only a leader replies.
-    %% Members are tried one at a time, each with the full timeout.
-    Self = self(),
-    ReplyRef = make_ref(),
-    {Pid, MRef} = spawn_monitor(
-                    fun() ->
-                            Self ! {ReplyRef, ra:members(Members, ?LEADER_HEALTH_CHECK_TIMEOUT)}
-                    end),
-    Tag = receive
-              {ReplyRef, Reply} ->
-                  erlang:demonitor(MRef, [flush]),
-                  case Reply of
-                      {ok, _, _} -> ok;
-                      _ -> error
-                  end;
-              {'DOWN', MRef, process, Pid, _} ->
-                  error
-          after Timeout ->
-                  exit(Pid, kill),
-                  receive {'DOWN', MRef, process, Pid, _} -> ok end,
-                  receive {ReplyRef, _} -> ok after 0 -> ok end,
-                  error
+    %% The remaining members are queried in parallel so that the time taken
+    %% does not grow with the number of members.
+    Tag = case query_members([Leader], CheckTimeout, min(Deadline, Now + CheckTimeout)) of
+              ok -> ok;
+              error -> query_members(Others, CheckTimeout, Deadline)
           end,
     From ! {Tag, HealthCheckRef, QResource},
     ok.
+
+query_members([], _CheckTimeout, _Deadline) ->
+    error;
+query_members(ServerIds, CheckTimeout, Deadline) ->
+    CheckPIDs = maps:from_list(
+                [begin
+                     {Pid, MRef} = spawn_monitor(
+                                     fun() ->
+                                             case ra:members(ServerId, CheckTimeout) of
+                                                 {ok, _, _} -> exit(healthy);
+                                                 _ -> ok
+                                             end
+                                     end),
+                     {MRef, Pid}
+                 end || ServerId <- ServerIds]),
+    await_members(CheckPIDs, Deadline).
+
+await_members(CheckPIDs, _Deadline) when map_size(CheckPIDs) =:= 0 ->
+    error;
+await_members(CheckPIDs, Deadline) ->
+    Timeout = max(0, Deadline - erlang:monotonic_time(millisecond)),
+    receive
+        {'DOWN', MRef, process, _, healthy} when is_map_key(MRef, CheckPIDs) ->
+            stop_member_queries(maps:remove(MRef, CheckPIDs)),
+            ok;
+        {'DOWN', MRef, process, _, _} when is_map_key(MRef, CheckPIDs) ->
+            await_members(maps:remove(MRef, CheckPIDs), Deadline)
+    after Timeout ->
+            stop_member_queries(CheckPIDs),
+            error
+    end.
+
+stop_member_queries(CheckPIDs) ->
+    maps:foreach(fun(MRef, Pid) ->
+                         erlang:demonitor(MRef, [flush]),
+                         exit(Pid, kill)
+                 end, CheckPIDs).
 
 wait_for_leader_health_checks(Ref, Pending, Timeout) ->
     Deadline = erlang:monotonic_time(millisecond) + Timeout,

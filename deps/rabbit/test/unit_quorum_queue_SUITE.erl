@@ -13,6 +13,7 @@ all() ->
      ra_machine_conf_delivery_limit,
      periodic_membership_reconciliation_target_group_size,
      leader_health_check_caps_time_per_queue,
+     leader_health_check_time_does_not_grow_with_members,
      leader_health_check_reports_outstanding_queues_on_timeout
     ].
 
@@ -142,7 +143,7 @@ leader_health_check_caps_time_per_queue(_Config) ->
     QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
     Ref = make_ref(),
     {Time, ok} = timer:tc(rabbit_quorum_queue, run_leader_health_check,
-                          [Members, QName, Ref, self(), 200], millisecond),
+                          [Members, QName, Ref, self(), 100, 200], millisecond),
     ?assert(Time < 1000),
     receive
         Msg -> ?assertEqual({error, Ref, QName}, Msg)
@@ -151,6 +152,32 @@ leader_health_check_caps_time_per_queue(_Config) ->
     end,
     stop_qprocs(Pids),
     ok.
+
+leader_health_check_time_does_not_grow_with_members(_Config) ->
+    Hung = [qq_hc_hung_1, qq_hc_hung_2, qq_hc_hung_3],
+    Pids = start_qprocs(Hung),
+    Leader = {qq_hc_leader, node()},
+    ok = meck:new(ra, [passthrough]),
+    ok = meck:expect(ra, members,
+                     fun(Id, _) when Id =:= Leader -> {ok, [Leader], Leader};
+                        (Id, T) -> meck:passthrough([Id, T])
+                     end),
+    try
+        Members = [{N, node()} || N <- Hung] ++ [Leader],
+        QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+        Ref = make_ref(),
+        {Time, ok} = timer:tc(rabbit_quorum_queue, run_leader_health_check,
+                              [Members, QName, Ref, self(), 500, 1000], millisecond),
+        ?assert(Time < 1000),
+        receive
+            Msg -> ?assertEqual({ok, Ref, QName}, Msg)
+        after 0 ->
+            ct:fail(no_result)
+        end
+    after
+        meck:unload(ra),
+        stop_qprocs(Pids)
+    end.
 
 leader_health_check_reports_outstanding_queues_on_timeout(_Config) ->
     ok = meck:new(rabbit_queue_type, [passthrough]),
