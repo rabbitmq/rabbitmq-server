@@ -324,6 +324,7 @@ local_source(Config, AckMode) ->
         {#'basic.deliver'{consumer_tag = CTag, delivery_tag = AckTag},
          #amqp_msg{payload = <<42>>,
                    props = #'P_basic'{headers = [{<<"x-shovelled">>, _, _},
+                                                 {<<"x-shovelled-count">>, long, _},
                                                  {<<"x-shovelled-timestamp">>,
                                                   long, _}]}}} ->
             case AckMode of
@@ -389,6 +390,7 @@ local_source_without_declarations(Config) ->
         {#'basic.deliver'{consumer_tag = CTag, delivery_tag = AckTag},
          #amqp_msg{payload = <<42>>,
                    props = #'P_basic'{headers = [{<<"x-shovelled">>, _, _},
+                                                 {<<"x-shovelled-count">>, long, _},
                                                  {<<"x-shovelled-timestamp">>,
                                                   long, _}]}}} ->
             ok = amqp_channel:call(Chan, #'basic.ack'{delivery_tag = AckTag})
