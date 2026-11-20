@@ -5,7 +5,7 @@ WORKDIR /code
 COPY package.json package.json
 
 FROM base AS test
-RUN npm install --ignore-scripts --verbose
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm install --ignore-scripts --verbose
 
 ENTRYPOINT [ "npm" ]
 CMD [ "" ]
