@@ -26,12 +26,26 @@ For new test cases, prefer unit tests or integration tests that exercise real
 behaviour end to end. Use `meck` or other mocking tools only when neither
 approach can easily cover the behaviour.
 
+When adding Erlang Common Test code, use an Erlang AMQP 1.0 client
+(`deps/rabbitmq_amqp_client` or `deps/amqp10_client`) by default. Use the Erlang
+AMQP 0-9-1 client (`deps/amqp_client`) only when testing AMQP 0-9-1-specific
+behaviour.
+
 When looking for GNU Make 4, consult `gmake` as well as `make`.
 
 ### Dialyzer and xref
 
 Use `gmake dialyze` and `gmake xref` to run static code analysis tools
 from individual `deps/` component directories (see below).
+
+
+## Feature Flags
+
+When a feature or incompatibility is introduced only in a new minor or major
+release, prefer reusing the feature flag for that release if it already exists.
+Examples include `rabbitmq_4.2.0`, `rabbitmq_4.3.0`, `rabbitmq_4.4.0`, and
+`rabbitmq_5.0.0`. A shared flag can gate multiple changes and reduce the total
+number of feature flags.
 
 
 ## Repository Structure
