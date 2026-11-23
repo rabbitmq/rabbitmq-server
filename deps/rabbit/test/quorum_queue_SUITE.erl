@@ -396,6 +396,9 @@ init_per_testcase(Testcase, Config) ->
         leader_locator_balanced_random_maintenance when IsMixed ->
             {skip, "leader_locator_balanced_random_maintenance isn't mixed "
              "versions compatible"};
+        leader_health_check_node_without_replica when IsMixed ->
+            {skip, "leader_health_check_node_without_replica isn't mixed "
+             "versions compatible"};
         leadership_takeover when not SameKhepriMacVers ->
             {skip, "leadership_takeover will fail with a mix of Khepri state "
              "machine versions"};
