@@ -417,16 +417,11 @@ init_per_testcase(Testcase, Config) ->
             {skip, "projection_timeout_cleanup isn't mixed versions compatible because "
              "it relies on the balanced locator picking a remote leader"};
         leader_locator_balanced_random_maintenance when IsMixed ->
-<<<<<<< HEAD
             {skip, "leader_locator_balanced_random_maintenance isn't mixed versions compatible because "
              "delete_declare isn't mixed versions reliable"};
-=======
-            {skip, "leader_locator_balanced_random_maintenance isn't mixed "
-             "versions compatible"};
         leader_health_check_node_without_replica when IsMixed ->
             {skip, "leader_health_check_node_without_replica isn't mixed "
              "versions compatible"};
->>>>>>> b7b4dc1 (QQ: skip leader_health_check_node_without_replica in mixed-version clusters)
         leadership_takeover when not SameKhepriMacVers ->
             {skip, "leadership_takeover will fail with a mix of Khepri state "
              "machine versions"};
