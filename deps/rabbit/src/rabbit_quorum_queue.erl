@@ -1654,9 +1654,10 @@ force_delete_queue(Q, Servers) ->
                _ -> #{}
            end,
     Leftovers = maps:get(leftovers, TypeState, []),
+    Adding = maps:get(adding, TypeState, []),
     %% A kept record lists its unconfirmed members as leftovers too.
     Candidates = lists:usort([{S, maps:get(Node, UIds, undefined)}
-                              || {_, Node} = S <- Servers] ++ Leftovers),
+                              || {_, Node} = S <- Servers] ++ Leftovers ++ Adding),
     Results = [{M, case M of
                        {S, undefined} -> force_delete_registered_member(S);
                        {S, UId} -> force_delete_member(S, UId)
@@ -1980,13 +1981,18 @@ cleanup_data_dir() ->
             ok
     end.
 
-%% Records without UIds map to `any`.
+%% Records without UIds, and members that are being added, map to `any`.
 expected_local_members(Qs) ->
     Node = node(),
     lists:foldl(
       fun(Q, Acc) ->
               {Name, _} = amqqueue:get_pid(Q),
-              case amqqueue:get_type_state(Q) of
+              TS = amqqueue:get_type_state(Q),
+              IsAdding = lists:any(fun({{_, N}, _}) -> N =:= Node end,
+                                   maps:get(adding, TS, [])),
+              case TS of
+                  _ when IsAdding ->
+                      Acc#{Name => any};
                   #{nodes := #{Node := UId}} ->
                       Acc#{Name => UId};
                   #{nodes := Nodes} when is_list(Nodes) ->
@@ -2257,7 +2263,6 @@ do_add_member(Q0, Node, Membership, Timeout)
        ?amqqueue_is_quorum(Q0) andalso
        is_atom(Node) ->
     {RaName, _} = amqqueue:get_pid(Q0),
-    QName = amqqueue:get_name(Q0),
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     Members = members(Q0),
@@ -2280,70 +2285,140 @@ do_add_member(Q0, Node, Membership, Timeout)
         NodeVersion ->
             MachineVersion = min(NodeVersion, min_machine_version(get_nodes(Q0))),
             Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
-            case start_member(Q0, Conf) of
+            #{uid := UId} = Conf,
+            Adding = {ServerId, UId},
+            case record_adding(Q0, Adding) of
                 ok ->
-                    ServerIdSpec = maps:with([id, uid, membership], Conf),
-                    case ra:add_member(Members, ServerIdSpec, Timeout) of
-                        {ok, {RaIndex, RaTerm}, Leader} ->
-                            Fun = fun(Q1) ->
-                                          Q2 = update_type_state(
-                                                 Q1, fun(#{nodes := NodesList} = Ts) when is_list(NodesList) ->
-                                                             Ts#{nodes => lists:usort([Node | NodesList])};
-                                                        (#{nodes := #{Node := _}} = Ts) ->
-                                                             Ts;
-                                                        (#{nodes := NodesMap} = Ts) when is_map(NodesMap) ->
-                                                             Ts#{nodes => maps:put(Node, maps:get(uid, Conf), NodesMap)}
-                                                     end),
-                                          amqqueue:set_pid(Q2, Leader)
-                                  end,
-                            %% The `ra:member_add/3` call above returns before the
-                            %% change is committed. This is ok for that addition but
-                            %% any follow-up changes to the cluster might be rejected
-                            %% with the `cluster_change_not_permitted` error.
-                            %%
-                            %% Instead of changing other places to wait or retry their
-                            %% cluster membership change, we wait for the current add
-                            %% to be applied using a conditional leader query before
-                            %% proceeding and returning.
-                            case ra:leader_query(
-                                   Leader,
-                                   {erlang, is_list, []},
-                                   #{condition => {applied, {RaIndex, RaTerm}}}) of
-                                {ok, _, _} ->
-                                    _ = rabbit_amqqueue:update(QName, Fun),
-                                    ?LOG_INFO("Added a replica of quorum ~ts on node ~ts",
-                                              [rabbit_misc:rs(QName), Node]),
-                                    ok;
-                                %% The leader can exit, for example when a
-                                %% concurrent delete deletes the cluster. The
-                                %% record does not list the new member, so the
-                                %% delete would not reach it.
-                                QueryErr ->
-                                    ok = delete_added_member(Q0, Members, ServerId,
-                                                             maps:get(uid, Conf)),
-                                    ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
-                                                 [rabbit_misc:rs(QName), Node, QueryErr]),
-                                    case QueryErr of
-                                        {timeout, _} -> {error, timeout};
-                                        _ -> QueryErr
-                                    end
-                            end;
-                        {timeout, _} ->
-                            _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
-                            _ = ra:remove_member(Members, ServerId),
-                            {error, timeout};
-                        E ->
-                            _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
+                    add_recorded_member(Q0, Members, Conf, Adding, Timeout);
+                {error, _} = Err ->
+                    Err
+            end
+    end.
+
+%% A delete that claims the record after this also deletes the new member.
+record_adding(Q0, Adding) ->
+    Fun = fun(Q) when ?amqqueue_state_is(Q, deleting) ->
+                  {error, queue_being_deleted};
+             (Q) ->
+                  case is_same_incarnation(Q, Q0) of
+                      true ->
+                          {ok, update_type_state(
+                                 Q, fun(TS) ->
+                                            TS#{adding => [Adding | maps:get(adding, TS, [])]}
+                                    end)};
+                      false ->
+                          {error, not_found}
+                  end
+          end,
+    case rabbit_db_queue:try_update(amqqueue:get_name(Q0), Fun, #{}) of
+        {ok, _} -> ok;
+        not_found -> {error, not_found};
+        {error, _} = Err -> Err
+    end.
+
+%% A member that may still exist stays in `adding', so that a delete of the
+%% queue deletes it.
+forget_adding(Q0, Adding, {error, not_owner}) ->
+    forget_adding(Q0, Adding, ok);
+forget_adding(Q0, Adding, ok) ->
+    _ = rabbit_db_queue:try_update(
+          amqqueue:get_name(Q0),
+          fun(Q) ->
+                  {ok, update_type_state(
+                         Q, fun(TS) ->
+                                    TS#{adding => lists:delete(Adding, maps:get(adding, TS, []))}
+                            end)}
+          end, #{}),
+    ok;
+forget_adding(_Q0, _Adding, _) ->
+    ok.
+
+add_recorded_member(Q0, Members, #{id := {_, Node} = ServerId,
+                                   uid := UId} = Conf, Adding, Timeout) ->
+    QName = amqqueue:get_name(Q0),
+    case start_member(Q0, Conf) of
+        ok ->
+            ServerIdSpec = maps:with([id, uid, membership], Conf),
+            case ra:add_member(Members, ServerIdSpec, Timeout) of
+                {ok, {RaIndex, RaTerm}, Leader} ->
+                    Fun = fun(Q1) when ?amqqueue_state_is(Q1, deleting) ->
+                                  {error, queue_being_deleted};
+                             (Q1) ->
+                                  case is_same_incarnation(Q1, Q0) of
+                                      true -> {ok, set_added(Q1, Node, UId, Adding, Leader)};
+                                      false -> {error, not_found}
+                                  end
+                          end,
+                    %% The `ra:member_add/3` call above returns before the
+                    %% change is committed. This is ok for that addition but
+                    %% any follow-up changes to the cluster might be rejected
+                    %% with the `cluster_change_not_permitted` error.
+                    %%
+                    %% Instead of changing other places to wait or retry their
+                    %% cluster membership change, we wait for the current add
+                    %% to be applied using a conditional leader query before
+                    %% proceeding and returning.
+                    Res = case ra:leader_query(
+                                 Leader,
+                                 {erlang, is_list, []},
+                                 #{condition => {applied, {RaIndex, RaTerm}}}) of
+                              {ok, _, _} ->
+                                  rabbit_db_queue:try_update(QName, Fun, #{});
+                              {timeout, _} ->
+                                  {error, timeout};
+                              QueryErr ->
+                                  QueryErr
+                          end,
+                    case Res of
+                        {ok, _} ->
+                            ?LOG_INFO("Added a replica of quorum ~ts on node ~ts",
+                                      [rabbit_misc:rs(QName), Node]),
+                            ok;
+                        %% The leader can exit, for example when a concurrent
+                        %% delete deletes the cluster.
+                        Err ->
+                            Deleted = delete_added_member(Q0, Members, ServerId, UId),
+                            ok = forget_adding(Q0, Adding, Deleted),
                             ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
-                                         [rabbit_misc:rs(QName), Node, E]),
-                            E
+                                         [rabbit_misc:rs(QName), Node, Err]),
+                            case Err of
+                                not_found -> {error, not_found};
+                                _ -> Err
+                            end
                     end;
+                {timeout, _} ->
+                    Deleted = force_delete_member(ServerId, UId),
+                    _ = ra:remove_member(Members, ServerId),
+                    ok = forget_adding(Q0, Adding, Deleted),
+                    {error, timeout};
                 E ->
+                    Deleted = force_delete_member(ServerId, UId),
+                    ok = forget_adding(Q0, Adding, Deleted),
                     ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
                                  [rabbit_misc:rs(QName), Node, E]),
                     E
-            end
+            end;
+        E ->
+            ok = forget_adding(Q0, Adding, ok),
+            ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
+                         [rabbit_misc:rs(QName), Node, E]),
+            E
     end.
+
+set_added(Q, Node, UId, Adding, Leader) ->
+    Q1 = update_type_state(
+           Q, fun(#{nodes := Nodes} = Ts) when is_list(Nodes) ->
+                      Ts#{nodes => lists:usort([Node | Nodes])};
+                 (#{nodes := #{Node := _}} = Ts) ->
+                      Ts;
+                 (#{nodes := Nodes} = Ts) when is_map(Nodes) ->
+                      Ts#{nodes => Nodes#{Node => UId}}
+              end),
+    Q2 = update_type_state(
+           Q1, fun(Ts) ->
+                       Ts#{adding => lists:delete(Adding, maps:get(adding, Ts, []))}
+               end),
+    amqqueue:set_pid(Q2, Leader).
 
 %% A failed query does not show that the addition failed. A member that the
 %% cluster can still count is kept.
@@ -2357,19 +2432,16 @@ delete_added_member(Q0, Members, ServerId, UId) ->
                 end,
     case IsDeleted orelse remove_added_member(Members, ServerId, 10) of
         true ->
-            _ = force_delete_member(ServerId, UId),
-            ok;
+            force_delete_member(ServerId, UId);
         {ok, _, _} ->
-            _ = force_delete_member(ServerId, UId),
-            ok;
+            force_delete_member(ServerId, UId);
         {error, not_member} ->
-            _ = force_delete_member(ServerId, UId),
-            ok;
+            force_delete_member(ServerId, UId);
         Err ->
             ?LOG_WARNING("Kept member ~w of quorum ~ts that may be in the "
                          "cluster: ~p",
                          [ServerId, rabbit_misc:rs(amqqueue:get_name(Q0)), Err]),
-            ok
+            kept
     end.
 
 %% The addition can still be pending, and only one membership change is
@@ -2431,8 +2503,9 @@ is_listed_member(Q, Node, UId) ->
     case amqqueue:get_type_state(Q) of
         #{nodes := Nodes} when is_list(Nodes) ->
             lists:member(Node, Nodes);
-        #{nodes := Nodes} when is_map(Nodes) ->
-            maps:get(Node, Nodes, undefined) =:= UId;
+        #{nodes := Nodes} = TS when is_map(Nodes) ->
+            maps:get(Node, Nodes, undefined) =:= UId orelse
+            lists:keymember(UId, 2, maps:get(adding, TS, []));
         _ ->
             false
     end.

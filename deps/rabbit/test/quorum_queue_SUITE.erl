@@ -169,6 +169,7 @@ groups() ->
                         redeclare_after_partial_delete,
                         delete_redeclared_deletes_leftovers,
                         declare_after_partial_delete_and_heal,
+                        delete_during_add_member,
                         reconnect_consumer_and_publish,
                         reconnect_consumer_and_wait,
                         reconnect_consumer_and_wait_channel_down
@@ -379,6 +380,7 @@ init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                          Testcase == redeclare_after_partial_delete;
                                          Testcase == delete_redeclared_deletes_leftovers;
                                          Testcase == declare_after_partial_delete_and_heal;
+                                         Testcase == delete_during_add_member;
                                          Testcase == reconnect_consumer_and_publish;
                                          Testcase == reconnect_consumer_and_wait;
                                          Testcase == reconnect_consumer_and_wait_channel_down ->
@@ -464,6 +466,7 @@ end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                         Testcase == redeclare_after_partial_delete;
                                         Testcase == delete_redeclared_deletes_leftovers;
                                         Testcase == declare_after_partial_delete_and_heal;
+                                        Testcase == delete_during_add_member;
                                         Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
                                         Testcase == reconnect_consumer_and_wait_channel_down ->
@@ -5149,6 +5152,92 @@ declare_after_partial_delete_and_heal(Config) ->
                 ?DEFAULT_AWAIT),
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{queue = QQ, no_ack = true})),
+    ok.
+
+delete_during_add_member(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        true ->
+            delete_during_add_member_(Config);
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"}
+    end.
+
+delete_during_add_member_(Config) ->
+    [Server1, _, Server3] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch, QQ, Args)),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    RaName = ra_name(QQ),
+    %% A new leader rejects membership changes until it has committed an entry.
+    ?awaitMatch(ok, rpc:call(Server1, rabbit_quorum_queue, delete_member,
+                             [<<"/">>, QQ, Server3]),
+                ?DEFAULT_AWAIT),
+
+    %% The add is held after Ra applies it, before it lists the member in `nodes`.
+    Self = self(),
+    ok = rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
+    ok = rpc:call(Server1, meck, new, [rabbit_db_queue, [passthrough, no_link]]),
+    ok = rpc:call(Server1, meck, expect,
+                  [rabbit_db_queue, try_update,
+                   fun(Name, Fun, Options) ->
+                           case get(hold_try_update) of
+                               0 ->
+                                   put(hold_try_update, done),
+                                   Self ! {try_update, self()},
+                                   receive continue -> ok end;
+                               N when is_integer(N) ->
+                                   put(hold_try_update, N - 1);
+                               _ ->
+                                   ok
+                           end,
+                           meck:passthrough([Name, Fun, Options])
+                   end]),
+    try
+        _ = rpc:call(Server1, erlang, spawn,
+                     [fun() ->
+                              put(hold_try_update, 1),
+                              Self ! {add_member,
+                                      rabbit_quorum_queue:add_member(
+                                        <<"/">>, QQ, Server3, voter, 30000)}
+                      end]),
+        Add = receive {try_update, Pid} -> Pid;
+                      {add_member, Early} -> ct:fail({add_member, Early})
+              after 30000 -> ct:fail(no_try_update)
+              end,
+        UId = rpc:call(Server3, ra_directory, uid_of, [quorum_queues, RaName]),
+        ?assert(is_binary(UId)),
+
+        partition(Config, Server3),
+        ?assertMatch(#'queue.delete_ok'{},
+                     amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+        {ok, Deleting} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+        ?assertEqual(deleting, amqqueue:get_state(Deleting)),
+        ?assertMatch(#{leftovers := [{{RaName, Server3}, UId}]},
+                     amqqueue:get_type_state(Deleting)),
+
+        Add ! continue,
+        receive
+            {add_member, Res} ->
+                ?assertEqual({error, queue_being_deleted}, Res)
+        after 60000 ->
+                  ct:fail(no_add_member)
+        end
+    after
+        ok = rpc:call(Server1, meck, unload, [rabbit_db_queue])
+    end,
+
+    heal(Config, Server3),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server1, rabbit_amqqueue, lookup, [QName])),
+    ?assertEqual(undefined, rpc:call(Server3, ra_directory, uid_of,
+                                     [quorum_queues, RaName])),
     ok.
 
 num_ready_messages(ServerId) ->
