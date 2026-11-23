@@ -25,10 +25,12 @@ all() ->
 groups() ->
     ClusterSize1Tests = [
         single_node_list_of_user,
-        single_node_user_deletion_forces_connection_closure
+        single_node_user_deletion_forces_connection_closure,
+        single_node_clear_permissions_forces_connection_closure
     ],
     ClusterSize2Tests = [
-        cluster_user_deletion_forces_connection_closure
+        cluster_user_deletion_forces_connection_closure,
+        cluster_clear_permissions_forces_connection_closure
     ],
     [
      {tests, [], [
@@ -208,9 +210,51 @@ cluster_user_deletion_forces_connection_closure(Config) ->
     close_connections([Conn1]),
     ?awaitMatch(0, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT).
 
+single_node_clear_permissions_forces_connection_closure(Config) ->
+    clear_permissions_forces_connection_closure(Config, ?FUNCTION_NAME, 0).
+
+cluster_clear_permissions_forces_connection_closure(Config) ->
+    clear_permissions_forces_connection_closure(Config, ?FUNCTION_NAME, 1).
+
+clear_permissions_forces_connection_closure(Config, Testcase, Node) ->
+    Username1 = list_to_binary(atom_to_list(Testcase) ++ "-1"),
+    Username2 = list_to_binary(atom_to_list(Testcase) ++ "-2"),
+    Vhost1 = proplists:get_value(rmq_vhost, Config),
+    Vhost2 = atom_to_binary(Testcase),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Vhost2),
+    [begin
+         rabbit_ct_broker_helpers:add_user(Config, U),
+         rabbit_ct_broker_helpers:set_full_permissions(Config, U, V)
+     end || U <- [Username1, Username2], V <- [Vhost1, Vhost2]],
+
+    Conn1 = open_connection(Config, Node, Vhost1, Username1),
+    _Conn2 = open_connection(Config, Node, Vhost1, Username2),
+    Conn3 = open_connection(Config, Node, Vhost2, Username2),
+    ?awaitMatch(1, count_connections_in(Config, Username1, Vhost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(1, count_connections_in(Config, Username2, Vhost1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(1, count_connections_in(Config, Username2, Vhost2), ?AWAIT_TIMEOUT),
+
+    ok = rabbit_ct_broker_helpers:clear_permissions(Config, 0, Username2, Vhost1),
+    ?awaitMatch(0, count_connections_in(Config, Username2, Vhost1), ?AWAIT_TIMEOUT),
+    ?assertEqual(1, count_connections_in(Config, Username1, Vhost1)),
+    ?assertEqual(1, count_connections_in(Config, Username2, Vhost2)),
+
+    close_connections([Conn1, Conn3]),
+    ?awaitMatch(0, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_connections_in(Config, Username2), ?AWAIT_TIMEOUT),
+    [rabbit_ct_broker_helpers:delete_user(Config, U) || U <- [Username1, Username2]],
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, Vhost2).
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
+
+open_connection(Config, Node, VHost, User) ->
+    Fun = case ?config(connection_type, Config) of
+              network -> open_unmanaged_connection;
+              direct  -> open_unmanaged_connection_direct
+          end,
+    rabbit_ct_client_helpers:Fun(Config, Node, VHost, User, User).
 
 open_connections(Config, NodesAndUsers) ->
     % Randomly select connection type
@@ -244,6 +288,10 @@ kill_connections(Conns) ->
 
 count_connections_in(Config, Username) ->
     length(connections_in(Config, Username)).
+
+count_connections_in(Config, Username, VHost) ->
+    length([C || C = #tracked_connection{vhost = V} <- connections_in(Config, Username),
+                 V =:= VHost]).
 
 connections_in(Config, Username) ->
     connections_in(Config, 0, Username).

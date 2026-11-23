@@ -107,6 +107,7 @@ sub_groups() ->
        session_resume_revokes_qos0_subscription_on_topic_permission_change,
        session_resume_by_different_user_does_not_inherit_subscription,
        session_resume_rejects_connect_when_any_subscription_loses_topic_access,
+       clear_permissions_disconnects_subscriber,
        will_queue_create_permission_queue_read,
        will_queue_create_permission_exchange_write,
        will_queue_publish_permission_exchange_write,
@@ -1275,6 +1276,21 @@ publish_permission_will_message(Config) ->
                fun () -> stop end}
              ]),
     ok = emqtt:disconnect(Sub).
+
+clear_permissions_disconnects_subscriber(Config) ->
+    set_permissions(".*", ".*", ".*", Config),
+    Topic = <<"orders/new">>,
+    C = open_mqtt_connection(Config),
+    {ok, _, [1]} = emqtt:subscribe(C, <<"orders/#">>, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"m1">>, qos1),
+    ok = expect_publishes(C, Topic, [<<"m1">>]),
+
+    process_flag(trap_exit, true),
+    ok = rabbit_ct_broker_helpers:clear_permissions(
+           Config, ?config(mqtt_user, Config), ?config(mqtt_vhost, Config)),
+    receive {'EXIT', C, _} -> ok
+    after 30_000 -> ct:fail(missing_exit)
+    end.
 
 topic_read_permission(Config) ->
     set_permissions(".*", ".*", ".*", Config),

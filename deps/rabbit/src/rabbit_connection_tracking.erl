@@ -148,7 +148,17 @@ handle_cast({user_deleted, Details}) ->
     ?LOG_INFO("Closing all connections for user '~ts' because the user is being deleted", [Username]),
     shutdown_tracked_items(
         list_of_user(Username),
-        rabbit_misc:format("user '~ts' is deleted", [Username])).
+        rabbit_misc:format("user '~ts' is deleted", [Username]));
+handle_cast({permission_deleted, Details}) ->
+    Username = pget(user, Details),
+    VHost = pget(vhost, Details),
+    ?LOG_INFO("Closing all connections for user '~ts' in vhost '~ts' because "
+              "the user's permissions in that virtual host were cleared", [Username, VHost]),
+    shutdown_tracked_items(
+        [Conn || Conn = #tracked_connection{vhost = V} <- list_of_user(Username),
+                 V =:= VHost],
+        rabbit_misc:format("permissions of user '~ts' in vhost '~ts' were cleared",
+                           [Username, VHost])).
 
 -spec register_tracked(rabbit_types:tracked_connection()) -> ok.
 -dialyzer([{nowarn_function, [register_tracked/1]}]).

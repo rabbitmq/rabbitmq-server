@@ -153,7 +153,8 @@ cluster_size_3_tests() ->
      duplicate_client_id,
      publish_to_all_queue_types_qos0,
      publish_to_all_queue_types_qos1,
-     maintenance
+     maintenance,
+     clear_permissions_disconnects_subscriber_on_other_node
     ].
 
 suite() ->
@@ -258,6 +259,9 @@ end_per_testcase(T, Config)
        T =:= clean_session_node_kill;
        T =:= notify_consumer_qos0_queue_deleted ->
     ok = rpc(Config, rabbit_registry, unregister, [queue, <<"qos0">>]),
+    end_per_testcase0(T, Config);
+end_per_testcase(T = clear_permissions_disconnects_subscriber_on_other_node, Config) ->
+    _ = rabbit_ct_broker_helpers:delete_user(Config, atom_to_binary(T)),
     end_per_testcase0(T, Config);
 end_per_testcase(Testcase, Config) ->
     end_per_testcase0(Testcase, Config).
@@ -1522,6 +1526,18 @@ duplicate_client_id(Config) ->
     ok = emqtt:disconnect(C1b),
     ok = emqtt:disconnect(C2b),
     eventually(?_assertEqual(0, length(all_connection_pids(Config)))).
+
+clear_permissions_disconnects_subscriber_on_other_node(Config) ->
+    User = Password = atom_to_binary(?FUNCTION_NAME),
+    VHost = <<"/">>,
+    ok = rabbit_ct_broker_helpers:add_user(Config, User, Password),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    C = connect(User, Config, 1, [{username, User}, {password, Password}]),
+    {ok, _, [1]} = emqtt:subscribe(C, <<"orders/#">>, qos1),
+
+    process_flag(trap_exit, true),
+    ok = rabbit_ct_broker_helpers:clear_permissions(Config, 0, User, VHost),
+    ok = await_exit(C).
 
 session_reconnect(Config) ->
     session_switch(Config, true, ?FUNCTION_NAME).
