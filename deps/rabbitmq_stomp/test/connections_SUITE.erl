@@ -37,6 +37,7 @@ all() ->
         connection_is_tracked,
         reader_process_flags,
         user_deletion_closes_connection,
+        clear_permissions_closes_connection,
         vhost_connection_limit,
         user_connection_limit,
         connection_churn
@@ -439,13 +440,25 @@ reader_process_flags(Config) ->
 
 user_deletion_closes_connection(Config) ->
     User = <<"stomp-tracked-user">>,
+    connection_closed_on(Config, User,
+                         fun() -> rabbit_ct_broker_helpers:delete_user(Config, User) end).
+
+clear_permissions_closes_connection(Config) ->
+    User = atom_to_binary(?FUNCTION_NAME),
+    connection_closed_on(Config, User,
+                         fun() ->
+                                 rabbit_ct_broker_helpers:clear_permissions(Config, User, <<"/">>)
+                         end),
+    ok = rabbit_ct_broker_helpers:delete_user(Config, User).
+
+connection_closed_on(Config, User, Revoke) ->
     ok = rabbit_ct_broker_helpers:add_user(Config, 0, User, User),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
     {ok, {Sock, _}} = rabbit_stomp_client:connect("1.2", binary_to_list(User),
                                                   binary_to_list(User),
                                                   get_stomp_port(Config), []),
     ?awaitMatch(1, count_tracked_stomp_connections(Config), 30_000),
-    ok = rabbit_ct_broker_helpers:delete_user(Config, User),
+    ok = Revoke(),
     ?assertEqual({error, closed}, gen_tcp:recv(Sock, 0, 30_000)),
     ?awaitMatch(0, count_tracked_stomp_connections(Config), 30_000).
 
