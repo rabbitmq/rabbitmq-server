@@ -223,17 +223,25 @@ emit_publisher_info_local(VHost, Items, Ref, AggregatorPid) ->
 
 list(VHost) ->
     [Client
-     || {_, ListSup, _, _} <- supervisor:which_children(rabbit_stream_sup),
+     || {_, ListSup, _, _} <- which_children(rabbit_stream_sup),
         {_, RanchEmbeddedSup, supervisor, _}
-            <- supervisor:which_children(ListSup),
+            <- which_children(ListSup),
         {{ranch_listener_sup, _}, RanchListSup, _, _}
-            <- supervisor:which_children(RanchEmbeddedSup),
+            <- which_children(RanchEmbeddedSup),
         {ranch_conns_sup_sup, RanchConnsSup, supervisor, _}
-            <- supervisor:which_children(RanchListSup),
+            <- which_children(RanchListSup),
         {_, RanchConnSup, supervisor, _}
-            <- supervisor:which_children(RanchConnsSup),
+            <- which_children(RanchConnsSup),
         {_, StreamClientSup, supervisor, _}
-            <- supervisor:which_children(RanchConnSup),
+            <- which_children(RanchConnSup),
         {rabbit_stream_reader, Client, _, _}
-            <- supervisor:which_children(StreamClientSup),
+            <- which_children(StreamClientSup),
         rabbit_stream_reader:in_vhost(Client, VHost)].
+
+which_children(Sup) ->
+    try
+        supervisor:which_children(Sup)
+    catch
+        exit:_ ->
+            []
+    end.
