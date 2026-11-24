@@ -210,6 +210,11 @@ groups() ->
        x_cc_annotation_queue,
        x_cc_annotation_null,
        non_utf8_names,
+<<<<<<< HEAD
+=======
+       binding_arguments_size_limit,
+       queue_arguments_size_limit,
+>>>>>>> 4795b10 (Limit the x-arguments table size of declared queues and streams)
        bad_x_cc_annotation_exchange,
        decimal_types,
        consumer_timeout_quorum_queue_policy,
@@ -8263,6 +8268,50 @@ x_cc_annotation_queue(Config) ->
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
 
+<<<<<<< HEAD
+=======
+binding_arguments_size_limit(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    QName = <<"my queue">>,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    %% Each `ulong 0` is 1 byte on the wire and 9 bytes in AMQP 0.9.1.
+    Args = #{<<"list">> => {list, lists:duplicate(100_000, {ulong, 0})}},
+    ?assertMatch(
+       {error, _},
+       rabbitmq_amqp_client:bind_queue(LinkPair, QName, <<"amq.fanout">>, <<>>, Args)),
+    {ok, Resp} = management_request(
+                   LinkPair,
+                   #{subject => <<"POST">>, to => <<"/bindings">>},
+                   {map, [{{utf8, <<"source">>}, {utf8, <<"amq.fanout">>}},
+                          {{utf8, <<"destination_queue">>}, {utf8, QName}},
+                          {{utf8, <<"binding_key">>}, {utf8, <<>>}},
+                          {{utf8, <<"arguments">>},
+                           {map, [{{utf8, <<"list">>}, {list, lists:duplicate(100_000, {ulong, 0})}}]}}]}),
+    ?assertMatch(#{subject := <<"400">>}, amqp10_msg:properties(Resp)),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, <<"amq.fanout">>, <<>>, #{}),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
+
+queue_arguments_size_limit(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Limit = 16384,
+    [begin
+         {ok, _} = rabbitmq_amqp_client:declare_queue(
+                     LinkPair, QName, #{arguments => queue_args_of_size(Type, Limit)}),
+         {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+
+         {error, Resp} = rabbitmq_amqp_client:declare_queue(
+                           LinkPair, QName, #{arguments => queue_args_of_size(Type, Limit + 1)}),
+         ?assertMatch(#{subject := <<"409">>}, amqp10_msg:properties(Resp)),
+         ?assertMatch({_, _}, binary:match(amqp10_msg:body_bin(Resp), <<"exceeds the limit">>)),
+         ?assertMatch({error, _}, rabbitmq_amqp_client:get_queue(LinkPair, QName))
+     end || Type <- [<<"classic">>, <<"quorum">>, <<"stream">>]],
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
+
+>>>>>>> 4795b10 (Limit the x-arguments table size of declared queues and streams)
 non_utf8_names(Config) ->
     {Connection, Session, LinkPair} = init(Config),
     {ok, QResp} = management_request(
@@ -8295,6 +8344,14 @@ non_utf8_names(Config) ->
     ?assertEqual([], rpc(Config, rabbit_amqqueue, list, [])),
 
     ok = close({Connection, Session, LinkPair}).
+
+queue_args_of_size(Type, Size) ->
+    Table = fun(Pad) -> [{<<"x-queue-type">>, longstr, Type}, {<<"x-pad">>, longstr, Pad}] end,
+    Overhead = iolist_size(rabbit_binary_generator:generate_table(Table(<<>>))),
+    Pad = binary:copy(<<"a">>, Size - Overhead),
+    Size = iolist_size(rabbit_binary_generator:generate_table(Table(Pad))),
+    #{<<"x-queue-type">> => {utf8, Type},
+      <<"x-pad">> => {utf8, Pad}}.
 
 management_request(#link_pair{outgoing_link = OutgoingLink,
                               incoming_link = IncomingLink},
