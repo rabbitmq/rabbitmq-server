@@ -2712,9 +2712,9 @@ file_handle_release_reservation() ->
     ok.
 
 leader_health_check(QueueNameOrRegEx, VHost) ->
-    %% Set a process limit threshold to 20% of ErlangVM process limit, beyond which
+    %% Set a process limit threshold to 30% of ErlangVM process limit, beyond which
     %% we cannot spawn any new processes for executing QQ leader health checks.
-    ProcessLimitThreshold = round(0.2 * erlang:system_info(process_limit)),
+    ProcessLimitThreshold = round(0.3 * erlang:system_info(process_limit)),
 
     leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold).
 
@@ -2734,8 +2734,9 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
                      amqqueue:get_type(Q) == ?MODULE,
                      {resource, _, queue, QueueName} = QResource <- [amqqueue:get_name(Q)],
                      rabbit_re:run(QueueName, QueueNameOrRegEx) =:= match],
-    check_process_limit_safety(lists:sum([1 + length(Members) || {_, Members} <- Checks]),
-                               ProcessLimitThreshold),
+    %% Followers are only queried when the leader does not reply, so the
+    %% estimate covers the per-queue process and the leader query.
+    check_process_limit_safety(2 * length(Checks), ProcessLimitThreshold),
     ParentPID = self(),
     HealthCheckRef = make_ref(),
     Pending =
