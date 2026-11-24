@@ -521,7 +521,10 @@ update_secret_should_close_connection_if_unauthorized_vhost(Config) ->
     C1 = test_peer_properties(T, S, C0),
     Username = <<"other">>,
     C2 = test_authenticate(T, S, C1, Username),
-    ok = rabbit_ct_broker_helpers:clear_permissions(Config, Username, <<"/">>),
+    %% This call avoids emitting a `permission_deleted` event,
+    %% which closes the connection.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_user, clear_user_permissions,
+                                      [Username, <<"/">>]),
     _C3 = expect_unsuccessful_authentication(
             try_authenticate(gen_tcp, S, C2, <<"PLAIN">>, Username, Username),
             ?RESPONSE_VHOST_ACCESS_FAILURE),
@@ -2240,7 +2243,7 @@ test_connection_properties_with_advertised_hints(Config) ->
               rpc(Config, 0, application, set_env, [rabbitmq_stream, KH, undefined]),
               rpc(Config, 0, application, set_env, [rabbitmq_stream, KP, undefined])
       end, [gen_tcp, ssl]),
-    
+
     ok.
 
 test_resolve_offset_spec(Config) ->
