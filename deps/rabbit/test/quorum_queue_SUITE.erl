@@ -171,6 +171,8 @@ groups() ->
                         declare_after_partial_delete_and_heal,
                         delete_during_add_member,
                         redeclare_on_new_vhost,
+                        redeclare_small_group_partitioned,
+                        redeclare_small_group_on_new_vhost_partitioned,
                         reconnect_consumer_and_publish,
                         reconnect_consumer_and_wait,
                         reconnect_consumer_and_wait_channel_down
@@ -388,6 +390,8 @@ init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                          Testcase == declare_after_partial_delete_and_heal;
                                          Testcase == delete_during_add_member;
                                          Testcase == redeclare_on_new_vhost;
+                                         Testcase == redeclare_small_group_partitioned;
+                                         Testcase == redeclare_small_group_on_new_vhost_partitioned;
                                          Testcase == reconnect_consumer_and_publish;
                                          Testcase == reconnect_consumer_and_wait;
                                          Testcase == reconnect_consumer_and_wait_channel_down ->
@@ -508,6 +512,8 @@ end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                         Testcase == declare_after_partial_delete_and_heal;
                                         Testcase == delete_during_add_member;
                                         Testcase == redeclare_on_new_vhost;
+                                        Testcase == redeclare_small_group_partitioned;
+                                        Testcase == redeclare_small_group_on_new_vhost_partitioned;
                                         Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
                                         Testcase == reconnect_consumer_and_wait_channel_down;
@@ -5535,6 +5541,96 @@ redeclare_on_new_vhost_(Config) ->
                  amqp_channel:call(Ch2, #'basic.get'{queue = QQ, no_ack = true})),
     ok.
 
+redeclare_small_group_partitioned(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        true ->
+            redeclare_small_group_partitioned_(Config);
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"}
+    end.
+
+redeclare_small_group_partitioned_(Config) ->
+    [Server1, _, Server3] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-quorum-initial-group-size">>, long, 1}],
+    %% producers will end up on either side of the partition
+    Ch1 = open_vhost_confirm_channel(Config, Server1, <<"/">>),
+    Ch3 = open_vhost_confirm_channel(Config, Server3, <<"/">>),
+    %% initial queue
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch3, QQ, Args)),
+    ?awaitMatch([{online, [Server3]}],
+                rpc:call(Server1, rabbit_quorum_queue, infos, [QName, [online]]),
+                ?DEFAULT_AWAIT),
+
+    partition(Config, Server3),
+    %% remade queue
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch1, QQ, Args)),
+    %% publish attempts on both sides
+    publish(Ch1, QQ),
+    publish(Ch3, QQ),
+    Confirmed = length([Ch || Ch <- [Ch1, Ch3],
+                              amqp_channel:wait_for_confirms(Ch, 5) =:= true]),
+
+    heal(Config, Server3),
+    ?assertEqual(Confirmed, consistent_messages_total(Server1, QName)),
+    ok.
+
+redeclare_small_group_on_new_vhost_partitioned(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, quorum_queue_deleting_state) of
+        true ->
+            redeclare_small_group_on_new_vhost_partitioned_(Config);
+        false ->
+            {skip, "requires the quorum_queue_deleting_state feature flag"}
+    end.
+
+redeclare_small_group_on_new_vhost_partitioned_(Config) ->
+    [Server1, _, Server3] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    VHost = <<"redeclare_small_group_on_new_vhost_partitioned">>,
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(VHost, queue, QQ),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-quorum-initial-group-size">>, long, 1}],
+    ok = add_vhost_with_full_permissions(Config, Server3, VHost),
+    Ch3 = open_vhost_confirm_channel(Config, Server3, VHost),
+    %% initial queue
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch3, QQ, Args)),
+    ?awaitMatch([{online, [Server3]}],
+                rpc:call(Server1, rabbit_quorum_queue, infos, [QName, [online]]),
+                ?DEFAULT_AWAIT),
+
+    partition(Config, Server3),
+    %% recreate vhost
+    ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+    ok = add_vhost_with_full_permissions(Config, Server1, VHost),
+    Ch1 = open_vhost_confirm_channel(Config, Server1, VHost),
+    %% remade queue
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0}, declare(Ch1, QQ, Args)),
+    %% publish attempts on both sides
+    publish(Ch1, QQ),
+    publish(Ch3, QQ),
+    Confirmed = length([Ch || Ch <- [Ch1, Ch3],
+                              amqp_channel:wait_for_confirms(Ch, 5) =:= true]),
+
+    heal(Config, Server3),
+    ?assertEqual(Confirmed, consistent_messages_total(Server1, QName)),
+    ok.
+
+consistent_messages_total(Server, QName) ->
+    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QName]),
+    case rpc:call(Server, ra, consistent_query,
+                  [amqqueue:get_pid(Q), {rabbit_fifo, query_messages_total, []}]) of
+        {ok, Total, _} -> Total;
+        Err -> Err
+    end.
+
 add_member_during_delete(Config) ->
     [Server1 | _] = Servers =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -5616,7 +5712,7 @@ await_message(Tag) ->
 add_vhost_with_full_permissions(Config, Node, VHost) ->
     User = ?config(rmq_username, Config),
     ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost, User),
-    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost).
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, Node, User, VHost).
 
 open_vhost_confirm_channel(Config, Node, VHost) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node, VHost),
