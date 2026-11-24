@@ -24,7 +24,8 @@
          protocol_error/3, protocol_error/4, protocol_error/1,
          precondition_failed/1, precondition_failed/2]).
 -export([type_class/1, assert_args_equivalence/4, assert_field_equivalence/4]).
--export([table_lookup/2, set_table_value/4, amqp_table/1, to_amqp_table/1]).
+-export([table_lookup/2, set_table_value/4, amqp_table/1, to_amqp_table/1,
+         check_table_size/1]).
 -export([r/3, r/2, r_arg/4, rs/1,
          queue_resource/2, exchange_resource/2]).
 -export([throw_on_error/2, with_exit_handler/2, is_abnormal_exit/1,
@@ -98,6 +99,8 @@
         R =:= noproc; R =:= noconnection; R =:= nodedown; R =:= normal;
             R =:= shutdown).
 
+-define(MAX_TABLE_SIZE, 16384).
+
 %%----------------------------------------------------------------------------
 
 -export_type([resource_name/0, thunk/1, channel_or_connection_exit/0]).
@@ -153,6 +156,8 @@
         (rabbit_framing:amqp_table(), binary(), rabbit_framing:amqp_field_type(),
          rabbit_framing:amqp_value()) ->
             rabbit_framing:amqp_table().
+-spec check_table_size(rabbit_framing:amqp_table()) ->
+    'ok' | {'error', {Size :: non_neg_integer(), Limit :: non_neg_integer()}}.
 -spec r(rabbit_types:vhost(), K) ->
           rabbit_types:r3(rabbit_types:vhost(), K, '_')
           when is_subtype(K, atom()).
@@ -371,6 +376,12 @@ table_lookup(Table, Key) ->
 set_table_value(Table, Key, Type, Value) ->
     sort_field_table(
       lists:keystore(Key, 1, Table, {Key, Type, Value})).
+
+check_table_size(Table) ->
+    case iolist_size(rabbit_binary_generator:generate_table(Table)) of
+        Size when Size > ?MAX_TABLE_SIZE -> {error, {Size, ?MAX_TABLE_SIZE}};
+        _                                -> ok
+    end.
 
 to_amqp_table(M) when is_map(M) ->
     lists:reverse(maps:fold(fun(K, V, Acc) -> [to_amqp_table_row(K, V)|Acc] end,

@@ -31,8 +31,6 @@
                                                kind = exchange,
                                                name = <<>>}).
 
--define(MAX_BINDING_ARGS_SIZE, 16384).
-
 %%----------------------------------------------------------------------------
 
 -export_type([key/0, deletions/0]).
@@ -147,12 +145,12 @@ binding_type0(_, _) ->
 
 binding_checks(Binding = #binding{args = Args}, InnerFun) ->
     fun(Src, Dst) ->
-            case iolist_size(rabbit_binary_generator:generate_table(Args)) of
-                Size when Size > ?MAX_BINDING_ARGS_SIZE ->
+            case rabbit_misc:check_table_size(Args) of
+                {error, {Size, Limit}} ->
                     {error, {binding_invalid,
                              "binding arguments size (~b bytes) exceeds the limit (~b bytes)",
-                             [Size, ?MAX_BINDING_ARGS_SIZE]}};
-                _ ->
+                             [Size, Limit]}};
+                ok ->
                     case rabbit_exchange:validate_binding(Src, Binding) of
                         ok ->
                             %% this argument is used to check queue exclusivity;
