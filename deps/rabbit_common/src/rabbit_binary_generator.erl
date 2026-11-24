@@ -105,57 +105,61 @@ create_frame(TypeInt, ChannelInt, Payload) ->
     [<<TypeInt:8, ChannelInt:16, (iolist_size(Payload)):32>>, Payload,
      ?FRAME_END].
 
-%% table_field_to_binary supports the AMQP 0-8/0-9 standard types, S,
+%% `field_value_to_binary/2` supports the AMQP 0-8/0-9 standard types, S,
 %% I, D, T and F, as well as the QPid extensions b, d, f, l, s, t, x,
 %% and V.
-table_field_to_binary({FName, T, V}) ->
-    [short_string_to_binary(FName) | field_value_to_binary(T, V)].
-
-field_value_to_binary(longstr,       V) -> [$S | long_string_to_binary(V)];
-field_value_to_binary(signedint,     V) -> [$I, <<V:32/signed>>];
+%%
+%% The functions below also return the encoded size because calling
+%% `iolist_size/1` on every table and array is quadratic in the nesting depth.
+field_value_to_binary(longstr,       V) -> long_string_to_binary($S, V);
+field_value_to_binary(signedint,     V) -> {[$I, <<V:32/signed>>], 5};
 field_value_to_binary(decimal,       V) -> {Before, After} = V,
-                                       [$D, Before, <<After:32>>];
-field_value_to_binary(timestamp,     V) -> [$T, <<V:64>>];
-field_value_to_binary(table,         V) -> [$F | table_to_binary(V)];
-field_value_to_binary(array,         V) -> [$A | array_to_binary(V)];
-field_value_to_binary(byte,          V) -> [$b, <<V:8/signed>>];
-field_value_to_binary(double,        V) -> [$d, <<V:64/float>>];
-field_value_to_binary(float,         V) -> [$f, <<V:32/float>>];
-field_value_to_binary(long,          V) -> [$l, <<V:64/signed>>];
-field_value_to_binary(short,         V) -> [$s, <<V:16/signed>>];
-field_value_to_binary(bool,          V) -> [$t, if V -> 1; true -> 0 end];
-field_value_to_binary(binary,        V) -> [$x | long_string_to_binary(V)];
-field_value_to_binary(unsignedbyte,  V) -> [$B, <<V:8/unsigned>>];
-field_value_to_binary(unsignedshort, V) -> [$u, <<V:16/unsigned>>];
-field_value_to_binary(unsignedint,   V) -> [$i, <<V:32/unsigned>>];
-field_value_to_binary(void,     _V) -> [$V].
+                                       {[$D, Before, <<After:32>>], 6};
+field_value_to_binary(timestamp,     V) -> {[$T, <<V:64>>], 9};
+field_value_to_binary(table,         V) -> table_to_binary(V);
+field_value_to_binary(array,         V) -> array_to_binary(V);
+field_value_to_binary(byte,          V) -> {[$b, <<V:8/signed>>], 2};
+field_value_to_binary(double,        V) -> {[$d, <<V:64/float>>], 9};
+field_value_to_binary(float,         V) -> {[$f, <<V:32/float>>], 5};
+field_value_to_binary(long,          V) -> {[$l, <<V:64/signed>>], 9};
+field_value_to_binary(short,         V) -> {[$s, <<V:16/signed>>], 3};
+field_value_to_binary(bool,          V) -> {[$t, if V -> 1; true -> 0 end], 2};
+field_value_to_binary(binary,        V) -> long_string_to_binary($x, V);
+field_value_to_binary(unsignedbyte,  V) -> {[$B, <<V:8/unsigned>>], 2};
+field_value_to_binary(unsignedshort, V) -> {[$u, <<V:16/unsigned>>], 3};
+field_value_to_binary(unsignedint,   V) -> {[$i, <<V:32/unsigned>>], 5};
+field_value_to_binary(void,     _V) -> {[$V], 1}.
 
 table_to_binary(Table) when is_list(Table) ->
-    BinTable = generate_table_iolist(Table),
-    [<<(iolist_size(BinTable)):32>> | BinTable].
+    {BinTable, Size} = generate_table_iolist(Table, [], 0),
+    {[$F, <<Size:32>> | BinTable], Size + 5}.
 
 array_to_binary(Array) when is_list(Array) ->
-    BinArray = generate_array_iolist(Array),
-    [<<(iolist_size(BinArray)):32>> | BinArray].
+    {BinArray, Size} = generate_array_iolist(Array, [], 0),
+    {[$A, <<Size:32>> | BinArray], Size + 5}.
 
 generate_table(Table) when is_list(Table) ->
-    list_to_binary(generate_table_iolist(Table)).
+    {BinTable, _Size} = generate_table_iolist(Table, [], 0),
+    list_to_binary(BinTable).
 
-generate_table_iolist(Table) ->
-    lists:map(fun table_field_to_binary/1, Table).
+generate_table_iolist([{FName, T, V} | Rest], Acc, Size) ->
+    Len = string_length(FName),
+    Len < 256 orelse exit(content_properties_shortstr_overflow),
+    {Value, ValueSize} = field_value_to_binary(T, V),
+    generate_table_iolist(Rest, [[<<Len:8>>, FName | Value] | Acc],
+                          Size + 1 + Len + ValueSize);
+generate_table_iolist([], Acc, Size) ->
+    {lists:reverse(Acc), Size}.
 
-generate_array_iolist(Array) ->
-    lists:map(fun ({T, V}) -> field_value_to_binary(T, V) end, Array).
+generate_array_iolist([{T, V} | Rest], Acc, Size) ->
+    {Value, ValueSize} = field_value_to_binary(T, V),
+    generate_array_iolist(Rest, [Value | Acc], Size + ValueSize);
+generate_array_iolist([], Acc, Size) ->
+    {lists:reverse(Acc), Size}.
 
-short_string_to_binary(String) ->
+long_string_to_binary(Tag, String) ->
     Len = string_length(String),
-    if Len < 256 -> [<<Len:8>>, String];
-       true      -> exit(content_properties_shortstr_overflow)
-    end.
-
-long_string_to_binary(String) ->
-    Len = string_length(String),
-    [<<Len:32>>, String].
+    {[Tag, <<Len:32>>, String], 5 + Len}.
 
 string_length(String) when is_binary(String) ->   size(String);
 string_length(String)                        -> length(String).

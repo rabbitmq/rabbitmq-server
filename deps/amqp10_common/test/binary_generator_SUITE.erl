@@ -30,7 +30,9 @@ all_tests() ->
      list,
      map,
      described,
-     array
+     array,
+     nested,
+     invalid_byte
     ].
 
 groups() ->
@@ -229,9 +231,56 @@ array(_Config) ->
 
     %% array:array32
     roundtrip({array, boolean, [true || _ <- lists:seq(1, 256)]}),
+
+    ?assertEqual(
+       iolist_to_binary(amqp10_binary_generator:generate(
+                          {array, array, [{as_is, 16#f0, <<5:32, 3:32, 16#40>>}]})),
+       iolist_to_binary(amqp10_binary_generator:generate(
+                          {array, array, [{as_is, 16#f0, [<<5:32>>, [<<3:32>>, 16#40]]}]}))),
     ok.
 
+nested(_Config) ->
+    ct:timetrap({seconds, 30}),
+    Depth = 100_000,
+    Leaf = {array, ubyte, []},
+    lists:foreach(
+      fun(Wrap) ->
+              Term = nest(Wrap, Leaf, Depth),
+              Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
+              ?assert({Term, byte_size(Bin)} =:= amqp10_binary_parser:parse(Bin))
+      end,
+      [fun(T) -> {list, [T]} end,
+       fun(T) -> {map, [{T, null}]} end,
+       fun(T) -> {map, [{{symbol, <<"k">>}, T}]} end,
+       fun(T) -> {list, [{described, {ulong, 0}, T}]} end,
+       fun(T) -> {list, [{described, T, null}]} end,
+       fun(T) -> {array, list, [{list, [T]}]} end,
+       fun(T) -> {array, map, [{map, [{null, T}]}]} end,
+       fun(T) -> {array, array, [T]} end]),
+
+    %% The parser does not accept compound array descriptors.
+    Term = nest(fun(T) -> {array, {described, T, ubyte}, []} end, Leaf, Depth),
+    Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
+    <<16#f0, Size:32, Rest/binary>> = Bin,
+    ?assertEqual(byte_size(Rest), Size).
+
+invalid_byte(_Config) ->
+    lists:foreach(
+      fun(Term) ->
+              ?assertError(function_clause, amqp10_binary_generator:generate(Term))
+      end,
+      [{ubyte, 256}, {ubyte, -1}, {uint, -1}, {ulong, -1}, {uint, 1.0},
+       {list, [{ubyte, 256}]},
+       {map, [{{uint, -1}, null}]},
+       {described, {ulong, -1}, null},
+       {array, ubyte, [{ubyte, 256}]}]).
+
 %% Utility
+
+nest(_Wrap, Term, 0) ->
+    Term;
+nest(Wrap, Term, N) ->
+    nest(Wrap, Wrap(Term), N - 1).
 
 roundtrip(Term) ->
     Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
