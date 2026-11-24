@@ -75,6 +75,7 @@ groups() ->
        sasl_plain_failure,
        sasl_none_failure,
        vhost_absent,
+       clear_permissions_closes_connection,
 
        %% limits
        vhost_connection_limit,
@@ -813,6 +814,21 @@ vhost_absent(Config) ->
     after ?TIMEOUT -> ct:fail(missing_closed)
     end.
 
+clear_permissions_closes_connection(Config) ->
+    ok = set_permissions(Config, <<".*">>, <<".*">>, <<".*">>),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Conn, Session, LinkPair} = init_pair(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    {ok, _Receiver} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver">>, rabbitmq_amqp_address:queue(QName)),
+
+    ok = rabbit_ct_broker_helpers:clear_permissions(
+           Config, ?config(test_user, Config), ?config(test_vhost, Config)),
+    receive {amqp10_event, {connection, Conn, {closed, _}}} -> ok
+    after ?TIMEOUT -> flush(missing_closed),
+                      ct:fail({missing_event, ?LINE})
+    end.
+
 vhost_connection_limit(Config) ->
     Vhost = proplists:get_value(test_vhost, Config),
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, Vhost, max_connections, 1),
@@ -952,7 +968,7 @@ delete_exchange(Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair1),
     ok = amqp10_client:end_session(Session1),
 
-    ok = clear_permissions(Config),
+    ok = set_permissions(Config, <<>>, <<>>, <<>>),
 
     {ok, Session2} = amqp10_client:begin_session_sync(Conn),
     {ok, LinkPair2} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session2, <<"pair 2">>),
@@ -1057,7 +1073,7 @@ delete_queue(Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair1),
     ok = amqp10_client:end_session(Session1),
 
-    ok = clear_permissions(Config),
+    ok = set_permissions(Config, <<>>, <<>>, <<>>),
 
     {ok, Session2} = amqp10_client:begin_session_sync(Conn),
     {ok, LinkPair2} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session2, <<"pair 2">>),

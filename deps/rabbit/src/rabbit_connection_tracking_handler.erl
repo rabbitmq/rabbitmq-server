@@ -59,6 +59,9 @@ handle_event(#event{type = vhost_down, props = Details}, State) ->
 handle_event(#event{type = user_deleted, props = Details}, State) ->
     ok = rabbit_connection_tracking:update_tracked({user_deleted, Details}),
     {ok, State};
+handle_event(#event{type = permission_deleted, props = Details}, State) ->
+    ok = rabbit_connection_tracking:update_tracked({permission_deleted, Details}),
+    {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.
 
