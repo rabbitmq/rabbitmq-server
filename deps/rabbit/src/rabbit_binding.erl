@@ -145,6 +145,7 @@ binding_type0(_, _) ->
 
 binding_checks(Binding, InnerFun) ->
     fun(Src, Dst) ->
+<<<<<<< HEAD
             case rabbit_exchange:validate_binding(Src, Binding) of
                 ok ->
                     %% this argument is used to check queue exclusivity;
@@ -153,6 +154,23 @@ binding_checks(Binding, InnerFun) ->
                     InnerFun(Src, Dst);
                 Err ->
                     Err
+=======
+            case rabbit_misc:check_table_size(Args) of
+                {error, {Size, Limit}} ->
+                    {error, {binding_invalid,
+                             "binding arguments size (~b bytes) exceeds the limit (~b bytes)",
+                             [Size, Limit]}};
+                ok ->
+                    case rabbit_exchange:validate_binding(Src, Binding) of
+                        ok ->
+                            %% this argument is used to check queue exclusivity;
+                            %% in general, we want to fail on that in preference to
+                            %% anything else
+                            InnerFun(Src, Dst);
+                        Err ->
+                            Err
+                    end
+>>>>>>> 8a51a53 (rabbit_misc: add check_table_size/1 and use it for binding arguments)
             end
     end.
 
