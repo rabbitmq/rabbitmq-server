@@ -29,7 +29,8 @@ groups() ->
           non_array_entry_in_existing_invalid_headers,
           content_framing,
           content_transcoding,
-          table_codec
+          table_codec,
+          table_codec_nested
         ]}
     ].
 
@@ -236,3 +237,20 @@ table_codec(_Config) ->
     Binary = rabbit_binary_generator:generate_table(Table),
     Table  = rabbit_binary_parser:parse_table(Binary),
     passed.
+
+table_codec_nested(_Config) ->
+    ct:timetrap({seconds, 30}),
+    lists:foreach(
+      fun(Wrap) ->
+              {Type, Value} = nest(Wrap, {array, []}, 100_000),
+              Table = [{<<"k">>, Type, Value}],
+              Binary = rabbit_binary_generator:generate_table(Table),
+              ?assert(Table =:= rabbit_binary_parser:parse_table(Binary))
+      end,
+      [fun(Field) -> {array, [Field]} end,
+       fun({Type, Value}) -> {table, [{<<"k">>, Type, Value}]} end]).
+
+nest(_Wrap, Acc, 0) ->
+    Acc;
+nest(Wrap, Acc, N) ->
+    nest(Wrap, Wrap(Acc), N - 1).
