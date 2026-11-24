@@ -210,6 +210,7 @@ groups() ->
        x_cc_annotation_null,
        non_utf8_names,
        binding_arguments_size_limit,
+       queue_arguments_size_limit,
        bad_x_cc_annotation_exchange,
        decimal_types,
        consumer_timeout_quorum_queue_policy,
@@ -8276,6 +8277,24 @@ binding_arguments_size_limit(Config) ->
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
 
+queue_arguments_size_limit(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Limit = 16384,
+    [begin
+         {ok, _} = rabbitmq_amqp_client:declare_queue(
+                     LinkPair, QName, #{arguments => queue_args_of_size(Type, Limit)}),
+         {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+
+         {error, Resp} = rabbitmq_amqp_client:declare_queue(
+                           LinkPair, QName, #{arguments => queue_args_of_size(Type, Limit + 1)}),
+         ?assertMatch(#{subject := <<"409">>}, amqp10_msg:properties(Resp)),
+         ?assertMatch({_, _}, binary:match(amqp10_msg:body_bin(Resp), <<"exceeds the limit">>)),
+         ?assertMatch({error, _}, rabbitmq_amqp_client:get_queue(LinkPair, QName))
+     end || Type <- [<<"classic">>, <<"quorum">>, <<"stream">>]],
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
+
 non_utf8_names(Config) ->
     {Connection, Session, LinkPair} = init(Config),
     {ok, QResp} = management_request(
@@ -8308,6 +8327,14 @@ non_utf8_names(Config) ->
     ?assertEqual([], rpc(Config, rabbit_amqqueue, list, [])),
 
     ok = close({Connection, Session, LinkPair}).
+
+queue_args_of_size(Type, Size) ->
+    Table = fun(Pad) -> [{<<"x-queue-type">>, longstr, Type}, {<<"x-pad">>, longstr, Pad}] end,
+    Overhead = iolist_size(rabbit_binary_generator:generate_table(Table(<<>>))),
+    Pad = binary:copy(<<"a">>, Size - Overhead),
+    Size = iolist_size(rabbit_binary_generator:generate_table(Table(Pad))),
+    #{<<"x-queue-type">> => {utf8, Type},
+      <<"x-pad">> => {utf8, Pad}}.
 
 management_request(#link_pair{outgoing_link = OutgoingLink,
                               incoming_link = IncomingLink},
