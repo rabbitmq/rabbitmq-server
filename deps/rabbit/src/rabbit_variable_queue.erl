@@ -724,7 +724,13 @@ timeout(State) ->
 
 handle_pre_hibernate(State = #vqstate{ msg_store_clients = MSCState0 }) ->
     MSCState = msg_store_pre_hibernate(MSCState0),
-    sync(State#vqstate{ msg_store_clients = MSCState }).
+    State1 = sync(State#vqstate{msg_store_clients = MSCState}),
+    case depth(State1) of
+        0 ->
+            Store = rabbit_classic_queue_store_v2:clear_cache(State1#vqstate.store_state),
+            State1#vqstate{store_state = Store};
+        _ -> State1
+    end.
 
 sync(State = #vqstate { index_state = IndexState0,
                         store_state = StoreState0,
