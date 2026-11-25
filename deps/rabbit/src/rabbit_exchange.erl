@@ -127,6 +127,7 @@ serial(X) ->
              rabbit_types:channel_exit().
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
+    ok = check_arguments_size(XName, Args),
     ok = check_exchange_limits(XName),
     X = rabbit_exchange_decorator:set(
           rabbit_policy:set(#exchange{name        = XName,
@@ -162,6 +163,17 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
             ?LOG_WARNING("ignoring exchange.declare for exchange ~tp,
                                 exchange.delete in progress~n.", [XName]),
             {ok, X}
+    end.
+
+check_arguments_size(XName, Args) ->
+    case rabbit_misc:check_table_size(Args) of
+        {error, {Size, Limit}} ->
+            rabbit_misc:protocol_error(
+              precondition_failed,
+              "arguments size of ~ts (~b bytes) exceeds the limit (~b bytes)",
+              [rabbit_misc:rs(XName), Size, Limit]);
+        ok ->
+            ok
     end.
 
 check_exchange_limits(XName) ->
