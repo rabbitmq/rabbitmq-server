@@ -541,11 +541,10 @@ public class MqttTest implements MqttCallback {
     client = newClient(info);
     client.setCallback(this);
     client.connect(client_opts);
-
-    // This time message are acknowledged and won't be redelivered
-    waitAtMost(() -> receivedMessagesSize() == 0);
-    assertThat(receivedMessages).isEmpty();
-
+    byte[] nextPayload = "next".getBytes(StandardCharsets.UTF_8);
+    publish(client, topic, 1, nextPayload);
+    waitAtMost(() -> receivedMessagesSize() > 0);
+    assertThat(firstMessage().getPayload()).isEqualTo(nextPayload);
     client.unsubscribe(topic);
     client.disconnect(5000);
     client.close();
