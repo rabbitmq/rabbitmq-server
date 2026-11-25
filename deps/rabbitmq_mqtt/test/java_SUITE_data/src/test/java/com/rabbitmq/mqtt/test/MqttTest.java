@@ -530,9 +530,13 @@ public class MqttTest implements MqttCallback {
 
     client = newClient(info);
     client.setCallback(this);
+    // Paho sends the automatic PUBACK after `messageArrived` returns, so a
+    // disconnect right after the delivery can drop it.
+    client.setManualAcks(true);
     client.connect(client_opts);
     waitAtMost(() -> receivedMessagesSize() == 1);
     assertThat(firstMessage().getPayload()).isEqualTo(payload);
+    client.messageArrivedComplete(firstMessage().getId(), 1);
     client.disconnect(5000);
     client.close();
 
