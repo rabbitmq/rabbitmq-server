@@ -53,7 +53,8 @@ all() ->
 groups() ->
     Common = [
         {backing_queue_embed_limit_0, [], ?BACKING_QUEUE_TESTCASES},
-        {backing_queue_embed_limit_1024, [], ?BACKING_QUEUE_TESTCASES}
+        {backing_queue_embed_limit_1024, [],
+         [variable_queue_releases_cached_payload | ?BACKING_QUEUE_TESTCASES]}
     ],
     V2Only = [
         v2_delete_segment_file_completely_acked,
@@ -3466,6 +3467,22 @@ variable_queue_restart_large_seq_id2(VQ0, QName) ->
     true = rabbit_variable_queue:is_empty(VQ3),
 
     VQ3.
+
+variable_queue_releases_cached_payload(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, with_fresh_variable_queue,
+                                          [fun ?MODULE:variable_queue_releases_cached_payload/2]).
+
+variable_queue_releases_cached_payload(VQ0, _QName) ->
+    Payload = <<"cached payload from drained queue">>,
+    VQ1 = variable_queue_publish(true, 1, 1, fun (_, Props) -> Props end,
+                                 fun (_) -> Payload end, VQ0),
+    VQ2 = rabbit_variable_queue:handle_pre_hibernate(VQ1),
+    {{_, false, Ack}, VQ3} = rabbit_variable_queue:fetch(true, VQ2),
+    {[_], VQ4} = rabbit_variable_queue:ack([Ack], VQ3),
+    0 = rabbit_variable_queue:depth(VQ4),
+    VQ5 = rabbit_variable_queue:handle_pre_hibernate(VQ4),
+    nomatch = binary:match(term_to_binary(VQ5), Payload),
+    VQ5.
 
 variable_queue_ack_limiting(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
