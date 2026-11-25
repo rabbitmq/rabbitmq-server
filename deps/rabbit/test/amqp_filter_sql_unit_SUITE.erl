@@ -1014,7 +1014,14 @@ properties_section(_Config) ->
     true = match("(p.content_type LIKE 'text/%') AND p.content_encoding = 'deflate'", Ps, APs),
 
     true = match("p.subject IS NULL", #'v1_0.properties'{}, APs),
-    false = match("p.subject IS NOT NULL", #'v1_0.properties'{}, APs).
+    false = match("p.subject IS NOT NULL", #'v1_0.properties'{}, APs),
+
+    BooleanSubject = #'v1_0.properties'{subject = {boolean, true}},
+    false = match("p.subject <> 'a'", BooleanSubject, APs),
+
+    DescribedSubject = #'v1_0.properties'{
+                          subject = {described, {symbol, <<"x">>}, {utf8, <<"a">>}}},
+    false = match("p.subject <> 'a'", DescribedSubject, APs).
 
 multiple_sections(_Config) ->
     Hdr = #'v1_0.header'{durable = true,
