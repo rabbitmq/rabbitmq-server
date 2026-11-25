@@ -211,6 +211,7 @@ groups() ->
        non_utf8_names,
        binding_arguments_size_limit,
        queue_arguments_size_limit,
+       exchange_arguments_size_limit,
        bad_x_cc_annotation_exchange,
        decimal_types,
        consumer_timeout_quorum_queue_policy,
@@ -8295,6 +8296,24 @@ queue_arguments_size_limit(Config) ->
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
 
+exchange_arguments_size_limit(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    XName = atom_to_binary(?FUNCTION_NAME),
+    Limit = 16384,
+    ok = rabbitmq_amqp_client:declare_exchange(
+           LinkPair, XName, #{arguments => args_of_size([], Limit)}),
+    ok = rabbitmq_amqp_client:delete_exchange(LinkPair, XName),
+
+    {error, Resp} = rabbitmq_amqp_client:declare_exchange(
+                      LinkPair, XName, #{arguments => args_of_size([], Limit + 1)}),
+    ?assertMatch(#{subject := <<"409">>}, amqp10_msg:properties(Resp)),
+    ?assertMatch({_, _}, binary:match(amqp10_msg:body_bin(Resp), <<"exceeds the limit">>)),
+    ?assertEqual({error, not_found},
+                 rpc(Config, rabbit_exchange, lookup,
+                     [rabbit_misc:r(<<"/">>, exchange, XName)])),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
+
 non_utf8_names(Config) ->
     {Connection, Session, LinkPair} = init(Config),
     {ok, QResp} = management_request(
@@ -8329,12 +8348,14 @@ non_utf8_names(Config) ->
     ok = close({Connection, Session, LinkPair}).
 
 queue_args_of_size(Type, Size) ->
-    Table = fun(Pad) -> [{<<"x-queue-type">>, longstr, Type}, {<<"x-pad">>, longstr, Pad}] end,
+    args_of_size([{<<"x-queue-type">>, longstr, Type}], Size).
+
+args_of_size(Table0, Size) ->
+    Table = fun(Pad) -> Table0 ++ [{<<"x-pad">>, longstr, Pad}] end,
     Overhead = iolist_size(rabbit_binary_generator:generate_table(Table(<<>>))),
     Pad = binary:copy(<<"a">>, Size - Overhead),
     Size = iolist_size(rabbit_binary_generator:generate_table(Table(Pad))),
-    #{<<"x-queue-type">> => {utf8, Type},
-      <<"x-pad">> => {utf8, Pad}}.
+    maps:from_list([{K, {utf8, V}} || {K, longstr, V} <- Table(Pad)]).
 
 management_request(#link_pair{outgoing_link = OutgoingLink,
                               incoming_link = IncomingLink},

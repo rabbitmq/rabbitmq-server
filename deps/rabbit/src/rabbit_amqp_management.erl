@@ -244,9 +244,9 @@ handle_http_req(<<"PUT">>,
                 ok = require_utf8(XNameBin),
                 ok = prohibit_reserved_amq(XName),
                 PermCache2 = check_alternate_exchange(XName, XArgs, User, PermCache1),
-                case rabbit_exchange:declare(
-                       XName, XTypeAtom, Durable, AutoDelete,
-                       Internal, XArgs, Username) of
+                try rabbit_exchange:declare(
+                      XName, XTypeAtom, Durable, AutoDelete,
+                      Internal, XArgs, Username) of
                     {ok, DeclaredX} ->
                         {DeclaredX, PermCache2};
                     {error, timeout} ->
@@ -255,6 +255,11 @@ handle_http_req(<<"PUT">>,
                           "Could not create ~ts because the operation "
                           "timed out",
                           [rabbit_misc:rs(XName)])
+                catch exit:#amqp_error{name = precondition_failed,
+                                       explanation = DeclareExpl} ->
+                          throw(<<"409">>, "~ts", [DeclareExpl]);
+                      exit:#amqp_error{explanation = DeclareExpl} ->
+                          throw(<<"400">>, "~ts", [DeclareExpl])
                 end
         end,
     try rabbit_exchange:assert_equivalence(

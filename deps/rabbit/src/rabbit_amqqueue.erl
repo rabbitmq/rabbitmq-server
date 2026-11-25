@@ -954,7 +954,7 @@ inject_default_queue_type_shortcut_into_args(Args0, QueueType) ->
     rabbit_misc:set_table_value(Args0, <<"x-queue-type">>, longstr, NewVal).
 
 check_declare_arguments(QueueName, Args0, DefaultQueueType) ->
-    check_arguments_size(QueueName, Args0),
+    check_arguments_size("arguments", QueueName, Args0),
     %% If the x-queue-type was not provided by the client, inject the
     %% (virtual host, global or fallback) default before performing validation. MK.
     Args = maybe_inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType),
@@ -966,18 +966,19 @@ check_declare_arguments(QueueName, Args0, DefaultQueueType) ->
     InvalidArgs = rabbit_queue_type:arguments(queue_arguments) -- QueueTypeArgs,
     check_arguments_key(QueueName, Type, Args, InvalidArgs).
 
-check_arguments_size(QueueName, Args) ->
+check_arguments_size(Kind, QueueName, Args) ->
     case rabbit_misc:check_table_size(Args) of
         {error, {Size, Limit}} ->
             rabbit_misc:protocol_error(
               precondition_failed,
-              "arguments size of ~ts (~b bytes) exceeds the limit (~b bytes)",
-              [rabbit_misc:rs(QueueName), Size, Limit]);
+              "~ts size of ~ts (~b bytes) exceeds the limit (~b bytes)",
+              [Kind, rabbit_misc:rs(QueueName), Size, Limit]);
         ok ->
             ok
     end.
 
 check_consume_arguments(QueueName, QueueType, Args) ->
+    check_arguments_size("consumer arguments", QueueName, Args),
     QueueTypeArgs = rabbit_queue_type:arguments(consumer_arguments, QueueType),
     Validators = lists:filter(fun({Arg, _}) -> lists:member(Arg, QueueTypeArgs) end, consume_args()),
     check_arguments_type_and_value(QueueName, Args, Validators),

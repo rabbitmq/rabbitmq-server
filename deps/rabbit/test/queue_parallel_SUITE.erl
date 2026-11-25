@@ -47,7 +47,8 @@ groups() ->
                 purge_no_consumer,
                 basic_recover,
                 delete_immediately_by_resource,
-                cc_header_non_array_should_close_channel
+                cc_header_non_array_should_close_channel,
+                consumer_arguments_size_limit
                ],
     ExtraBccTests = [extra_bcc_option,
                      extra_bcc_option_multiple_1,
@@ -58,7 +59,8 @@ groups() ->
        {classic_queue, GroupOptions, AllTests ++ [delete_immediately_by_pid_succeeds,
                                                   trigger_message_store_compaction]},
        {quorum_queue, GroupOptions, AllTests ++ ExtraBccTests ++ [delete_immediately_by_pid_fails]},
-       {stream_queue, GroupOptions, ExtraBccTests ++ [publish, subscribe]}
+       {stream_queue, GroupOptions, ExtraBccTests ++ [publish, subscribe,
+                                                      consumer_arguments_size_limit]}
       ]}
     ].
 
@@ -672,6 +674,33 @@ cc_header_non_array_should_close_channel(Config) ->
     end,
 
     ok = rabbit_ct_client_helpers:close_connection(C).
+
+consumer_arguments_size_limit(Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    ?assertMatch(#'basic.qos_ok'{},
+                 amqp_channel:call(Ch, #'basic.qos'{global = false,
+                                                    prefetch_count = 10})),
+    CArgs = ?config(consumer_args, Config),
+    Limit = 16384,
+    subscribe(Ch, QName, false, consumer_args_of_size(CArgs, Limit)),
+    rabbit_ct_client_helpers:close_channel(Ch),
+
+    C = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch2} = amqp_connection:open_channel(C),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, <<"PRECONDITION_FAILED - consumer arguments size", _/binary>>}}, _},
+       amqp_channel:call(Ch2, #'basic.consume'{queue = QName,
+                                               arguments = consumer_args_of_size(CArgs, Limit + 1)})),
+    ok = rabbit_ct_client_helpers:close_connection(C).
+
+consumer_args_of_size(Args0, Size) ->
+    Args = fun(Pad) -> Args0 ++ [{<<"x-pad">>, longstr, Pad}] end,
+    Overhead = iolist_size(rabbit_binary_generator:generate_table(Args(<<>>))),
+    Pad = binary:copy(<<"a">>, Size - Overhead),
+    Size = iolist_size(rabbit_binary_generator:generate_table(Args(Pad))),
+    Args(Pad).
 
 extra_bcc_option(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
