@@ -88,6 +88,18 @@ sort_partitions(_Config) ->
                                                                  binding(<<"no-order-field">>),
                                                                  binding(<<"a">>,
                                                                          0)])]),
+    InvalidOrders = [{<<"x-stream-partition-order">>, longstr, <<"abc">>},
+                     {<<"x-stream-partition-order">>, double, 1.5},
+                     {<<"x-stream-partition-order">>, table, []}],
+    [begin
+         Invalid = #binding{destination = #resource{name = <<"invalid">>},
+                            args = [Arg]},
+         ?assertEqual([<<"a">>, <<"invalid">>],
+                      [S
+                       || #binding{destination = #resource{name = S}}
+                              <- rabbit_stream_utils:sort_partitions(
+                                   [Invalid, binding(<<"a">>, 0)])])
+     end || Arg <- InvalidOrders],
     ok.
 
 filter_defined(_) ->

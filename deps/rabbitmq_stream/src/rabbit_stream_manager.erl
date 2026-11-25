@@ -397,13 +397,10 @@ partition_index(VirtualHost, SuperStream, Stream) ->
             Bindings ->
                 Binding = lists:nth(1, Bindings),
                 #binding{args = Args} = Binding,
-                case rabbit_misc:table_lookup(Args,
-                                              <<"x-stream-partition-order">>)
-                of
-                    {_, Order} ->
-                        Index = rabbit_data_coercion:to_integer(Order),
+                case rabbit_stream_utils:partition_order(Args) of
+                    Index when is_integer(Index) ->
                         {ok, Index};
-                    _ ->
+                    undefined ->
                         Pattern = <<"-">>,
                         Size = byte_size(Pattern),
                         case string:find(Stream, Pattern, trailing) of
