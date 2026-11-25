@@ -36,6 +36,7 @@
          check_read_or_write_permitted/2,
          extract_stream_list/2,
          sort_partitions/1,
+         partition_order/1,
          strip_cr_lf/1,
          consumer_activity_status/2,
          filter_defined/1,
@@ -362,22 +363,27 @@ extract_stream_list(<<Length:16, Stream:Length/binary, Rest/binary>>,
 -spec sort_partitions([#binding{}]) -> [#binding{}].
 sort_partitions(Partitions) ->
     lists:sort(fun(#binding{args = Args1}, #binding{args = Args2}) ->
-                  Arg1 =
-                      rabbit_misc:table_lookup(Args1,
-                                               <<"x-stream-partition-order">>),
-                  Arg2 =
-                      rabbit_misc:table_lookup(Args2,
-                                               <<"x-stream-partition-order">>),
-                  case {Arg1, Arg2} of
-                      {{_, Order1}, {_, Order2}} ->
-                          rabbit_data_coercion:to_integer(Order1)
-                          =< rabbit_data_coercion:to_integer(Order2);
-                      {undefined, {_, _Order2}} -> false;
-                      {{_, _Order1}, undefined} -> true;
-                      _ -> true
+                  case {partition_order(Args1), partition_order(Args2)} of
+                      {undefined, Order2} when is_integer(Order2) -> false;
+                      {_, undefined} -> true;
+                      {Order1, Order2} -> Order1 =< Order2
                   end
                end,
                Partitions).
+
+-spec partition_order(rabbit_framing:amqp_table()) ->
+    integer() | undefined.
+partition_order(Args) ->
+    case rabbit_misc:table_lookup(Args, <<"x-stream-partition-order">>) of
+        {_, Order} when is_integer(Order) ->
+            Order;
+        {_, Order} when is_binary(Order) ->
+            try binary_to_integer(Order)
+            catch error:badarg -> undefined
+            end;
+        _ ->
+            undefined
+    end.
 
 strip_cr_lf(NameBin) ->
     binary:replace(NameBin, [<<"\n">>, <<"\r">>], <<"">>, [global]).
