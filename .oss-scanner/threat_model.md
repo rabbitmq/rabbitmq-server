@@ -153,9 +153,9 @@ discovery integration suites, and mixed-version cluster tests.
 
 ## How we rate severity
 
-Rate severity with CVSS 4.0 and include the score and vector string. Optional
-plugins and non-default configuration do not by themselves justify `AT:P`; list them
-as prerequisites in the report.
+Rate severity with CVSS 4.0 and include the score and vector string. When a finding
+is in a plugin or a feature that is not enabled by default, set Attack Requirements
+to Present (`AT:P`).
 
 The categories below are typical triage priorities, not fixed assignments or caps:
 
