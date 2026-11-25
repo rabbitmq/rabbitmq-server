@@ -184,6 +184,7 @@
 
 -define(RPC_TIMEOUT, 1000).
 -define(START_CLUSTER_TIMEOUT, 5000).
+-define(START_CLUSTER_ATTEMPTS, 3).
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
@@ -558,23 +559,27 @@ start_ra_cluster(Q, LeaderNode, RaConfs) ->
         not_declared ->
             {error, not_declared};
         _ ->
-            case start_ra_cluster(LeaderNode, RaConfs) of
-                {error, {members_exist, Existing}} = Err ->
-                    Members = rabbit_misc:upmap(fun clashing_member/1,
-                                                Existing),
-                    case delete_leftover_members(Q, Members) of
-                        ok ->
-                            ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
-                                      [Existing, rabbit_misc:rs(amqqueue:get_name(Q))]),
-                            start_ra_cluster(LeaderNode, RaConfs);
-                        not_declared ->
-                            {error, not_declared};
-                        error ->
-                            Err
-                    end;
-                Res ->
-                    Res
-            end
+            start_ra_cluster(Q, LeaderNode, RaConfs, ?START_CLUSTER_ATTEMPTS)
+    end.
+
+%% Members of another declare can start between the delete of the leftovers
+%% and the next attempt. The record is checked before they are deleted.
+start_ra_cluster(Q, LeaderNode, RaConfs, Attempts) ->
+    case start_ra_cluster(LeaderNode, RaConfs) of
+        {error, {members_exist, Existing}} = Err when Attempts > 1 ->
+            Members = rabbit_misc:upmap(fun clashing_member/1, Existing),
+            case delete_leftover_members(Q, Members) of
+                ok ->
+                    ?LOG_INFO("Deleted leftover members ~w of quorum ~ts",
+                              [Existing, rabbit_misc:rs(amqqueue:get_name(Q))]),
+                    start_ra_cluster(Q, LeaderNode, RaConfs, Attempts - 1);
+                not_declared ->
+                    {error, not_declared};
+                error ->
+                    Err
+            end;
+        Res ->
+            Res
     end.
 
 %% `ra:start_cluster/3' only reports running members, and replaces a stopped
