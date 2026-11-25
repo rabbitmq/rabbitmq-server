@@ -20,9 +20,12 @@ Treat everything a network client sends as untrusted:
 - Credentials and tokens checked by the authentication backends: internal, LDAP,
   OAuth 2.0 (JWT validation), HTTP, cache, and X.509 certificate login
   (`rabbitmq_auth_mechanism_ssl`)
-- Client-supplied filter expressions: AMQP 1.0 SQL and property filters, and JMS
-  topic exchange selectors
-- Responses from remote brokers that Shovel and Federation links connect to
+- Client-supplied filter expressions: AMQP 1.0 SQL and property filters, JMS topic
+  exchange selectors, and stream filters
+- Shovel and Federation URIs and runtime parameters, and the responses of the
+  remote brokers they connect to
+- Values sent in HTTP and LDAP authentication backend requests, and OAuth 2.0
+  discovery and key responses
 
 Data from a client stays untrusted when it is stored, replicated to other nodes, or
 rendered in the management UI.
@@ -34,7 +37,9 @@ read permissions, topic permissions, and user tags (`management`, `policymaker`,
 `monitoring`, `administrator`, `impersonator`). A user must not reach a virtual host
 or resource outside their permissions, gain a tag they do not have, or set a message
 `user_id` other than their own without the `impersonator` tag. Access to shared
-resources depends on permissions, not on who created them.
+resources depends on permissions, not on who created them. Tags grant the management
+capabilities documented at <https://www.rabbitmq.com/docs/management#permissions>,
+not messaging permissions.
 
 The following are trusted:
 
@@ -50,8 +55,8 @@ The following are trusted:
   operator configures. Still check how their responses are validated
 
 The default `guest` user is limited to loopback connections by design
-(`loopback_users`). `ANONYMOUS` is enabled by default and logs in as `guest`, so the
-same restriction applies to it.
+(`loopback_users`). `ANONYMOUS` is enabled by default and logs in as `guest` unless
+`anonymous_login_user` is changed, so by default the same restriction applies to it.
 
 ## Components that matter most and least
 
@@ -75,19 +80,24 @@ RabbitMQ.
 
 ## What to look for
 
-Common classes of past issues:
+Common security-sensitive patterns:
 
 - Atoms created from client input (`binary_to_atom/2`, `list_to_atom/1`)
-- Unbounded memory or CPU use reachable before authentication, or from one client
-  at the expense of others
-- Credentials in logs, crash reports or process state
+- External terms decoded from client input (`binary_to_term/1`)
+- Unbounded memory, CPU, mailbox or ETS growth reachable before authentication, or
+  from one client at the expense of others, including expensive regular expressions
+  and filter evaluation
+- Credentials in logs, crash reports or process state that other users can see
 - Permission checks missing on one protocol or API path but present on others
+- Client-controlled file paths and URIs
+- Stored data that makes nodes fail on Ra or Khepri log replay, restart or recovery
 
 These are not vulnerabilities by themselves:
 
 - A failure limited to the offending connection
-- `monitoring` and `administrator` users seeing other users' connections and
-  resources
+- `monitoring` and `administrator` users seeing other users' connections
+- Outbound connections that authorized users configure through Shovel and
+  Federation
 - The Prometheus endpoint being unauthenticated unless
   `prometheus.authentication.enabled` is set
 - Topic permissions applying only to topic exchanges
@@ -135,9 +145,9 @@ discovery integration suites, and mixed-version cluster tests.
 
 ## How we rate severity
 
-Rate severity with CVSS 4.0 and include the vector string. When a finding is in a
-plugin or a feature that is not enabled by default, set Attack Requirements to
-Present (`AT:P`).
+Rate severity with CVSS 4.0 and include the score and vector string. Optional
+plugins and non-default configuration do not by themselves justify `AT:P`; list them
+as prerequisites in the report.
 
 - Critical: remote code execution, or authentication bypass reachable by an
   unauthenticated client
@@ -148,16 +158,21 @@ Present (`AT:P`).
 - Medium: denial of service that requires an authenticated user, stored XSS in the
   management UI by a non-administrator user, and disclosure of credentials or other
   secrets in logs or API responses
-- Low or not a vulnerability: issues that require the `administrator` tag, the
-  Erlang cookie or access to configuration files, and resource use that stays within
-  the limits an operator can configure (`max_message_size`, `frame_max`, virtual host
-  and user limits, memory and disk alarms)
+- Low or not a vulnerability: documented `administrator` capabilities, issues that
+  require the Erlang cookie or access to configuration files, and resource use that
+  stays within the limits an operator can configure (`max_message_size`,
+  `frame_max`, virtual host and user limits, memory and disk alarms). A way from the
+  `administrator` tag to host-level access is still in scope
+
+Rate persistent or cluster-wide denial of service by the affected nodes and the
+recovery cost; it can rank above Medium even when authentication is required. Impact on the RabbitMQ cluster itself is `VA`,
+not `SA`.
 
 ## Reports
 
 Each report should name the scanned commit, the protocol or API entry point, the
 required plugins and configuration, and the attacker's privileges. Include a
 reproducer, preferably a Common Test case, and a proposed patch, and say whether the
-reproducer was run. Group reports that share a root cause. Check
-<https://github.com/rabbitmq/rabbitmq-server/security/advisories> for findings that
-have already been reported and fixed.
+reproducer was run. Group reports that share a root cause. Do not report an issue
+that the repository history shows as fixed unless it is still reachable at the
+scanned commit.
