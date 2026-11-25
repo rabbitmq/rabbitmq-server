@@ -45,7 +45,7 @@
 -module(rabbit_classic_queue_store_v2).
 
 -export([init/1, terminate/1, info/1,
-         write/4, sync/1, read/3, read_many/2, check_msg_on_disk/3,
+         write/4, sync/1, clear_cache/1, read/3, read_many/2, check_msg_on_disk/3,
          remove/2, delete_segments/2, format_state/1]).
 
 -define(SEGMENT_EXTENSION, ".qs").
@@ -190,6 +190,10 @@ get_write_offset(Segment, Size, State = #qs{ write_segment = undefined }) ->
 sync(State) ->
     ?DEBUG("~0p", [State]),
     flush_buffer(State, fun(_) -> ok end).
+
+-spec clear_cache(state()) -> state().
+clear_cache(State) ->
+    State#qs{cache = #{}}.
 
 maybe_flush_buffer(State = #qs{ write_buffer_size = WriteBufferSize }) ->
     case WriteBufferSize >= max_cache_size() of
@@ -492,9 +496,8 @@ check_msg_on_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
 
 -spec remove(rabbit_variable_queue:seq_id(), State) -> State when State::state().
 
-%% We only remove the message from the write_buffer. We will remove
-%% the message from the disk when we delete the segment file, and
-%% from the cache on the next write.
+%% The next non-empty flush replaces the cache. A drained queue also clears
+%% it before hibernating. On disk, space is reclaimed by deleting the segment.
 remove(SeqId, State = #qs{ write_buffer = WriteBuffer0,
                            write_buffer_size = WriteBufferSize }) ->
     ?DEBUG("~0p ~0p", [SeqId, State]),
