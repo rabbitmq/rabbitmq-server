@@ -7,7 +7,8 @@ permitted to use.
 
 ## Where untrusted input enters
 
-Treat everything a network client sends as untrusted:
+Treat everything a network client sends as untrusted. The ports are configurable
+defaults:
 
 - AMQP 0-9-1 and AMQP 1.0 (port `5672`, `5671` with TLS), including the protocol
   header, SASL exchange, frames, and message sections, properties, and headers
@@ -35,17 +36,19 @@ rendered in the management UI.
 Authenticated users are limited by their virtual host access, configure, write and
 read permissions, topic permissions, and user tags (`management`, `policymaker`,
 `monitoring`, `administrator`, `impersonator`). A user must not reach a virtual host
-or resource outside their permissions, gain a tag they do not have, or set a message
-`user_id` other than their own without the `impersonator` tag. Access to shared
-resources depends on permissions, not on who created them. Tags grant the management
-capabilities documented at <https://www.rabbitmq.com/docs/management#permissions>,
-not messaging permissions.
+or resource outside their permissions, or gain a tag or permission that an
+administrator did not grant. Access to shared resources depends on permissions, not
+on who created them. Management tags grant the capabilities documented at
+<https://www.rabbitmq.com/docs/management#permissions>, not messaging permissions.
+A message `user_id` must match the authenticated user, unless the publisher has the
+`impersonator` tag or a Federation upstream has `trust-user-id` enabled.
 
 The following are trusted:
 
-- Erlang distribution (port `25672`) and `epmd` (port `4369`). Any party holding
-  the Erlang cookie has full control of the node by design. This includes the CLI
-  tools, which connect over Erlang distribution
+- Parties holding the Erlang cookie and authenticated cluster peers, which have full
+  control of the node by design over Erlang distribution (port `25672`, with `epmd`
+  on port `4369`). This includes the CLI tools. A RabbitMQ-specific way around
+  distribution authentication or cookie protection is in scope
 - Operators and the files they control: `rabbitmq.conf`, `advanced.config`,
   `enabled_plugins`, definition files, TLS certificates and keys
 - Users with the `administrator` tag, for broker administration. The tag does not
@@ -76,7 +79,8 @@ Out of scope: test code and test helpers (`rabbitmq_ct_helpers`,
 `*_examples` plugins, and community plugins that are not in this repository.
 Dependencies fetched into `deps/` during the build (`ra`, `khepri`, `osiris`, `cowboy`,
 `ranch` and others) are in scope only when a vulnerability is reachable through
-RabbitMQ.
+RabbitMQ. Report RabbitMQ's misuse of a dependency, not a standalone flaw in the
+dependency itself.
 
 ## What to look for
 
@@ -84,6 +88,10 @@ Common security-sensitive patterns:
 
 - Atoms created from client input (`binary_to_atom/2`, `list_to_atom/1`)
 - External terms decoded from client input (`binary_to_term/1`)
+- Client-controlled dynamic function calls (`erlang:apply/3`) or OS commands
+- Incorrect token or signature validation
+- Authorization caches that mix identities or keep revoked access beyond the
+  documented caching behavior
 - Unbounded memory, CPU, mailbox or ETS growth reachable before authentication, or
   from one client at the expense of others, including expensive regular expressions
   and filter evaluation
@@ -149,6 +157,8 @@ Rate severity with CVSS 4.0 and include the score and vector string. Optional
 plugins and non-default configuration do not by themselves justify `AT:P`; list them
 as prerequisites in the report.
 
+The categories below are typical triage priorities, not fixed assignments or caps:
+
 - Critical: remote code execution, or authentication bypass reachable by an
   unauthenticated client
 - High: authorization bypass that gives a user access to virtual hosts, resources or
@@ -159,19 +169,21 @@ as prerequisites in the report.
   management UI by a non-administrator user, and disclosure of credentials or other
   secrets in logs or API responses
 - Low or not a vulnerability: documented `administrator` capabilities, issues that
-  require the Erlang cookie or access to configuration files, and resource use that
-  stays within the limits an operator can configure (`max_message_size`,
-  `frame_max`, virtual host and user limits, memory and disk alarms). A way from the
-  `administrator` tag to host-level access is still in scope
+  require the Erlang cookie or access to configuration files, and normal resource
+  use within enforced operator limits (`max_message_size`, `frame_max`, virtual host
+  and user limits, memory and disk alarms) that is not disproportionate and does not
+  affect other clients. A way from the `administrator` tag to host-level access is
+  still in scope
 
 Rate persistent or cluster-wide denial of service by the affected nodes and the
-recovery cost; it can rank above Medium even when authentication is required. Impact on the RabbitMQ cluster itself is `VA`,
-not `SA`.
+recovery cost; it can rank above Medium even when authentication is required.
+Availability impact within the RabbitMQ cluster is `VA`, not `SA`.
 
 ## Reports
 
 Each report should name the scanned commit, the protocol or API entry point, the
-required plugins and configuration, and the attacker's privileges. Include a
+required plugins and configuration, the attacker's privileges, the root cause with
+source locations, the violated boundary and the demonstrated impact. Include a
 reproducer, preferably a Common Test case, and a proposed patch, and say whether the
 reproducer was run. Group reports that share a root cause. Do not report an issue
 that the repository history shows as fixed unless it is still reachable at the
