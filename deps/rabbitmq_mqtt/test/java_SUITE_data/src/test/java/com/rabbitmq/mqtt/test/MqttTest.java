@@ -480,11 +480,13 @@ public class MqttTest implements MqttCallback {
     MqttClient client = newConnectedClient(clientIdBase + "-1", client_opts);
     client.subscribe(topic, 1);
     client.disconnect(5000);
+    client.close();
 
     MqttClient client2 = newConnectedClient(clientIdBase + "-2", client_opts);
     publish(client2, topic, 1, payload);
     client2.disconnect(5000);
 
+    client = newClient(clientIdBase + "-1");
     client.setCallback(this);
     client.connect(client_opts);
 
@@ -505,49 +507,48 @@ public class MqttTest implements MqttCallback {
     client_opts.setCleanSession(false);
     MqttClient client = newConnectedClient(info, client_opts);
     client.subscribe(topic, 1);
-    disconnect(client);
+    client.disconnect(5000);
+    client.close();
 
-    MqttClient client2 = newConnectedClient(info, client_opts);
-    publish(client2, topic, 1, payload);
-    disconnect(client2);
+    MqttClient publisher = newConnectedClient(clientId(info) + "-publisher");
+    publish(publisher, topic, 1, payload);
+    publisher.disconnect(5000);
+    publisher.close();
 
     failOnDelivery = true;
+    MqttClient failingClient = newClient(info);
+    failingClient.setCallback(this);
+    failingClient.connect(client_opts);
 
-    // Connection should fail. Messages will be redelivered.
-    client.setCallback(this);
-    client.connect(client_opts);
-
-    // Message has been delivered but connection has failed.
-    waitAtMost(() -> receivedMessagesSize() == 1);
+    waitAtMost(() -> !failingClient.isConnected());
+    assertThat(receivedMessages).hasSize(1);
     assertThat(firstMessage().getPayload()).isEqualTo(payload);
-    Thread.sleep(100);
-    assertThat(client.isConnected()).isFalse();
+    failingClient.close();
 
     receivedMessages.clear();
     failOnDelivery = false;
 
+    client = newClient(info);
     client.setCallback(this);
-    // Wait for client to leave connection state 'DISCONNECTING'.
-    Thread.sleep(500);
     client.connect(client_opts);
-
-    // Message has been redelivered after session resume
     waitAtMost(() -> receivedMessagesSize() == 1);
     assertThat(firstMessage().getPayload()).isEqualTo(payload);
-    assertThat(client.isConnected()).isTrue();
-    disconnect(client);
+    client.disconnect(5000);
+    client.close();
 
     receivedMessages.clear();
 
+    client = newClient(info);
     client.setCallback(this);
-    waitAtMost(() -> !client.isConnected());
     client.connect(client_opts);
 
     // This time message are acknowledged and won't be redelivered
     waitAtMost(() -> receivedMessagesSize() == 0);
     assertThat(receivedMessages).isEmpty();
 
-    disconnect(client);
+    client.unsubscribe(topic);
+    client.disconnect(5000);
+    client.close();
   }
 
   @Test
@@ -557,13 +558,14 @@ public class MqttTest implements MqttCallback {
     MqttClient client = newConnectedClient(info, client_opts);
     client.subscribe(topic, 1);
     client.disconnect(5000);
+    client.close();
 
     MqttClient client2 = newConnectedClient(info, client_opts);
     publish(client2, topic, 1, payload);
     disconnect(client2);
 
     client_opts.setCleanSession(true);
-    client.connect(client_opts);
+    client = newConnectedClient(info, client_opts);
     client.setCallback(this);
     client.subscribe(topic, 1);
 

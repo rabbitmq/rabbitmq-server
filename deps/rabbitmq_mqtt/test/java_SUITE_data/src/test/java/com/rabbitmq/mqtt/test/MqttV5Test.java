@@ -442,13 +442,14 @@ public class MqttV5Test implements MqttCallback {
     MqttClient client = newConnectedClient(info, client_opts);
     client.subscribe(topic, 1);
     client.disconnect(5000);
+    client.close();
 
     MqttClient client2 = newConnectedClient(info, client_opts);
     publish(client2, topic, 1, payload);
     disconnect(client2);
 
     client_opts.setCleanStart(true);
-    client.connect(client_opts);
+    client = newConnectedClient(info, client_opts);
     client.setCallback(this);
     client.subscribe(topic, 1);
 
@@ -466,11 +467,13 @@ public class MqttV5Test implements MqttCallback {
     MqttClient client = newConnectedClient(clientIdBase + "-1", client_opts);
     client.subscribe(topic, 1);
     client.disconnect(5000);
+    client.close();
 
     MqttClient client2 = newConnectedClient(clientIdBase + "-2", client_opts);
     publish(client2, topic, 1, payload);
     client2.disconnect(5000);
 
+    client = newClient(clientIdBase + "-1");
     client.setCallback(this);
     client.connect(client_opts);
 
