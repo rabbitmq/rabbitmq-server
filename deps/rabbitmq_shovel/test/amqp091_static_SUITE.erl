@@ -281,7 +281,8 @@ run_valid_test(Config) ->
                      props   = #'P_basic' {
                         delivery_mode = 2,
                         content_type  = ?SHOVELLED,
-                        headers       = [{<<"x-shovelled">>, _, _},
+                        headers       = [{<<"x-opt-shovel-hops">>, long, 1},
+                                         {<<"x-shovelled">>, _, _},
                                          {<<"x-shovelled-timestamp">>,
                                           long, _}]}
                    }} ->
@@ -351,7 +352,8 @@ run_without_source_declarations_test(Config) ->
                    props   = #'P_basic'{
                       delivery_mode = 2,
                       content_type  = ?SHOVELLED,
-                      headers       = [{<<"x-shovelled">>, _, _},
+                      headers       = [{<<"x-opt-shovel-hops">>, long, 1},
+                                       {<<"x-shovelled">>, _, _},
                                        {<<"x-shovelled-timestamp">>,
                                         long, _}]}}} ->
             ok = amqp_channel:call(Chan, #'basic.ack'{delivery_tag = AckTag})

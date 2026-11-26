@@ -202,14 +202,12 @@ set_empty_properties_using_proplist(Config) ->
 headers(Config) ->
     with_amqp091_ch(Config,
         fun(Ch) ->
-            %% No headers by default
             shovel_test_utils:set_param(Config,
                 <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>}]),
-            ?assertMatch(#amqp_msg{props = #'P_basic'{headers = H0}}
-                           when H0 == undefined orelse H0 == [],
-                                amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi1">>)),
+            ?assertMatch(#amqp_msg{props = #'P_basic'{headers = [{<<"x-opt-shovel-hops">>, long, 1}]}},
+                         amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi1">>)),
 
             shovel_test_utils:set_param(Config,
                 <<"test">>,
@@ -220,7 +218,8 @@ headers(Config) ->
             Timestmp = os:system_time(seconds),
             #amqp_msg{props = #'P_basic'{headers = Headers}} =
                     amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi2">>),
-            [{<<"x-shovelled">>, _, [{table, ShovelledHeader}]},
+            [{<<"x-opt-shovel-hops">>, long, 1},
+             {<<"x-shovelled">>, _, [{table, ShovelledHeader}]},
              {<<"x-shovelled-timestamp">>, long, TS}] = Headers,
             %% We assume that the message was shovelled within a 2 second
             %% window.
@@ -237,8 +236,9 @@ headers(Config) ->
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>},
                  {<<"add-timestamp-header">>, true}]),
-            #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled-timestamp">>,
-                                                    long, _}]}} =
+            #amqp_msg{props = #'P_basic'{headers = [{<<"x-opt-shovel-hops">>, long, 1},
+                                                    {<<"x-shovelled-timestamp">>,
+                                                     long, _}]}} =
                     amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi3">>),
 
             shovel_test_utils:set_param(Config,
@@ -246,8 +246,8 @@ headers(Config) ->
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>},
                  {<<"add-forward-headers">>,  true}]),
-            #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled">>,
-                                                     _, _}]}} =
+            #amqp_msg{props = #'P_basic'{headers = [{<<"x-opt-shovel-hops">>, long, 1},
+                                                    {<<"x-shovelled">>, _, _}]}} =
                     amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi4">>)
 
         end).

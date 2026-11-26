@@ -188,7 +188,8 @@ amqp10_source(Config, AckMode) ->
          #amqp_msg{payload = <<42>>,
                    props = #'P_basic'{%delivery_mode = 2,
                                       %content_type = ?SHOVELLED,
-                                      headers = [{<<"x-shovelled">>, _, _},
+                                      headers = [{<<"x-opt-shovel-hops">>, long, 1},
+                                                 {<<"x-shovelled">>, _, _},
                                                  {<<"x-shovelled-timestamp">>,
                                                   long, _}]}}} ->
             case AckMode of

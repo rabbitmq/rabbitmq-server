@@ -204,7 +204,8 @@ local_destination_forward_headers_amqp091(Config) ->
     receive
         {#'basic.deliver'{consumer_tag = CTag},
          #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
-            ?assertMatch([{<<"x-opt-shovel-name">>, longstr, <<"test_shovel">>},
+            ?assertMatch([{<<"x-opt-shovel-hops">>, long, 1},
+                          {<<"x-opt-shovel-name">>, longstr, <<"test_shovel">>},
                           {<<"x-opt-shovel-type">>, longstr, <<"static">>},
                           {<<"x-opt-shovelled-by">>, longstr, _}],
                          lists:sort(Headers))
@@ -323,7 +324,8 @@ local_source(Config, AckMode) ->
     receive
         {#'basic.deliver'{consumer_tag = CTag, delivery_tag = AckTag},
          #amqp_msg{payload = <<42>>,
-                   props = #'P_basic'{headers = [{<<"x-shovelled">>, _, _},
+                   props = #'P_basic'{headers = [{<<"x-opt-shovel-hops">>, long, 1},
+                                                 {<<"x-shovelled">>, _, _},
                                                  {<<"x-shovelled-timestamp">>,
                                                   long, _}]}}} ->
             case AckMode of
@@ -388,7 +390,8 @@ local_source_without_declarations(Config) ->
     receive
         {#'basic.deliver'{consumer_tag = CTag, delivery_tag = AckTag},
          #amqp_msg{payload = <<42>>,
-                   props = #'P_basic'{headers = [{<<"x-shovelled">>, _, _},
+                   props = #'P_basic'{headers = [{<<"x-opt-shovel-hops">>, long, 1},
+                                                 {<<"x-shovelled">>, _, _},
                                                  {<<"x-shovelled-timestamp">>,
                                                   long, _}]}}} ->
             ok = amqp_channel:call(Chan, #'basic.ack'{delivery_tag = AckTag})
