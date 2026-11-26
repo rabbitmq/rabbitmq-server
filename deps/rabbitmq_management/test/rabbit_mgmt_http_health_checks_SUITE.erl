@@ -615,6 +615,29 @@ virtual_hosts_test(Config) ->
     VHosts = lists:sort([VHost1, VHost2]),
     ?assertEqual(VHosts, lists:sort(maps:get(<<"virtual-hosts">>, Body2))),
 
+    User = <<"virtual_hosts_test-user">>,
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    UserCheck = http_get(Config, Path, User, User, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, UserCheck)),
+    ?assertNot(maps:is_key('virtual-hosts', UserCheck)),
+
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost1),
+    {ok, {{_, ?HEALTH_CHECK_FAILURE_STATUS, _}, _, UserResBody}} =
+        req(Config, get, Path, [auth_header(User, User)]),
+    UserBody = rabbit_json:decode(rabbit_data_coercion:to_binary(UserResBody)),
+    ?assertEqual([VHost1], maps:get(<<"virtual-hosts">>, UserBody)),
+
+    Monitor = <<"virtual_hosts_test-monitor">>,
+    rabbit_ct_broker_helpers:add_user(Config, Monitor, Monitor),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Monitor, [monitoring]),
+    {ok, {{_, ?HEALTH_CHECK_FAILURE_STATUS, _}, _, MonitorResBody}} =
+        req(Config, get, Path, [auth_header(Monitor, Monitor)]),
+    MonitorBody = rabbit_json:decode(rabbit_data_coercion:to_binary(MonitorResBody)),
+    ?assertEqual(VHosts, lists:sort(maps:get(<<"virtual-hosts">>, MonitorBody))),
+
+    rabbit_ct_broker_helpers:delete_user(Config, Monitor),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2),
     http_get(Config, Path, ?OK),
