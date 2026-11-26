@@ -29,7 +29,8 @@ groups() ->
         vhost_stats,
         exchange_stats,
         node_stats,
-        consumer_stats
+        consumer_stats,
+        large_tables
       ]
      }
     ].
@@ -629,6 +630,54 @@ consumer_stats(Config) ->
     [] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup, [consumer_stats, Id]),
 
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"queue_stats">>}),
+    rabbit_ct_client_helpers:close_channel(Ch),
+
+    ok.
+
+large_tables(Config) ->
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+    QName = <<"large_tables">>,
+    amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
+
+    LiveQ = q(QName),
+    LivePid = rabbit_ct_broker_helpers:rpc(Config, A, erlang, whereis, [rabbit_mgmt_gc]),
+    DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
+    VHost = <<"large_tables">>,
+    %% Well above the number of keys that `rabbit_mgmt_gc` selects at once.
+    Intervals = lists:seq(100_000, 102_500),
+    ChannelRows = lists:append([[{{LivePid, I}, slide}, {{DeadPid, I}, slide}]
+                                || I <- Intervals]),
+    QueueRows = lists:append(
+                  [[{{LiveQ, I}, slide},
+                    {{rabbit_misc:r(VHost, queue, integer_to_binary(I)), I}, slide}]
+                   || I <- Intervals]),
+    true = rabbit_ct_broker_helpers:rpc(Config, A, ets, insert,
+                                        [channel_stats_fine_stats, ChannelRows]),
+    true = rabbit_ct_broker_helpers:rpc(Config, A, ets, insert,
+                                        [queue_msg_stats, QueueRows]),
+
+    rabbit_ct_broker_helpers:rpc(Config, A, erlang, send, [rabbit_mgmt_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, A, gen_server, call, [rabbit_mgmt_gc, test]),
+
+    Spec = fun(Id) ->
+                   [{{{Id, '$1'}, '_'}, [{'>=', '$1', hd(Intervals)}], [true]}]
+           end,
+    Count = fun(Table, Id) ->
+                    rabbit_ct_broker_helpers:rpc(Config, A, ets, select_count,
+                                                 [Table, Spec(Id)])
+            end,
+    N = length(Intervals),
+    N = Count(channel_stats_fine_stats, LivePid),
+    0 = Count(channel_stats_fine_stats, DeadPid),
+    N = Count(queue_msg_stats, LiveQ),
+    0 = Count(queue_msg_stats, #resource{virtual_host = VHost, _ = '_'}),
+
+    rabbit_ct_broker_helpers:rpc(Config, A, ets, select_delete,
+                                 [channel_stats_fine_stats, Spec(LivePid)]),
+    rabbit_ct_broker_helpers:rpc(Config, A, ets, select_delete,
+                                 [queue_msg_stats, Spec(LiveQ)]),
+    amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     rabbit_ct_client_helpers:close_channel(Ch),
 
     ok.

@@ -10,6 +10,8 @@
                 interval
                }).
 
+-define(KEYS_PER_SELECT, 256).
+
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 
 -export([start_link/0]).
@@ -114,15 +116,11 @@ gc_nodes() ->
     gc_entity(node_node_coarse_stats, Set).
 
 gc_process(Table) ->
-    ets:foldl(fun({{Pid, _} = Key, _}, none) ->
-                      gc_process(Pid, Table, Key);
-                 ({Pid = Key, _}, none) ->
-                      gc_process(Pid, Table, Key);
-                 ({Pid = Key, _, _}, none) ->
-                      gc_process(Pid, Table, Key);
-                 ({{Pid, _} = Key, _, _, _, _}, none) ->
-                      gc_process(Pid, Table, Key)
-              end, none, Table).
+    foreach_key(fun({Pid, _} = Key) ->
+                        gc_process(Pid, Table, Key);
+                   (Pid) ->
+                        gc_process(Pid, Table, Pid)
+                end, Table).
 
 gc_process(Pid, Table, Key) ->
     case rabbit_misc:is_process_alive(Pid) of
@@ -134,17 +132,14 @@ gc_process(Pid, Table, Key) ->
     end.
 
 gc_entity(Table, Set) ->
-    ets:foldl(fun({{_, Id} = Key, _}, none) when Table == node_node_stats ->
-                      gc_entity(Id, Table, Key, Set);
-                 ({{{_, Id}, _} = Key, _}, none) when Table == node_node_coarse_stats ->
-                      gc_entity(Id, Table, Key, Set);
-                  ({{Id, _} = Key, _}, none) ->
-                      gc_entity(Id, Table, Key, Set);
-                 ({Id = Key, _}, none) ->
-                      gc_entity(Id, Table, Key, Set);
-                 ({{Id, _} = Key, _}, none) ->
-                      gc_entity(Id, Table, Key, Set)
-              end, none, Table).
+    foreach_key(fun(Key) ->
+                        gc_entity(entity_id(Table, Key), Table, Key, Set)
+                end, Table).
+
+entity_id(node_node_stats, {_, Id}) -> Id;
+entity_id(node_node_coarse_stats, {{_, Id}, _}) -> Id;
+entity_id(_, {Id, _}) -> Id;
+entity_id(_, Id) -> Id.
 
 gc_entity(Id, Table, Key, Set) ->
     case sets:is_element(Id, Set) of
@@ -155,10 +150,18 @@ gc_entity(Id, Table, Key, Set) ->
             none
     end.
 
+gc_process_and_entity(consumer_stats = Table, Set) ->
+    foreach_key(fun({Id, Pid, _} = Key) ->
+                        gc_process_and_entity(Id, Pid, Table, Key, Set)
+                end, Table);
+gc_process_and_entity(Table, Set)
+  when Table == channel_queue_stats_deliver_stats;
+       Table == channel_exchange_stats_fine_stats ->
+    foreach_key(fun({{Pid, Id}, _} = Key) ->
+                        gc_process_and_entity(Id, Pid, Table, Key, Set)
+                end, Table);
 gc_process_and_entity(Table, Set) ->
-    ets:foldl(fun({{Id, Pid, _} = Key, _}, none) when Table == consumer_stats ->
-                      gc_process_and_entity(Id, Pid, Table, Key, Set);
-                 ({Id = Key, {_, Pid, _}} = Object, none)
+    ets:foldl(fun({Id = Key, {_, Pid, _}} = Object, none)
                     when Table == consumer_stats_queue_index ->
                       gc_object(Pid, Table, Object),
                       gc_entity(Id, Table, Key, Set);
@@ -175,15 +178,7 @@ gc_process_and_entity(Table, Set) ->
                     when Table == channel_exchange_stats_fine_stats_channel_index;
                          Table == channel_queue_stats_deliver_stats_channel_index ->
                       gc_object(Id, Table, Object, Set),
-                      gc_process(Pid, Table, Key);
-                 ({{{Pid, Id}, _} = Key, _}, none)
-                    when Table == channel_queue_stats_deliver_stats;
-                         Table == channel_exchange_stats_fine_stats ->
-                      gc_process_and_entity(Id, Pid, Table, Key, Set);
-                 ({{{Pid, Id}, _} = Key, _, _, _, _, _, _, _, _}, none) ->
-                      gc_process_and_entity(Id, Pid, Table, Key, Set);
-                 ({{{Pid, Id}, _} = Key, _, _, _, _}, none) ->
-                      gc_process_and_entity(Id, Pid, Table, Key, Set)
+                      gc_process(Pid, Table, Key)
               end, none, Table).
 
 gc_process_and_entity(Id, Pid, Table, Key, Set) ->
@@ -213,12 +208,13 @@ gc_object(Id, Table, Object, Set) ->
             none
     end.
 
+gc_entities(queue_exchange_stats_publish = Table, QueueSet, ExchangeSet) ->
+    foreach_key(fun({{Q, X}, _} = Key) ->
+                        gc_entity(Q, Table, Key, QueueSet),
+                        gc_entity(X, Table, Key, ExchangeSet)
+                end, Table);
 gc_entities(Table, QueueSet, ExchangeSet) ->
-    ets:foldl(fun({{{Q, X}, _} = Key, _}, none)
-                    when Table == queue_exchange_stats_publish ->
-                      gc_entity(Q, Table, Key, QueueSet),
-                      gc_entity(X, Table, Key, ExchangeSet);
-                 ({Q, {{_, X}, _}} = Object, none)
+    ets:foldl(fun({Q, {{_, X}, _}} = Object, none)
                     when Table == queue_exchange_stats_publish_queue_index ->
                       gc_object(X, Table, Object, ExchangeSet),
                       gc_entity(Q, Table, Q, QueueSet);
@@ -227,3 +223,21 @@ gc_entities(Table, QueueSet, ExchangeSet) ->
                       gc_object(Q, Table, Object, QueueSet),
                       gc_entity(X, Table, X, ExchangeSet)
               end, none, Table).
+
+%% Values can hold many `exometer_slide` samples, so only keys are copied.
+%% A match spec body that refers to the whole object would copy it.
+foreach_key(Fun, Table) ->
+    MatchSpec = [{{'$1', '_'}, [], ['$1']},
+                 {{'$1', '_', '_'}, [], ['$1']}],
+    ets:safe_fixtable(Table, true),
+    try
+        foreach_key0(Fun, ets:select(Table, MatchSpec, ?KEYS_PER_SELECT))
+    after
+        ets:safe_fixtable(Table, false)
+    end.
+
+foreach_key0(_Fun, '$end_of_table') ->
+    ok;
+foreach_key0(Fun, {Keys, Cont}) ->
+    lists:foreach(Fun, Keys),
+    foreach_key0(Fun, ets:select(Cont)).
