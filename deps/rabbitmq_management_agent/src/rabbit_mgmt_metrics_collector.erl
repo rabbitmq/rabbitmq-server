@@ -170,9 +170,9 @@ aggregate_metrics(Timestamp, #state{table = Table,
                                     policies = {_, _, _GPolicies}} = State0) ->
     Table = State0#state.table,
     {Next, Ops, #state{old_aggr_stats = Remainders}} =
-        ets:foldl(fun(R, {NextStats, O, State}) ->
-                          aggregate_entry(R, NextStats, O, State)
-                  end, {#{}, #{}, State0}, Table),
+        fold_entries(fun(R, {NextStats, O, State}) ->
+                             aggregate_entry(R, NextStats, O, State)
+                     end, {#{}, #{}, State0}, Table),
     maps:fold(fun(Tbl, TblOps, Acc) ->
                       _ = exec_table_ops(Tbl, Timestamp, TblOps),
                       Acc
@@ -181,6 +181,20 @@ aggregate_metrics(Timestamp, #state{table = Table,
     handle_deleted_queues(Table, Remainders, State0),
     remove_closed_created_stats(Table, Ops),
     State0#state{old_aggr_stats = Next}.
+
+%% `aggregate_entry/4` skips connections and channels that already have a
+%% created stats entry, so their entries are not copied out of ETS.
+fold_entries(Fun, Acc, Table)
+  when Table =:= connection_created; Table =:= channel_created ->
+    StatsTable = created_stats_table(Table),
+    lists:foldl(fun(Id, Acc0) ->
+                        case ets:member(StatsTable, Id) of
+                            true -> Acc0;
+                            false -> lists:foldl(Fun, Acc0, ets:lookup(Table, Id))
+                        end
+                end, Acc, ets:select(Table, [{{'$1', '_'}, [], ['$1']}]));
+fold_entries(Fun, Acc, Table) ->
+    ets:foldl(Fun, Acc, Table).
 
 %% A connection, channel or consumer that terminates between the fold over
 %% the core table and the insert below deletes its core entry before it emits the
