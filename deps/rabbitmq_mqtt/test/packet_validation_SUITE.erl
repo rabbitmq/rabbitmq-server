@@ -155,14 +155,18 @@ topic_names_and_filters(_Config) ->
          [?assertThrow(invalid_topic_name,
                        rabbit_mqtt_packet:parse(packet(16#32, <<(byte_size(Topic)):16, Topic/binary,
                                                                 0, 1, Props/binary>>), Vsn))
-          || Topic <- [<<"a/+">>, <<"a/#">>, <<"a+b">>]],
+          || Topic <- [<<"a/+">>, <<"a/#">>, <<"a+b">>, binary:copy(<<"a">>, 256)]],
+         [?assertMatch({ok, _, _, Vsn},
+                       rabbit_mqtt_packet:parse(packet(16#32, <<(byte_size(Topic)):16, Topic/binary,
+                                                                0, 1, Props/binary>>), Vsn))
+          || Topic <- [binary:copy(<<"a">>, 255)]],
          [assert_connect_error(
             connect_packet(Vsn, 6, <<Props/binary, (byte_size(Topic)):16, Topic/binary, 0, 0>>),
             invalid_topic_name)
-          || Topic <- [<<>>, <<"a/+">>, <<"a/#">>, <<"a+b">>]],
+          || Topic <- [<<>>, <<"a/+">>, <<"a/#">>, <<"a+b">>, binary:copy(<<"a">>, 256)]],
          [?assertMatch({ok, _, <<>>, Vsn},
                        parse_connect(Vsn, 6, <<Props/binary, (byte_size(Topic)):16, Topic/binary, 0, 0>>))
-          || Topic <- [<<"/">>, <<"a/b">>, <<"$SYS/a">>]],
+          || Topic <- [<<"/">>, <<"a/b">>, <<"$SYS/a">>, binary:copy(<<"a">>, 255)]],
          [?assertException(error, {badmatch, _},
                            rabbit_mqtt_packet:parse(packet(Header, <<0, 1, Props/binary,
                                                                      (byte_size(Filter)):16, Filter/binary,
@@ -228,7 +232,12 @@ protocol_name(3) -> <<"MQIsdp">>;
 protocol_name(_) -> <<"MQTT">>.
 
 packet(Header, Body) ->
-    <<Header, (byte_size(Body)), Body/binary>>.
+    <<Header, (remaining_length(byte_size(Body)))/binary, Body/binary>>.
+
+remaining_length(Len) when Len < 128 ->
+    <<Len>>;
+remaining_length(Len) ->
+    <<(Len band 127 bor 128), (remaining_length(Len bsr 7))/binary>>.
 
 properties(3) -> <<>>;
 properties(4) -> <<>>;

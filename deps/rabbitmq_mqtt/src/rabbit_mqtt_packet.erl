@@ -21,6 +21,8 @@
                    protocol_version() |
                    More :: fun().
 
+%% Intentionally limited compared to the MQTTv5 spec for cross-protocol compatibility.
+-define(MAX_TOPIC_NAME_BYTES, 255).
 -define(RESERVED, 0).
 -define(HIGHBIT, 2#10000000).
 -define(LOWBITS, 2#01111111).
@@ -360,6 +362,9 @@ validate_topic_name(<<>>, false) ->
     throw(invalid_topic_name);
 validate_topic_name(<<>>, true) ->
     ok;
+validate_topic_name(Topic, _AllowEmpty)
+  when byte_size(Topic) > ?MAX_TOPIC_NAME_BYTES ->
+    throw(invalid_topic_name);
 validate_topic_name(Topic, _AllowEmpty) ->
     validate_topic_name_chars(Topic).
 
