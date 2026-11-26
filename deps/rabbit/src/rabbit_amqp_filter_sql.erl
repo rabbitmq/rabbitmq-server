@@ -295,7 +295,7 @@ get_field_value(Name, Msg) ->
     case mc:property(Name, Msg) of
         {_Type, Val} ->
             Val;
-        undefined ->
+        _ ->
             undefined
     end.
 
