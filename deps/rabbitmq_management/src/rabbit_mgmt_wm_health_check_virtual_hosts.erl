@@ -28,13 +28,19 @@ content_types_provided(ReqData, Context) ->
 resource_exists(ReqData, Context) ->
     {true, ReqData, Context}.
 
-to_json(ReqData, Context) ->
+to_json(ReqData, Context = #context{user = User}) ->
     case rabbit_vhost_sup_sup:check() of
         [] ->
             rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
-        Vs when length(Vs) > 0 ->
-            Msg = <<"Some virtual hosts are down">>,
-            failure(Msg, Vs, ReqData, Context)
+        Vs ->
+            Visible = rabbit_mgmt_util:list_visible_vhosts_names(User),
+            case [V || V <- Vs, lists:member(V, Visible)] of
+                [] ->
+                    rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
+                VisibleVs ->
+                    Msg = <<"Some virtual hosts are down">>,
+                    failure(Msg, VisibleVs, ReqData, Context)
+            end
     end.
 
 failure(Message, Vs, ReqData, Context) ->
