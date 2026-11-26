@@ -715,62 +715,19 @@ get_data(Table, false, _, _) when Table == channel_exchange_metrics;
                            Table == channel_process_metrics ->
     [sum_values(Table)];
 get_data(exchange_metrics = Table, true, VHostsFilter, _) when is_map(VHostsFilter)->
-    ets:foldl(fun
-        ({#resource{kind = exchange, virtual_host = VHost}, _, _, _, _, _} = Row, Acc) when
-            map_get(VHost, VHostsFilter)
-        ->
-            [Row | Acc];
-        (_Row, Acc) ->
-            Acc
-    end, [], Table);
+    select_by_vhost(Table, {resource_in_vhost(exchange), '_', '_', '_', '_', '_'}, VHostsFilter);
 get_data(queue_delivery_metrics = Table, true, VHostsFilter, QueueFilter) when is_map(VHostsFilter) ->
-    ets:foldl(fun
-        ({#resource{kind = queue, virtual_host = VHost, name = QName}, _, _, _, _, _, _, _, _} = Row, Acc) when
-            map_get(VHost, VHostsFilter)
-        ->
-            case matches_queue_filter(QName, QueueFilter) of
-                true -> [Row | Acc];
-                false -> Acc
-            end;
-        (_Row, Acc) ->
-            Acc
-    end, [], Table);
+    Head = {resource_in_vhost(queue), '_', '_', '_', '_', '_', '_', '_', '_'},
+    filter_by_queue_name(select_by_vhost(Table, Head, VHostsFilter), QueueFilter);
 get_data(queue_exchange_metrics = Table, true, VHostsFilter, QueueFilter) when is_map(VHostsFilter) ->
-    ets:foldl(fun
-        ({{
-            #resource{kind = queue, virtual_host = VHost, name = QName},
-            #resource{kind = exchange, virtual_host = VHost}
-         }, _, _} = Row, Acc) when
-            map_get(VHost, VHostsFilter)
-        ->
-            case matches_queue_filter(QName, QueueFilter) of
-                true -> [Row | Acc];
-                false -> Acc
-            end;
-        (_Row, Acc) ->
-            Acc
-    end, [], Table);
+    Head = {{resource_in_vhost(queue), resource_in_vhost(exchange)}, '_', '_'},
+    filter_by_queue_name(select_by_vhost(Table, Head, VHostsFilter), QueueFilter);
 get_data(queue_coarse_metrics = Table, true, VHostsFilter, QueueFilter) when is_map(VHostsFilter) ->
-    ets:foldl(fun
-                  ({#resource{kind = queue, virtual_host = VHost, name = QName}, _, _, _, _} = Row, Acc) when map_get(VHost, VHostsFilter) ->
-                      case matches_queue_filter(QName, QueueFilter) of
-                          true -> [Row|Acc];
-                          false -> Acc
-                      end;
-                  (_, Acc) ->
-                      Acc
-              end, [], Table);
+    Head = {resource_in_vhost(queue), '_', '_', '_', '_'},
+    filter_by_queue_name(select_by_vhost(Table, Head, VHostsFilter), QueueFilter);
 get_data(MF, true, VHostsFilter, QueueFilter) when is_map(VHostsFilter), MF == queue_metrics orelse MF == queue_consumer_count ->
-    Table = queue_metrics,
-    ets:foldl(fun
-                  ({#resource{kind = queue, virtual_host = VHost, name = QName}, _, _} = Row, Acc) when map_get(VHost, VHostsFilter) ->
-                      case matches_queue_filter(QName, QueueFilter) of
-                          true -> [Row|Acc];
-                          false -> Acc
-                      end;
-                  (_, Acc) ->
-                      Acc
-              end, [], Table);
+    Head = {resource_in_vhost(queue), '_', '_'},
+    filter_by_queue_name(select_by_vhost(queue_metrics, Head, VHostsFilter), QueueFilter);
 get_data(queue_consumer_count, true, _, QueueFilter) ->
     filter_by_queue_name(ets:tab2list(queue_metrics), QueueFilter);
 get_data(queue_delivery_metrics = Table, true, _, QueueFilter) ->
@@ -986,6 +943,13 @@ matches_queue_filter(_QName, false) ->
     true;
 matches_queue_filter(QName, MP) ->
     rabbit_re:matches(QName, MP, [{match_limit, ?QUEUE_FILTER_MATCH_LIMIT}]).
+
+%% Rows of excluded vhosts are not copied out of ETS.
+select_by_vhost(Table, Head, VHostsFilter) ->
+    ets:select(Table, [{Head, [{map_get, '$1', {const, VHostsFilter}}], ['$_']}]).
+
+resource_in_vhost(Kind) ->
+    #resource{virtual_host = '$1', kind = Kind, name = '_'}.
 
 filter_by_queue_name(Rows, false) ->
     Rows;
