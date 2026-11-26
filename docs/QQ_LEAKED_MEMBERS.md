@@ -116,6 +116,9 @@ Details:
  * The queue stays listed, with `deleting` as its state. Declares and other operations that go
    through `rabbit_amqqueue:with/4` fail with `not_found`, "queue is being deleted", like the other
    absent states, so a client that polls with a passive declare until the queue is gone still works
+ * A `deleting` queue is not a routing target, so a mandatory message to it is returned. The
+   feature flag replaces the `rabbit_khepri_queue_target` projection with
+   `rabbit_khepri_queue_target_v2`, which leaves `deleting` records out
  * A declare, but not a passive one, of a `deleting` queue whose owner died finishes the delete and
    then declares the queue, so that an application that declares its queues at startup recovers on
    its own. This is done for AMQP 0-9-1 and for the AMQP 1.0 management API

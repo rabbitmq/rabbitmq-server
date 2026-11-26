@@ -173,7 +173,8 @@ groups() ->
                         reconnect_consumer_and_publish,
                         reconnect_consumer_and_wait,
                         reconnect_consumer_and_wait_channel_down
-                       ]}
+                       ]},
+                      enable_deleting_state
                      ]}
     ].
 
@@ -185,7 +186,8 @@ deleting_state_tests() ->
      vhost_delete_finishes_delete,
      delete_with_hanging_member_node,
      delete_after_owner_node_restart,
-     deleting_survives_leader_change].
+     deleting_survives_leader_change,
+     deleting_queue_is_not_routed].
 
 all_tests() ->
     [
@@ -404,6 +406,21 @@ init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
             [rabbit, consumer_disconnected_timeout, 5000])
      || N <- lists:seq(0, 2)],
     Config3;
+init_per_testcase(enable_deleting_state = Testcase, Config) ->
+    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config2 = rabbit_ct_helpers:set_config(
+                Config1, [{rmq_nodes_count, 3},
+                          {rmq_nodename_suffix, Testcase},
+                          {tcp_ports_base, {skip_n_nodes, 3}},
+                          {queue_name, rabbit_data_coercion:to_binary(Testcase)}]),
+    Config3 = rabbit_ct_helpers:merge_app_env(
+                Config2,
+                {rabbit, [{forced_feature_flags_on_init,
+                           {rel, [], [quorum_queue_deleting_state]}}]}),
+    rabbit_ct_helpers:run_steps(
+      Config3,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(T, Config)
   when T =:= leader_locator_balanced orelse
        T =:= leader_locator_policy ->
@@ -469,7 +486,8 @@ end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                         Testcase == delete_during_add_member;
                                         Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
-                                        Testcase == reconnect_consumer_and_wait_channel_down ->
+                                        Testcase == reconnect_consumer_and_wait_channel_down;
+                                        Testcase == enable_deleting_state ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()),
@@ -4908,6 +4926,84 @@ deleting_survives_leader_change(Config) ->
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
     ok.
+
+deleting_queue_is_not_routed(Config) ->
+    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = ?config(queue_name, Config),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    Owner = rpc:call(Server1, erlang, spawn, [timer, sleep, [infinity]]),
+    mark_deleting(Server1, QName, Owner),
+
+    amqp_channel:register_return_handler(Ch, self()),
+    publish_mandatory(Ch, QQ),
+    receive
+        {#'basic.return'{reply_code = 312, routing_key = QQ}, _} ->
+            ok
+    after 5000 ->
+              ct:fail(no_basic_return)
+    end,
+
+    exit(Owner, kill),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    ok.
+
+enable_deleting_state(Config) ->
+    [Server1 | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                 Config, quorum_queue_deleting_state)),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_return_handler(Ch, self()),
+    publish_mandatory(Ch, QQ),
+    true = amqp_channel:wait_for_confirms(Ch, 5),
+
+    case rabbit_ct_broker_helpers:enable_feature_flag(
+           Config, quorum_queue_deleting_state) of
+        ok ->
+            [?awaitMatch(undefined,
+                         rpc:call(S, ets, info, [rabbit_khepri_queue_target]),
+                         ?DEFAULT_AWAIT)
+             || S <- Servers],
+            publish_mandatory(Ch, QQ),
+            true = amqp_channel:wait_for_confirms(Ch, 5),
+            receive
+                {#'basic.return'{}, _} = Return -> ct:fail({returned, Return})
+            after 0 ->
+                      ok
+            end,
+            wait_for_messages_ready(Servers, ra_name(QQ), 2),
+
+            Owner = rpc:call(Server1, erlang, spawn, [timer, sleep, [infinity]]),
+            mark_deleting(Server1, QName, Owner),
+            publish_mandatory(Ch, QQ),
+            receive
+                {#'basic.return'{reply_code = 312}, _} -> ok
+            after 5000 ->
+                      ct:fail(no_basic_return)
+            end,
+            exit(Owner, kill),
+            ?assertMatch(#'queue.delete_ok'{},
+                         amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+            ok;
+        {skip, _} = Skip ->
+            Skip
+    end.
+
+publish_mandatory(Ch, QQ) ->
+    ok = amqp_channel:call(Ch, #'basic.publish'{routing_key = QQ,
+                                                mandatory = true},
+                           #amqp_msg{payload = <<"msg">>}).
 
 mark_deleting(Server, QName, Owner) ->
     {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QName]),

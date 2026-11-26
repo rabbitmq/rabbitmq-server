@@ -79,7 +79,6 @@
 -dialyzer({nowarn_function, [foreach_transient/1]}).
 
 -define(KHEPRI_PROJECTION, rabbit_khepri_queue).
--define(KHEPRI_TARGET_PROJECTION, rabbit_khepri_queue_target).
 
 %% -------------------------------------------------------------------
 %% get_all().
@@ -400,20 +399,21 @@ delete_if(QueueName, Conditions, OnlyDurable, Options) ->
 -spec get_targets(rabbit_exchange:route_return()) ->
     [amqqueue:target() | {amqqueue:target(), rabbit_exchange:route_infos()}].
 get_targets(Names) ->
+    Table = rabbit_khepri:queue_target_table_name(),
     lists:filtermap(fun({Name, RouteInfos})
                           when is_map(RouteInfos) ->
-                            case lookup_target(Name) of
+                            case lookup_target(Table, Name) of
                                 not_found -> false;
                                 Target -> {true, {Target, RouteInfos}}
                             end;
                        (Name) ->
-                            case lookup_target(Name) of
+                            case lookup_target(Table, Name) of
                                 not_found -> false;
                                 Target -> {true, Target}
                             end
                     end, Names).
 
-lookup_target(#resource{name = NameBin} = Name) ->
+lookup_target(Table, #resource{name = NameBin} = Name) ->
     case rabbit_volatile_queue:is(NameBin) of
         true ->
             %% This queue is not stored in the database. We create it on the fly.
@@ -422,11 +422,11 @@ lookup_target(#resource{name = NameBin} = Name) ->
                 Target -> Target
             end;
         false ->
-            lookup_target0(Name)
+            lookup_target0(Table, Name)
     end.
 
-lookup_target0(Name) ->
-    try ets:lookup_element(?KHEPRI_TARGET_PROJECTION, Name, 2, not_found) of
+lookup_target0(Table, Name) ->
+    try ets:lookup_element(Table, Name, 2, not_found) of
         not_found ->
             not_found;
         Target ->
