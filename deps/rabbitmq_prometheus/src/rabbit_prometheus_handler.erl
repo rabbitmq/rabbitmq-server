@@ -196,7 +196,9 @@ parse_queue_filter(B) when is_binary(B) ->
                                   [Pos, ErrStr])),
             {error, Msg};
         {error, heap_limit_not_allowed} ->
-            {error, <<"'queue' regex must not set (*LIMIT_HEAP=)">>}
+            {error, <<"'queue' regex must not set (*LIMIT_HEAP=)">>};
+        {error, _} ->
+            {error, <<"Refuse to compile the provided regular expression">>}
     end;
 parse_queue_filter([B]) when is_binary(B) ->
     parse_queue_filter(B);
