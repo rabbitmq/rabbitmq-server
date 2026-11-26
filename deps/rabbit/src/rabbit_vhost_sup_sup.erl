@@ -296,6 +296,8 @@ check() ->
                       not is_vhost_alive(V) orelse (not lists:all(fun(P) ->
                                                                           erlang:is_process_alive(P)
                                                                   end, MsgStores));
+                  {error, {no_such_vhost, _}} ->
+                      false;
                   {error, _} ->
                       true
               end
