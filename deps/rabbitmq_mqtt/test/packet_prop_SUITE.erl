@@ -180,7 +180,7 @@ user_property() ->
                       ])))}.
 
 mqtt_topic_name() ->
-    ?SUCHTHAT(Topic, mqtt_utf8_string(),
+    ?SUCHTHAT(Topic, mqtt_utf8_string(255),
               Topic =/= <<>> andalso binary:match(Topic, [<<"+">>, <<"#">>]) =:= nomatch).
 
 qos() ->
@@ -224,13 +224,14 @@ binary_up_to(N) ->
 utf8_string_pair() ->
     {mqtt_utf8_string(), mqtt_utf8_string()}.
 
-%% "Unless stated otherwise all UTF-8 encoded strings can have any length
-%% in the range 0 to 65,535 bytes." v5 1.5.4
 mqtt_utf8_string() ->
+    mqtt_utf8_string(16#ffff).
+
+mqtt_utf8_string(MaxBytes) ->
     %% Defining an upper size other than 'inf' is too slow because the
     %% test ?SIZE is not taken into account anymore.
     MaxCodePointSize = 4,
-    MaxCodePoints = 16#ffff div MaxCodePointSize,
+    MaxCodePoints = MaxBytes div MaxCodePointSize,
     ?LET(Bin, utf8(inf, MaxCodePointSize),
          begin
              L0 = unicode:characters_to_list(Bin, utf8),
