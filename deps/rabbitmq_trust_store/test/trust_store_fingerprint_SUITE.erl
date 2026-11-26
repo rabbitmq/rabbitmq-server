@@ -18,7 +18,15 @@ all() ->
      forged_cert_with_same_issuer_id_is_rejected,
      different_cert_is_rejected,
      is_whitelisted_der_matches_stored_cert,
+<<<<<<< HEAD
      whitelisted_leaf_is_accepted_as_peer
+=======
+     whitelisted_leaf_is_accepted_as_peer,
+     cert_issued_by_whitelisted_cert_is_rejected_as_peer,
+     non_canonical_cert_is_looked_up_and_logged_by_received_bytes,
+     rejected_cert_is_logged_with_its_names,
+     rejected_cert_with_large_name_is_logged_without_it
+>>>>>>> 6eb2514 (Trust store: validate certificate value lengths)
     ].
 
 init_per_suite(Config) ->
@@ -40,12 +48,11 @@ end_per_testcase(_Testcase, _Config) ->
     catch ets:delete(trust_store_whitelist),
     ok.
 
-%% A whitelisted certificate must be accepted by is_whitelisted/1.
 whitelisted_cert_is_accepted(_Config) ->
     {CertDER, _KeyA} = generate_self_signed_cert("CN=TestCA", 1),
     OTPCert = public_key:pkix_decode_cert(CertDER, otp),
     insert_entry(CertDER, OTPCert),
-    ?assert(rabbit_trust_store:is_whitelisted(OTPCert)).
+    ?assert(rabbit_trust_store:is_whitelisted_der(CertDER)).
 
 %% A certificate with the same Issuer DN and Serial (but different key/content)
 %% must NOT be accepted. This is the core of the V-16 forgery fix.
@@ -62,8 +69,8 @@ forged_cert_with_same_issuer_id_is_rejected(_Config) ->
     ?assertNotEqual(CertA_DER, CertB_DER),
     %% Whitelist CertA only
     insert_entry(CertA_DER, OTPCertA),
-    ?assert(rabbit_trust_store:is_whitelisted(OTPCertA)),
-    ?assertNot(rabbit_trust_store:is_whitelisted(OTPCertB)).
+    ?assert(rabbit_trust_store:is_whitelisted_der(CertA_DER)),
+    ?assertNot(rabbit_trust_store:is_whitelisted_der(CertB_DER)).
 
 %% A completely different certificate must be rejected.
 different_cert_is_rejected(_Config) ->
@@ -72,8 +79,8 @@ different_cert_is_rejected(_Config) ->
     OTPCertA = public_key:pkix_decode_cert(CertA_DER, otp),
     OTPCertB = public_key:pkix_decode_cert(CertB_DER, otp),
     insert_entry(CertA_DER, OTPCertA),
-    ?assert(rabbit_trust_store:is_whitelisted(OTPCertA)),
-    ?assertNot(rabbit_trust_store:is_whitelisted(OTPCertB)).
+    ?assert(rabbit_trust_store:is_whitelisted_der(CertA_DER)),
+    ?assertNot(rabbit_trust_store:is_whitelisted_der(CertB_DER)).
 
 %% is_whitelisted_der/1 accepts the raw DER of a whitelisted cert.
 is_whitelisted_der_matches_stored_cert(_Config) ->
@@ -89,12 +96,66 @@ whitelisted_leaf_is_accepted_as_peer(_Config) ->
     OTPCert = public_key:pkix_decode_cert(CertDER, otp),
     insert_entry(CertDER, OTPCert),
     ?assertEqual({valid, confirmed},
-                 rabbit_trust_store:whitelisted(OTPCert, {bad_cert, unknown_ca}, continue)),
+                 rabbit_trust_store:whitelisted(OTPCert, CertDER, {bad_cert, unknown_ca}, continue)),
     ?assertEqual({valid, confirmed},
-                 rabbit_trust_store:whitelisted(OTPCert, {bad_cert, selfsigned_peer}, continue)),
+                 rabbit_trust_store:whitelisted(OTPCert, CertDER, {bad_cert, selfsigned_peer}, continue)),
     ?assertEqual({valid, continue},
-                 rabbit_trust_store:whitelisted(OTPCert, valid_peer, continue)).
+                 rabbit_trust_store:whitelisted(OTPCert, CertDER, valid_peer, continue)).
 
+<<<<<<< HEAD
+=======
+cert_issued_by_whitelisted_cert_is_rejected_as_peer(_Config) ->
+    {CertDER, Key} = generate_self_signed_cert("CN=Whitelisted", 1),
+    OTPCert = public_key:pkix_decode_cert(CertDER, otp),
+    insert_entry(CertDER, OTPCert),
+    ForgedDER = generate_cert_signed_by("CN=Peer", "CN=Whitelisted", 2, Key),
+    Forged = public_key:pkix_decode_cert(ForgedDER, otp),
+    ?assertEqual({valid, confirmed},
+                 rabbit_trust_store:whitelisted(OTPCert, CertDER, {bad_cert, unknown_ca}, continue)),
+    ?assertMatch({fail, _},
+                 rabbit_trust_store:whitelisted(Forged, ForgedDER, valid_peer, confirmed)).
+
+%% A serial number with redundant leading zeros does not survive
+%% a decoding and re-encoding round trip.
+non_canonical_cert_is_looked_up_and_logged_by_received_bytes(_Config) ->
+    {CertDER0, _} = generate_self_signed_cert("NonCanonical", 1),
+    CertDER = replace_serial_number(CertDER0, <<0, 0, 1>>),
+    OTPCert = public_key:pkix_decode_cert(CertDER, otp),
+    ?assertNotEqual(CertDER, public_key:pkix_encode('OTPCertificate', OTPCert, otp)),
+    Msg = capture_trust_store_warning(
+            fun() ->
+                    rabbit_trust_store:whitelisted(OTPCert, CertDER, {bad_cert, selfsigned_peer}, continue)
+            end),
+    {match, [Fingerprint]} = re:run(Msg, "fingerprint: ([0-9A-F:]+),", [{capture, all_but_first, binary}]),
+    ?assertEqual(binary:encode_hex(crypto:hash(sha256, CertDER)),
+                 binary:replace(Fingerprint, <<":">>, <<>>, [global])),
+    insert_entry(CertDER, OTPCert),
+    ?assertEqual({valid, confirmed},
+                 rabbit_trust_store:whitelisted(OTPCert, CertDER, {bad_cert, selfsigned_peer}, continue)).
+
+rejected_cert_is_logged_with_its_names(_Config) ->
+    {CertDER, _} = generate_self_signed_cert("Rejected", 1),
+    OTPCert = public_key:pkix_decode_cert(CertDER, otp),
+    Msg = capture_trust_store_warning(
+            fun() ->
+                    rabbit_trust_store:whitelisted(OTPCert, CertDER, {bad_cert, selfsigned_peer}, continue)
+            end),
+    ?assertMatch({match, _}, re:run(Msg, "subject: CN=Rejected,")),
+    ?assertMatch({match, _}, re:run(Msg, "issuer: CN=Rejected,")).
+
+rejected_cert_with_large_name_is_logged_without_it(_Config) ->
+    {CertDER, _} = generate_self_signed_cert(lists:duplicate(100_000, $x), 1),
+    OTPCert = public_key:pkix_decode_cert(CertDER, otp),
+    Msg = capture_trust_store_warning(
+            fun() ->
+                    rabbit_trust_store:whitelisted(OTPCert, CertDER, {bad_cert, selfsigned_peer}, continue)
+            end),
+    ?assertMatch({match, _}, re:run(Msg, "subject: <too large to be logged>,")),
+    ?assertMatch({match, _}, re:run(Msg, "issuer: <too large to be logged>,")),
+    ?assertMatch({match, _}, re:run(Msg, "fingerprint: [0-9A-F:]{95},")),
+    ?assert(length(Msg) < 1000).
+
+>>>>>>> 6eb2514 (Trust store: validate certificate value lengths)
 %% ------------------------------------------------------------------
 %% Helpers
 %% ------------------------------------------------------------------
@@ -147,3 +208,46 @@ insert_entry(CertDER, OTPCert) ->
     ets:insert(trust_store_whitelist,
                {entry, Fingerprint, undefined, <<"test">>,
                 ?MODULE, IssuerId, CertDER}).
+
+replace_serial_number(CertDER, SerialNumber) ->
+    {16#30, Cert, <<>>} = der_split(CertDER),
+    {16#30, TBS, SigAlgAndSig} = der_split(Cert),
+    {16#a0, Version, TBSRest0} = der_split(TBS),
+    {16#02, _, TBSRest} = der_split(TBSRest0),
+    NewTBS = der_tlv(16#30, <<(der_tlv(16#a0, Version))/binary,
+                              (der_tlv(16#02, SerialNumber))/binary,
+                              TBSRest/binary>>),
+    der_tlv(16#30, <<NewTBS/binary, SigAlgAndSig/binary>>).
+
+der_split(<<Tag, 0:1, Len:7, Value:Len/binary, Rest/binary>>) ->
+    {Tag, Value, Rest};
+der_split(<<Tag, 1:1, N:7, Len:N/unit:8, Value:Len/binary, Rest/binary>>) ->
+    {Tag, Value, Rest}.
+
+der_tlv(Tag, Value) when byte_size(Value) < 128 ->
+    <<Tag, (byte_size(Value)), Value/binary>>;
+der_tlv(Tag, Value) ->
+    Len = binary:encode_unsigned(byte_size(Value)),
+    <<Tag, 1:1, (byte_size(Len)):7, Len/binary, Value/binary>>.
+
+capture_trust_store_warning(Fun) ->
+    ok = logger:add_handler(?MODULE, ?MODULE, #{config => #{pid => self()}}),
+    try
+        Fun()
+    after
+        logger:remove_handler(?MODULE)
+    end,
+    receive
+        {trust_store_warning, Msg} -> Msg
+    after 5000 ->
+        ct:fail(no_trust_store_warning)
+    end.
+
+log(#{level := warning, msg := {Format, Args}}, #{config := #{pid := Pid}}) ->
+    Msg = lists:flatten(io_lib:format(Format, Args)),
+    case lists:prefix("Trust store:", Msg) of
+        true  -> Pid ! {trust_store_warning, Msg};
+        false -> ok
+    end;
+log(_, _) ->
+    ok.

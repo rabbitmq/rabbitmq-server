@@ -78,7 +78,8 @@ groups() ->
             hexify,
             getstat_or_zero_on_live_socket,
             getstat_or_zero_on_closed_socket,
-            ssl_options_check_file
+            ssl_options_check_file,
+            ssl_options_fix_keeps_verify_fun
         ]},
         {sequential_tests, [], [
             data_coercion_to_existing_atom_does_not_create_atoms
@@ -725,6 +726,15 @@ getstat_or_zero_on_closed_socket(_) ->
     ?assertEqual(0, rabbit_net:getstat_or_zero(LSock, recv_oct)),
     ?assertEqual(0, rabbit_net:getstat_or_zero(LSock, send_oct)),
     ok.
+
+ssl_options_fix_keeps_verify_fun(_Config) ->
+    Fun3 = fun(_, _, St) -> {valid, St} end,
+    Fun4 = fun(_, _, _, St) -> {valid, St} end,
+    [?assertEqual({Fun, continue},
+                  proplists:get_value(verify_fun,
+                                      rabbit_ssl_options:fix([{verify_fun, {Fun, continue}}])))
+     || Fun <- [Fun3, Fun4]],
+    passed.
 
 ssl_options_check_file(Config) ->
     Dir = ?config(priv_dir, Config),

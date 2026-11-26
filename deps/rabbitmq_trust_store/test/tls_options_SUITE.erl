@@ -83,7 +83,7 @@ verify_always_set_to_verify_peer(_Config) ->
 verify_fun_always_set(_Config) ->
     Opts = merge([]),
     {Fun, continue} = opt(verify_fun, Opts),
-    true = is_function(Fun, 3).
+    true = is_function(Fun, 4).
 
 verify_fun_overrides_user_value(_Config) ->
     UserFun = fun(_Cert, _Event, State) -> {valid, State} end,

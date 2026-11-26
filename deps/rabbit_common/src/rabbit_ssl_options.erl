@@ -112,7 +112,8 @@ fix_verify_fun(SslOptsConfig) ->
         {Module, Function} when is_atom(Module) ->
             Fun = make_verify_fun(Module, Function, none),
             rabbit_misc:pset(verify_fun, Fun, SslOptsConfig);
-        {Verifyfun, _InitialUserState} when is_function(Verifyfun, 3) ->
+        {Verifyfun, _InitialUserState} when is_function(Verifyfun, 3);
+                                             is_function(Verifyfun, 4) ->
             SslOptsConfig;
         undefined ->
             SslOptsConfig
