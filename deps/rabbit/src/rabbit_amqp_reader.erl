@@ -317,10 +317,12 @@ handle_session_exit(ChannelNum, SessionPid, Reason, State0) ->
             false ->
                 Detail = case Reason of
                              {RealReason, Trace} ->
-                                 rabbit_misc:format("Session error: ~tp~n~tp",
-                                                     [RealReason, Trace]);
+                                 rabbit_misc:format("Session error: ~tP~n~tP",
+                                                    [RealReason, ?FORMAT_DEPTH_LIMIT,
+                                                     Trace, ?FORMAT_DEPTH_LIMIT]);
                              _ ->
-                                 rabbit_misc:format("Session error: ~tp", [Reason])
+                                 rabbit_misc:format("Session error: ~tP",
+                                                    [Reason, ?FORMAT_DEPTH_LIMIT])
                          end,
                 handle_exception(State, ChannelNum, internal_error_frame(), Detail)
         end,
@@ -430,7 +432,9 @@ handle_frame(Mode, Channel, Body, State) ->
             handle_exception(State,
                              Channel,
                              internal_error_frame(),
-                             rabbit_misc:format("Reader error: ~tp~n~tp", [Reason, Trace]))
+                             rabbit_misc:format("Reader error: ~tP~n~tP",
+                                                [Reason, ?FORMAT_DEPTH_LIMIT,
+                                                 Trace, ?FORMAT_DEPTH_LIMIT]))
     end.
 
 handle_frame0(amqp, Channel, _Body,
@@ -510,6 +514,7 @@ handle_connection_frame(
        "using SASL mechanism ~s and granted access to vhost '~ts'",
        [ContainerId, Username, Mechanism, Vhost]),
 
+<<<<<<< HEAD
     OutgoingMaxFrameSize = case ClientMaxFrame of
                                undefined ->
                                    unlimited;
@@ -565,6 +570,137 @@ handle_connection_frame(
                                   ChannelMax;
                               {ushort, N} ->
                                   min(N, ChannelMax)
+=======
+    OfferedCaps0 = [%% https://docs.oasis-open.org/amqp/linkpair/v1.0/cs01/linkpair-v1.0-cs01.html#_Toc51331306
+                    <<"LINK_PAIR_V1_0">>,
+                    %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
+                    <<"ANONYMOUS-RELAY">>,
+                    %% [schdmsg-v1.0-wd02] §2.1, [amqp-bindmap-jms-v1.0-wd10] §9
+                    %% Offered for the whole connection instead of per link: a sending link often targets an exchange
+                    %% or the anonymous relay, so which queues a message reaches, and therefore whether they support
+                    %% a delivery delay, is only known per message at routing time. Queue types that do not support
+                    %% delivery delays enqueue the message immediately.
+                    <<"DELAYED_DELIVERY">>,
+                    %% amqp-bindmap-jms-v1.0-wd10 §8
+                    <<"SHARED-SUBS">>],
+    {map, Props0} = server_properties(),
+
+    HasSoleCap = rabbit_amqp_util:has_capability(?CAP_SOLE_CONN, DesiredCaps) andalso
+                 rabbit_sole_conn:is_feature_enabled(),
+    {SoleConnPlcy, OfferedCaps, Props} =
+        case HasSoleCap of
+            true  ->
+                {sole_conn_enforcement_policy(Properties),
+                 [?CAP_SOLE_CONN | OfferedCaps0],
+                 [{?SOLE_CONN_DETECTION_POLICY, ?SOLE_CONN_DETECTION_POLICY_WEAK}
+                  | Props0]};
+            false ->
+                {none, OfferedCaps0, Props0}
+        end,
+
+    case rabbit_sole_conn:acquire(SoleConnPlcy, Vhost, ContainerId, Username, self()) of
+        {error, refuse_connection} ->
+            %% "If the enforcing container has not already sent the open
+            %% for the connection, it MUST add the property
+            %% amqp:connection-establishment-failed to the properties field
+            %% of open having boolean value true." [sole conn 3.2.1]
+            Props1 = [{?AMQP_ERROR_CONNECTION_ESTABLISHMENT_FAILED, true} | Props],
+            Open = #'v1_0.open'{
+                      container_id = {utf8, rabbit_nodes:cluster_name()},
+                      offered_capabilities = amqp10_util:capabilities_from_list(OfferedCaps),
+                      properties = {map, Props1}},
+
+            ok = send_on_channel0(State0, Open, amqp10_framing),
+
+            %% The enforcing container MUST then immediately send a close"
+            %% [sole conn 3.2.1]
+            State = State0#v1{connection_state = closing},
+            Error = rabbit_sole_conn:refuse_connection_error(),
+            close(Error, State);
+        _ ->
+            rabbit_access_control:clear_max_heap_size(),
+            Timer = maybe_start_credential_expiry_timer(User),
+            rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
+            notify_auth(user_authentication_success, Username, State0),
+            ?LOG_INFO(
+               "Connection from AMQP 1.0 container '~ts': user '~ts' authenticated "
+               "using SASL mechanism ~s and granted access to vhost '~ts'",
+               [ContainerId, Username, Mechanism, Vhost]),
+
+            OutgoingMaxFrameSize = case ClientMaxFrame of
+                                       undefined ->
+                                           unlimited;
+                                       {uint, Bytes}
+                                         when Bytes >= ?MIN_MAX_FRAME_1_0_SIZE ->
+                                           Bytes;
+                                       {uint, Bytes} ->
+                                           protocol_error(
+                                             ?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
+                                             "max_frame_size (~w) < minimum maximum frame size (~w)",
+                                             [Bytes, ?MIN_MAX_FRAME_1_0_SIZE])
+                                   end,
+            SendTimeoutSec =
+            case IdleTimeout of
+                undefined ->
+                    0;
+                {uint, Interval} ->
+                    if Interval =:= 0 ->
+                           0;
+                       Interval < 1000 ->
+                           %% "If a peer can not, for any reason support a proposed idle timeout, then it SHOULD
+                           %% close the connection using a close frame with an error explaining why. There is no
+                           %% requirement for peers to support arbitrarily short or long idle timeouts." [2.4.5]
+                           %% rabbit_heartbeat does not want to support sub-second timeouts.
+                           protocol_error(
+                             ?V_1_0_AMQP_ERROR_NOT_ALLOWED,
+                             "idle-time-out (~b ms) < minimum idle-time-out (1000 ms)",
+                             [Interval]);
+                       Interval >= 1000 ->
+                           Interval div 1000
+                    end
+            end,
+            {ok, ReceiveTimeoutSec} = application:get_env(rabbit, heartbeat),
+            ReceiveTimeoutMillis = ReceiveTimeoutSec * 1000,
+            Reader = self(),
+            ReceiveFun = fun() -> Reader ! heartbeat_timeout end,
+            SendFun = heartbeat_send_fun(Reader, State0),
+            %% TODO: only start heartbeat receive timer at next next frame
+            Heartbeater = rabbit_heartbeat:start(
+                            HelperSupPid, Sock, ConnectionName,
+                            SendTimeoutSec, SendFun,
+                            ReceiveTimeoutSec, ReceiveFun),
+            {ok, IncomingMaxFrameSize} = application:get_env(rabbit, frame_max),
+            {ok, SessionMax} = application:get_env(rabbit, session_max_per_connection),
+            %% "The channel-max value is the highest channel number that can be used on the connection.
+            %% This value plus one is the maximum number of sessions that can be simultaneously active
+            %% on the connection." [2.7.1]
+            ChannelMax = SessionMax - 1,
+            %% Assert config is valid.
+            true = ChannelMax >= 0 andalso ChannelMax =< 16#ff_ff,
+            EffectiveChannelMax = case ClientChannelMax of
+                                      undefined ->
+                                          ChannelMax;
+                                      {ushort, N} ->
+                                          min(N, ChannelMax)
+                                  end,
+            State1 = State0#v1{connection_state = running,
+                               connection = Connection#v1_connection{
+                                              container_id = ContainerId,
+                                              vhost = Vhost,
+                                              incoming_max_frame_size = IncomingMaxFrameSize,
+                                              outgoing_max_frame_size = OutgoingMaxFrameSize,
+                                              channel_max = EffectiveChannelMax,
+                                              properties = Properties,
+                                              is_jms = IsJms,
+                                              timeout = ReceiveTimeoutMillis,
+                                              credential_timer = Timer},
+                               heartbeater = Heartbeater},
+            State = start_writer(State1),
+            HostnameVal = case Hostname of
+                              undefined -> undefined;
+                              null -> undefined;
+                              {utf8, Val} -> Val
+>>>>>>> 34b96e5 (AMQP 1.0: limit nesting for several logged values)
                           end,
     State1 = State0#v1{connection_state = running,
                        connection = Connection#v1_connection{
@@ -853,7 +989,6 @@ auth_phase(
             State1 = State#v1{connection = Conn#v1_connection{auth_state = AuthState1}},
             switch_callback(State1, {frame_header, sasl}, 8);
         {ok, User} ->
-            rabbit_access_control:clear_max_heap_size(),
             Outcome = #'v1_0.sasl_outcome'{code = ?V_1_0_SASL_CODE_OK},
             ok = send_on_channel0(State, Outcome, rabbit_amqp_sasl),
             State1 = State#v1{connection_state = waiting_amqp0100,
@@ -1035,12 +1170,12 @@ set_credential0(Cred,
                                           "access to vhost '~ts' failed for new credential",
                                           [Vhost]),
                       handle_exception(State, 0, Error,
-                                        rabbit_misc:format("~tp", [Reason]))
+                                       rabbit_misc:format_term(Reason))
             end;
         {refused, Fmt, FmtArgs} ->
             credential_update_failed(State, rabbit_misc:format(Fmt, FmtArgs));
         Err ->
-            credential_update_failed(State, rabbit_misc:format("~tp", [Err]))
+            credential_update_failed(State, rabbit_misc:format_term(Err))
     end.
 
 credential_update_failed(State, Detail) ->
