@@ -18,6 +18,7 @@ all() ->
     [
         catastrophic_nested_quantifier_returns_quickly,
         catastrophic_alternation_returns_quickly,
+        slow_to_compile_pattern_returns_quickly,
         oversized_pattern_denies_access,
         pattern_at_max_size_is_accepted,
         pattern_one_byte_over_max_is_rejected,
@@ -77,6 +78,19 @@ catastrophic_alternation_returns_quickly(_Config) ->
         fun() ->
             rabbit_oauth2_scope:resource_access(
                 vhost_resource(<<"vh">>, Subject), read, [Scope], regex)
+        end),
+    ?assertEqual(false, Result),
+    ?assert(ElapsedMs < ?REDOS_TIME_BUDGET_MS).
+
+slow_to_compile_pattern_returns_quickly(_Config) ->
+    Pattern = iolist_to_binary(["[", lists:duplicate(900, "\\d"), "]*",
+                                lists:duplicate(10, "(?:|z*)"),
+                                "(?:", lists:duplicate(20, "a*b*"), "){100}z"]),
+    {Result, ElapsedMs} = time_match(
+        fun() ->
+            rabbit_oauth2_scope:resource_access(
+                vhost_resource(<<"vh">>, <<"orders">>), read,
+                [<<"read:vh/", Pattern/binary>>], regex)
         end),
     ?assertEqual(false, Result),
     ?assert(ElapsedMs < ?REDOS_TIME_BUDGET_MS).
