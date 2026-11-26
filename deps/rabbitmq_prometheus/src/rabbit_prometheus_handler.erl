@@ -187,14 +187,16 @@ parse_queue_filter(<<>>) ->
 parse_queue_filter(B) when byte_size(B) > ?MAX_QUEUE_FILTER_LENGTH ->
     {error, <<"'queue' regex too long">>};
 parse_queue_filter(B) when is_binary(B) ->
-    case re:compile(B) of
+    case rabbit_re:compile(B) of
         {ok, _} = OK ->
             OK;
         {error, {ErrStr, Pos}} ->
             Msg = unicode:characters_to_binary(
                     io_lib:format("Invalid 'queue' regex at position ~b: ~ts",
                                   [Pos, ErrStr])),
-            {error, Msg}
+            {error, Msg};
+        {error, heap_limit_not_allowed} ->
+            {error, <<"'queue' regex must not set (*LIMIT_HEAP=)">>}
     end;
 parse_queue_filter([B]) when is_binary(B) ->
     parse_queue_filter(B);
