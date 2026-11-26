@@ -127,10 +127,7 @@ regex_full_string_match(_, _) ->
 do_regex_full_string_match(Subject, Pattern) ->
     Wrapped = <<"\\A(?:", Pattern/binary, ")\\z">>,
     try
-        %% OAuth 2 enforces its own pattern length limit
-        %% (`?MAX_REGEX_PATTERN_BYTES`), which is higher than
-        %% `rabbit_re:compile/2`'s.
-        case re:compile(Wrapped, [unicode, anchored, ucp]) of
+        case rabbit_re:compile(Wrapped, [unicode, anchored, ucp]) of
             {ok, MP} ->
                 %% Caller-supplied `match_limit` and `match_limit_recursion`
                 %% override `rabbit_re`'s defaults via `re:run/3`'s last-wins

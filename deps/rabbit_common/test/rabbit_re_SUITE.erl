@@ -8,6 +8,7 @@
 -module(rabbit_re_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile([export_all, nowarn_export_all]).
 
@@ -43,6 +44,8 @@ groups() ->
        compile_returns_error_for_invalid_utf8,
        compile_refuses_heap_limit,
        compile_with_options_passes_them_through,
+       compile_bounded_in_time,
+       run_compiles_in_bounded_time,
        match_limit_constant,
        max_pattern_length_constant,
        escape_leaves_plain_text_unchanged,
@@ -233,6 +236,7 @@ compile_returns_error_for_invalid_utf8(_Config) ->
     {error, _} = Error = re:compile(<<"a", 255>>, [unicode]),
     Error = rabbit_re:compile(<<"a", 255>>, [unicode]),
     {ok, _} = rabbit_re:compile([$a, 16#101], [unicode]),
+    {error, badarg} = rabbit_re:compile([$a, 16#101]),
     ok.
 
 compile_refuses_heap_limit(_Config) ->
@@ -245,6 +249,24 @@ compile_with_options_passes_them_through(_Config) ->
     {ok, MP1} = rabbit_re:compile(<<"abc">>, [caseless]),
     match = rabbit_re:run(<<"ABC">>, MP1),
     ok.
+
+compile_bounded_in_time(_Config) ->
+    {Time, {ok, _}} = timer:tc(rabbit_re, compile, [slow_to_compile_pattern()],
+                               millisecond),
+    ?assert(Time < 1000),
+    ok.
+
+run_compiles_in_bounded_time(_Config) ->
+    {Time, nomatch} = timer:tc(rabbit_re, run,
+                               [<<"orders">>, slow_to_compile_pattern()],
+                               millisecond),
+    ?assert(Time < 1000),
+    ok.
+
+slow_to_compile_pattern() ->
+    iolist_to_binary(["(*UCP)(?i)[", lists:duplicate(900, "\\d"), "]*",
+                      lists:duplicate(10, "(?:|z*)"),
+                      "(?:", lists:duplicate(20, "a*b*"), "){100}z"]).
 
 match_limit_constant(_Config) ->
     Limit = rabbit_re:match_limit(),
