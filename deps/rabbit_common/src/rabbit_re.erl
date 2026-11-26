@@ -19,6 +19,7 @@
 %% For the backtracking frames in use. PCRE2 doubles their vector as it grows,
 %% so it may allocate about three times as much while copying it.
 -define(MAX_MATCH_MEMORY, 8 * 1024 * 1024).
+-define(NO_AUTO_POSSESS, "(*NO_AUTO_POSSESS)").
 
 -spec match_limit() -> pos_integer().
 match_limit() -> ?MATCH_LIMIT.
@@ -51,7 +52,14 @@ run(Subject, Pattern, Opts) ->
                     {error, heap_limit_not_allowed};
                 false ->
                     %% Every capture group starts with a parenthesis.
-                    run1(Subject, Bin, length(binary:matches(Bin, <<"(">>)), Opts)
+                    Captures = length(binary:matches(Bin, <<"(">>)),
+                    case run1(Subject, <<?NO_AUTO_POSSESS, Bin/binary>>,
+                              Captures, Opts) of
+                        {error, {compile, Err}} ->
+                            {error, {compile, compile_error(Err)}};
+                        Result ->
+                            Result
+                    end
             end
     end.
 
@@ -98,9 +106,7 @@ to_binary(Pattern, Opts) ->
     end.
 
 sets_heap_limit(Bin) when is_binary(Bin) ->
-    binary:match(Bin, <<"(*LIMIT_HEAP=">>) =/= nomatch;
-sets_heap_limit(error) ->
-    false.
+    binary:match(Bin, <<"(*LIMIT_HEAP=">>) =/= nomatch.
 
 -spec matches(iodata() | unicode:charlist(), re:mp() | iodata()) -> boolean().
 matches(Subject, Pattern) ->
@@ -150,7 +156,20 @@ compile(Pattern, _Opts) when is_list(Pattern),
                              length(Pattern) > ?MAX_PATTERN_LENGTH ->
     {error, pattern_too_long};
 compile(Pattern, Opts) ->
-    case sets_heap_limit(to_binary(Pattern, Opts)) of
-        true  -> {error, heap_limit_not_allowed};
-        false -> re:compile(Pattern, Opts)
+    case to_binary(Pattern, Opts) of
+        error ->
+            {error, badarg};
+        Bin ->
+            case sets_heap_limit(Bin) of
+                true ->
+                    {error, heap_limit_not_allowed};
+                false ->
+                    case re:compile(<<?NO_AUTO_POSSESS, Bin/binary>>, Opts) of
+                        {error, Err} -> {error, compile_error(Err)};
+                        OK           -> OK
+                    end
+            end
     end.
+
+compile_error({Msg, Pos}) ->
+    {Msg, Pos - length(?NO_AUTO_POSSESS)}.
