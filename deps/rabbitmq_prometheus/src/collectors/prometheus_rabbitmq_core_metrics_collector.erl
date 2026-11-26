@@ -54,6 +54,7 @@
 % Extra context: https://github.com/prometheus/docs/pull/1414#issuecomment-522337895
 
 -define(QUEUE_FILTER_MATCH_LIMIT, 2000).
+-define(ROWS_PER_SELECT, 256).
 -define(MILLISECOND, 1000).
 -define(MICROSECOND, 1000000).
 
@@ -703,7 +704,7 @@ get_data(queue_metrics = Table, false, VHostsFilter, _) ->
                {messages_bytes_persistent, A9}, {message_bytes, A10},
                {message_bytes_ready, A11}, {message_bytes_unacknowledged, A12},
                {disk_reads, A13}, {disk_writes, A14}, {segments, A15}]}];
-get_data(Table, false, VHostsFilter, _) when Table == channel_exchange_metrics;
+get_data(Table, false, _, _) when Table == channel_exchange_metrics;
                            Table == queue_coarse_metrics;
                            Table == queue_delivery_metrics;
                            Table == channel_queue_metrics;
@@ -712,30 +713,7 @@ get_data(Table, false, VHostsFilter, _) when Table == channel_exchange_metrics;
                            Table == queue_exchange_metrics;
                            Table == channel_queue_exchange_metrics;
                            Table == channel_process_metrics ->
-    Result = ets:foldl(fun
-                  %% For queue_coarse_metrics
-                  ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _}, Acc) when is_map(VHostsFilter), map_get(VHost, VHostsFilter) == false ->
-                               Acc;
-                  ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _, _, _, _, _}, Acc) when is_map(VHostsFilter), map_get(VHost, VHostsFilter) == false ->
-                               Acc;
-                  ({{#resource{kind = queue, virtual_host = VHost}, #resource{kind = exchange}}, _, _}, Acc) when is_map(VHostsFilter), map_get(VHost, VHostsFilter) == false ->
-                               Acc;
-                  ({_, V1}, {T, A1}) ->
-                       {T, V1 + A1};
-                  ({_, V1, _}, {T, A1}) ->
-                       {T, V1 + A1};
-                  ({_, V1, V2, V3}, {T, A1, A2, A3}) ->
-                       {T, V1 + A1, V2 + A2, V3 + A3};
-                  ({_, V1, V2, V3, _}, {T, A1, A2, A3}) ->
-                       {T, V1 + A1, V2 + A2, V3 + A3};
-                  ({_, V1, V2, V3, V4, _}, {T, A1, A2, A3, A4}) ->
-                       {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4};
-                  ({_, V1, V2, V3, V4}, {T, A1, A2, A3, A4}) ->
-                       {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4};
-                  ({_, V1, V2, V3, V4, V5, V6, V7, _}, {T, A1, A2, A3, A4, A5, A6, A7}) ->
-                       {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, V6 + A6, V7 + A7}
-               end, empty(Table), Table),
-    [Result];
+    [sum_values(Table)];
 get_data(exchange_metrics = Table, true, VHostsFilter, _) when is_map(VHostsFilter)->
     ets:foldl(fun
         ({#resource{kind = exchange, virtual_host = VHost}, _, _, _, _, _} = Row, Acc) when
@@ -900,6 +878,45 @@ get_data(exchange_names, _, _, _) ->
 get_data(Table, _, _, _) ->
     ets:tab2list(Table).
 
+
+%% Only the summed values are copied out of ETS, not the keys, and in
+%% chunks so that the heap size does not grow with the table.
+sum_values(Table) ->
+    ets:safe_fixtable(Table, true),
+    try
+        sum_values(ets:select(Table, values_match_spec(Table), ?ROWS_PER_SELECT),
+                   empty(Table))
+    after
+        ets:safe_fixtable(Table, false)
+    end.
+
+sum_values('$end_of_table', Acc) ->
+    Acc;
+sum_values({Values, Cont}, Acc) ->
+    sum_values(ets:select(Cont), lists:foldl(fun add_values/2, Acc, Values)).
+
+values_match_spec(T) when T == queue_exchange_metrics; T == channel_queue_exchange_metrics ->
+    [{{'_', '$1', '_'}, [], ['$1']}];
+values_match_spec(channel_process_metrics) ->
+    [{{'_', '$1'}, [], ['$1']}];
+values_match_spec(connection_coarse_metrics) ->
+    [{{'_', '$1', '$2', '$3', '_'}, [], [{{'$1', '$2', '$3'}}]}];
+values_match_spec(queue_coarse_metrics) ->
+    [{{'_', '$1', '$2', '$3', '$4'}, [], [{{'$1', '$2', '$3', '$4'}}]}];
+values_match_spec(T) when T == channel_exchange_metrics; T == exchange_metrics ->
+    [{{'_', '$1', '$2', '$3', '$4', '_'}, [], [{{'$1', '$2', '$3', '$4'}}]}];
+values_match_spec(T) when T == channel_queue_metrics; T == queue_delivery_metrics ->
+    [{{'_', '$1', '$2', '$3', '$4', '$5', '$6', '$7', '_'}, [],
+      [{{'$1', '$2', '$3', '$4', '$5', '$6', '$7'}}]}].
+
+add_values({V1, V2, V3}, {T, A1, A2, A3}) ->
+    {T, V1 + A1, V2 + A2, V3 + A3};
+add_values({V1, V2, V3, V4}, {T, A1, A2, A3, A4}) ->
+    {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4};
+add_values({V1, V2, V3, V4, V5, V6, V7}, {T, A1, A2, A3, A4, A5, A6, A7}) ->
+    {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, V6 + A6, V7 + A7};
+add_values(V1, {T, A1}) ->
+    {T, V1 + A1}.
 
 sum_queue_metrics(Props, {T, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11,
                           A12, A13, A14, A15}) ->
