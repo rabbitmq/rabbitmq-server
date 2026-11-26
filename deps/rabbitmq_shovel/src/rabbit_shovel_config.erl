@@ -66,7 +66,8 @@ convert_from_legacy(Config) ->
                     {add_forward_headers, AFH},
                     {add_timestamp_header, ATH}]},
      {ack_mode, AckMode},
-     {reconnect_delay, RD}].
+     {reconnect_delay, RD},
+     {max_hops, proplists:get_value(max_hops, Config, unlimited)}].
 
 parse(ShovelName, Config0) ->
     try
@@ -137,9 +138,12 @@ parse_current(ShovelName, Config) ->
     DstMod = resolve_module(proplists:get_value(protocol, Destination, amqp091)),
     AckMode = proplists:get_value(ack_mode, Config, no_ack),
     validate_ack_mode(AckMode),
+    MaxHops = proplists:get_value(max_hops, Config, unlimited),
+    validate_max_hops(MaxHops),
     {ok, #{name => ShovelName,
            shovel_type => static,
            ack_mode => AckMode,
+           max_hops => MaxHops,
            reconnect_delay => proplists:get_value(reconnect_delay, Config,
                                                   ?DEFAULT_RECONNECT_DELAY),
            source => rabbit_shovel_behaviour:parse(SrcMod, ShovelName,
@@ -177,6 +181,14 @@ validate_ack_mode(WrongVal) ->
     fail({invalid_parameter_value, ack_mode,
           {ack_mode_value_requires_one_of, {no_ack, on_publish, on_confirm},
           WrongVal}}).
+
+validate_max_hops(unlimited) ->
+    ok;
+validate_max_hops(N) when is_integer(N) andalso N >= 1 ->
+    ok;
+validate_max_hops(WrongVal) ->
+    fail({invalid_parameter_value, max_hops,
+          {require_positive_integer, WrongVal}}).
 
 duplicate_keys(PropList) when is_list(PropList) ->
     proplists:get_keys(
