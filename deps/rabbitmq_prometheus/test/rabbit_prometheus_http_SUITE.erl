@@ -75,6 +75,8 @@ groups() ->
                                      queue_exchange_metrics_per_object_test,
                                      queue_metrics_per_object_test,
                                      queue_consumer_count_and_queue_metrics_mutually_exclusive_test,
+                                     aggregated_metrics_are_sums_of_per_object_metrics_test,
+                                     aggregated_metrics_of_large_tables_test,
                                      vhost_status_metric,
                                      exchange_bindings_metric,
                                      exchange_names_metric,
@@ -813,6 +815,56 @@ queue_consumer_count_and_queue_metrics_mutually_exclusive_test(Config) ->
                  map_get(rabbitmq_detailed_queue_consumers, parse_response(Body1))),
 
     ok.
+
+aggregated_metrics_are_sums_of_per_object_metrics_test(Config) ->
+    Metrics = [{"queue_coarse_metrics", "queue_messages"},
+               {"queue_coarse_metrics", "queue_messages_ready"},
+               {"queue_delivery_metrics", "queue_messages_delivered_ack_total"},
+               {"queue_exchange_metrics", "queue_exchange_messages_published_total"},
+               {"exchange_metrics", "exchange_messages_published_total"},
+               {"channel_exchange_metrics", "channel_messages_published_total"},
+               {"channel_queue_exchange_metrics", "queue_messages_published_total"},
+               {"channel_queue_metrics", "channel_messages_delivered_ack_total"}],
+    Query = lists:join("&", ["family=" ++ F || F <- lists:usort([F || {F, _} <- Metrics])]),
+    {_, AggregatedBody} = http_get_with_pal(Config, "/metrics", [], 200),
+    {_, PerObjectBody} = http_get_with_pal(Config, "/metrics/detailed?" ++ lists:append(Query),
+                                           [], 200),
+    Aggregated = parse_response(AggregatedBody),
+    PerObject = parse_response(PerObjectBody),
+    [begin
+         #{undefined := [Total]} = map_get(list_to_atom("rabbitmq_" ++ Name), Aggregated),
+         Values = lists:append(maps:values(map_get(list_to_atom("rabbitmq_detailed_" ++ Name),
+                                                   PerObject))),
+         ?assert(Total > 0),
+         ?assertEqual({Name, lists:sum(Values)}, {Name, Total})
+     end || {_, Name} <- Metrics],
+    ok.
+
+aggregated_metrics_of_large_tables_test(Config) ->
+    Ready = fun() ->
+                    {_, Body} = http_get_with_pal(Config, "/metrics", [], 200),
+                    #{undefined := [V]} = map_get(rabbitmq_queue_messages_ready,
+                                                  parse_response(Body)),
+                    V
+            end,
+    VHost = <<"large-tables">>,
+    %% Well above the number of rows that are summed at once.
+    Rows = [{rabbit_misc:r(VHost, queue, integer_to_binary(N)), 1, 0, 1, 0}
+            || N <- lists:seq(1, 2_500)],
+    %% The core metrics GC deletes the rows of queues that do not exist.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, suspend, [rabbit_core_metrics_gc]),
+    try
+        Before = Ready(),
+        true = rabbit_ct_broker_helpers:rpc(Config, 0, ets, insert,
+                                            [queue_coarse_metrics, Rows]),
+        ?assertEqual(Before + length(Rows), Ready())
+    after
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0, ets, select_delete,
+          [queue_coarse_metrics,
+           [{{#resource{virtual_host = VHost, _ = '_'}, '_', '_', '_', '_'}, [], [true]}]]),
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, resume, [rabbit_core_metrics_gc])
+    end.
 
 detailed_metrics_no_families_enabled_by_default(Config) ->
     {_, Body} = http_get_with_pal(Config, "/metrics/detailed", [], 200),
