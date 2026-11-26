@@ -272,7 +272,8 @@ local_destination_timestamp_header_amqp091(Config) ->
     receive
         {#'basic.deliver'{consumer_tag = CTag},
          #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
-            ?assertMatch([{<<"x-opt-shovelled-timestamp">>, long, _}],
+            ?assertMatch([{<<"x-opt-shovel-hops">>, long, 1},
+                          {<<"x-opt-shovelled-timestamp">>, long, _}],
                          Headers)
     after ?TIMEOUT -> throw(timeout_waiting_for_deliver1)
     end,

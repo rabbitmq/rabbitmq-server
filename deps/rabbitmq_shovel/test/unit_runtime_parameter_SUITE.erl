@@ -484,7 +484,7 @@ validate_max_hops_0() ->
               {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
               {<<"dest-address">>, <<"a-dest-queue">>}],
     Errors = fun(V) ->
-                     [E || {error, _, [<<"max-hops">>, _]} = E
+                     [E || {error, _, [<<"max-hops">> | _]} = E
                                <- lists:flatten(
                                     rabbit_shovel_parameters:validate(
                                       "my-vhost", <<"shovel">>, "my-shovel",
