@@ -210,12 +210,10 @@ detail_queue_data(Ranges, Id) ->
 
 list_queue_data(Ranges, Id) ->
     maps:from_list(queue_raw_message_data(Ranges, Id) ++
-                   queue_raw_deliver_stats_data(Ranges, Id) ++
                    [{queue_stats, lookup_element(queue_stats, Id)}]).
 
 list_basic_queue_data(Ranges, Id) ->
     maps:from_list(queue_raw_message_data(Ranges, Id) ++
-                   queue_raw_deliver_stats_data(Ranges, Id) ++
                    [{queue_stats, lookup_element(queue_basic_stats, Id)}]).
 
 detail_channel_data(Ranges, Id) ->
@@ -226,7 +224,6 @@ detail_channel_data(Ranges, Id) ->
 
 list_channel_data(Ranges, Id) ->
     maps:from_list(channel_raw_message_data(Ranges, Id) ++
-                   channel_raw_detail_stats_data(Ranges, Id) ++
                    [{channel_stats, lookup_element(channel_stats, Id)}]).
 
 -spec raw_message_data(atom(), maybe_range(), any()) ->
