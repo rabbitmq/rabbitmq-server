@@ -5,6 +5,16 @@ CLI tools written in Elixir. Clients connect over the network, authenticate, and
 publish and consume messages within the virtual hosts and resources they are
 permitted to use.
 
+The following documentation guides are key to understanding RabbitMQ access
+control, deployment and security recommendations:
+
+ * [Production Deployment Guidelines](https://www.rabbitmq.com/docs/production-checklist)
+ * [Access Control](https://www.rabbitmq.com/docs/access-control)
+ * [TLS](https://www.rabbitmq.com/docs/ssl)
+ * [OAuth 2](https://www.rabbitmq.com/docs/oauth2)
+ * [Networking](https://www.rabbitmq.com/docs/networking)
+ * [Configuration](https://www.rabbitmq.com/docs/configure)
+
 ## Where untrusted input enters
 
 Treat everything a network client sends as untrusted:
@@ -41,7 +51,9 @@ The following are trusted:
   operator configures. Still check how their responses are validated
 
 The default `guest` user and the `ANONYMOUS` SASL mechanism are limited to
-loopback connections by design (`loopback_users`).
+loopback connections by design (`loopback_users`). Production deployments
+delete the default user and seed a new one, with an installation-specific
+username and a generated password.
 
 ## Components that matter most and least
 
