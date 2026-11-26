@@ -4,6 +4,7 @@
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 all() ->
     [
@@ -11,7 +12,10 @@ all() ->
      filter_nonvoters,
      filter_quorum_critical_accounts_nonvoters,
      ra_machine_conf_delivery_limit,
-     periodic_membership_reconciliation_target_group_size
+     periodic_membership_reconciliation_target_group_size,
+     leader_health_check_caps_time_per_queue,
+     leader_health_check_queries_followers_in_parallel,
+     leader_health_check_reports_outstanding_queues_on_timeout
     ].
 
 ra_machine_conf_delivery_limit(_Config) ->
@@ -133,6 +137,100 @@ periodic_membership_reconciliation_target_group_size(_Config) ->
        3, rabbit_quorum_queue_periodic_membership_reconciliation:get_target_size(
             Q, undefined)),
     ok.
+
+leader_health_check_caps_time_per_queue(_Config) ->
+    Members = [{N, node()} || N <- [qq_hc_member_1, qq_hc_member_2, qq_hc_member_3]],
+    TestPid = self(),
+    with_mocked_ra_members(
+      fun(_ServerId, _Timeout) -> hang(TestPid) end,
+      fun() ->
+              QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+              Ref = make_ref(),
+              ok = rabbit_quorum_queue:run_leader_health_check(
+                     Members, QName, Ref, self(), 100, 200),
+              ?assertEqual({error, Ref, QName}, receive_result(Ref)),
+              Hung = receive_hung(3),
+              [?awaitMatch(false, is_process_alive(P), 30_000) || P <- Hung]
+      end).
+
+leader_health_check_queries_followers_in_parallel(_Config) ->
+    Members = [{N, node()} || N <- [qq_hc_down, qq_hc_hung_1, qq_hc_hung_2, qq_hc_ok]],
+    TestPid = self(),
+    with_mocked_ra_members(
+      fun({qq_hc_down, _}, _Timeout) ->
+              {error, noproc};
+         ({qq_hc_ok, _} = ServerId, _Timeout) ->
+              TestPid ! {ok_member, self()},
+              receive go -> {ok, [ServerId], ServerId} end;
+         (_ServerId, _Timeout) ->
+              hang(TestPid)
+      end,
+      fun() ->
+              QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+              Ref = make_ref(),
+              Self = self(),
+              _ = spawn_link(
+                    fun() ->
+                            rabbit_quorum_queue:run_leader_health_check(
+                              Members, QName, Ref, Self, 30_000, 60_000)
+                    end),
+              %% A sequential implementation never reaches `qq_hc_ok`
+              Hung = receive_hung(2),
+              OkMember = receive
+                             {ok_member, P} -> P
+                         after 30_000 ->
+                                 ct:fail(healthy_member_not_queried)
+                         end,
+              OkMember ! go,
+              ?assertEqual({ok, Ref, QName}, receive_result(Ref)),
+              [?awaitMatch(false, is_process_alive(P), 30_000) || P <- Hung]
+      end).
+
+with_mocked_ra_members(MembersFun, TestFun) ->
+    ok = meck:new(ra, [passthrough]),
+    ok = meck:expect(ra, members, MembersFun),
+    try
+        TestFun()
+    after
+        meck:unload(ra)
+    end.
+
+hang(TestPid) ->
+    TestPid ! {hung, self()},
+    receive never -> ok end.
+
+receive_hung(N) ->
+    [receive
+         {hung, Pid} -> Pid
+     after 30_000 ->
+             ct:fail(member_not_queried)
+     end || _ <- lists:seq(1, N)].
+
+receive_result(Ref) ->
+    receive
+        {_, Ref, _} = Msg -> Msg
+    after 30_000 ->
+            ct:fail(no_result)
+    end.
+
+leader_health_check_reports_outstanding_queues_on_timeout(_Config) ->
+    ok = meck:new(rabbit_queue_type, [passthrough]),
+    ok = meck:expect(rabbit_queue_type, discover,
+                     fun(rabbit_quorum_queue) -> rabbit_quorum_queue end),
+    try
+        [Q1, Q2, Q3] = [rabbit_misc:r(<<"/">>, queue, N)
+                        || N <- [<<"q1">>, <<"q2">>, <<"q3">>]],
+        Ref = make_ref(),
+        self() ! {ok, Ref, Q1},
+        self() ! {ok, make_ref(), Q2},
+        self() ! {error, Ref, Q3},
+        Pending = maps:from_keys([Q1, Q2, Q3], true),
+        Result = rabbit_quorum_queue:wait_for_leader_health_checks(Ref, Pending, 100),
+        ?assertEqual([<<"queue 'q2' in vhost '/'">>, <<"queue 'q3' in vhost '/'">>],
+                     lists:sort([maps:get(<<"readable_name">>, R) || R <- Result]))
+    after
+        meck:unload(rabbit_queue_type)
+    end.
 
 make_ra_machine_conf(Q0, Arg, Pol, OpPol) ->
     Q1 = amqqueue:set_arguments(Q0, [{<<"x-delivery-limit">>, long, Arg}]),
