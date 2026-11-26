@@ -38,6 +38,7 @@ groups() ->
           set_empty_properties_using_proplist,
           set_empty_properties_using_map,
           headers,
+          forward_headers_history_is_capped,
           restart,
           validation,
           runtime_parse_failure,
@@ -249,6 +250,29 @@ headers(Config) ->
                                                      _, _}]}} =
                     amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi4">>)
 
+        end).
+
+forward_headers_history_is_capped(Config) ->
+    with_amqp091_ch(Config,
+        fun(Ch) ->
+            shovel_test_utils:set_param(Config,
+                <<"test">>,
+                [{<<"src-queue">>,           <<"src">>},
+                 {<<"dest-queue">>,          <<"dest">>},
+                 {<<"add-forward-headers">>, true}]),
+            Prior = [{table, [{<<"shovel-name">>, longstr, integer_to_binary(N)}]}
+                     || N <- lists:seq(1, 12)],
+            shovel_test_utils:amqp091_publish(
+              Ch, <<>>, <<"src">>,
+              #amqp_msg{props = #'P_basic'{headers = [{<<"x-shovelled">>, array, Prior}]},
+                        payload = <<"hi">>}),
+            #amqp_msg{props = #'P_basic'{headers = Headers}} =
+                shovel_test_utils:amqp091_expect(Ch, <<"dest">>, <<"hi">>),
+            {array, [{table, Newest} | Rest]} =
+                rabbit_misc:table_lookup(Headers, <<"x-shovelled">>),
+            ?assertEqual({longstr, <<"test">>},
+                         rabbit_misc:table_lookup(Newest, <<"shovel-name">>)),
+            ?assertEqual(lists:sublist(Prior, 9), Rest)
         end).
 
 restart(Config) ->

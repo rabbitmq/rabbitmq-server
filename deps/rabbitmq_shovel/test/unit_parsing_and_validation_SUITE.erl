@@ -11,6 +11,7 @@
 
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(EXCHANGE,    <<"test_exchange">>).
 -define(TO_SHOVEL,   <<"to_the_shovel">>).
@@ -32,6 +33,7 @@ groups() ->
           parse_local,
           parse_delete_after,
           parse_max_hops,
+          forward_headers_history_is_capped,
           validate_uri_error_has_no_credentials,
           source_without_declarations_is_arity_compatible,
           source_with_declarations_is_arity_compatible,
@@ -235,6 +237,23 @@ parse_max_hops(_Config) ->
               {queue, <<"q">>},
               {max_hops, 2}],
     ?assertMatch({ok, #{max_hops := 2}}, rabbit_shovel_config:parse(my_shovel, Legacy)),
+    ok.
+
+forward_headers_history_is_capped(_Config) ->
+    Entry = fun(N) -> {table, [{<<"n">>, long, N}]} end,
+    Update = fun(Prior) ->
+                     #'P_basic'{headers = Headers} =
+                         rabbit_shovel_util:update_headers(
+                           [{<<"shovel-name">>, <<"s">>}], [], <<"src">>, <<"dest">>,
+                           #'P_basic'{headers = [{<<"x-shovelled">>, array,
+                                                  [Entry(N) || N <- Prior]}]}),
+                     {array, Entries} = rabbit_misc:table_lookup(Headers, <<"x-shovelled">>),
+                     Entries
+             end,
+    ?assertEqual(10, length(Update(lists:seq(1, 9)))),
+    [{table, Newest} | Rest] = Update(lists:seq(1, 12)),
+    ?assertEqual({longstr, <<"s">>}, rabbit_misc:table_lookup(Newest, <<"shovel-name">>)),
+    ?assertEqual([Entry(N) || N <- lists:seq(1, 9)], Rest),
     ok.
 
 validate_uri_error_has_no_credentials(_Config) ->
