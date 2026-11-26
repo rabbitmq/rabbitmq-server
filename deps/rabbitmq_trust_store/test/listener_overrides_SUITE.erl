@@ -54,7 +54,7 @@ end_per_testcase(_Testcase, Config) ->
 listener_overrides_carry_verify_fun_and_partial_chain(_Config) ->
     Overrides = rabbit_trust_store_app:merge_tls_options([]),
     {Fun, continue} = proplists:get_value(verify_fun, Overrides),
-    ?assert(is_function(Fun, 3)),
+    ?assert(is_function(Fun, 4)),
     ?assert(is_function(proplists:get_value(partial_chain, Overrides), 1)).
 
 change_SSL_options_sets_the_overrides_env(_Config) ->
