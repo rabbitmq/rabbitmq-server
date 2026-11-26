@@ -554,12 +554,21 @@ declared_queue_deleted(Q) ->
      [rabbit_misc:rs(amqqueue:get_name(Q))]}.
 
 %% With no record for this queue, any registered member is a leftover.
+%%
+%% Without UIds, `confirm_declared/1' cannot tell this declare's record from a
+%% later declare's, whose members would then be deleted.
 start_ra_cluster(Q, LeaderNode, RaConfs) ->
-    case delete_registered_members(Q, RaConfs) of
-        not_declared ->
-            {error, not_declared};
+    case amqqueue:get_type_state(Q) of
+        #{nodes := Nodes} when is_list(Nodes) ->
+            start_ra_cluster(LeaderNode, RaConfs);
         _ ->
-            start_ra_cluster(Q, LeaderNode, RaConfs, ?START_CLUSTER_ATTEMPTS)
+            case delete_registered_members(Q, RaConfs) of
+                not_declared ->
+                    {error, not_declared};
+                _ ->
+                    start_ra_cluster(Q, LeaderNode, RaConfs,
+                                     ?START_CLUSTER_ATTEMPTS)
+            end
     end.
 
 %% Members of another declare can start between the delete of the leftovers
@@ -2505,15 +2514,16 @@ is_unlisted_member(Q0, Node, UId) ->
 %% Records created before `track_qq_members_uids` list nodes without UIds, so
 %% a member on a listed node cannot be told apart from a leftover.
 is_listed_member(Q, Node, UId) ->
-    case amqqueue:get_type_state(Q) of
-        #{nodes := Nodes} when is_list(Nodes) ->
-            lists:member(Node, Nodes);
-        #{nodes := Nodes} = TS when is_map(Nodes) ->
-            maps:get(Node, Nodes, undefined) =:= UId orelse
-            lists:keymember(UId, 2, maps:get(adding, TS, []));
-        _ ->
-            false
-    end.
+    TS = amqqueue:get_type_state(Q),
+    lists:keymember(UId, 2, maps:get(adding, TS, [])) orelse
+        case TS of
+            #{nodes := Nodes} when is_list(Nodes) ->
+                lists:member(Node, Nodes);
+            #{nodes := Nodes} when is_map(Nodes) ->
+                maps:get(Node, Nodes, undefined) =:= UId;
+            _ ->
+                false
+        end.
 
 delete_member(VHost, Name, Node) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},

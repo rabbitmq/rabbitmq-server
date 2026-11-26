@@ -14,7 +14,7 @@ Known causes:
  * Two deletes race with a declare (#17457). The second delete removes the new incarnation's record,
    and its Ra cluster keeps running
  * A declare times out while members are still starting (ra#668). The record is removed, and a member
-   that finishes starting afterwards stays. Ra `main` now cleans up after a timeout, but only on a best
+   that finishes starting afterwards stays. Ra `3.3.0` cleans up after a timeout, but only on a best
    effort basis
 
 #17214 retries failed force deletes from a node-local DETS table. That state is lost with the node that
@@ -28,7 +28,7 @@ Changes 1 to 3 are small and can ship first. Change 4 removes the delete race an
 
 ### 1. Ra: delete by UID
 
-On the `members-exist-uids` branch of Ra, on top of the unreleased `start_cluster` work:
+In Ra `3.3.0` (rabbitmq/ra#676):
 
  * `ra:force_delete_server/4` deletes a member only if it is registered with the given UID, and returns
    `{error, not_owner}` otherwise
@@ -36,7 +36,8 @@ On the `members-exist-uids` branch of Ra, on top of the unreleased `start_cluste
    is running deletes the members it started, by UID, and returns `{error, {members_exist, Existing}}`,
    with the UID each running member is registered with, or `undefined` if it could not be read
 
-`rabbitmq-components.mk` points `dep_ra` at that branch until Ra is released.
+Ra returns `members_exist` only when the `report_members_exist` environment variable of `ra` is `true`.
+The prelaunch default config sets it.
 
 Ra does not detect stopped members. Doing so broke Ra callers that start a cluster over stopped members
 on purpose, such as `ra_system_SUITE:restart_system`, so that check is done by RabbitMQ instead
@@ -51,15 +52,15 @@ stopped one and leave its data directory behind. On `members_exist`, which a mem
 meantime can still cause, the declare deletes the clashing members by the UIDs Ra returns and retries
 once. If the
 declare fails for another reason, it deletes the members it tried to start, by UID, before removing
-the record.
+the record. A declare whose record has no UIDs, because `track_qq_members_uids` is disabled, skips the
+cleanup, as it cannot tell its own record from a later declare's.
 
 `add_member` does the same when `ra:start_server/2` fails because the name is already registered on the
 target node. It reads the registered UID on that node and deletes the member by UID only if the record
 does not list that node with that UID; otherwise it is the real member and the error is returned as
-today. With legacy list-format records, it only deletes if the record does not list the node. Two
-concurrent `add_member` calls for the same queue and node could delete each other's new member. The
-reconciliation process only acts on queues whose leader is local, so this needs a second caller, such as
-`rabbitmq-queues add_member`, or a leader change.
+today. With legacy list-format records, it only deletes if the record does not list the node. A member
+that is being added is listed as `adding`, so a concurrent `add_member` for the same node does not
+delete it.
 
 In `delete/4`, `force_delete_queue/1` uses `ra:force_delete_server/4` when the record has UIDs, so a
 stale delete cannot remove a newer incarnation's members through that path.
@@ -135,7 +136,8 @@ Details:
    removes the record
  * The by-name force delete, used for records without UIDs and for nodes with an older Ra, has the
    same 30 second timeout as the UID-guarded one, so the owner cannot block forever on a member
- * It needs a feature flag, `quorum_queue_deleting_state`, since older nodes would ignore the marker
+ * It needs a feature flag, `quorum_queue_deleting_state`, since older nodes would ignore the marker.
+   The flag depends on `track_qq_members_uids`, since telling incarnations apart needs member UIDs
 
 Status: implemented on the `qq-deleting-state` branch, on top of changes 1 to 3.
 
@@ -157,7 +159,7 @@ Ra cluster by name, and the condition then keeps a record with no cluster behind
 
  * Changes 1 to 3 need no feature flag. Change 4 does
  * `ra:start_cluster/3` runs on the leader node. On an older node it does not return `members_exist`
- * Change 2 needs a released Ra with change 1, and `dep_ra` back on a hex pin. Change 3 does not
+ * Change 2 needs Ra `3.3.0`. Change 3 does not
 
 ## Tests
 

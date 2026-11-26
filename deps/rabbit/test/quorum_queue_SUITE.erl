@@ -174,7 +174,9 @@ groups() ->
                         reconnect_consumer_and_wait,
                         reconnect_consumer_and_wait_channel_down
                        ]},
-                      enable_deleting_state
+                      enable_deleting_state,
+                      stale_declare_without_uids_keeps_members,
+                      concurrent_add_member_without_uids
                      ]}
     ].
 
@@ -407,20 +409,13 @@ init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
      || N <- lists:seq(0, 2)],
     Config3;
 init_per_testcase(enable_deleting_state = Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    Config2 = rabbit_ct_helpers:set_config(
-                Config1, [{rmq_nodes_count, 3},
-                          {rmq_nodename_suffix, Testcase},
-                          {tcp_ports_base, {skip_n_nodes, 3}},
-                          {queue_name, rabbit_data_coercion:to_binary(Testcase)}]),
-    Config3 = rabbit_ct_helpers:merge_app_env(
-                Config2,
-                {rabbit, [{forced_feature_flags_on_init,
-                           {rel, [], [quorum_queue_deleting_state]}}]}),
-    rabbit_ct_helpers:run_steps(
-      Config3,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps());
+    init_per_testcase_without(Testcase, Config, [quorum_queue_deleting_state]);
+init_per_testcase(Testcase, Config)
+  when Testcase =:= stale_declare_without_uids_keeps_members orelse
+       Testcase =:= concurrent_add_member_without_uids ->
+    init_per_testcase_without(Testcase, Config,
+                              [track_qq_members_uids,
+                               quorum_queue_deleting_state]);
 init_per_testcase(T, Config)
   when T =:= leader_locator_balanced orelse
        T =:= leader_locator_policy ->
@@ -473,6 +468,31 @@ init_per_testcase(Testcase, Config) ->
             rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps())
     end.
 
+init_per_testcase_without(Testcase, Config, FeatureFlags) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "older nodes fail to boot when told to skip a feature "
+             "flag they do not know"};
+        false ->
+            init_per_testcase_without1(Testcase, Config, FeatureFlags)
+    end.
+
+init_per_testcase_without1(Testcase, Config, FeatureFlags) ->
+    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config2 = rabbit_ct_helpers:set_config(
+                Config1, [{rmq_nodes_count, 3},
+                          {rmq_nodename_suffix, Testcase},
+                          {tcp_ports_base, {skip_n_nodes, 3}},
+                          {queue_name, rabbit_data_coercion:to_binary(Testcase)}]),
+    Config3 = rabbit_ct_helpers:merge_app_env(
+                Config2,
+                {rabbit, [{forced_feature_flags_on_init,
+                           {rel, [], FeatureFlags}}]}),
+    rabbit_ct_helpers:run_steps(
+      Config3,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(
       rabbit_ct_helpers:merge_app_env(Config,
@@ -487,7 +507,9 @@ end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                         Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
                                         Testcase == reconnect_consumer_and_wait_channel_down;
-                                        Testcase == enable_deleting_state ->
+                                        Testcase == enable_deleting_state;
+                                        Testcase == stale_declare_without_uids_keeps_members;
+                                        Testcase == concurrent_add_member_without_uids ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()),
@@ -4370,6 +4392,112 @@ stale_declare_keeps_redeclared_queue(Config, OlderRa) ->
     [?assertEqual(maps:get(S, UIds),
                   rpc:call(S, ra_directory, uid_of, [quorum_queues, ra_name(QQ)]))
      || S <- Servers],
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    ok.
+
+stale_declare_without_uids_keeps_members(Config) ->
+    [Server1, Server2 | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                 Config, track_qq_members_uids)),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    RaName = ra_name(QQ),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
+    ok = rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
+    ok = rpc:call(Server1, meck, new,
+                  [rabbit_queue_type_util, [passthrough, no_link]]),
+    ok = rpc:call(Server1, meck, expect,
+                  [rabbit_queue_type_util, wait_for_projection,
+                   fun(Node, Name) ->
+                           timer:sleep(5000),
+                           meck:passthrough([Node, Name])
+                   end]),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    UIds = try
+               Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+               Self = self(),
+               spawn(fun() -> Self ! {declare, catch declare(Ch1, QQ, Args)} end),
+               ?awaitMatch({ok, _},
+                           rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+                           ?DEFAULT_AWAIT),
+               ?assertMatch(#'queue.delete_ok'{},
+                            amqp_channel:call(Ch2, #'queue.delete'{queue = QQ})),
+               ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                            declare(Ch2, QQ, Args)),
+               ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ),
+                           ?DEFAULT_AWAIT),
+               Redeclared = [rpc:call(S, ra_directory, uid_of,
+                                      [quorum_queues, RaName])
+                             || S <- Servers],
+               ?assert(lists:all(fun erlang:is_binary/1, Redeclared)),
+               receive
+                   {declare, _} -> ok
+               after 30000 ->
+                         ct:fail(no_declare)
+               end,
+               Redeclared
+           after
+               ok = rpc:call(Server1, meck, unload, [rabbit_queue_type_util])
+           end,
+    ?assertEqual(UIds, [rpc:call(S, ra_directory, uid_of,
+                                 [quorum_queues, RaName])
+                        || S <- Servers]),
+    ok.
+
+concurrent_add_member_without_uids(Config) ->
+    [Server1 | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                 Config, track_qq_members_uids)),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    RaName = ra_name(QQ),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 2}])),
+    ?awaitMatch(2, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    {ok, Q} = rpc:call(Server1, rabbit_amqqueue, lookup, [QName]),
+    [Other] = Servers -- rpc:call(Server1, rabbit_amqqueue, get_quorum_nodes, [Q]),
+    Self = self(),
+    ok = rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
+    ok = rpc:call(Server1, meck, new, [ra, [passthrough, no_link, unstick]]),
+    ok = rpc:call(Server1, meck, expect,
+                  [ra, add_member,
+                   fun(Members, ServerIdSpec, Timeout) ->
+                           Self ! {add_member, self()},
+                           receive continue -> ok end,
+                           meck:passthrough([Members, ServerIdSpec, Timeout])
+                   end]),
+    try
+        spawn(fun() ->
+                      Self ! {first,
+                              rpc:call(Server1, rabbit_quorum_queue, add_member,
+                                       [<<"/">>, QQ, Other, 30000])}
+              end),
+        Adder = receive
+                    {add_member, Pid} -> Pid;
+                    {first, Early} -> ct:fail({first_add_member, Early})
+                after 30000 ->
+                          ct:fail(no_add_member)
+                end,
+        UId = rpc:call(Other, ra_directory, uid_of, [quorum_queues, RaName]),
+        ?assert(is_binary(UId)),
+        ?assertMatch({error, _},
+                     rpc:call(Server1, rabbit_quorum_queue, add_member,
+                              [<<"/">>, QQ, Other, 30000], 15000)),
+        ?assertEqual(UId,
+                     rpc:call(Other, ra_directory, uid_of, [quorum_queues, RaName])),
+        Adder ! continue,
+        receive
+            {first, Res} -> ?assertEqual(ok, Res)
+        after 30000 ->
+                  ct:fail(no_first_add_member)
+        end
+    after
+        rpc:call(Server1, meck, unload, [ra])
+    end,
     ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
     ok.
 
