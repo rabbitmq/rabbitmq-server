@@ -4,6 +4,7 @@
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 all() ->
     [
@@ -13,7 +14,7 @@ all() ->
      ra_machine_conf_delivery_limit,
      periodic_membership_reconciliation_target_group_size,
      leader_health_check_caps_time_per_queue,
-     leader_health_check_time_does_not_grow_with_members,
+     leader_health_check_queries_followers_in_parallel,
      leader_health_check_reports_outstanding_queues_on_timeout
     ].
 
@@ -138,45 +139,78 @@ periodic_membership_reconciliation_target_group_size(_Config) ->
     ok.
 
 leader_health_check_caps_time_per_queue(_Config) ->
-    Pids = start_qprocs([qq_hc_member_1, qq_hc_member_2, qq_hc_member_3]),
     Members = [{N, node()} || N <- [qq_hc_member_1, qq_hc_member_2, qq_hc_member_3]],
-    QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
-    Ref = make_ref(),
-    {Time, ok} = timer:tc(rabbit_quorum_queue, run_leader_health_check,
-                          [Members, QName, Ref, self(), 100, 200], millisecond),
-    ?assert(Time < 1000),
-    receive
-        Msg -> ?assertEqual({error, Ref, QName}, Msg)
-    after 0 ->
-        ct:fail(no_result)
-    end,
-    stop_qprocs(Pids),
-    ok.
+    TestPid = self(),
+    with_mocked_ra_members(
+      fun(_ServerId, _Timeout) -> hang(TestPid) end,
+      fun() ->
+              QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+              Ref = make_ref(),
+              ok = rabbit_quorum_queue:run_leader_health_check(
+                     Members, QName, Ref, self(), 100, 200),
+              ?assertEqual({error, Ref, QName}, receive_result(Ref)),
+              Hung = receive_hung(3),
+              [?awaitMatch(false, is_process_alive(P), 30_000) || P <- Hung]
+      end).
 
-leader_health_check_time_does_not_grow_with_members(_Config) ->
-    Hung = [qq_hc_hung_1, qq_hc_hung_2, qq_hc_hung_3],
-    Pids = start_qprocs(Hung),
-    Leader = {qq_hc_leader, node()},
+leader_health_check_queries_followers_in_parallel(_Config) ->
+    Members = [{N, node()} || N <- [qq_hc_down, qq_hc_hung_1, qq_hc_hung_2, qq_hc_ok]],
+    TestPid = self(),
+    with_mocked_ra_members(
+      fun({qq_hc_down, _}, _Timeout) ->
+              {error, noproc};
+         ({qq_hc_ok, _} = ServerId, _Timeout) ->
+              TestPid ! {ok_member, self()},
+              receive go -> {ok, [ServerId], ServerId} end;
+         (_ServerId, _Timeout) ->
+              hang(TestPid)
+      end,
+      fun() ->
+              QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+              Ref = make_ref(),
+              Self = self(),
+              _ = spawn_link(
+                    fun() ->
+                            rabbit_quorum_queue:run_leader_health_check(
+                              Members, QName, Ref, Self, 30_000, 60_000)
+                    end),
+              %% A sequential implementation never reaches `qq_hc_ok`
+              Hung = receive_hung(2),
+              OkMember = receive
+                             {ok_member, P} -> P
+                         after 30_000 ->
+                                 ct:fail(healthy_member_not_queried)
+                         end,
+              OkMember ! go,
+              ?assertEqual({ok, Ref, QName}, receive_result(Ref)),
+              [?awaitMatch(false, is_process_alive(P), 30_000) || P <- Hung]
+      end).
+
+with_mocked_ra_members(MembersFun, TestFun) ->
     ok = meck:new(ra, [passthrough]),
-    ok = meck:expect(ra, members,
-                     fun(Id, _) when Id =:= Leader -> {ok, [Leader], Leader};
-                        (Id, T) -> meck:passthrough([Id, T])
-                     end),
+    ok = meck:expect(ra, members, MembersFun),
     try
-        Members = [{N, node()} || N <- Hung] ++ [Leader],
-        QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
-        Ref = make_ref(),
-        {Time, ok} = timer:tc(rabbit_quorum_queue, run_leader_health_check,
-                              [Members, QName, Ref, self(), 500, 1000], millisecond),
-        ?assert(Time < 1000),
-        receive
-            Msg -> ?assertEqual({ok, Ref, QName}, Msg)
-        after 0 ->
-            ct:fail(no_result)
-        end
+        TestFun()
     after
-        meck:unload(ra),
-        stop_qprocs(Pids)
+        meck:unload(ra)
+    end.
+
+hang(TestPid) ->
+    TestPid ! {hung, self()},
+    receive never -> ok end.
+
+receive_hung(N) ->
+    [receive
+         {hung, Pid} -> Pid
+     after 30_000 ->
+             ct:fail(member_not_queried)
+     end || _ <- lists:seq(1, N)].
+
+receive_result(Ref) ->
+    receive
+        {_, Ref, _} = Msg -> Msg
+    after 30_000 ->
+            ct:fail(no_result)
     end.
 
 leader_health_check_reports_outstanding_queues_on_timeout(_Config) ->
