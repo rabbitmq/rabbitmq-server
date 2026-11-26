@@ -88,7 +88,9 @@ groups() ->
                                      queue_filter_raft_metrics_match_limit_test,
                                      queue_filter_combined_with_vhost_test,
                                      queue_filter_multiple_patterns_rejected_test,
-                                     queue_filter_empty_is_ignored_test
+                                     queue_filter_empty_is_ignored_test,
+                                     queue_filter_heap_limit_rejected_test,
+                                     queue_filter_compile_time_test
         ]},
        {special_chars, [], [core_metrics_special_chars, exchange_metrics_special_chars]},
        {authentication, [], [basic_auth]}
@@ -1078,6 +1080,25 @@ queue_filter_empty_is_ignored_test(Config) ->
     ParsedNoFilter = map_get(rabbitmq_detailed_queue_messages, parse_response(BodyNoFilter)),
     ParsedEmpty = map_get(rabbitmq_detailed_queue_messages, parse_response(BodyEmpty)),
     ?assertEqual(ParsedNoFilter, ParsedEmpty),
+    ok.
+
+queue_filter_heap_limit_rejected_test(Config) ->
+    {_, Body} = http_get_with_pal(Config,
+                                  "/metrics/detailed?family=queue_coarse_metrics&queue="
+                                  ++ uri_string:quote("(*LIMIT_HEAP=1)a"),
+                                  [], 400),
+    ?assertNotEqual(nomatch, string:find(Body, "LIMIT_HEAP")),
+    ok.
+
+queue_filter_compile_time_test(Config) ->
+    Pattern = ["(*UCP)(?i)[", lists:duplicate(900, "\\d"), "]*",
+               lists:duplicate(10, "(?:|z*)"),
+               "(?:", lists:duplicate(20, "a*b*"), "){100}z"],
+    ?assert(iolist_size(Pattern) =< 2000),
+    Path = "/metrics/detailed?family=queue_coarse_metrics&queue="
+           ++ uri_string:quote(lists:flatten(Pattern)),
+    {Time, _} = timer:tc(fun() -> http_get(Config, Path, [], 200) end, millisecond),
+    ?assert(Time < 5000),
     ok.
 
 basic_auth(Config) ->
