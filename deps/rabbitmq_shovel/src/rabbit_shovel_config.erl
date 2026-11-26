@@ -67,7 +67,7 @@ convert_from_legacy(Config) ->
                     {add_timestamp_header, ATH}]},
      {ack_mode, AckMode},
      {reconnect_delay, RD},
-     {max_hops, proplists:get_value(max_hops, Config, unlimited)}].
+     {max_hops, proplists:get_value(max_hops, Config, ?DEFAULT_MAX_HOPS)}].
 
 parse(ShovelName, Config0) ->
     try
@@ -138,7 +138,7 @@ parse_current(ShovelName, Config) ->
     DstMod = resolve_module(proplists:get_value(protocol, Destination, amqp091)),
     AckMode = proplists:get_value(ack_mode, Config, no_ack),
     validate_ack_mode(AckMode),
-    MaxHops = proplists:get_value(max_hops, Config, unlimited),
+    MaxHops = proplists:get_value(max_hops, Config, ?DEFAULT_MAX_HOPS),
     validate_max_hops(MaxHops),
     {ok, #{name => ShovelName,
            shovel_type => static,
@@ -182,13 +182,13 @@ validate_ack_mode(WrongVal) ->
           {ack_mode_value_requires_one_of, {no_ack, on_publish, on_confirm},
           WrongVal}}).
 
-validate_max_hops(unlimited) ->
-    ok;
-validate_max_hops(N) when is_integer(N) andalso N >= 1 ->
+validate_max_hops(N) when is_integer(N) andalso
+                          N >= 1 andalso
+                          N =< ?MAX_MAX_HOPS ->
     ok;
 validate_max_hops(WrongVal) ->
     fail({invalid_parameter_value, max_hops,
-          {require_positive_integer, WrongVal}}).
+          {require_integer_between, 1, ?MAX_MAX_HOPS, WrongVal}}).
 
 duplicate_keys(PropList) when is_list(PropList) ->
     proplists:get_keys(

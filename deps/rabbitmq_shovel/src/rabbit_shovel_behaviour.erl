@@ -40,6 +40,7 @@
          removed_from_rabbit_registry/1]).
 
 -include_lib("kernel/include/logger.hrl").
+-include("rabbit_shovel.hrl").
 
 -define(HOPS_ANN, <<"x-opt-shovel-hops">>).
 
@@ -177,7 +178,7 @@ dest_endpoint(#{dest := #{module := Mod}} = State) ->
 
 -spec forward(tag(), mc:state(), state()) ->
     state() | {stop, any()}.
-forward(Tag, Msg, #{max_hops := MaxHops} = State) when is_integer(MaxHops) ->
+forward(Tag, Msg, #{max_hops := MaxHops} = State) ->
     %% The value is client-controlled.
     Hops = case mc:x_header(?HOPS_ANN, Msg) of
                {_, N} when is_integer(N) andalso N >= 0 -> N;
@@ -188,9 +189,7 @@ forward(Tag, Msg, #{max_hops := MaxHops} = State) when is_integer(MaxHops) ->
             dest_forward(Tag, mc:set_annotation(?HOPS_ANN, Hops + 1, Msg), State);
         false ->
             discard(Tag, State)
-    end;
-forward(Tag, Msg, State) ->
-    dest_forward(Tag, Msg, State).
+    end.
 
 dest_forward(Tag, Msg, #{dest := #{module := Mod}} = State) ->
     Mod:forward(Tag, Msg, State).

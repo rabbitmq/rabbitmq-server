@@ -136,7 +136,7 @@ parse_amqp10_mixed(_Config) ->
     ?assertMatch(
        #{name := my_shovel,
          ack_mode := on_confirm,
-         max_hops := unlimited,
+         max_hops := 10,
          source := #{module := rabbit_amqp10_shovel,
                      uris := [{encrypted, _}],
                      source_address := <<"the-queue">>
@@ -231,7 +231,9 @@ parse_max_hops(_Config) ->
     [?assertMatch({error, {invalid_shovel_configuration, my_shovel,
                            {invalid_parameter_value, max_hops, _}}},
                   rabbit_shovel_config:parse(my_shovel, [Src, Dst, {max_hops, V}]))
-     || V <- [0, -1, 1.5, "3"]],
+     || V <- [0, -1, 65, 1.5, "3", unlimited]],
+    ?assertMatch({ok, #{max_hops := 64}},
+                 rabbit_shovel_config:parse(my_shovel, [Src, Dst, {max_hops, 64}])),
     Legacy = [{sources, [{broker, "amqp://"}]},
               {destinations, [{broker, "amqp://"}]},
               {queue, <<"q">>},

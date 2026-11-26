@@ -154,10 +154,13 @@ dest_validation(Def0, User) ->
     {ok, Mod} = rabbit_registry:lookup_module(shovel_protocol, Protocol),
     Mod:validate_dest_funs(Def0, User).
 
-validate_max_hops(_Name, N) when is_integer(N) andalso N >= 1 ->
+validate_max_hops(_Name, N) when is_integer(N) andalso
+                                 N >= 1 andalso
+                                 N =< ?MAX_MAX_HOPS ->
     ok;
 validate_max_hops(Name, Term) ->
-    {error, "~ts should be a positive integer, actually was ~tp", [Name, Term]}.
+    {error, "~ts should be an integer between 1 and ~b, actually was ~tp",
+     [Name, ?MAX_MAX_HOPS, Term]}.
 
 validate_internal_owner(Name, Term0) ->
     Term = rabbit_data_coercion:to_proplist(Term0),
@@ -228,7 +231,7 @@ parse({VHost, Name}, ClusterName, Def) ->
            ack_mode => translate_ack_mode(pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
            reconnect_delay => pget(<<"reconnect-delay">>, Def,
                                    ?DEFAULT_RECONNECT_DELAY),
-           max_hops => pget(<<"max-hops">>, Def, unlimited)}}.
+           max_hops => pget(<<"max-hops">>, Def, ?DEFAULT_MAX_HOPS)}}.
 
 parse_source(Def) ->
     {Protocol, _} = protocols(Def),
