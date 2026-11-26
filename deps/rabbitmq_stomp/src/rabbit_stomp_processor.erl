@@ -389,7 +389,6 @@ process_connect(Implicit, Frame,
                                                           auth_login = Username}},
                   {Username, AuthProps} = auth_props_for_creds(Creds, StateN1),
                   {ok, User} ?= rabbit_access_control:check_user_login(Username, AuthProps),
-                  rabbit_access_control:clear_max_heap_size(),
                   #user{username = AuthUsername} = User,
                   ok ?= check_vhost_exists(VHost, AuthUsername, PeerIp),
                   {ok, AuthzCtx} ?= check_vhost_access(VHost, User, PeerIp),
@@ -416,6 +415,8 @@ process_connect(Implicit, Frame,
                                 true  -> Headers0;
                                 false -> Headers0#{?HEADER_SERVER => iolist_to_binary(server_header())}
                             end,
+
+                  rabbit_access_control:clear_max_heap_size(),
 
                   Res = ok("CONNECTED", Headers,
                            [],
