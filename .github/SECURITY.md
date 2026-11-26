@@ -34,6 +34,7 @@ The advisory will credit the reporters.
 
  * Not enough information is available to triage (try to reliably reproduce) the issue
  * You need help tuning RabbitMQ for security.
+ * The issue is out of scope or intended behavior according to the [threat model](https://github.com/rabbitmq/rabbitmq-server/blob/main/.oss-scanner/threat_model.md)
 
 ### On Security Scan Dumps
 
