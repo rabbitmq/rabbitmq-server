@@ -311,12 +311,12 @@ redact_params_ssl_options_none(_Config) ->
 %% -------------------------------------------------------------------
 
 validate_max_hops_accepts_bounds(_Config) ->
-    [?assertEqual([], validation_errors(V)) || V <- [0, 1, 2, 32766, 32767]],
+    [?assertEqual([], validation_errors(V)) || V <- [0, 1, 2, 63, 64]],
     ok.
 
 validate_max_hops_rejects_out_of_range(_Config) ->
     [?assertMatch([{error, _, _}], validation_errors(V)) ||
-        V <- [-1, -32768, 32768, 100000]],
+        V <- [-1, -32768, 65, 32767, 32768, 100000]],
     ok.
 
 validate_max_hops_rejects_non_integers(_Config) ->
@@ -326,14 +326,16 @@ validate_max_hops_rejects_non_integers(_Config) ->
 
 max_hops_keeps_valid_values(_Config) ->
     [?assertEqual(V, rabbit_federation_upstream:max_hops(V)) ||
-        V <- [0, 1, 2, 32766, 32767]],
+        V <- [0, 1, 2, 63, 64]],
     ok.
 
 %% Values persisted by versions that did not validate `max-hops` are read
 %% back as is.
 max_hops_normalizes_legacy_values(_Config) ->
-    ?assertEqual(32767, rabbit_federation_upstream:max_hops(40000)),
-    ?assertEqual(32767, rabbit_federation_upstream:max_hops(40000.5)),
+    ?assertEqual(64, rabbit_federation_upstream:max_hops(65)),
+    ?assertEqual(64, rabbit_federation_upstream:max_hops(32767)),
+    ?assertEqual(64, rabbit_federation_upstream:max_hops(40000)),
+    ?assertEqual(64, rabbit_federation_upstream:max_hops(40000.5)),
     ?assertEqual(2, rabbit_federation_upstream:max_hops(2.7)),
     ?assertEqual(0, rabbit_federation_upstream:max_hops(0)),
     ?assertEqual(0, rabbit_federation_upstream:max_hops(0.5)),
