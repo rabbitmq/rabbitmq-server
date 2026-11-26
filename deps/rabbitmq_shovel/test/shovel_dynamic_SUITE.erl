@@ -131,7 +131,8 @@ local_src_tests() ->
 %% reaches the running state.
 local_dest_tests() ->
     [no_write_access_on_dest_queue,
-     write_access_on_default_exchange_only].
+     write_access_on_default_exchange_only,
+     dest_queue_dead_letters].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -865,6 +866,24 @@ max_hops(Config) ->
               ?assertMatch({_, dynamic, {running, _}, #{forwarded := 3}, _},
                            shovel_status(Config, {<<"/">>, Param})),
               amqp10_expect_empty(Sess, SrcAddress)
+      end).
+
+dest_queue_dead_letters(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    DLQ = dlq(Src),
+    with_amqp10_session(Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, DLQ, #{}),
+              amqp10_declare_queue(Sess, Dest, #{<<"x-message-ttl">> => {ulong, 0},
+                                                 <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                 <<"x-dead-letter-routing-key">> => {utf8, DLQ}}),
+              set_param(Config, ?config(param, Config), ?config(shovel_args, Config)),
+              amqp10_publish(Sess, rabbitmq_amqp_address:queue(Src), <<"m">>, 1),
+              [Msg] = amqp10_expect_count(Sess, rabbitmq_amqp_address:queue(DLQ), 1),
+              ?assertMatch(#{<<"x-last-death-reason">> := <<"expired">>,
+                             <<"x-last-death-queue">> := Dest},
+                           amqp10_msg:message_annotations(Msg))
       end).
 
 declare_full_queue(Sess, QName) ->
