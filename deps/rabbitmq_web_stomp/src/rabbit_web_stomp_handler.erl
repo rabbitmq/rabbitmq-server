@@ -134,8 +134,8 @@ init(Req0, Opts) ->
             }, WsOpts#{data_delivery => relay}};
         {error, origin_not_allowed} ->
             ?LOG_WARNING("Web STOMP: WebSocket connection rejected, "
-                         "origin not in allow_origins: ~tp",
-                         [cowboy_req:header(<<"origin">>, Req0)]),
+                         "origin not in allow_origins: ~0tP",
+                         [cowboy_req:header(<<"origin">>, Req0), 10]),
             {ok,
              cowboy_req:reply(403, #{<<"connection">> => <<"close">>}, Req0),
              #state{}}
