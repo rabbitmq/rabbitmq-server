@@ -29,6 +29,10 @@
         <td><%= fmt_time(shovel.value['reconnect-delay'], 's') %></td>
       </tr>
       <tr>
+        <th>Max hops</th>
+        <td><%= fmt_string(shovel.value['max-hops'], 10) %></td>
+      </tr>
+      <tr>
         <th>Add headers</th>
         <td><%= fmt_boolean(fallback_value(shovel, 'dest-add-forward-headers', 'add-forward-headers')) %></td>
       </tr>

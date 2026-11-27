@@ -135,3 +135,25 @@ describe('Move messages credentials', () => {
     assert.equal(result['dest-uri'], 'amqp:///tenant%2Fvhost');
   });
 });
+
+describe('Shovel form', () => {
+  it('submits max-hops as a number', () => {
+    const { sandbox, dispatcherCallback } = loadShovelModule();
+    const sammy = fakeSammy();
+    dispatcherCallback(sammy);
+    sandbox.put_parameter = (request, _mandatory, numKeys) => {
+      sandbox.submitted = { ...request.params };
+      sandbox.numKeys = numKeys;
+    };
+    const params = {
+      'src-protocol-selector': 'amqp091-src',
+      'dest-protocol-selector': 'amqp091-dest',
+      'src-delete-after-selector': 'never',
+      'max-hops': '5'
+    };
+    const route = sammy.routes.find(r => r.path === '#/shovel-parameters' && r.method === 'PUT');
+    route.handler.call({ params });
+    assert.equal(sandbox.submitted['max-hops'], '5');
+    assert.ok(sandbox.numKeys.includes('max-hops'));
+  });
+});
