@@ -74,7 +74,8 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
-         emit_consumers_local/3, internal_delete/3, internal_delete/4]).
+         emit_consumers_local/3, internal_delete/3, internal_delete/4,
+         internal_delete_if/4]).
 
 %% Deprecated feature callback.
 -export([are_transient_nonexcl_used/1]).
@@ -103,7 +104,7 @@
 -type msg_id() :: undefined | non_neg_integer() | {Priority :: non_neg_integer(), undefined | non_neg_integer()}.
 -type ok_or_errors() ::
         'ok' | {'error', [{'error' | 'exit' | 'throw', any()}]}.
--type absent_reason() :: 'nodedown' | 'crashed' | stopped | timeout.
+-type absent_reason() :: 'nodedown' | 'crashed' | stopped | timeout | deleting.
 -type queue_not_found() :: not_found.
 -type queue_absent() :: {'absent', amqqueue:amqqueue(), absent_reason()}.
 -type not_found_or_absent() :: queue_not_found() | queue_absent().
@@ -609,6 +610,8 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
         %% The queue process has crashed with unknown error
         {ok, Q} when ?amqqueue_state_is(Q, crashed) ->
             E({absent, Q, crashed});
+        {ok, Q} when ?amqqueue_state_is(Q, deleting) ->
+            E({absent, Q, deleting});
         %% The queue is supposed to be active.
         %% The node can go away or queue can be killed so we retry.
         %% TODO review this: why to retry when mirroring is gone?
@@ -726,6 +729,11 @@ priv_absent(QueueName, _QPid, _IsDurable, crashed) ->
     rabbit_misc:protocol_error(
       not_found,
       "~ts has crashed and failed to restart", [rabbit_misc:rs(QueueName)]);
+
+priv_absent(QueueName, _QPid, _IsDurable, deleting) ->
+    rabbit_misc:protocol_error(
+      not_found,
+      "~ts is being deleted", [rabbit_misc:rs(QueueName)]);
 
 priv_absent(QueueName, _QPid, _IsDurable, timeout) ->
     rabbit_misc:protocol_error(
@@ -1804,17 +1812,18 @@ delete_with(AMQQueue, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) when
     QueueName = amqqueue:get_name(AMQQueue),
     delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive);
 delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) when is_record(QueueName, resource) ->
+    DeleteFun = fun (Q) ->
+                        ok = check_internal(Q, Username),
+                        if CheckExclusive ->
+                               check_exclusive_access(Q, ConnPid);
+                           true ->
+                               ok
+                        end,
+                        rabbit_queue_type:delete(Q, IfUnused, IfEmpty, Username)
+                end,
     case with(
            QueueName,
-           fun (Q) ->
-                ok = check_internal(Q, Username),
-                if CheckExclusive ->
-                    check_exclusive_access(Q, ConnPid);
-                true ->
-                    ok
-                end,
-                rabbit_queue_type:delete(Q, IfUnused, IfEmpty, Username)
-           end,
+           DeleteFun,
            fun (not_found) ->
                    {ok, 0};
                ({absent, Q, crashed}) ->
@@ -1823,6 +1832,8 @@ delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) whe
                ({absent, Q, stopped}) ->
                    _ = delete_crashed(Q, Username),
                    {ok, 0};
+               ({absent, Q, deleting}) ->
+                   DeleteFun(Q);
                ({absent, Q, Reason}) ->
                    absent(Q, Reason)
            end) of
@@ -1967,7 +1978,6 @@ internal_delete(Queue, ActingUser, Reason) ->
       Ret :: ok | {error, timeout}.
 
 internal_delete(Queue, ActingUser, Reason, Options) ->
-    QueueName = amqqueue:get_name(Queue),
     Conditions = case amqqueue:get_exclusive_owner(Queue) of
                      none ->
                          [];
@@ -1976,6 +1986,20 @@ internal_delete(Queue, ActingUser, Reason, Options) ->
                          [#if_data_matches{pattern = Pattern}]
                  end,
     OnlyDurable = Reason =:= missing_owner,
+    internal_delete_if(Queue, Conditions, OnlyDurable, ActingUser, Options).
+
+-spec internal_delete_if(Queue, Conditions, OnlyDurable, ActingUser) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      Conditions :: [khepri_condition:condition()],
+      OnlyDurable :: boolean(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok | {error, timeout}.
+
+internal_delete_if(Queue, Conditions, OnlyDurable, ActingUser) ->
+    internal_delete_if(Queue, Conditions, OnlyDurable, ActingUser, #{}).
+
+internal_delete_if(Queue, Conditions, OnlyDurable, ActingUser, Options) ->
+    QueueName = amqqueue:get_name(Queue),
     case rabbit_db_queue:delete_if(QueueName, Conditions, OnlyDurable, Options) of
         ok ->
             ok;

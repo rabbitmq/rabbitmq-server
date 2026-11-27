@@ -192,6 +192,10 @@
 -export([topic_binding_projection_v5_enable/1,
          topic_binding_projection_v5_post_enable/1]).
 
+-export([queue_target_table_name/0,
+         queue_target_projection_v2_enable/1,
+         queue_target_projection_v2_post_enable/1]).
+
 -export([register_projections/0]).
 
 -ifdef(TEST).
@@ -1458,9 +1462,29 @@ register_rabbit_queue_projection() ->
     KeyPos = 2, %% #amqqueue.name
     register_simple_projection(Name, PathPattern, KeyPos, false).
 
+register_rabbit_queue_target_projection() ->
+    case is_queue_target_projection_v2_enabled() of
+        true -> register_rabbit_queue_target_projection_v2();
+        false -> register_rabbit_queue_target_projection_v1()
+    end.
+
+is_queue_target_projection_v2_enabled() ->
+    rabbit_feature_flags:is_enabled(quorum_queue_deleting_state,
+                                    non_blocking) =:= true.
+
+-spec queue_target_table_name() -> atom().
+queue_target_table_name() ->
+    case is_queue_target_projection_v2_enabled() of
+        true -> rabbit_khepri_queue_target_v2;
+        false -> rabbit_khepri_queue_target
+    end.
+
 %% This projection exists to avoid looking up the full amqqueue record
 %% per message delivered to a target queue.
-register_rabbit_queue_target_projection() ->
+%%
+%% It is kept for backward compatibility only, and is unused after the
+%% `quorum_queue_deleting_state' feature flag is enabled.
+register_rabbit_queue_target_projection_v1() ->
     PathPattern = rabbit_db_queue:khepri_queue_path(
                     _VHost = ?KHEPRI_WILDCARD_STAR,
                     _Name = ?KHEPRI_WILDCARD_STAR),
@@ -1475,6 +1499,61 @@ register_rabbit_queue_target_projection() ->
              read_concurrency => true},
     Projection = khepri_projection:new(rabbit_khepri_queue_target, Fun, Opts),
     khepri:register_projection(?STORE_ID, PathPattern, Projection).
+
+%% A queue that is being deleted is not a routing target, so that a mandatory
+%% message to it is returned.
+register_rabbit_queue_target_projection_v2() ->
+    PathPattern = rabbit_db_queue:khepri_queue_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Name = ?KHEPRI_WILDCARD_STAR),
+    Fun = fun(Table, _Path, _OldProps, #{data := Q}) ->
+                  Name = amqqueue:get_name(Q),
+                  case amqqueue:get_state(Q) of
+                      deleting ->
+                          ets:delete(Table, Name);
+                      _ ->
+                          Type = amqqueue:get_type(Q),
+                          Pid = amqqueue:get_pid(Q),
+                          ExtraBcc = amqqueue:get_extra_bcc(Q),
+                          ets:insert(Table, {Name, {Type, Pid, ExtraBcc}})
+                  end;
+             (Table, _Path, #{data := Q}, _NewProps) ->
+                  ets:delete(Table, amqqueue:get_name(Q));
+             (_Table, _Path, _OldProps, _NewProps) ->
+                  ok
+          end,
+    Opts = #{keypos => 1,
+             read_concurrency => true},
+    Projection = khepri_projection:new(rabbit_khepri_queue_target_v2, Fun,
+                                       Opts),
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
+
+queue_target_projection_v2_enable(
+  #{feature_name := quorum_queue_deleting_state = FeatureName}) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`: register queue target projection v2",
+       [FeatureName],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    case register_rabbit_queue_target_projection_v2() of
+        ok ->
+            ok;
+        {error, {khepri, projection_already_exists, _Info}} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+queue_target_projection_v2_post_enable(
+  #{feature_name := quorum_queue_deleting_state = FeatureName}) ->
+    ProjectionName = rabbit_khepri_queue_target,
+    Result = try khepri:unregister_projections(?STORE_ID, [ProjectionName])
+             catch _:Reason -> Reason
+             end,
+    ?LOG_DEBUG(
+       "Feature flag `~s`: unregister projection ~s: ~tp",
+       [FeatureName, ProjectionName, Result],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    ok.
 
 register_rabbit_vhost_projection() ->
     Name = rabbit_khepri_vhost,

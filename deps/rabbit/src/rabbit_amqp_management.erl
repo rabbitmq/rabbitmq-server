@@ -1,6 +1,7 @@
 -module(rabbit_amqp_management).
 
 -include("rabbit_amqp.hrl").
+-include("amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
 
@@ -171,6 +172,10 @@ handle_http_req(HttpMethod = <<"PUT">>,
                          exit:#amqp_error{explanation = Expl} ->
                              throw(<<"400">>, "~ts", [Expl])
                    end
+           end,
+           %% The declare takes over a delete whose owner died.
+           fun({absent, _, deleting}) -> {error, not_found};
+              (Reason) -> {error, Reason}
            end) of
         {ok, Result} ->
             Result;
@@ -193,6 +198,9 @@ handle_http_req(HttpMethod = <<"PUT">>,
                     {<<"201">>, RespPayload, PermCaches};
                 {absent, Q, Reason} ->
                     absent(Q, Reason);
+                {existing, Q} when ?amqqueue_state_is(Q, deleting) ->
+                    throw(<<"409">>, "~ts is being deleted",
+                          [rabbit_misc:rs(QName)]);
                 {existing, _Q} ->
                     %% Must have been created in the meantime. Loop around again.
                     handle_http_req(HttpMethod, PathSegments, Query, ReqPayload,

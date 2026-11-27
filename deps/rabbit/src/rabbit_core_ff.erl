@@ -272,3 +272,14 @@
       stability     => stable,
       depends_on    => ['rabbitmq_4.3.0']
      }}).
+
+-rabbit_feature_flag(
+   {quorum_queue_deleting_state,
+    #{desc          => "Mark a quorum queue as being deleted before deleting its Ra cluster",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.4.0', track_qq_members_uids],
+      callbacks     => #{enable =>
+                         {rabbit_khepri, queue_target_projection_v2_enable},
+                         post_enable =>
+                         {rabbit_khepri, queue_target_projection_v2_post_enable}}
+     }}).
