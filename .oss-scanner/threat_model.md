@@ -34,16 +34,17 @@ Virtual hosts provide soft multi-tenancy: tenants are assumed not to be maliciou
 isolation protects them from each other's mistakes, not from attacks. Tenants that do
 not trust each other use separate clusters.
 
-Resource use by an authenticated user is a vulnerability only when one of these holds:
+Resource use by an authenticated user is a vulnerability when one of these holds:
 
 - A faulty client application or client library could plausibly cause it
 - It bypasses a configured limit or a memory or disk alarm
 - It persists after a node restart, for example a queue that fails on Ra log replay
 
 Otherwise, exhausting memory, CPU or the metadata store with input that an
-authenticated user crafts for that purpose is not a vulnerability. Examples are hash
+authenticated user crafts for that purpose is lower priority. Examples are hash
 collisions, regular expressions with catastrophic backtracking, million-digit integers
-and input that triggers quadratic behavior.
+and input that triggers quadratic behavior. Report it only when it affects the whole
+node or cluster.
 
 ## What not to report
 
