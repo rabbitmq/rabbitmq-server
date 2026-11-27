@@ -798,7 +798,8 @@ apply_(#{system_time := Ts} = Meta,
                           consumer_strategy = ConsumerStrat},
                consumers = Cons0} = State0) ->
     %% if any consumer message times out the consumer enters timeout state and
-    %% all messages are returned
+    %% the timed out messages are returned; its other checked out messages stay
+    %% checked out until they time out or are settled
     {State1, Effects0} =
         maps:fold(
           fun (CKey, #consumer{checked_out = Checked,

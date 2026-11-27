@@ -907,11 +907,21 @@
 ## `notify_consumer` (the default) sends a `basic.cancel` to clients
 ## that support the `consumer_cancel_notify` capability
 ## and only closes the channel for clients that do not.
+## On quorum queues, the consumer's other deliveries stay with the client,
+## and one that later times out too is returned to the queue without closing
+## the channel. If the client cancelled the consumer itself, a later timeout
+## of one of its deliveries still closes the channel.
 ##
 ## `close_channel`, as the name suggests, always closes the channel,
 ## which is the pre-`4.3.0` behavior.
 ##
 # consumer_timeout_response = notify_consumer
+
+## How long, in milliseconds, the channel waits for a `basic.cancel_ok`
+## after cancelling a consumer for a delivery timeout before removing the
+## consumer itself.
+##
+# consumer_cancel_ok_timeout = 10000
 
 #
 # Advanced Erlang Networking/Clustering Options

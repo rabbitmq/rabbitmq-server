@@ -1074,6 +1074,13 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {rabbit_consumer_cancel_ok_timeout,
+   "consumer_cancel_ok_timeout = 5000",
+   [{rabbit, [
+      {consumer_cancel_ok_timeout, 5000}
+     ]}],
+   []},
+
   {rabbit_msg_store_shutdown_timeout,
    "message_store_shutdown_timeout = 600000",
    [{rabbit, [
