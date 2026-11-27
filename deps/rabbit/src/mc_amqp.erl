@@ -599,6 +599,8 @@ application_properties_as_simple_map0(Content, L) ->
                         Acc
                 end, L, Content).
 
+msg_body_decoded([], #msg_body_decoded{data = [_, _ | _] = Body} = Msg) ->
+    Msg#msg_body_decoded{data = lists:reverse(Body)};
 msg_body_decoded([], Acc) ->
     Acc;
 msg_body_decoded([#'v1_0.header'{} = H | Rem], Msg) ->
@@ -613,10 +615,10 @@ msg_body_decoded([#'v1_0.application_properties'{content = APC} | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{application_properties = APC});
 msg_body_decoded([#'v1_0.data'{} = D | Rem], #msg_body_decoded{data = Body} = Msg)
   when is_list(Body) ->
-    msg_body_decoded(Rem, Msg#msg_body_decoded{data = Body ++ [D]});
+    msg_body_decoded(Rem, Msg#msg_body_decoded{data = [D | Body]});
 msg_body_decoded([#'v1_0.amqp_sequence'{} = D | Rem], #msg_body_decoded{data = Body} = Msg)
   when is_list(Body) ->
-    msg_body_decoded(Rem, Msg#msg_body_decoded{data = Body ++ [D]});
+    msg_body_decoded(Rem, Msg#msg_body_decoded{data = [D | Body]});
 msg_body_decoded([#'v1_0.amqp_value'{} = B | Rem], #msg_body_decoded{} = Msg) ->
     %% an amqp value can only be a singleton
     msg_body_decoded(Rem, Msg#msg_body_decoded{data = B});
