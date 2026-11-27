@@ -59,7 +59,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   def plugin_modules(opts) do
-    _ = require_rabbit(opts)
+    _ = require_rabbit_and_plugins(opts)
 
     enabled_plugins =
       try do
@@ -103,29 +103,12 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
         end
       )
 
-    partitioned =
-      Enum.group_by(all_enabled_plugins, fn app ->
-        case Application.load(app) do
-          :ok -> :loaded
-          {:error, {:already_loaded, ^app}} -> :loaded
-          _ -> :not_found
-        end
-      end)
-
-    loaded = partitioned[:loaded] || []
-    missing = partitioned[:not_found] || []
-    ## If plugins are not in ERL_LIBS, they should be loaded from plugins_dir
-    case missing do
-      [] ->
-        :ok
-
-      _ ->
-        add_plugins_to_load_path(opts)
-        Enum.each(missing, fn app -> Application.load(app) end)
-    end
-
-    Enum.flat_map(loaded ++ missing, fn app ->
-      Application.spec(app, :modules) || []
+    Enum.flat_map(all_enabled_plugins, fn app ->
+      case Application.load(app) do
+        :ok -> Application.spec(app, :modules) || []
+        {:error, {:already_loaded, ^app}} -> Application.spec(app, :modules) || []
+        _ -> []
+      end
     end)
   end
 
