@@ -9,6 +9,7 @@
 
 -export([args_policy_lookup/3,
          qname_to_internal_name/1,
+         is_internal_name_in_use/2,
          check_auto_delete/1,
          check_exclusive/1,
          check_non_durable/1,
@@ -52,7 +53,49 @@ qname_to_internal_name(QName) ->
 name_concat(#resource{virtual_host = <<"/">>, name = Name}) ->
     <<"%2F_", Name/binary>>;
 name_concat(#resource{virtual_host = VHost, name = Name}) ->
-    <<VHost/binary, "_", Name/binary>>.
+    <<(escape_vhost(VHost))/binary, "_", Name/binary>>.
+
+%% Ra server names are shared by all virtual hosts. With the underscores of
+%% the virtual host escaped, the first underscore is always the separator.
+escape_vhost(VHost) ->
+    binary:replace(binary:replace(VHost, <<"%">>, <<"%25">>, [global]),
+                   <<"_">>, <<"%5F">>, [global]).
+
+%% A name may already be taken by another registered process, or by a queue
+%% declared before virtual hosts were escaped, in whose name any underscore
+%% may be the separator. A queue declared again keeps its name.
+-spec is_internal_name_in_use(atom(), rabbit_amqqueue:name()) -> boolean().
+is_internal_name_in_use(InternalName, QName) ->
+    case has_internal_name(QName, InternalName) of
+        true ->
+            false;
+        false ->
+            is_pid(whereis(InternalName)) orelse
+                lists:any(fun(OtherQName) ->
+                                  has_internal_name(OtherQName, InternalName)
+                          end, candidate_queue_names(InternalName) -- [QName])
+    end.
+
+has_internal_name(QName, InternalName) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            case amqqueue:get_pid(Q) of
+                {InternalName, _Node} -> true;
+                _                     -> false
+            end;
+        {error, not_found} ->
+            false
+    end.
+
+candidate_queue_names(InternalName) ->
+    Bin = atom_to_binary(InternalName),
+    [rabbit_misc:r(VHost, queue, Name)
+     || {Pos, _} <- binary:matches(Bin, <<"_">>),
+        <<VHost0:Pos/binary, "_", Name/binary>> <- [Bin],
+        VHost <- unescape_vhost(VHost0)].
+
+unescape_vhost(<<"%2F">> = VHost) -> [<<"/">>, VHost];
+unescape_vhost(VHost)             -> [VHost].
 
 check_auto_delete(Q) when ?amqqueue_is_auto_delete(Q) ->
     Name = amqqueue:get_name(Q),

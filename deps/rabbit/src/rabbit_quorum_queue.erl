@@ -108,6 +108,7 @@
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
                                  qname_to_internal_name/1,
+                                 is_internal_name_in_use/2,
                                  erpc_call/5]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -357,7 +358,13 @@ start_cluster(Q) ->
     %% requires cluster names to be atoms. Please do not report this as a vulnerability.
     RaName = case qname_to_internal_name(QName) of
                  {ok, A} ->
-                     A;
+                     case is_internal_name_in_use(A, QName) of
+                         false ->
+                             A;
+                         true ->
+                             rabbit_data_coercion:to_atom(
+                               ra:new_uid(atom_to_binary(A)))
+                     end;
                  {error, {too_long, N}} ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
