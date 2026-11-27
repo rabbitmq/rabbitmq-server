@@ -67,7 +67,8 @@ load(Map) when is_map(Map) ->
 load(IsDir, Path) when is_boolean(IsDir) ->
     load_from_local_path(IsDir, Path).
 
--spec load_with_hashing(Proplist :: list() | map(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
+-spec load_with_hashing(Proplist :: list() | map(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) ->
+    binary() | 'undefined' | {error, term()}.
 load_with_hashing(Proplist, PreviousHash, Algo) ->
     case pget(local_path, Proplist, undefined) of
         undefined -> {error, "local definition file path is not configured: local_path is not set"};
@@ -76,7 +77,8 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
             load_with_hashing(IsDir, Path, PreviousHash, Algo)
     end.
 
--spec load_with_hashing(IsDir :: boolean(), Path :: file:name_all(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
+-spec load_with_hashing(IsDir :: boolean(), Path :: file:name_all(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) ->
+    binary() | 'undefined' | {error, term()}.
 load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
     ?LOG_DEBUG("Loading definitions with content hashing enabled, path: ~ts, is directory?: ~tp, previous hash value: ~ts",
                      [Path, IsDir, rabbit_misc:hexify(PreviousHash)]),
@@ -91,8 +93,10 @@ load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
                         PreviousHash -> PreviousHash;
                         Other        ->
                             ?LOG_DEBUG("New hash: ~ts", [rabbit_misc:hexify(Other)]),
-                            _ = load_from_local_path(IsDir, Path),
-                            Other
+                            maybe
+                                ok ?= load_from_local_path(IsDir, Path),
+                                Other
+                            end
                     end;
                 false ->
                     ?LOG_ERROR("Definitions file at path ~p failed validation. The file must be a valid JSON document "

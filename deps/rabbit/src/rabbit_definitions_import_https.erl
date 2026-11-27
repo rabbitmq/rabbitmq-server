@@ -58,7 +58,8 @@ load(Proplist) ->
     HTTPOptions = http_options(TLSOptions),
     load_from_url(URL, HTTPOptions).
 
--spec load_with_hashing(Proplist :: list() | map(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
+-spec load_with_hashing(Proplist :: list() | map(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) ->
+    binary() | 'undefined' | {error, term()}.
 load_with_hashing(Proplist, PreviousHash, Algo) ->
     URL = pget(url, Proplist),
     ?LOG_INFO("Applying definitions from a remote URL"),
@@ -78,8 +79,10 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
                 PreviousHash -> PreviousHash;
                 Other        ->
                     ?LOG_DEBUG("New hash: ~ts", [rabbit_misc:hexify(Other)]),
-                    _ = import_raw(Body),
-                    Other
+                    maybe
+                        ok ?= import_raw(Body),
+                        Other
+                    end
             end;
         {ok, {{_, Code, _}, _Headers, _Body}} when Code >= 400 ->
             ?LOG_DEBUG("Requested definitions from remote URL '~ts', response code: ~b", [URL, Code]),

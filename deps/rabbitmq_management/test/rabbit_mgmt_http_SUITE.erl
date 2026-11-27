@@ -118,6 +118,7 @@ definitions_group3_tests() ->
 definitions_group4_tests() ->
     [
         definitions_vhost_test,
+        cluster_import_rejects_vhost_definitions,
         definitions_etag_test
     ].
 
@@ -2721,6 +2722,14 @@ defs_vhost(Config, Key, URI0, Rep1, VHost1, VHost2, CreateMethod, Args,
     URI3 = create(Config, CreateMethod, Rep1(URI0, VHost2), Args),
     DeleteFun(URI3),
     passed.
+
+cluster_import_rejects_vhost_definitions(Config) ->
+    Definitions = #{queues => [#{name => <<"vhost-scoped-queue">>, durable => true}]},
+    {ok, {{_, ?BAD_REQUEST, _}, _, Body}} =
+        req(Config, 0, post, "/definitions", [auth_header("guest", "guest")],
+            format_for_upload(Definitions)),
+    ?assertMatch(#{error := <<"bad_request">>, reason := <<"invalid_definitions_file">>},
+                 decode_body(Body)).
 
 definitions_vhost_test(Config) ->
     %% Ensures that definitions can be exported/imported from a single virtual
