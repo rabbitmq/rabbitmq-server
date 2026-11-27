@@ -142,7 +142,7 @@ ensure_ssl() ->
     {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
     ok = app_utils:start_applications(SslAppsConfig),
     {ok, SslOptsConfig0} = application:get_env(rabbit, ssl_options),
-    rabbit_ssl_options:fix(SslOptsConfig0).
+    rabbit_ssl_options:fix_for_server(SslOptsConfig0).
 
 -spec fix_ssl_options(rabbit_types:infos()) -> rabbit_types:infos().
 
@@ -154,7 +154,7 @@ ensure_ssl() ->
 fix_ssl_options(Config) ->
     Overrides = application:get_env(rabbit, ssl_options_overrides, []),
     rabbit_ssl_options:wrap_password_opt(
-      rabbit_ssl_options:fix(
+      rabbit_ssl_options:fix_for_server(
         lists:foldl(fun({Key, Value}, Acc) -> rabbit_misc:pset(Key, Value, Acc) end,
                     Config, Overrides))).
 

@@ -27,7 +27,9 @@ groups() ->
           listener_value_is_preserved_when_not_overridden,
           bare_atom_socket_option_is_preserved,
           override_replaces_every_duplicate_listener_value,
-          keyfile_password_is_wrapped
+          keyfile_password_is_wrapped,
+          client_renegotiation_is_disabled_by_default,
+          client_renegotiation_override_is_preserved
         ]}
     ].
 
@@ -80,3 +82,13 @@ keyfile_password_is_wrapped(_Config) ->
     Password = proplists:get_value(password, Fixed),
     ?assert(is_function(Password, 0)),
     ?assertEqual("hunter2", Password()).
+
+client_renegotiation_is_disabled_by_default(_Config) ->
+    Fixed = rabbit_networking:fix_ssl_options([{versions, ['tlsv1.3', 'tlsv1.2']}]),
+    ?assertEqual([false], [V || {client_renegotiation, V} <- Fixed]).
+
+client_renegotiation_override_is_preserved(_Config) ->
+    ok = application:set_env(rabbit, ssl_options_overrides, [{client_renegotiation, true}]),
+    Fixed = rabbit_networking:fix_ssl_options([{client_renegotiation, false},
+                                               {versions, ['tlsv1.2']}]),
+    ?assertEqual([true], [V || {client_renegotiation, V} <- Fixed]).

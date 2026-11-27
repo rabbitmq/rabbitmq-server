@@ -14,6 +14,7 @@
 -export([
     fix/1,
     fix_client/1,
+    fix_for_server/1,
     wrap_password_opt/1,
     check_file/1,
     check_file_options/1
@@ -84,6 +85,11 @@ fix(Config) ->
 -spec fix_client(rabbit_types:infos()) -> rabbit_types:infos().
 fix_client(Config) ->
     fix_cacerts(
+        fix(Config)).
+
+-spec fix_for_server(rabbit_types:infos()) -> rabbit_types:infos().
+fix_for_server(Config) ->
+    fix_client_renegotiation(
         fix(Config)).
 
 fix_cacerts(SslOptsConfig) ->
@@ -165,6 +171,18 @@ fix_ssl_protocol_versions(Config) ->
                              Vs        -> Vs
                          end,
             rabbit_misc:pset(versions, Configured -- ?BAD_SSL_PROTOCOL_VERSIONS, Config)
+    end.
+
+fix_client_renegotiation(Config) ->
+    Versions = case rabbit_misc:pget(versions, Config) of
+                   undefined -> rabbit_misc:pget(supported, ssl:versions(), []);
+                   Vs        -> Vs
+               end,
+    Renegotiable = ['tlsv1', 'tlsv1.1', 'tlsv1.2'],
+    case proplists:is_defined(client_renegotiation, Config) orelse
+         not lists:any(fun(V) -> lists:member(V, Renegotiable) end, Versions) of
+        true  -> Config;
+        false -> [{client_renegotiation, false} | Config]
     end.
 
 hibernate_after(Config) ->

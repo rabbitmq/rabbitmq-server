@@ -78,7 +78,8 @@ groups() ->
             hexify,
             getstat_or_zero_on_live_socket,
             getstat_or_zero_on_closed_socket,
-            ssl_options_check_file
+            ssl_options_check_file,
+            ssl_options_fix_for_server_disables_client_renegotiation
         ]},
         {sequential_tests, [], [
             data_coercion_to_existing_atom_does_not_create_atoms
@@ -746,6 +747,20 @@ ssl_options_check_file(Config) ->
     ?assertEqual({error, {keyfile, not_a_regular_file}},
                  rabbit_ssl_options:check_file_options(
                    [{cacertfile, Small}, {keyfile, "/dev/zero"}])),
+    ok.
+
+ssl_options_fix_for_server_disables_client_renegotiation(_) ->
+    Renegotiation = fun(Opts) -> proplists:get_all_values(client_renegotiation, Opts) end,
+    ?assertEqual([false], Renegotiation(rabbit_ssl_options:fix_for_server([]))),
+    ?assertEqual([false], Renegotiation(rabbit_ssl_options:fix_for_server(
+                                          [{versions, ['tlsv1.3', 'tlsv1.2']}]))),
+    ?assertEqual([], Renegotiation(rabbit_ssl_options:fix_for_server(
+                                     [{versions, ['tlsv1.3']}]))),
+    ?assertEqual([true], Renegotiation(rabbit_ssl_options:fix_for_server(
+                                         [{client_renegotiation, true},
+                                          {versions, ['tlsv1.2']}]))),
+    ?assertEqual([], Renegotiation(rabbit_ssl_options:fix([]))),
+    ?assertEqual([], Renegotiation(rabbit_ssl_options:fix_client([]))),
     ok.
 
 date_time_parse_duration(_) ->

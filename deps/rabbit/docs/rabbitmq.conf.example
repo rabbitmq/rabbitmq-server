@@ -137,8 +137,9 @@
 # ssl_options.honor_cipher_order   = true
 # ssl_options.honor_ecc_order      = true
 #
-## These are highly recommended for TLSv1.2 but cannot be used
-## with TLSv1.3. If TLSv1.3 is enabled, these lines MUST be removed.
+## These only apply to TLSv1.2 and earlier versions. Leave them out when
+## TLSv1.3 is the only enabled version. RabbitMQ disables client-initiated
+## renegotiation by default.
 # ssl_options.client_renegotiation = false
 # ssl_options.secure_renegotiate   = true
 #
@@ -1017,8 +1018,9 @@
 # management.ssl.honor_cipher_order   = true
 # management.ssl.honor_ecc_order      = true
 
-## These are highly recommended for TLSv1.2 but cannot be used
-## with TLSv1.3. If TLSv1.3 is enabled, these lines MUST be removed.
+## These only apply to TLSv1.2 and earlier versions. Leave them out when
+## TLSv1.3 is the only enabled version. RabbitMQ disables client-initiated
+## renegotiation by default.
 # management.ssl.client_renegotiation = false
 # management.ssl.secure_renegotiate   = true
 
