@@ -9,6 +9,11 @@
         {rates_mode,basic}]}],
   [rabbitmq_management]},
 
+ {ui_terminology,
+  "management.ui.terminology = legacy",
+  [{rabbitmq_management,[{ui_terminology,legacy}]}],
+  [rabbitmq_management]},
+
  {polling_consumer_limits,
   "management.polling_consumer.max_messages = 500
    management.polling_consumer.max_payload_bytes = 16MB",
