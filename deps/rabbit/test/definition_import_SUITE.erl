@@ -91,6 +91,11 @@ groups() ->
         ]},
 
         {skip_if_unchanged, [], [
+            failed_import_preserves_hash,
+            failed_vhost_import_preserves_hash,
+            failed_file_import_preserves_hash,
+            failed_directory_import_preserves_hash,
+            failed_http_import_preserves_hash,
             %% these all must import the same definition file
             import_on_a_booting_node_using_skip_if_unchanged,
             import_case5
@@ -648,6 +653,82 @@ import_on_a_booting_node_using_public_https_source(Config) ->
         ok -> ok;
         {error, timeout} -> ct:fail("virtual host ~tp was not imported on boot", [VHost])
     end.
+
+failed_import_preserves_hash(Config) ->
+    Defs = #{<<"bindings">> => [invalid_binding(#{<<"vhost">> => <<"/">>})]},
+    StoredHash = fun() ->
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions_hashing, stored_global_hash, [])
+    end,
+    Hash = StoredHash(),
+    ?assertMatch({error, _},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions,
+                                              import_parsed_with_hashing, [Defs])),
+    ?assertEqual(Hash, StoredHash()).
+
+failed_vhost_import_preserves_hash(Config) ->
+    VHost = <<"/">>,
+    Defs = #{<<"bindings">> => [invalid_binding(#{})]},
+    StoredHash = fun() ->
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions_hashing,
+                                     stored_vhost_specific_hash, [VHost])
+    end,
+    Hash = StoredHash(),
+    ?assertMatch({error, _},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions,
+                                              import_parsed_with_hashing, [Defs, VHost])),
+    ?assertEqual(Hash, StoredHash()).
+
+failed_file_import_preserves_hash(Config) ->
+    Path = write_failing_definitions(Config, ?FUNCTION_NAME),
+    assert_failed_load_preserves_hash(
+      Config, maybe_load_definitions_from_local_filesystem_if_unchanged,
+      [rabbit_definitions_import_local_filesystem, false, Path]).
+
+failed_directory_import_preserves_hash(Config) ->
+    Path = write_failing_definitions(Config, ?FUNCTION_NAME),
+    assert_failed_load_preserves_hash(
+      Config, maybe_load_definitions_from_local_filesystem_if_unchanged,
+      [rabbit_definitions_import_local_filesystem, true, filename:dirname(Path)]).
+
+failed_http_import_preserves_hash(Config) ->
+    Path = write_failing_definitions(Config, ?FUNCTION_NAME),
+    {ok, Httpd} = inets:start(httpd, [{port, 0},
+                                      {bind_address, {127, 0, 0, 1}},
+                                      {server_name, "localhost"},
+                                      {server_root, filename:dirname(Path)},
+                                      {document_root, filename:dirname(Path)}]),
+    try
+        [{port, Port}] = httpd:info(Httpd, [port]),
+        URL = rabbit_misc:format("http://127.0.0.1:~b/~ts", [Port, filename:basename(Path)]),
+        assert_failed_load_preserves_hash(
+          Config, maybe_load_definitions_from_pluggable_source_if_unchanged,
+          [rabbit_definitions_import_https, [{url, URL}]])
+    after
+        inets:stop(httpd, Httpd)
+    end.
+
+assert_failed_load_preserves_hash(Config, Fun, Args) ->
+    StoredHash = fun() ->
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions_hashing, stored_global_hash, [])
+    end,
+    Load = fun() -> rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions, Fun, Args) end,
+    Hash = StoredHash(),
+    ?assertMatch({error, _}, Load()),
+    ?assertEqual(Hash, StoredHash()),
+    ?assertMatch({error, _}, Load()).
+
+write_failing_definitions(Config, Name) ->
+    Path = filename:join([?config(priv_dir, Config), Name, "definitions.json"]),
+    ok = filelib:ensure_dir(Path),
+    Defs = #{<<"bindings">> => [invalid_binding(#{<<"vhost">> => <<"/">>})]},
+    ok = file:write_file(Path, rabbit_json:encode(Defs)),
+    Path.
+
+invalid_binding(Binding) ->
+    Binding#{<<"source">> => <<"amq.direct">>,
+             <<"destination">> => <<"q">>,
+             <<"destination_type">> => <<"neither">>,
+             <<"routing_key">> => <<>>}.
 
 import_on_a_booting_node_using_skip_if_unchanged(Config) ->
     %% see case5.json

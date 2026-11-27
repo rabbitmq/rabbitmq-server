@@ -230,9 +230,8 @@ import_parsed_with_hashing(Body0) when is_map(Body0) ->
                         binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
                         binary:part(rabbit_misc:hexify(Other), 0, 10)
                     ]),
-                    Result = apply_defs(Body, ?INTERNAL_USER),
-                    rabbit_definitions_hashing:store_global_hash(Other),
-                    Result
+                    apply_defs(Body, ?INTERNAL_USER,
+                               fun() -> rabbit_definitions_hashing:store_global_hash(Other) end)
             end
     end.
 
@@ -258,9 +257,9 @@ import_parsed_with_hashing(Body0, VHost) ->
                         binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
                         binary:part(rabbit_misc:hexify(Other), 0, 10)
                     ]),
-                    Result = apply_defs(Body, ?INTERNAL_USER, fun() -> ok end, VHost),
-                    rabbit_definitions_hashing:store_vhost_specific_hash(VHost, Other, ?INTERNAL_USER),
-                    Result
+                    apply_defs(Body, ?INTERNAL_USER,
+                               fun() -> rabbit_definitions_hashing:store_vhost_specific_hash(VHost, Other, ?INTERNAL_USER) end,
+                               VHost)
             end
     end.
 
