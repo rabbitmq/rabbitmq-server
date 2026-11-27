@@ -9,8 +9,9 @@ const LOGIN_BUTTON = By.css('div#outer div#login form input[type=submit]')
 const WARNING = By.css('div#outer div#login div#login-status p')
 
 module.exports = class LoginPage extends BasePage {
-  async isLoaded () {
-    return this.waitForDisplayed(FORM)
+  async isLoaded (customTimeout, suppressErrors = false) {
+    await this.driver.sleep(500)
+    return this.waitForDisplayed(FORM, customTimeout, suppressErrors)
   }
 
   async login (username, password) {
@@ -25,9 +26,9 @@ module.exports = class LoginPage extends BasePage {
   }
 
 
-  async isWarningVisible () {
+  async isWarningVisible (customTimeout, suppressErrors = false) {
     try {
-      await this.waitForDisplayed(WARNING)
+      await this.waitForDisplayed(WARNING, customTimeout, suppressErrors)
       return Promise.resolve(true)
     } catch (e) {
       return Promise.resolve(false)

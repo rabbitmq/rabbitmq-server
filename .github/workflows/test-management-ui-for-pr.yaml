@@ -57,8 +57,36 @@ jobs:
         cd ${SELENIUM_DIR}
         docker build -t mocha-test --target test .
 
-    - name: Run short UI suites on a standalone rabbitmq server
+    - name: Select the suite to run
+      id: suite
+      env:
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        SUITE=short-suite-management-ui
+        # A line `run-suite <name>` in the message of the latest commit selects another suite
+        git fetch --no-tags --depth=1 origin "refs/pull/${PR_NUMBER}/head"
+        REQUESTED=$(git log -1 --format=%B FETCH_HEAD | sed -nE 's/^run-suite[[:space:]]+([A-Za-z0-9_./-]+)[[:space:]]*$/\1/p' | head -n 1)
+        if [ -n "$REQUESTED" ]; then
+          case "$REQUESTED" in
+            *..*|/*)
+              echo "::warning::Ignoring suite '$REQUESTED' requested via commit log"
+              ;;
+            *)
+              if [ -e "${SELENIUM_DIR}/${REQUESTED}" ] || [ -e "${SELENIUM_DIR}/suites/${REQUESTED}" ]; then
+                echo "Running suite triggered via commit log : ${REQUESTED}"
+                SUITE="$REQUESTED"
+              else
+                echo "::warning::Ignoring unknown suite '$REQUESTED' requested via commit log"
+              fi
+              ;;
+          esac
+        fi
+        echo "name=${SUITE}" >> "$GITHUB_OUTPUT"
+
+    - name: Run UI suites on a standalone rabbitmq server
       id: tests
+      env:
+        SUITE_NAME: ${{ steps.suite.outputs.name }}
       run: |
         export IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
         export CONF_DIR_PREFIX="$(mktemp -d)" 
@@ -68,7 +96,8 @@ jobs:
         echo " - IMAGE_TAG: ${IMAGE_TAG}"
         echo " - RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"       
         echo "SELENIUM_ARTIFACTS=${CONF_DIR_PREFIX}" >> $GITHUB_ENV
-        ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui
+        echo " - SUITE: ${SUITE_NAME}"
+        ${SELENIUM_DIR}/run-suites.sh "${SUITE_NAME}"
       
     - name: Upload Test Artifacts
       if: ${{ failure() && steps.tests.outcome == 'failure' }}

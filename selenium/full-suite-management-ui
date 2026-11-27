@@ -38,3 +38,10 @@ mgt/queuesAndStreams-basic-stats-no-stream-management.sh
 mgt/feature-flags.sh
 mgt/hide-allow-header.sh
 mgt/enforce-definition-file-extension.sh
+mgt/sessions-basic-auth.sh
+mgt/sessions-oauth-keycloak.sh
+mgt/sessions-basic-auth-two-logins-limit.sh
+mgt/sessions-oauth-keycloak-two-logins-limit.sh
+mgt/sessions-basic-auth-one-minute-login-timeout.sh
+mgt/sessions-oauth-idp-initiated.sh
+mgt/sessions-oauth-idp-initiated-token-expiry.sh
