@@ -127,6 +127,106 @@ setup() {
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +t 4000000 "* ]]
 }
 
+@test "atom limit jitter includes zero offset" {
+    od() { echo 0; }
+    RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=500000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [ "$RABBITMQ_MAX_NUMBER_OF_ATOMS" -eq 5000000 ]
+}
+
+@test "atom limit jitter includes its upper bound" {
+    od() { echo 500000; }
+    RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=500000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [ "$RABBITMQ_MAX_NUMBER_OF_ATOMS" -eq 5500000 ]
+}
+
+@test "atom limit jitter can be configured via conf file" {
+    echo 'MAX_NUMBER_OF_ATOMS_JITTER=500000' > "$RABBITMQ_CONF_ENV_FILE"
+    od() { echo 100000; }
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [ "$RABBITMQ_MAX_NUMBER_OF_ATOMS" -eq 5100000 ]
+}
+
+@test "atom limit jitter env takes precedence over conf file" {
+    echo 'MAX_NUMBER_OF_ATOMS_JITTER=500000' > "$RABBITMQ_CONF_ENV_FILE"
+    od() { echo 500000; }
+    RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=100000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [ "$RABBITMQ_MAX_NUMBER_OF_ATOMS" -eq 5099996 ]
+}
+
+@test "zero atom limit jitter does not read randomness" {
+    od() { return 1; }
+    RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=0 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [ "$RABBITMQ_MAX_NUMBER_OF_ATOMS" -eq 5000000 ]
+}
+
+@test "explicit atom limit in conf file disables jitter" {
+    echo 'MAX_NUMBER_OF_ATOMS=1000000' > "$RABBITMQ_CONF_ENV_FILE"
+    od() { return 1; }
+    RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=500000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [ "$RABBITMQ_MAX_NUMBER_OF_ATOMS" -eq 1000000 ]
+}
+
+@test "explicit atom limit in env disables jitter" {
+    od() { return 1; }
+    RABBITMQ_MAX_NUMBER_OF_ATOMS=2000000 RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=500000 \
+        source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +t 2000000 "* ]]
+}
+
+@test "atom limit jitter rejects malformed and excessive ranges" {
+    for value in -1 invalid 1.5 010 129217728 999999999999999999999; do
+        run env RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER="$value" \
+            sh -c '. "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"'
+        [ "$status" -eq 78 ]
+        [[ $output == *"MAX_NUMBER_OF_ATOMS_JITTER must be an integer"* ]]
+    done
+}
+
+@test "atom limit jitter fails if randomness is unavailable" {
+    od() { return 1; }
+    export RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=500000
+    run source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [ "$status" -eq 78 ]
+    [[ $output == *"Could not read randomness"* ]]
+}
+
+@test "sourcing the environment twice preserves the selected atom limit" {
+    od() { echo 123456; }
+    RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=500000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    limit=$RABBITMQ_MAX_NUMBER_OF_ATOMS
+    od() { return 1; }
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [ "$RABBITMQ_MAX_NUMBER_OF_ATOMS" -eq "$limit" ]
+}
+
+@test "Erlang VM uses the randomized atom limit" {
+    RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=500000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    [ "$RABBITMQ_MAX_NUMBER_OF_ATOMS" -ge 5000000 ]
+    [ "$RABBITMQ_MAX_NUMBER_OF_ATOMS" -le 5500000 ]
+    run erl $RABBITMQ_SERVER_ERL_ARGS +S 1:1 -noshell \
+        -eval 'io:format("~b", [erlang:system_info(atom_limit)]), halt().'
+    [ "$status" -eq 0 ]
+    [ "$output" -eq "$RABBITMQ_MAX_NUMBER_OF_ATOMS" ]
+}
+
+@test "explicit additional Erlang atom limit overrides jitter" {
+    export RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS='+t 6000000'
+    RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=500000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    run erl $RABBITMQ_SERVER_ERL_ARGS $RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS +S 1:1 -noshell \
+        -eval 'io:format("~b", [erlang:system_info(atom_limit)]), halt().'
+    [ "$status" -eq 0 ]
+    [ "$output" -eq 6000000 ]
+}
+
+@test "explicit Erlang server arguments override jitter" {
+    export RABBITMQ_SERVER_ERL_ARGS='+t 6000000'
+    RABBITMQ_MAX_NUMBER_OF_ATOMS_JITTER=500000 source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    run erl $RABBITMQ_SERVER_ERL_ARGS +S 1:1 -noshell \
+        -eval 'io:format("~b", [erlang:system_info(atom_limit)]), halt().'
+    [ "$status" -eq 0 ]
+    [ "$output" -eq 6000000 ]
+}
+
 @test "default Erlang scheduler busy wait threshold" {
     source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
     echo $RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD
