@@ -317,10 +317,12 @@ handle_session_exit(ChannelNum, SessionPid, Reason, State0) ->
             false ->
                 Detail = case Reason of
                              {RealReason, Trace} ->
-                                 rabbit_misc:format("Session error: ~tp~n~tp",
-                                                     [RealReason, Trace]);
+                                 rabbit_misc:format("Session error: ~tP~n~tP",
+                                                    [RealReason, ?FORMAT_DEPTH_LIMIT,
+                                                     Trace, ?FORMAT_DEPTH_LIMIT]);
                              _ ->
-                                 rabbit_misc:format("Session error: ~tp", [Reason])
+                                 rabbit_misc:format("Session error: ~tP",
+                                                    [Reason, ?FORMAT_DEPTH_LIMIT])
                          end,
                 handle_exception(State, ChannelNum, internal_error_frame(), Detail)
         end,
@@ -430,7 +432,9 @@ handle_frame(Mode, Channel, Body, State) ->
             handle_exception(State,
                              Channel,
                              internal_error_frame(),
-                             rabbit_misc:format("Reader error: ~tp~n~tp", [Reason, Trace]))
+                             rabbit_misc:format("Reader error: ~tP~n~tP",
+                                                [Reason, ?FORMAT_DEPTH_LIMIT,
+                                                 Trace, ?FORMAT_DEPTH_LIMIT]))
     end.
 
 handle_frame0(amqp, Channel, _Body,
@@ -502,6 +506,7 @@ handle_connection_frame(
            User, Vhost, {socket, client_socket(Sock, ProxySock)}, #{}),
     ok = check_vhost_connection_limit(Vhost, Username),
     ok = check_user_connection_limit(Username),
+    rabbit_access_control:clear_max_heap_size(),
     Timer = maybe_start_credential_expiry_timer(User),
     rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
     notify_auth(user_authentication_success, Username, State0),
@@ -853,7 +858,6 @@ auth_phase(
             State1 = State#v1{connection = Conn#v1_connection{auth_state = AuthState1}},
             switch_callback(State1, {frame_header, sasl}, 8);
         {ok, User} ->
-            rabbit_access_control:clear_max_heap_size(),
             Outcome = #'v1_0.sasl_outcome'{code = ?V_1_0_SASL_CODE_OK},
             ok = send_on_channel0(State, Outcome, rabbit_amqp_sasl),
             State1 = State#v1{connection_state = waiting_amqp0100,
@@ -1035,12 +1039,12 @@ set_credential0(Cred,
                                           "access to vhost '~ts' failed for new credential",
                                           [Vhost]),
                       handle_exception(State, 0, Error,
-                                        rabbit_misc:format("~tp", [Reason]))
+                                       rabbit_misc:format_term(Reason))
             end;
         {refused, Fmt, FmtArgs} ->
             credential_update_failed(State, rabbit_misc:format(Fmt, FmtArgs));
         Err ->
-            credential_update_failed(State, rabbit_misc:format("~tp", [Err]))
+            credential_update_failed(State, rabbit_misc:format_term(Err))
     end.
 
 credential_update_failed(State, Detail) ->
