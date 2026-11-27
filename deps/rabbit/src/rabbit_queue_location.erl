@@ -11,6 +11,9 @@
 
 -export([queue_leader_locators/0,
          select_leader_and_followers/2,
+         select_placement/2,
+         members/1,
+         select_leader/2,
          master_locator_permitted/0]).
 
 %% these are needed because they are called with ?MODULE:
@@ -23,7 +26,7 @@
          placement_tag_key/1]).
 
 -ifdef(TEST).
--export([select_members/8, leader_node/6, leader_locator/1]).
+-export([select_members/8, leader_node/7, leader_locator/1]).
 -endif.
 
 -rabbit_deprecated_feature(
@@ -40,6 +43,14 @@
 -define(QUEUE_COUNT_START_RANDOM_SELECTION, 1_000).
 
 -type queue_leader_locator() :: binary().
+-opaque placement() :: {local, node()} | #{members := [node(),...],
+                                             leader_locator := queue_leader_locator(),
+                                             running_nodes := [node(),...],
+                                             queue_count := non_neg_integer(),
+                                             queue_count_start_random := non_neg_integer(),
+                                             get_queues := function()}.
+
+-export_type([placement/0]).
 
 -spec queue_leader_locators() ->
     [queue_leader_locator()].
@@ -48,7 +59,12 @@ queue_leader_locators() ->
 
 -spec select_leader_and_followers(amqqueue:amqqueue(), pos_integer()) ->
     {Leader :: node(), Followers :: [node()]}.
-select_leader_and_followers(Q, Size)
+select_leader_and_followers(Q, Size) ->
+    Placement = select_placement(Q, Size),
+    select_leader(members(Placement), Placement).
+
+-spec select_placement(amqqueue:amqqueue(), pos_integer()) -> placement().
+select_placement(Q, Size)
   when (?is_amqqueue_v2(Q)) andalso is_integer(Size) ->
     LeaderLocator = leader_locator(Q),
     QueueType = amqqueue:get_type(Q),
@@ -56,15 +72,14 @@ select_leader_and_followers(Q, Size)
         rabbit_quorum_queue -> placement_tag_key(Q);
         _ -> undefined
     end,
-    do_select_leader_and_followers(Size, QueueType, LeaderLocator, PlacementTagKey).
+    do_select_placement(Size, QueueType, LeaderLocator, PlacementTagKey).
 
--spec do_select_leader_and_followers(pos_integer(), atom(), queue_leader_locator(),
-                                      binary() | undefined) ->
-    {Leader :: node(), Followers :: [node()]}.
-do_select_leader_and_followers(1, _, <<"client-local">>, _) ->
+-spec do_select_placement(pos_integer(), atom(), queue_leader_locator(),
+                          binary() | undefined) -> placement().
+do_select_placement(1, _, <<"client-local">>, _) ->
     %% Optimisation for classic queues.
-    {?MODULE:node(), []};
-do_select_leader_and_followers(Size, QueueType, LeaderLocator, PlacementTagKey) ->
+    {local, ?MODULE:node()};
+do_select_placement(Size, QueueType, LeaderLocator, PlacementTagKey) ->
     AllNodes = rabbit_nodes:list_members(),
     RunningNodes = rabbit_nodes:filter_running(AllNodes),
     true = lists:member(?MODULE:node(), AllNodes),
@@ -77,7 +92,32 @@ do_select_leader_and_followers(Size, QueueType, LeaderLocator, PlacementTagKey) 
     {Members, GetQueues} = select_members(Size, QueueType, AllNodes, RunningNodes,
                                           QueueCount, QueueCountStartRandom, GetQueues0,
                                           PlacementTagKey),
+    #{members => Members,
+      leader_locator => LeaderLocator,
+      running_nodes => RunningNodes,
+      queue_count => QueueCount,
+      queue_count_start_random => QueueCountStartRandom,
+      get_queues => GetQueues}.
+
+-spec members(placement()) -> [node(),...].
+members({local, Node}) ->
+    [Node];
+members(#{members := Members}) ->
+    Members.
+
+-spec select_leader([node()], placement()) ->
+    {Leader :: node(), Followers :: [node()]}.
+select_leader(_ElectableNodes, {local, Node}) ->
+    {Node, []};
+select_leader(ElectableNodes, #{members := Members,
+                                leader_locator := LeaderLocator,
+                                running_nodes := RunningNodes,
+                                queue_count := QueueCount,
+                                queue_count_start_random := QueueCountStartRandom,
+                                get_queues := GetQueues}) ->
     Leader = leader_node(LeaderLocator, Members, RunningNodes,
+                         non_empty_or([N || N <- Members, lists:member(N, ElectableNodes)],
+                                      Members),
                          QueueCount, QueueCountStartRandom, GetQueues),
     Followers = lists:delete(Leader, Members),
     {Leader, Followers}.
@@ -126,7 +166,7 @@ leader_locator0(_) ->
                           non_neg_integer(), non_neg_integer(), binary() | undefined) ->
     placement_strategy().
 placement_strategy(rabbit_classic_queue, 1, _, _, _) ->
-    %% Classic queues declare a single member; the leader is chosen later by leader_node/6.
+    %% Classic queues declare a single member; the leader is chosen later by `leader_node/7`.
     classic;
 placement_strategy(_, _, _, _, TagKey) when is_binary(TagKey) ->
     %% Quorum queues with a placement tag: use the configured placement module.
@@ -214,39 +254,38 @@ build_node_counters(Counters0, Queues) ->
                 end, Counters0, Queues).
 
 -spec leader_node(queue_leader_locator(), [node(),...], [node(),...],
-                  non_neg_integer(), non_neg_integer(), function()) ->
+                  [node(),...], non_neg_integer(), non_neg_integer(),
+                  function()) ->
     node().
-leader_node(<<"client-local">>, Nodes, RunningNodes, QueueCount, QueueCountStartRandom, GetQueues) ->
-    case lists:member(?MODULE:node(), Nodes) of
+leader_node(<<"client-local">>, Nodes, RunningNodes, ElectableNodes, QueueCount, QueueCountStartRandom, GetQueues) ->
+    case lists:member(?MODULE:node(), ElectableNodes) of
         true  -> ?MODULE:node();
-        false -> leader_node(<<"balanced">>, Nodes, RunningNodes,
+        false -> leader_node(<<"balanced">>, Nodes, RunningNodes, ElectableNodes,
                              QueueCount, QueueCountStartRandom, GetQueues)
     end;
-leader_node(<<"balanced">>, Nodes0, RunningNodes, QueueCount, QueueCountStartRandom, _)
+leader_node(<<"balanced">>, Nodes0, RunningNodes, ElectableNodes, QueueCount, QueueCountStartRandom, _)
   when QueueCount >= QueueCountStartRandom ->
-    Nodes = potential_leaders(Nodes0, RunningNodes),
+    Nodes = potential_leaders(Nodes0, RunningNodes, ElectableNodes),
     lists:nth(rand:uniform(length(Nodes)), Nodes);
-leader_node(<<"balanced">>, Members0, RunningNodes, _, _, GetQueues)
+leader_node(<<"balanced">>, Members0, RunningNodes, ElectableNodes, _, _, GetQueues)
   when is_function(GetQueues, 0) ->
-    Members = potential_leaders(Members0, RunningNodes),
+    Members = potential_leaders(Members0, RunningNodes, ElectableNodes),
     Counters = ?MODULE:queues_per_node(Members, GetQueues),
     {Node, _} = hd(lists:keysort(2, maps:to_list(Counters))),
     Node.
 
-potential_leaders(Members, RunningNodes) ->
-    case lists:filter(fun(R) ->
-                              lists:member(R, RunningNodes)
-                      end, Members) of
-        [] ->
-            Members;
-        RunningMembers ->
-            case rabbit_maintenance:filter_out_drained_nodes_local_read(RunningMembers) of
-                [] ->
-                    RunningMembers;
-                Filtered ->
-                    Filtered
-            end
-    end.
+potential_leaders(Members, RunningNodes, ElectableNodes) ->
+    Running = non_empty_or([N || N <- Members, lists:member(N, RunningNodes)],
+                           Members),
+    Candidates = non_empty_or([N || N <- Running, lists:member(N, ElectableNodes)],
+                              Running),
+    non_empty_or(rabbit_maintenance:filter_out_drained_nodes_local_read(Candidates),
+                 Candidates).
+
+non_empty_or([], Default) ->
+    Default;
+non_empty_or(Nodes, _Default) ->
+    Nodes.
 
 %% Return a function so that queues are fetched lazily (i.e. only when needed,
 %% and at most once when no amqqueue migration is going on).

@@ -72,7 +72,8 @@ groups() ->
                                             delete_member_not_a_member,
                                             delete_member_member_already_deleted,
                                             long_name_member_management,
-                                            node_removal_is_quorum_critical]
+                                            node_removal_is_quorum_critical,
+                                            declare_elects_leader_without_election_timeout]
                        ++ memory_tests()},
                       {cluster_size_3, [], [
                                             cleanup_data_dir,
@@ -4050,6 +4051,25 @@ node_removal_is_quorum_critical(Config) ->
          Qs = rpc:call(S, rabbit_quorum_queue, list_with_minimum_quorum, []),
          ?assertEqual([QName], queue_names(Qs))
      end || S <- Servers].
+
+declare_elects_leader_without_election_timeout(Config) ->
+    [Server0, Server1] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    Vsn0 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_fifo, version, []),
+    Vsn1 = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_fifo, version, []),
+    Leader = case Vsn0 > Vsn1 of
+                 true -> Server1;
+                 false -> Server0
+             end,
+    ?assertMatch({ok, _, {_, Leader}}, ra:members({ra_name(QQ), Server0})),
+    [NonLeader] = [Server0, Server1] -- [Leader],
+    ?assertEqual(#{pre_vote_elections => 0},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, NonLeader, ra_counters, counters,
+                   [{ra_name(QQ), NonLeader}, [pre_vote_elections]])).
 
 node_removal_is_not_quorum_critical(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

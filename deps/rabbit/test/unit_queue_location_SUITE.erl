@@ -22,7 +22,8 @@ groups() ->
 generic_tests() -> [
                     default_strategy,
                     policy_key_precedence,
-                    policy_key_fallback
+                    policy_key_fallback,
+                    client_local_leader_electable
                    ].
 
 classic_tests() -> [
@@ -72,6 +73,50 @@ policy_key_fallback(_Config) ->
     ?assertEqual(<<"balanced">>, rabbit_queue_location:leader_locator(queue)),
     ok = meck:unload(rabbit_queue_type_util).
 
+client_local_leader_electable(_Config) ->
+    ok = meck:new(rabbit_queue_location, [passthrough]),
+    ok = meck:expect(rabbit_queue_location, node, fun() -> node1 end),
+    ok = meck:expect(rabbit_queue_location, queues_per_node,
+                     fun(Nodes, _) -> #{N => 0 || N <- Nodes} end),
+    ok = meck:new(rabbit_maintenance, [passthrough]),
+    ok = meck:expect(rabbit_maintenance, filter_out_drained_nodes_local_read,
+                     fun(N) -> N end),
+    Members = [node1, node2, node3],
+    ok = meck:new(rabbit_nodes, [passthrough]),
+    ok = meck:expect(rabbit_nodes, list_members, fun() -> Members end),
+    ok = meck:expect(rabbit_nodes, filter_running, fun(N) -> N end),
+    ok = meck:new(rabbit_amqqueue, [passthrough]),
+    ok = meck:expect(rabbit_amqqueue, count, fun() -> 2 end),
+    ok = meck:new(rabbit_queue_type_util, [passthrough]),
+    ok = meck:expect(rabbit_queue_type_util, args_policy_lookup,
+                     fun(<<"queue-leader-locator">>, _, _) -> <<"client-local">>;
+                        (_, _, _) -> undefined
+                     end),
+    try
+        Leader = fun(Electable) ->
+                         rabbit_queue_location:leader_node(
+                           <<"client-local">>, Members, Members, Electable,
+                           2, 1000, fun() -> [] end)
+                 end,
+        ?assertEqual(node1, Leader(Members)),
+        ?assertEqual(node1, Leader([node1, node3])),
+        ?assertEqual(node2, Leader([node2])),
+        ?assert(lists:member(Leader([node2, node3]), [node2, node3])),
+        Q = amqqueue:new(rabbit_misc:r(<<"/">>, queue, <<"q">>), none,
+                         true, false, none, [], <<"/">>, #{}),
+        Placement = rabbit_queue_location:select_placement(Q, 3),
+        ?assertEqual(Members, rabbit_queue_location:members(Placement)),
+        ?assertEqual({node1, [node2, node3]},
+                     rabbit_queue_location:select_leader([], Placement)),
+        ?assertEqual({node2, [node1, node3]},
+                     rabbit_queue_location:select_leader([node2], Placement)),
+        ?assertEqual({node1, [node2, node3]},
+                     rabbit_queue_location:select_leader([node4], Placement))
+    after
+        ok = meck:unload([rabbit_queue_location, rabbit_maintenance, rabbit_nodes,
+                          rabbit_amqqueue, rabbit_queue_type_util])
+    end.
+
 classic_balanced_below_threshold(_Config) ->
     ok = meck:new(rabbit_queue_location, [passthrough]),
     ok = meck:expect(rabbit_queue_location, node, fun() -> node1 end),
@@ -104,6 +149,7 @@ classic_balanced_below_threshold(_Config) ->
     ?assertEqual(node2, rabbit_queue_location:leader_node(<<"balanced">>,
                                                           PotentialLeaders,
                                                           RunningNodes,
+                                                          PotentialLeaders,
                                                           QueueCount,
                                                           QueueCountStartRandom,
                                                           GetQueues)),
@@ -116,6 +162,7 @@ classic_balanced_below_threshold(_Config) ->
     ?assertEqual(node1, rabbit_queue_location:leader_node(<<"balanced">>,
                                                           PotentialLeaders,
                                                           RunningNodes,
+                                                          PotentialLeaders,
                                                           QueueCount,
                                                           QueueCountStartRandom,
                                                           GetQueues)),
@@ -128,6 +175,7 @@ classic_balanced_below_threshold(_Config) ->
     ?assertEqual(node3, rabbit_queue_location:leader_node(<<"balanced">>,
                                                           PotentialLeaders,
                                                           RunningNodes,
+                                                          PotentialLeaders,
                                                           QueueCount,
                                                           QueueCountStartRandom,
                                                           GetQueues)),
@@ -156,6 +204,7 @@ classic_balanced_above_threshold(_Config) ->
                      rabbit_queue_location:leader_node(<<"balanced">>,
                                                        Members,
                                                        RunningNodes,
+                                                       Members,
                                                        QueueCount,
                                                        QueueCountStartRandom,
                                                        GetQueues)

@@ -15,7 +15,8 @@ all() ->
      periodic_membership_reconciliation_target_group_size,
      leader_health_check_caps_time_per_queue,
      leader_health_check_queries_followers_in_parallel,
-     leader_health_check_reports_outstanding_queues_on_timeout
+     leader_health_check_reports_outstanding_queues_on_timeout,
+     electable_members
     ].
 
 ra_machine_conf_delivery_limit(_Config) ->
@@ -232,6 +233,20 @@ leader_health_check_reports_outstanding_queues_on_timeout(_Config) ->
         meck:unload(rabbit_queue_type)
     end.
 
+electable_members(_Config) ->
+    Electable = fun rabbit_quorum_queue:electable_members/2,
+    ?assertEqual([n1, n2, n3],
+                 Electable([n1, n2, n3], #{n1 => 9, n2 => 9, n3 => 9})),
+    ?assertEqual([n2],
+                 Electable([n1, n2], #{n1 => 9, n2 => 7})),
+    ?assertEqual([n1, n2, n3],
+                 Electable([n1, n2, n3], #{n1 => 9, n2 => 7, n3 => 9})),
+    ?assertEqual([n2, n3],
+                 Electable([n1, n2, n3], #{n1 => 9, n2 => 7, n3 => 7})),
+    ?assertEqual([], Electable([n1, n2], #{n1 => 9})),
+    ?assertEqual([], Electable([n1, n2], #{})),
+    ?assertEqual([n1], Electable([n1], #{n1 => 9})).
+
 make_ra_machine_conf(Q0, Arg, Pol, OpPol) ->
     Q1 = amqqueue:set_arguments(Q0, [{<<"x-delivery-limit">>, long, Arg}]),
     Q2 = amqqueue:set_policy(Q1, [{name, <<"p1">>},
@@ -249,4 +264,3 @@ start_qprocs(Qs) ->
 
 stop_qprocs(Pids) ->
     [erlang:send(P, done)|| P <- Pids].
-

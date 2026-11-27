@@ -103,7 +103,8 @@
 -export([filter_promotable/2,
          ra_machine_config/1,
          run_leader_health_check/6,
-         wait_for_leader_health_checks/3]).
+         wait_for_leader_health_checks/3,
+         electable_members/2]).
 -endif.
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
@@ -361,8 +362,13 @@ start_cluster(Q) ->
                  {error, {too_long, N}} ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
+    Placement = rabbit_queue_location:select_placement(Q, QuorumSize),
+    Members = rabbit_queue_location:members(Placement),
+    MacVersions = machine_versions(Members),
+    MinVersion = min_version(MacVersions),
     {LeaderNode, FollowerNodes} =
-        rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
+        rabbit_queue_location:select_leader(electable_members(Members, MacVersions),
+                                            Placement),
     LeaderId = {RaName, LeaderNode},
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
     NewQ1 = case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
@@ -375,8 +381,6 @@ start_cluster(Q) ->
                     amqqueue:set_type_state(NewQ0,
                                             #{nodes => UIDs})
             end,
-
-    MinVersion = min_machine_version([LeaderNode | FollowerNodes]),
 
     ?LOG_DEBUG("Will start up to ~w replicas for quorum ~ts with "
                      "leader on node '~ts', initial machine version ~b",
@@ -2410,9 +2414,25 @@ format_ra_event(ServerId, Evt, QRef) ->
     {'$gen_cast', {queue_event, QRef, {ServerId, Evt}}}.
 
 min_machine_version(Nodes) ->
-    Versions = [V || {ok, V} <- erpc:multicall(Nodes, rabbit_fifo, version, [],
-                                               ?RPC_TIMEOUT)],
-    lists:min([rabbit_fifo:version() | Versions]).
+    min_version(machine_versions(Nodes)).
+
+min_version(MachineVersions) ->
+    lists:min([rabbit_fifo:version() | maps:values(MachineVersions)]).
+
+machine_versions(Nodes) ->
+    Results = erpc:multicall(Nodes, rabbit_fifo, version, [], ?RPC_TIMEOUT),
+    #{N => V || {N, {ok, V}} <- lists:zip(Nodes, Results)}.
+
+%% On a new cluster, a Ra member only grants a pre-vote to a candidate whose
+%% machine version is not newer than its own, so a leader needs a majority of
+%% members on its version or a newer one to be elected.
+-spec electable_members([node(),...], #{node() => non_neg_integer()}) -> [node()].
+electable_members(Members, MachineVersions) ->
+    Quorum = length(Members) div 2 + 1,
+    [N || N <- Members,
+          is_map_key(N, MachineVersions),
+          length([V || _ := V <- MachineVersions,
+                       V >= map_get(N, MachineVersions)]) >= Quorum].
 
 make_ra_conf(Q, ServerId, Membership, MacVersion)
   when is_integer(MacVersion) ->
