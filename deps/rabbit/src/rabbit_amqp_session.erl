@@ -2724,8 +2724,8 @@ incoming_link_transfer(
                 {error, Reason} ->
                     link_error(
                       ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                      "failed to deliver message (delivery-tag=~p, delivery-id=~p): ~tP",
-                      [DeliveryTag, DeliveryId, Reason, ?FORMAT_DEPTH_LIMIT])
+                      "failed to deliver message (delivery-tag=~P, delivery-id=~p): ~tP",
+                      [DeliveryTag, ?FORMAT_DEPTH_LIMIT, DeliveryId, Reason, ?FORMAT_DEPTH_LIMIT])
             end;
         {error, {anonymous_terminus, false}, #'v1_0.error'{} = Err} ->
             Disposition = case Settled of
@@ -3551,7 +3551,7 @@ boolean_field(_Field, Bool) when is_boolean(Bool) ->
     Bool;
 boolean_field(Field, Value) ->
     protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                   "invalid field '~s': ~tp", [Field, Value]).
+                   "invalid field '~s': ~tP", [Field, Value, ?FORMAT_DEPTH_LIMIT]).
 
 default(undefined, Default) -> Default;
 default(Thing, _Default) -> Thing.
@@ -3795,8 +3795,8 @@ validate_multi_transfer_delivery_id(OtherId, FirstDeliveryId) ->
     %% differs from the delivery-id on the first transfer of a delivery."
     link_error(
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-      "delivery-id of continuation transfer (~p) differs from delivery-id on first transfer (~p)",
-      [OtherId, FirstDeliveryId]).
+      "delivery-id of continuation transfer (~P) differs from delivery-id on first transfer (~p)",
+      [OtherId, ?FORMAT_DEPTH_LIMIT, FirstDeliveryId]).
 
 validate_multi_transfer_settled(Settled, Settled)
   when is_boolean(Settled) ->
@@ -3808,9 +3808,9 @@ validate_multi_transfer_settled(Other, First)
   when is_boolean(First) ->
     link_error(
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-      "field 'settled' of continuation transfer (~p) differs from "
+      "field 'settled' of continuation transfer (~P) differs from "
       "(interpreted) field 'settled' on first transfer (~p)",
-      [Other, First]).
+      [Other, ?FORMAT_DEPTH_LIMIT, First]).
 
 validate_transfer_snd_settle_mode(mixed, _Settled) ->
     ok;
