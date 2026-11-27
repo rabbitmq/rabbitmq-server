@@ -75,6 +75,46 @@ Out of scope: test code and test helpers, `selenium/`, `packaging/`, `release-no
 the `*_examples` plugins, and community plugins. Dependencies fetched into `deps/`
 are in scope only when a vulnerability is reachable through RabbitMQ.
 
+## What to focus on
+
+- Permission checks that one protocol or API path performs and another omits
+- Virtual host isolation, including messages converted between protocols and links
+  created by Shovel and Federation
+- Message `user_id` validation in AMQP 0-9-1, AMQP 1.0, STOMP and the HTTP API
+  publish endpoint
+- Client-supplied filter expressions: AMQP 1.0 SQL and property filters, JMS topic
+  exchange selectors and stream filters
+- Atoms created from client input, and memory or CPU use that a client can trigger
+  before authentication or at the expense of other clients
+- Stored client data that makes nodes fail on Ra or Khepri log replay, restart or
+  recovery, or that is rendered in the management UI
+- Credentials in logs, crash reports or process state that other users can see
+- A way from the `administrator` tag to code execution on the node, file system
+  access or the Erlang cookie
+
+## What not to report
+
+These are intended behavior. A finding that goes beyond what each item describes is
+still in scope.
+
+- A `policymaker` configuring Shovel or Federation connections to any host from a
+  virtual host they have access to. The outbound connection itself is not SSRF
+- `management` users seeing topology and statistics in the virtual hosts they have
+  access to, and `monitoring` and `administrator` users seeing global statistics,
+  node information and other users' connections and channels
+- Users with the `impersonator` tag publishing with another user's `user_id`, and
+  Federation upstreams with `trust-user-id` enabled keeping the upstream `user_id`
+- `ANONYMOUS` login, which is enabled by default and logs in as `guest` unless
+  `anonymous_login_user` is changed
+- The Prometheus endpoint being unauthenticated unless
+  `prometheus.authentication.enabled` is set
+- Topic permissions applying only to topic exchanges, and the internal backend
+  allowing topic access when the user has no topic permissions for the exchange
+- Existing connections keeping cached authorization decisions as documented
+- Malformed input that closes only the offending connection
+- Documented `administrator` capabilities, such as managing users, permissions and
+  virtual hosts, or importing definitions
+
 ## How to exercise it
 
 The checkout at `/src` is built, and test dependencies are fetched and built. There is
