@@ -10,7 +10,7 @@
 -behaviour(gen_server).
 
 -export([mode/0, refresh/0, list/0, list_certificates/0]). %% Console Interface.
--export([whitelisted/3, is_whitelisted/1, is_whitelisted_der/1]). %% Client-side Interface.
+-export([whitelisted/4, is_whitelisted_der/1]). %% Client-side Interface.
 -export([start_link/0]).
 -export([init/1, terminate/2,
          handle_call/3, handle_cast/2,
@@ -20,6 +20,8 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("kernel/include/logger.hrl").
+
+-define(MAX_LOGGED_CERT_FIELD_SIZE, 4096).
 
 -type certificate() :: #'OTPCertificate'{}.
 -type event()       :: valid_peer
@@ -114,43 +116,38 @@ list_certificates() ->
 
 %% Client (SSL Socket) Interface
 
--spec whitelisted(certificate(), event(), state()) -> outcome().
-whitelisted(_, {bad_cert, unknown_ca}, confirmed) ->
+-spec whitelisted(certificate(), public_key:der_encoded(), event(), state()) -> outcome().
+whitelisted(_, _, {bad_cert, unknown_ca}, confirmed) ->
     {valid, confirmed};
-whitelisted(#'OTPCertificate'{}=C, {bad_cert, unknown_ca}, continue) ->
-    case is_whitelisted(C) of
+whitelisted(#'OTPCertificate'{}=C, DER, {bad_cert, unknown_ca}, continue) ->
+    case is_whitelisted_der(DER) of
         true ->
             {valid, confirmed};
         false ->
-            log_certificate_rejected("CA is not known and certificate is not whitelisted", C),
+            log_certificate_rejected("CA is not known and certificate is not whitelisted", C, DER),
             {fail, "CA is not known and certificate is not whitelisted"}
     end;
-whitelisted(#'OTPCertificate'{}=C, {bad_cert, selfsigned_peer}, continue) ->
-    case is_whitelisted(C) of
+whitelisted(#'OTPCertificate'{}=C, DER, {bad_cert, selfsigned_peer}, continue) ->
+    case is_whitelisted_der(DER) of
         true ->
             {valid, confirmed};
         false ->
-            log_certificate_rejected("certificate is not whitelisted", C),
+            log_certificate_rejected("certificate is not whitelisted", C, DER),
             {fail, "certificate is not whitelisted"}
     end;
-whitelisted(_, {bad_cert, _} = Reason, _) ->
+whitelisted(_, _, {bad_cert, _} = Reason, _) ->
     {fail, Reason};
 %% `confirmed` means that a whitelisted certificate is the trust anchor.
-whitelisted(#'OTPCertificate'{}=C, Event, confirmed) when Event =:= valid;
-                                                          Event =:= valid_peer ->
-    log_certificate_rejected("certificate was issued by a whitelisted certificate", C),
+whitelisted(#'OTPCertificate'{}=C, DER, Event, confirmed) when Event =:= valid;
+                                                               Event =:= valid_peer ->
+    log_certificate_rejected("certificate was issued by a whitelisted certificate", C, DER),
     {fail, "certificate was issued by a whitelisted certificate"};
-whitelisted(_, valid, St) ->
+whitelisted(_, _, valid, St) ->
     {valid, St};
-whitelisted(#'OTPCertificate'{}=_, valid_peer, St) ->
+whitelisted(#'OTPCertificate'{}=_, _, valid_peer, St) ->
     {valid, St};
-whitelisted(_, {extension, _}, St) ->
+whitelisted(_, _, {extension, _}, St) ->
     {unknown, St}.
-
--spec is_whitelisted(certificate()) -> boolean().
-is_whitelisted(#'OTPCertificate'{}=C) ->
-    DER = public_key:pkix_encode('OTPCertificate', C, otp),
-    is_whitelisted_der(DER).
 
 -spec is_whitelisted_der(binary()) -> boolean().
 is_whitelisted_der(DER) when is_binary(DER) ->
@@ -386,10 +383,15 @@ clean_deleted_providers(Providers) ->
     Condition = [ {'=/=', '$1', Provider} || Provider <- Providers ],
     ets:select_delete(table_name(), [{EntryMatch, Condition, [true]}]).
 
--spec log_certificate_rejected(string(), certificate()) -> ok.
-log_certificate_rejected(Reason, #'OTPCertificate'{} = C) ->
+-spec log_certificate_rejected(string(), certificate(), public_key:der_encoded()) -> ok.
+log_certificate_rejected(Reason,
+                         #'OTPCertificate'{
+                            tbsCertificate = #'OTPTBSCertificate'{
+                                                subject = Subject,
+                                                issuer = Issuer,
+                                                validity = Validity}},
+                         DER) ->
     try
-        DER = public_key:pkix_encode('OTPCertificate', C, otp),
         Fingerprint = format_fingerprint(crypto:hash(sha256, DER)),
         ?LOG_WARNING("Trust store: ~ts "
                      "(subject: ~ts, "
@@ -397,15 +399,21 @@ log_certificate_rejected(Reason, #'OTPCertificate'{} = C) ->
                      "issuer: ~ts, "
                      "validity: ~ts)",
                      [Reason,
-                      rabbit_cert_info:subject(DER),
+                      format_cert_field(fun rabbit_cert_info:subject/1, Subject, DER),
                       Fingerprint,
-                      rabbit_cert_info:issuer(DER),
-                      rabbit_cert_info:validity(DER)])
+                      format_cert_field(fun rabbit_cert_info:issuer/1, Issuer, DER),
+                      format_cert_field(fun rabbit_cert_info:validity/1, Validity, DER)])
     catch
         _:_ ->
             ?LOG_WARNING("Trust store: ~ts", [Reason])
     end,
     ok.
+
+format_cert_field(FormatFun, Field, DER) ->
+    case erlang:external_size(Field) > ?MAX_LOGGED_CERT_FIELD_SIZE of
+        true  -> "<too large to be logged>";
+        false -> FormatFun(DER)
+    end.
 
 format_fingerprint(Bin) ->
     lists:flatten(
