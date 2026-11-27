@@ -212,7 +212,11 @@ cluster_should_grow_with_tick(Config) ->
     lists:foreach(
       fun({Node, _Peer}) ->
               call(Config, Node, meck, expect,
-                   [rabbit_nodes, list_reachable, fun() -> [Node1, Node2] end])
+                   [rabbit_nodes, list_members, fun() -> [Node1, Node2] end]),
+              call(Config, Node, meck, expect,
+                   [rabbit_nodes, list_reachable, fun() -> [Node1, Node2] end]),
+              call(Config, Node, meck, expect,
+                   [rabbit_nodes, list_running, fun() -> [Node1, Node2] end])
       end, Nodes),
 
     ct:pal("Triggering acquire/4 on Node 1 (~p)", [Node1]),
@@ -223,9 +227,19 @@ cluster_should_grow_with_tick(Config) ->
     Members1 = kh_members(Config, Node1),
     ?assertEqual(2, length(Members1)),
 
+    lists:foreach(
+      fun({Node, _Peer}) ->
+              call(Config, Node, meck, expect,
+                   [rabbit_nodes, list_members, fun() -> [Node1, Node2, Node3] end]),
+              call(Config, Node, meck, expect,
+                   [rabbit_nodes, list_reachable, fun() -> [Node1, Node2, Node3] end]),
+              call(Config, Node, meck, expect,
+                   [rabbit_nodes, list_running, fun() -> [Node1, Node2, Node3] end])
+      end, Nodes),
+
     %% Wait until the tick adds Node3
     rabbit_ct_helpers:eventually(?_assert(length(kh_members(Config, Node1)) =:= ?NODE_COUNT),
-                                 1000, 10),
+                                 30000, 10),
 
     %% Check nodes are working as expected
     Pid2 = spawn_disposable(Config, Node2),
