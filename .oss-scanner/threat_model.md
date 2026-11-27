@@ -41,7 +41,7 @@ Resource use by an authenticated user is a vulnerability when one of these holds
 - It persists after a node restart, for example a queue that fails on Ra log replay
 
 Otherwise, exhausting memory, CPU or the metadata store with input that an
-authenticated user crafts for that purpose is lower priority. Examples are hash
+authenticated user crafts for that purpose is low priority. Examples are hash
 collisions, regular expressions with catastrophic backtracking, million-digit integers
 and input that triggers quadratic behavior. Report it only when it affects the whole
 node or cluster.
