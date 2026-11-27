@@ -91,6 +91,7 @@ groups() ->
         ]},
 
         {skip_if_unchanged, [], [
+            rejected_import_preserves_hash,
             failed_import_preserves_hash,
             failed_vhost_import_preserves_hash,
             failed_file_import_preserves_hash,
@@ -653,6 +654,17 @@ import_on_a_booting_node_using_public_https_source(Config) ->
         ok -> ok;
         {error, timeout} -> ct:fail("virtual host ~tp was not imported on boot", [VHost])
     end.
+
+rejected_import_preserves_hash(Config) ->
+    Defs = #{<<"queues">> => [#{<<"name">> => <<"vhost-scoped-queue">>}]},
+    StoredHash = fun() ->
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions_hashing, stored_global_hash, [])
+    end,
+    Hash = StoredHash(),
+    ?assertEqual({error, <<"invalid_definitions_file">>},
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_definitions,
+                                              import_parsed_with_hashing, [Defs])),
+    ?assertEqual(Hash, StoredHash()).
 
 failed_import_preserves_hash(Config) ->
     Defs = #{<<"bindings">> => [invalid_binding(#{<<"vhost">> => <<"/">>})]},

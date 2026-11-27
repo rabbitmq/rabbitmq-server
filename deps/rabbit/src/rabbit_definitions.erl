@@ -540,21 +540,16 @@ apply_defs(Map, ActingUser) ->
 apply_defs(Map, ActingUser, VHost) when is_binary(VHost) ->
     apply_defs(Map, ActingUser, fun () -> ok end, VHost);
 apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
-    Version = maps:get(rabbitmq_version, Map, maps:get(rabbit_version, Map, undefined)),
-
-    %% If any of the queues or exchanges do not have virtual hosts set,
-    %% this definition file was a virtual-host specific import. They cannot be applied
-    %% as "complete" definition imports, most notably, imported on boot.
-    AnyOrphaned = any_orphaned_in_doc(Map),
-
-    case AnyOrphaned of
+    case any_orphaned_in_doc(Map) of
         true ->
             log_an_error_about_orphaned_objects(),
-            throw({error, invalid_definitions_file});
+            {error, format(invalid_definitions_file)};
         false ->
-            ok
-    end,
+            apply_cluster_defs(Map, ActingUser, SuccessFun)
+    end.
 
+apply_cluster_defs(Map, ActingUser, SuccessFun) ->
+    Version = maps:get(rabbitmq_version, Map, maps:get(rabbit_version, Map, undefined)),
     try
         concurrent_for_all(users, ActingUser, Map,
                 fun(User, _Username) ->
