@@ -22,7 +22,8 @@ The following are trusted:
   definition files, TLS certificates and keys
 - Users with the `administrator` tag. Most users have neither this tag nor `policymaker`
 - The LDAP server, OAuth 2.0 identity provider and HTTP authentication service the
-  operator configures. Still check how their responses are validated
+  operator configures. Still check how their responses are validated and how
+  values are interpolated into LDAP queries
 
 Production deployments delete the default `guest` user. `guest`, and `ANONYMOUS` login
 as `guest`, are limited to loopback connections by default (`loopback_users`).
@@ -54,16 +55,20 @@ still in scope.
 - `management` users seeing topology and statistics in the virtual hosts they have
   access to, and `monitoring` and `administrator` users seeing global statistics,
   node information and other users' connections and channels
-- Users with the `impersonator` tag publishing with another user's `user_id`, and
-  Federation upstreams with `trust-user-id` enabled keeping the upstream `user_id`
+- Issues with [Validated User ID](https://www.rabbitmq.com/docs/validated-user-id),
+  including the `impersonator` tag and Federation `trust-user-id`. It is not an
+  authorization mechanism
 - The Prometheus endpoint being unauthenticated unless
   `prometheus.authentication.enabled` is set
 - Topic permissions applying only to topic exchanges, and the internal backend
   allowing topic access when the user has no topic permissions for the exchange
 - Existing connections keeping cached authorization decisions as documented
-- Malformed input that closes only the offending connection
+- Attacks that only affect the attacker's own connection, session or channel, or a
+  resource only they can access, such as an exclusive queue
 - Documented `administrator` capabilities, such as managing users, permissions and
   virtual hosts, or importing definitions
+- Load on the LDAP server from authentication and authorization requests, which
+  `rabbitmq_auth_backend_cache` addresses
 
 Out of scope: test code and test helpers, `selenium/`, `packaging/`, `release-notes/`,
 the `*_examples` plugins, and community plugins. Dependencies fetched into `deps/`
