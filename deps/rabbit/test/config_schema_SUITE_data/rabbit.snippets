@@ -1312,6 +1312,21 @@ credential_validator.regexp = ^abc\\d+",
   %% Quorum queue
   %%
 
+  {quorum_queue_unique_names_enabled,
+   "quorum_queue.unique_names = true",
+   [{rabbit, [{quorum_queue_unique_names, true}]}],
+   []},
+
+  {quorum_queue_unique_names_disabled,
+   "quorum_queue.unique_names = false",
+   [{rabbit, [{quorum_queue_unique_names, false}]}],
+   []},
+
+  {quorum_queue_unique_names_unset,
+   "",
+   [],
+   []},
+
   {quorum_queue_compute_checksums,
    "quorum_queue.compute_checksums = true",
    [{rabbit, [
