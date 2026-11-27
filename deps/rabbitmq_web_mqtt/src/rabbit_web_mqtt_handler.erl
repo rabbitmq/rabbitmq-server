@@ -125,8 +125,8 @@ init(Req, Opts) ->
             end;
         {error, origin_not_allowed} ->
             ?LOG_WARNING("Web MQTT: WebSocket connection rejected, "
-                         "origin not in allow_origins: ~tp",
-                         [cowboy_req:header(<<"origin">>, Req)]),
+                         "origin not in allow_origins: ~0tP",
+                         [cowboy_req:header(<<"origin">>, Req), 10]),
             {ok,
              cowboy_req:reply(403, #{<<"connection">> => <<"close">>}, Req),
              #state{}}
@@ -339,7 +339,7 @@ terminate(_Reason, _Request,
 
 no_supported_sub_protocol(Protocol, Req) ->
     %% The client MUST include "mqtt" in the list of WebSocket Sub Protocols it offers [MQTT-6.0.0-3].
-    ?LOG_ERROR("Web MQTT: 'mqtt' not included in client offered subprotocols: ~tp", [Protocol]),
+    ?LOG_ERROR("Web MQTT: 'mqtt' not included in client offered subprotocols: ~0tP", [Protocol, 10]),
     {ok,
      cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req),
      #state{}}.
