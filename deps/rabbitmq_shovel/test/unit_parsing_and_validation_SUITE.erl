@@ -11,6 +11,7 @@
 
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(EXCHANGE,    <<"test_exchange">>).
 -define(TO_SHOVEL,   <<"to_the_shovel">>).
@@ -31,6 +32,8 @@ groups() ->
           parse_amqp10_mixed,
           parse_local,
           parse_delete_after,
+          parse_max_hops,
+          forward_headers_history_is_capped,
           validate_uri_error_has_no_credentials,
           source_without_declarations_is_arity_compatible,
           source_with_declarations_is_arity_compatible,
@@ -83,13 +86,15 @@ parse_amqp091(_Config) ->
     In = [Amqp091Src,
           Amqp091Dst,
           {ack_mode, on_confirm},
-          {reconnect_delay, 2}],
+          {reconnect_delay, 2},
+          {max_hops, 3}],
 
     {ok, Parsed} = rabbit_shovel_config:parse(my_shovel, In),
     ?assertMatch(
        #{name := my_shovel,
          ack_mode := on_confirm,
          reconnect_delay := 2,
+         max_hops := 3,
          dest := #{module := rabbit_amqp091_shovel,
                    uris := [{encrypted, _}],
                    fields_fun := _PubFields,
@@ -131,6 +136,7 @@ parse_amqp10_mixed(_Config) ->
     ?assertMatch(
        #{name := my_shovel,
          ack_mode := on_confirm,
+         max_hops := 10,
          source := #{module := rabbit_amqp10_shovel,
                      uris := [{encrypted, _}],
                      source_address := <<"the-queue">>
@@ -213,6 +219,43 @@ parse_delete_after(_Config) ->
     ?assertError(function_clause,
                  rabbit_shovel_util:parse_delete_after(Unexpected)),
     ?assertError(badarg, binary_to_existing_atom(Unexpected, utf8)),
+    ok.
+
+parse_max_hops(_Config) ->
+    Src = {source, [{protocol, amqp10},
+                    {uris, ["amqp://localhost:5672"]},
+                    {source_address, <<"src">>}]},
+    Dst = {destination, [{protocol, amqp10},
+                         {uris, ["amqp://localhost:5672"]},
+                         {target_address, <<"dest">>}]},
+    [?assertMatch({error, {invalid_shovel_configuration, my_shovel,
+                           {invalid_parameter_value, max_hops, _}}},
+                  rabbit_shovel_config:parse(my_shovel, [Src, Dst, {max_hops, V}]))
+     || V <- [0, -1, 65, 1.5, "3", unlimited]],
+    ?assertMatch({ok, #{max_hops := 64}},
+                 rabbit_shovel_config:parse(my_shovel, [Src, Dst, {max_hops, 64}])),
+    Legacy = [{sources, [{broker, "amqp://"}]},
+              {destinations, [{broker, "amqp://"}]},
+              {queue, <<"q">>},
+              {max_hops, 2}],
+    ?assertMatch({ok, #{max_hops := 2}}, rabbit_shovel_config:parse(my_shovel, Legacy)),
+    ok.
+
+forward_headers_history_is_capped(_Config) ->
+    Entry = fun(N) -> {table, [{<<"n">>, long, N}]} end,
+    Update = fun(Prior) ->
+                     #'P_basic'{headers = Headers} =
+                         rabbit_shovel_util:update_headers(
+                           [{<<"shovel-name">>, <<"s">>}], [], <<"src">>, <<"dest">>,
+                           #'P_basic'{headers = [{<<"x-shovelled">>, array,
+                                                  [Entry(N) || N <- Prior]}]}),
+                     {array, Entries} = rabbit_misc:table_lookup(Headers, <<"x-shovelled">>),
+                     Entries
+             end,
+    ?assertEqual(10, length(Update(lists:seq(1, 9)))),
+    [{table, Newest} | Rest] = Update(lists:seq(1, 12)),
+    ?assertEqual({longstr, <<"s">>}, rabbit_misc:table_lookup(Newest, <<"shovel-name">>)),
+    ?assertEqual([Entry(N) || N <- lists:seq(1, 9)], Rest),
     ok.
 
 validate_uri_error_has_no_credentials(_Config) ->

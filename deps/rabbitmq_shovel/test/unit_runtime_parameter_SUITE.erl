@@ -37,6 +37,7 @@ groups() ->
           validate_amqp10,
           validate_amqp10_with_a_map,
           validate_uri_length,
+          validate_max_hops,
           validate_uri_connection_timeout,
           test_src_protocol_defaults,
           test_src_protocol_explicit,
@@ -274,6 +275,7 @@ parse_amqp10_0() ->
         [
          {<<"ack-mode">>, <<"on-publish">>},
          {<<"reconnect-delay">>, 1001},
+         {<<"max-hops">>, 5},
 
          {<<"src-protocol">>, <<"amqp10">>},
          {<<"src-uri">>, <<"amqp://localhost:5672">>},
@@ -298,6 +300,7 @@ parse_amqp10_0() ->
     ?assertMatch(
        #{name := "my_shovel",
          ack_mode := on_publish,
+         max_hops := 5,
          source := #{module := rabbit_amqp10_shovel,
                      uris := [{encrypted, _}],
                      delete_after := never,
@@ -337,6 +340,7 @@ parse_amqp10_minimal_0() ->
     ?assertMatch(
        #{name := "my_shovel",
          ack_mode := on_confirm,
+         max_hops := 10,
          source := #{module := rabbit_amqp10_shovel,
                      uris := [{encrypted, _}],
                      delete_after := never,
@@ -362,6 +366,7 @@ validate_amqp10_0() ->
         [
          {<<"ack-mode">>, <<"on-publish">>},
          {<<"reconnect-delay">>, 1001},
+         {<<"max-hops">>, 1},
 
          {<<"src-protocol">>, <<"amqp10">>},
          {<<"src-uri">>, <<"amqp://localhost:5672">>},
@@ -467,6 +472,27 @@ validate_uri_length(_Config) ->
                  Validate(<<"src-uri">>, Uri(65537))),
     ?assertMatch({error, _, [<<"src-uri">>, 65536]},
                  Validate(<<"src-uri">>, [Prefix, Uri(65537)])).
+
+validate_max_hops(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, validate_max_hops_0, []).
+
+validate_max_hops_0() ->
+    Params = [{<<"src-protocol">>, <<"amqp10">>},
+              {<<"src-uri">>, <<"amqp://localhost:5672">>},
+              {<<"src-address">>, <<"a-src-queue">>},
+              {<<"dest-protocol">>, <<"amqp10">>},
+              {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
+              {<<"dest-address">>, <<"a-dest-queue">>}],
+    Errors = fun(V) ->
+                     [E || {error, _, [<<"max-hops">> | _]} = E
+                               <- lists:flatten(
+                                    rabbit_shovel_parameters:validate(
+                                      "my-vhost", <<"shovel">>, "my-shovel",
+                                      [{<<"max-hops">>, V} | Params], none))]
+             end,
+    [?assertMatch([_ | _], Errors(V)) || V <- [0, -1, 65, 1.5, <<"3">>]],
+    [?assertEqual([], Errors(V)) || V <- [1, 64]],
+    ok.
 
 validate_uri_connection_timeout(_Config) ->
     Validate = rabbit_shovel_util:validate_uri_fun(none),

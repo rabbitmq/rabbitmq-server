@@ -35,6 +35,7 @@ groups() ->
                   start_and_get_a_dynamic_amqp091_shovel_with_empty_publish_properties,
                   start_and_get_a_dynamic_local_shovel,
                   get_shovel_parameters,
+                  max_hops,
                   create_and_delete_a_dynamic_shovel_that_successfully_connects,
                   create_and_delete_a_dynamic_shovel_that_fails_to_connect,
                   delete_a_starting_dynamic_shovel_removes_its_status,
@@ -279,6 +280,31 @@ get_shovel_parameters(Config) ->
     after
         catch http_delete(Config, "/users/mon", ?NO_CONTENT),
         remove_all_dynamic_shovels(Config, <<"/">>)
+    end.
+
+max_hops(Config) ->
+    Name = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    Path = io_lib:format("/parameters/shovel/%2f/~ts", [Name]),
+    Def = fun(MaxHops) ->
+                  #{value => #{<<"src-protocol">> => <<"amqp091">>,
+                               <<"src-uri">> => shovel_uri(Config),
+                               <<"src-queue">> => <<"max_hops.src">>,
+                               <<"dest-protocol">> => <<"amqp091">>,
+                               <<"dest-uri">> => shovel_uri(Config),
+                               <<"dest-queue">> => <<"max_hops.dest">>,
+                               <<"max-hops">> => MaxHops}}
+          end,
+    Queues = [<<"max_hops.src">>, <<"max_hops.dest">>],
+    declare_queues(Config, Queues),
+    try
+        [http_put(Config, Path, Def(V), ?BAD_REQUEST) || V <- [0, 65, <<"3">>]],
+        http_put(Config, Path, Def(5), ?CREATED),
+        ?assertMatch(#{value := #{'max-hops' := 5}},
+                     http_get(Config, Path, "guest", "guest", ?OK))
+    after
+        remove_all_dynamic_shovels(Config, <<"/">>),
+        [http_delete(Config, io_lib:format("/queues/%2F/~ts", [Q]), ?NO_CONTENT)
+         || Q <- Queues]
     end.
 
 start_static_shovels(Config) ->

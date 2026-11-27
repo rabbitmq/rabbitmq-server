@@ -40,6 +40,9 @@
          removed_from_rabbit_registry/1]).
 
 -include_lib("kernel/include/logger.hrl").
+-include("rabbit_shovel.hrl").
+
+-define(HOPS_ANN, <<"x-opt-shovel-hops">>).
 
 -type tag() :: non_neg_integer().
 -type uri() :: string() | binary().
@@ -175,8 +178,28 @@ dest_endpoint(#{dest := #{module := Mod}} = State) ->
 
 -spec forward(tag(), mc:state(), state()) ->
     state() | {stop, any()}.
-forward(Tag, Msg, #{dest := #{module := Mod}} = State) ->
+forward(Tag, Msg, #{max_hops := MaxHops} = State) ->
+    %% The value is client-controlled.
+    Hops = case mc:x_header(?HOPS_ANN, Msg) of
+               {_, N} when is_integer(N) andalso N >= 0 -> N;
+               _ -> 0
+           end,
+    case Hops < MaxHops of
+        true ->
+            dest_forward(Tag, mc:set_annotation(?HOPS_ANN, Hops + 1, Msg), State);
+        false ->
+            discard(Tag, State)
+    end.
+
+dest_forward(Tag, Msg, #{dest := #{module := Mod}} = State) ->
     Mod:forward(Tag, Msg, State).
+
+%% As in the destination modules, deliveries past the autodelete budget are
+%% left to be requeued.
+discard(_Tag, #{source := #{remaining_unacked := 0}} = State) ->
+    State;
+discard(Tag, State) ->
+    decr_remaining(1, decr_remaining_unacked(reject(Tag, State))).
 
 -spec ack(tag(), boolean(), state()) -> state().
 ack(Tag, Multi, #{source := #{module := Mod}} = State) ->

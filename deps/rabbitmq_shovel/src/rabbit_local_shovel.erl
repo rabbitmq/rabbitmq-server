@@ -639,6 +639,16 @@ add_forward_headers(Msg, #{cached_forward_headers := Props}) ->
 add_forward_headers(Msg, _D) ->
     Msg.
 
+%% Dead-lettering requires these annotations, and an AMQP 1.0 source does
+%% not set them.
+add_routing(Msg, #{queue := Queue}) when is_binary(Queue) ->
+    case mc:exchange(Msg) of
+        undefined ->
+            mc:set_annotation(?ANN_ROUTING_KEYS, [Queue],
+                              mc:set_annotation(?ANN_EXCHANGE, <<>>, Msg));
+        _ ->
+            Msg
+    end;
 add_routing(Msg0, Dest) ->
     Msg = case maps:get(exchange, Dest, undefined) of
               undefined -> Msg0;

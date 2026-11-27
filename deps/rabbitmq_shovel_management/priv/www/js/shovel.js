@@ -81,7 +81,7 @@ dispatcher_add(function(sammy) {
 
             rekey_params(this, trimProtoPrefix);
 
-            var num_keys = ['src-prefetch-count', 'reconnect-delay'];
+            var num_keys = ['src-prefetch-count', 'reconnect-delay', 'max-hops'];
 
             //copy the correct delete-after value
             if (this.params['src-delete-after-selector'] == 'never') {
@@ -141,6 +141,9 @@ HELP['shovel-prefetch'] =
 
 HELP['shovel-reconnect'] =
     'Time in seconds to wait after a shovel goes down before attempting reconnection. Defaults to 1 if not set.';
+
+HELP['shovel-max-hops'] =
+    'Maximum number of times a message can be transferred by a shovel before it is dropped. Defaults to 10, the value cannot be greater than 64.';
 
 HELP['shovel-forward-headers'] =
     'Whether to add headers to the shovelled messages indicating where they have been shovelled from and to. Defaults to false if not set.';

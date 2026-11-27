@@ -135,6 +135,7 @@ shovel_validation() ->
     [{<<"internal">>, fun rabbit_parameter_validation:boolean/2, optional},
      {<<"internal_owner">>, fun validate_internal_owner/2, optional},
      {<<"reconnect-delay">>, fun rabbit_parameter_validation:non_negative_number/2,optional},
+     {<<"max-hops">>, fun validate_max_hops/2, optional},
      {<<"ack-mode">>, rabbit_parameter_validation:enum(
                         ['no-ack', 'on-publish', 'on-confirm']), optional},
      {<<"src-protocol">>,
@@ -152,6 +153,14 @@ dest_validation(Def0, User) ->
     {_, Protocol} = protocols(Def0),
     {ok, Mod} = rabbit_registry:lookup_module(shovel_protocol, Protocol),
     Mod:validate_dest_funs(Def0, User).
+
+validate_max_hops(_Name, N) when is_integer(N) andalso
+                                 N >= 1 andalso
+                                 N =< ?MAX_MAX_HOPS ->
+    ok;
+validate_max_hops(Name, Term) ->
+    {error, "~ts should be an integer between 1 and ~b, actually was ~tp",
+     [Name, ?MAX_MAX_HOPS, Term]}.
 
 validate_internal_owner(Name, Term0) ->
     Term = rabbit_data_coercion:to_proplist(Term0),
@@ -221,7 +230,8 @@ parse({VHost, Name}, ClusterName, Def) ->
                                       SourceHeaders),
            ack_mode => translate_ack_mode(pget(<<"ack-mode">>, Def, <<"on-confirm">>)),
            reconnect_delay => pget(<<"reconnect-delay">>, Def,
-                                   ?DEFAULT_RECONNECT_DELAY)}}.
+                                   ?DEFAULT_RECONNECT_DELAY),
+           max_hops => pget(<<"max-hops">>, Def, ?DEFAULT_MAX_HOPS)}}.
 
 parse_source(Def) ->
     {Protocol, _} = protocols(Def),

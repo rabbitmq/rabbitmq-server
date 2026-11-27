@@ -44,6 +44,7 @@
 -define(APP, rabbitmq_shovel).
 -define(ROUTING_HEADER, <<"x-shovelled">>).
 -define(TIMESTAMP_HEADER, <<"x-shovelled-timestamp">>).
+-define(MAX_FORWARD_HEADER_ENTRIES, 10).
 
 -spec dynamic_shovel_supervisor_mod() -> module().
 dynamic_shovel_supervisor_mod() ->
@@ -53,9 +54,17 @@ update_headers(Prefix, Suffix, SrcURI, DestURI,
                Props = #'P_basic'{headers = Headers}) ->
     Table = Prefix ++ [{<<"src-uri">>,  SrcURI},
                        {<<"dest-uri">>, DestURI}] ++ Suffix,
-    Headers2 = rabbit_basic:prepend_table_header(
+    Headers1 = rabbit_basic:prepend_table_header(
                  ?ROUTING_HEADER, [{K, longstr, V} || {K, V} <- Table],
                  Headers),
+    Headers2 = case rabbit_misc:table_lookup(Headers1, ?ROUTING_HEADER) of
+                   {array, Entries} when length(Entries) > ?MAX_FORWARD_HEADER_ENTRIES ->
+                       rabbit_misc:set_table_value(
+                         Headers1, ?ROUTING_HEADER, array,
+                         lists:sublist(Entries, ?MAX_FORWARD_HEADER_ENTRIES));
+                   _ ->
+                       Headers1
+               end,
     Props#'P_basic'{headers = Headers2}.
 
 add_timestamp_header(Props = #'P_basic'{headers = undefined}) ->
