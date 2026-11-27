@@ -19,7 +19,6 @@ all() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:run_setup_steps(Config),
     rabbit_ct_config_schema:init_schemas(rabbitmq_peer_discovery_aws, Config1).
 
