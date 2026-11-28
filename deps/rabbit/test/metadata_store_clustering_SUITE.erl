@@ -97,7 +97,14 @@ cluster_size_5_tests() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config, []).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% Khepri is not yet compatible with mixed version testing and this
+            %% suite enables Khepri.
+            {skip, "This suite does not yet support mixed version testing"};
+        false ->
+            rabbit_ct_helpers:run_setup_steps(Config, [])
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -140,7 +147,7 @@ end_per_testcase(Testcase, Config) ->
 join_khepri_khepri_cluster(Config) ->
     Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ret = rabbit_ct_broker_helpers:enable_feature_flag( Config, Servers, khepri_db),
+    Ret = rabbit_ct_broker_helpers:enable_feature_flag(Config, Servers, khepri_db),
     case Ret of
         ok               -> join_size_2_cluster(Config, Servers);
         {skip, _} = Skip -> Skip
